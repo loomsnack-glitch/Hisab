@@ -596,6 +596,7 @@ const successStoreCommercial = (
             plans: [{ key: "trial", displayName: "Trial", planType: "trial", term: { count: 7, unit: "day" } }],
             modules: [{ key: "core_operations", displayName: "Core Operations" }],
         },
+        refundablePayments: [],
     },
 });
 

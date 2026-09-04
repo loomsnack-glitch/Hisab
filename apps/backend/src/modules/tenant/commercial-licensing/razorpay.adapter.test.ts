@@ -87,4 +87,37 @@ describe("Razorpay payment-provider adapter", () => {
         const provider = createRazorpayPaymentProvider({ keyId: "", keySecret: "" });
         expect(() => provider.getPublicKeyId()).toThrow(RazorpayAdapterError);
     });
+
+    test("creates a Razorpay Refund for an approved payment amount", async () => {
+        const fetchImpl: (url: string, init?: RequestInit) => Promise<Response> = async (url, init) => {
+            expect(url).toBe("https://api.razorpay.com/v1/payments/pay_abc/refund");
+            expect(JSON.parse(String(init?.body))).toEqual({ amount: 150000 });
+            return new Response(JSON.stringify({
+                id: "rfnd_abc",
+                amount: 150000,
+                currency: "INR",
+                status: "processed",
+            }), { status: 200 });
+        };
+        const provider = createRazorpayPaymentProvider({
+            keyId: "rzp_test_key",
+            keySecret: "rzp_test_secret",
+            fetchImpl,
+        });
+
+        const refund = await provider.createRefund({
+            paymentId: "pay_abc",
+            amountPaise: 150000,
+        });
+
+        expect(refund.id).toBe("rfnd_abc");
+        expect(refund.paymentId).toBe("pay_abc");
+    });
+
+    test("does not create a Refund when credentials are missing", async () => {
+        const provider = createRazorpayPaymentProvider({ keyId: "", keySecret: "" });
+        await expect(provider.createRefund({ paymentId: "pay_abc", amountPaise: 100 }))
+            .rejects
+            .toThrow(RazorpayAdapterError);
+    });
 });

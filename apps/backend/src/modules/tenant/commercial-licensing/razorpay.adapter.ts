@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const RAZORPAY_WEBHOOK_MAX_BODY_BYTES = 1_000_000;
 export const RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders";
+export const RAZORPAY_REFUNDS_URL = "https://api.razorpay.com/v1/payments";
 
 export type RazorpayOrder = {
     id: string;
@@ -18,8 +19,22 @@ export type CreateRazorpayOrderInput = {
     notes: Record<string, string>;
 };
 
+export type RazorpayRefund = {
+    id: string;
+    paymentId: string;
+    amount: number;
+    currency: "INR";
+    status: string;
+};
+
+export type CreateRazorpayRefundInput = {
+    paymentId: string;
+    amountPaise: number;
+};
+
 export type RazorpayPaymentProvider = {
     createOrder: (input: CreateRazorpayOrderInput) => Promise<RazorpayOrder>;
+    createRefund: (input: CreateRazorpayRefundInput) => Promise<RazorpayRefund>;
     getPublicKeyId: () => string;
 };
 
@@ -34,7 +49,7 @@ export type RazorpayWebhookExtraction = {
 };
 
 export class RazorpayAdapterError extends Error {
-    readonly code: "missing_configuration" | "order_failed";
+    readonly code: "missing_configuration" | "order_failed" | "refund_failed";
 
     constructor(code: RazorpayAdapterError["code"], message: string) {
         super(message);
@@ -137,27 +152,44 @@ const toOrder = (value: unknown): RazorpayOrder => {
     return { id, amount, currency, receipt, status };
 };
 
+const toRefund = (value: unknown, paymentId: string): RazorpayRefund => {
+    if (!isRecord(value)) {
+        throw new RazorpayAdapterError("refund_failed", "Razorpay did not return a Refund");
+    }
+    const id = nonEmptyString(value.id);
+    const amount = asInteger(value.amount);
+    const currency = nonEmptyString(value.currency);
+    const status = nonEmptyString(value.status) ?? "processed";
+    if (!id || amount === null || currency !== "INR") {
+        throw new RazorpayAdapterError("refund_failed", "Razorpay Refund is missing amount or currency");
+    }
+    return { id, paymentId, amount, currency, status };
+};
+
 export const createRazorpayPaymentProvider = (
     env: {
         keyId?: string;
         keySecret?: string;
     fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
         ordersUrl?: string;
+        refundsUrl?: string;
     } = {},
 ): RazorpayPaymentProvider => {
     const keyId = () => requireSecret(env.keyId ?? process.env.RAZORPAY_KEY_ID, "Razorpay key id");
     const keySecret = () => requireSecret(env.keySecret ?? process.env.RAZORPAY_KEY_SECRET, "Razorpay key secret");
     const fetchImpl = env.fetchImpl ?? fetch;
     const ordersUrl = env.ordersUrl ?? RAZORPAY_ORDERS_URL;
+    const refundsUrl = env.refundsUrl ?? RAZORPAY_REFUNDS_URL;
+
+    const authorize = () => Buffer.from(`${keyId()}:${keySecret()}`).toString("base64");
 
     return {
         getPublicKeyId: () => keyId(),
         createOrder: async (input) => {
-            const authorization = Buffer.from(`${keyId()}:${keySecret()}`).toString("base64");
             const response = await fetchImpl(ordersUrl, {
                 method: "POST",
                 headers: {
-                    Authorization: `Basic ${authorization}`,
+                    Authorization: `Basic ${authorize()}`,
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
@@ -172,6 +204,23 @@ export const createRazorpayPaymentProvider = (
                 throw new RazorpayAdapterError("order_failed", "Unable to create a Razorpay Order");
             }
             return toOrder(body);
+        },
+        createRefund: async (input) => {
+            const response = await fetchImpl(`${refundsUrl}/${input.paymentId}/refund`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Basic ${authorize()}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    amount: input.amountPaise,
+                }),
+            });
+            const body = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new RazorpayAdapterError("refund_failed", "Unable to create a Razorpay Refund");
+            }
+            return toRefund(body, input.paymentId);
         },
     };
 };

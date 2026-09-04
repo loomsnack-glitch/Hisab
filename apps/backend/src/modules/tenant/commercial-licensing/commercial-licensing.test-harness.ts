@@ -7,7 +7,9 @@ import type {
     CommercialEnforcementLaunch,
     CommercialPaymentEventRecord,
     CommercialQuoteRecord,
+    CommercialRefundRecord,
     ExistingStoreRecord,
+    LicenseRevocationRecord,
     StoreAccessGrantRecord,
     StoreCoTermAddOnRecord,
     StoreLicenseRecord,
@@ -166,6 +168,8 @@ type MemoryState = {
     enforcementLaunch: CommercialEnforcementLaunch | null;
     quotes: CommercialQuoteRecord[];
     paymentEvents: CommercialPaymentEventRecord[];
+    refunds: CommercialRefundRecord[];
+    revocations: LicenseRevocationRecord[];
 };
 
 const toLicenseAccessSource = (license: StoreLicenseRecord): CommercialAccessSourceRecord => ({
@@ -249,11 +253,14 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         enforcementLaunch: null,
         quotes: [],
         paymentEvents: [],
+        refunds: [],
+        revocations: [],
     };
 
     let currentTime = now;
     let nextId = 1;
     let nextOrder = 1;
+    let nextRefund = 1;
     const razorpay: RazorpayPaymentProvider = {
         getPublicKeyId: () => "rzp_test_harness",
         createOrder: async (input) => {
@@ -266,6 +273,13 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
             };
             return order;
         },
+        createRefund: async (input) => ({
+            id: `rfnd_test_${String(nextRefund++).padStart(3, "0")}`,
+            paymentId: input.paymentId,
+            amount: input.amountPaise,
+            currency: "INR",
+            status: "processed",
+        }),
     };
 
     const repository = {
@@ -600,6 +614,56 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
             quote.fulfilledAt = input.now;
             quote.fulfilledCoTermAddOnId = created.id;
             return cloneCoTermAddOn(created);
+        },
+        listCommercialRefundsForStore: async (targetStoreId: string) =>
+            state.refunds.filter((refund) => refund.storeId === targetStoreId).map((refund) => ({ ...refund })),
+        listLicenseRevocationsForStore: async (targetStoreId: string) =>
+            state.revocations.filter((revocation) => revocation.storeId === targetStoreId).map((revocation) => ({
+                ...revocation,
+            })),
+        getCommercialPaymentEventById: async (eventId: string) =>
+            state.paymentEvents.find((event) => event.id === eventId) ?? null,
+        insertCommercialRefundAndRevocation: async (input: {
+            refund: CommercialRefundRecord;
+            revocation: LicenseRevocationRecord;
+        }) => {
+            if (state.refunds.some((refund) => refund.paymentEventId === input.refund.paymentEventId)) {
+                return "duplicate-refund" as const;
+            }
+            if (state.revocations.some((revocation) =>
+                revocation.accessSourceKind === input.revocation.accessSourceKind
+                && revocation.accessSourceId === input.revocation.accessSourceId,
+            )) {
+                return "duplicate-revocation" as const;
+            }
+            if (input.revocation.accessSourceKind === "store_license") {
+                const license = state.licenses.find((item) =>
+                    item.id === input.revocation.accessSourceId
+                    && item.storeId === input.revocation.storeId
+                    && item.sourceKind === "paid"
+                    && item.revokedAt === null,
+                );
+                if (!license) {
+                    return "access-source-not-found" as const;
+                }
+                license.revokedAt = input.revocation.effectiveEndsAt;
+            } else {
+                const addOn = state.coTermAddOns.find((item) =>
+                    item.id === input.revocation.accessSourceId
+                    && item.storeId === input.revocation.storeId
+                    && item.revokedAt === null,
+                );
+                if (!addOn) {
+                    return "access-source-not-found" as const;
+                }
+                addOn.revokedAt = input.revocation.effectiveEndsAt;
+            }
+            state.refunds.push({ ...input.refund });
+            state.revocations.push({ ...input.revocation });
+            return {
+                refund: { ...input.refund },
+                revocation: { ...input.revocation },
+            };
         },
     };
 

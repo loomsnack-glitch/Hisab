@@ -11,7 +11,9 @@ import type {
     CommercialQuoteLineItemDTOSchema,
     CommercialQuoteStatusSchema,
     ConsoleStoreCommercialInspectionResponseSchema,
+    CreateCommercialRefundAndRevocationSchema,
     CreatePaidPlanCheckoutSchema,
+    CommercialRefundDTOSchema,
     CreateCoTermAddOnCheckoutSchema,
     CreateStoreAccessGrantSchema,
     EntitledFeatureDTOSchema,
@@ -19,12 +21,14 @@ import type {
     GrantableCommercialAccessDTOSchema,
     GrantableModuleDTOSchema,
     GrantablePlanDTOSchema,
+    LicenseRevocationDTOSchema,
     PaidPlanCheckoutResponseSchema,
     CoTermAddOnCheckoutResponseSchema,
     PaidPlanCheckoutActionSchema,
     PurchasableCoTermAddOnDTOSchema,
     PurchasablePaidPlanDTOSchema,
     StoreCoTermAddOnDTOSchema,
+    RefundableCommercialPaymentDTOSchema,
     RazorpayCheckoutBootstrapDTOSchema,
     StartStoreTrialResponseSchema,
     StoreAccessGrantDTOSchema,
@@ -249,6 +253,42 @@ export type CommercialQuoteRecord = {
     createdAt: Date;
     lineItems: CommercialQuoteLineItemRecord[];
     modules: CommercialAccessSourceModuleSnapshot[];
+};
+
+export type RefundableCommercialPaymentDTO = z.infer<typeof RefundableCommercialPaymentDTOSchema>;
+export type CommercialRefundDTO = z.infer<typeof CommercialRefundDTOSchema>;
+export type LicenseRevocationDTO = z.infer<typeof LicenseRevocationDTOSchema>;
+export type CreateCommercialRefundAndRevocationJSON = z.input<typeof CreateCommercialRefundAndRevocationSchema>;
+export type CreateCommercialRefundAndRevocationSVC = z.output<typeof CreateCommercialRefundAndRevocationSchema>;
+
+export type CommercialRefundRecord = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    quoteId: string;
+    paymentEventId: string;
+    accessSourceKind: "store_license" | "co_term_add_on";
+    accessSourceId: string;
+    razorpayPaymentId: string;
+    razorpayRefundId: string;
+    amountInr: number;
+    amountPaise: number;
+    currency: "INR";
+    createdByOwnerUserId: string;
+    createdAt: Date;
+};
+
+export type LicenseRevocationRecord = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    commercialRefundId: string;
+    accessSourceKind: "store_license" | "co_term_add_on";
+    accessSourceId: string;
+    effectiveEndsAt: Date;
+    recordedAt: Date;
+    createdByOwnerUserId: string;
+    createdAt: Date;
 };
 
 export type CommercialPaymentEventRecord = {

@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     createStoreAccessGrant as createStoreAccessGrantRequest,
     getPlatformStoreCommercialStatus as getPlatformStoreCommercialStatusRequest,
+    refundAndRevokeLicense as refundAndRevokeLicenseRequest,
 } from "@repo/services";
 import {
     COMMERCIAL_TERM_TIMEZONE,
+    type CreateCommercialRefundAndRevocationJSON,
     type CreateStoreAccessGrantJSON,
+    type RefundableCommercialPaymentDTO,
     type StoreAccessGrantSelection,
     type StoreAccessGrantTermKind,
 } from "@repo/types";
@@ -24,6 +27,7 @@ type ConsoleStoreCommercialAccessProps = {
     storeId: string;
     getPlatformStoreCommercialStatus?: typeof getPlatformStoreCommercialStatusRequest;
     createStoreAccessGrant?: typeof createStoreAccessGrantRequest;
+    refundAndRevokeLicense?: typeof refundAndRevokeLicenseRequest;
     onUnauthorized?: () => Promise<void>;
 };
 
@@ -39,11 +43,20 @@ const toKolkataIso = (localValue: string) => {
     return new Date(`${localValue}:00+05:30`).toISOString();
 };
 
+const readDatetimeLocalValue = (form: HTMLFormElement | undefined, name: string, fallback: string) => {
+    const field = form?.elements.namedItem(name);
+    if (field instanceof HTMLInputElement && field.value) {
+        return field.value;
+    }
+    return fallback;
+};
+
 const ConsoleStoreCommercialAccess = ({
     organizationId,
     storeId,
     getPlatformStoreCommercialStatus = getPlatformStoreCommercialStatusRequest,
     createStoreAccessGrant = createStoreAccessGrantRequest,
+    refundAndRevokeLicense = refundAndRevokeLicenseRequest,
     onUnauthorized,
 }: ConsoleStoreCommercialAccessProps) => {
     const queryClient = useQueryClient();
@@ -54,6 +67,10 @@ const ConsoleStoreCommercialAccess = ({
     const [termUnit, setTermUnit] = useState<"day" | "month" | "year">("day");
     const [customEndsAt, setCustomEndsAt] = useState("");
     const [formError, setFormError] = useState<string | null>(null);
+    const [selectedRefundPaymentId, setSelectedRefundPaymentId] = useState("");
+    const [refundAmountPaise, setRefundAmountPaise] = useState("");
+    const [refundEffectiveEndsAt, setRefundEffectiveEndsAt] = useState("");
+    const [refundError, setRefundError] = useState<string | null>(null);
 
     const statusQuery = useQuery({
         queryKey: [...storeCommercialQueryKey, organizationId, storeId],
@@ -64,6 +81,7 @@ const ConsoleStoreCommercialAccess = ({
     const inspection = statusQuery.data?.status === "success" ? statusQuery.data.data ?? null : null;
     const status = inspection?.commercialStatus ?? null;
     const grantable = inspection?.grantableAccess;
+    const refundablePayments = inspection?.refundablePayments ?? [];
     const errorCode = (statusQuery.error as { code?: number } | null)?.code
         ?? (statusQuery.data?.status === "error" ? statusQuery.data.code : undefined);
 
@@ -90,12 +108,69 @@ const ConsoleStoreCommercialAccess = ({
         },
     });
 
+    const selectedRefund = refundablePayments.find(
+        (payment) => payment.paymentEventId === (selectedRefundPaymentId || refundablePayments[0]?.paymentEventId),
+    ) ?? null;
+    const resolvedRefundPaymentId = selectedRefund?.paymentEventId ?? "";
+
+    const createRefund = useMutation({
+        mutationFn: (input: CreateCommercialRefundAndRevocationJSON) =>
+            refundAndRevokeLicense(organizationId, storeId, input),
+        onSuccess: (response) => {
+            if (response.status === "error" || !response.data) {
+                setRefundError(response.message ?? "Unable to record the refund and License Revocation");
+                return;
+            }
+            queryClient.setQueryData(
+                [...storeCommercialQueryKey, organizationId, storeId],
+                response,
+            );
+            setRefundError(null);
+            setRefundAmountPaise("");
+            setRefundEffectiveEndsAt("");
+        },
+        onError: (error: { message?: string }) => {
+            setRefundError(error.message ?? "Unable to record the refund and License Revocation");
+        },
+    });
+
+    const submitRefund = (form?: HTMLFormElement) => {
+        if (!selectedRefund) {
+            setRefundError("Select a paid commercial payment to refund.");
+            return;
+        }
+        const amountPaise = Number(refundAmountPaise || selectedRefund.amountPaise);
+        if (!Number.isInteger(amountPaise) || amountPaise <= 0) {
+            setRefundError("Enter a whole-number refund amount in paise.");
+            return;
+        }
+        if (selectedRefund.accessSourceStatus === "active") {
+            const effectiveEndsAt = toKolkataIso(
+                readDatetimeLocalValue(form, "refundEffectiveEndsAt", refundEffectiveEndsAt),
+            );
+            if (!effectiveEndsAt) {
+                setRefundError("Choose an Asia/Kolkata access end timestamp.");
+                return;
+            }
+            createRefund.mutate({
+                paymentEventId: selectedRefund.paymentEventId,
+                amountPaise,
+                effectiveEndsAt,
+            });
+            return;
+        }
+        createRefund.mutate({
+            paymentEventId: selectedRefund.paymentEventId,
+            amountPaise,
+        });
+    };
+
     const plans = grantable?.plans ?? [];
     const modules = grantable?.modules ?? [];
     const selectionOptions = selectionKind === "plan" ? plans : modules;
     const resolvedKey = selectedKey || selectionOptions[0]?.key || "";
 
-    const submitGrant = () => {
+    const submitGrant = (form?: HTMLFormElement) => {
         if (!resolvedKey) {
             setFormError("Select a Plan or Module to grant.");
             return;
@@ -108,7 +183,7 @@ const ConsoleStoreCommercialAccess = ({
             return;
         }
         if (termKind === "custom_range") {
-            const endsAt = toKolkataIso(customEndsAt);
+            const endsAt = toKolkataIso(readDatetimeLocalValue(form, "grantEndsAt", customEndsAt));
             if (!endsAt) {
                 setFormError("Choose an Asia/Kolkata end timestamp.");
                 return;
@@ -128,9 +203,9 @@ const ConsoleStoreCommercialAccess = ({
         });
     };
 
-    const onCreate = (event: FormEvent) => {
+    const onCreate = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        submitGrant();
+        submitGrant(event.currentTarget);
     };
 
     return (
@@ -239,6 +314,55 @@ const ConsoleStoreCommercialAccess = ({
                             )}
                         </div>
 
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-medium text-foreground">Commercial history</h3>
+                            {status.commercialHistory.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No commercial history on this Store.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {status.commercialHistory.slice(0, 8).map((entry) => (
+                                        <li
+                                            key={`${entry.kind}-${entry.id}`}
+                                            className="rounded-xl border border-border/60 bg-muted/10 px-4 py-3 text-sm"
+                                        >
+                                            <p className="font-medium text-foreground">{entry.title}</p>
+                                            <p className="text-muted-foreground">{entry.detail}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-medium text-foreground">Refundable payments</h3>
+                            {refundablePayments.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No paid commercial payments are currently eligible for refund.
+                                </p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {refundablePayments.map((payment: RefundableCommercialPaymentDTO) => (
+                                        <li
+                                            key={payment.paymentEventId}
+                                            className="rounded-xl border border-border/60 bg-muted/10 px-4 py-3 text-sm"
+                                        >
+                                            <p className="font-medium text-foreground">{payment.accessSourceLabel}</p>
+                                            <p className="text-muted-foreground">
+                                                {formatCommercialTimestamp(payment.paidAt)}
+                                                {" · "}
+                                                {payment.accessSourceStatus}
+                                                {" · "}
+                                                {new Intl.NumberFormat("en-IN", {
+                                                    style: "currency",
+                                                    currency: "INR",
+                                                }).format(payment.amountInr)}
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
                         <form className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4" onSubmit={onCreate}>
                             <h3 className="text-sm font-medium text-foreground">Create Store Access Grant</h3>
                             <label className="block space-y-1.5 text-sm">
@@ -319,9 +443,10 @@ const ConsoleStoreCommercialAccess = ({
                                     <span className="font-medium">Ends at (Asia/Kolkata)</span>
                                     <input
                                         type="datetime-local"
+                                        name="grantEndsAt"
                                         value={customEndsAt}
                                         onChange={(event) => setCustomEndsAt(event.target.value)}
-                                        aria-label="Ends at"
+                                        aria-label="Grant ends at"
                                         className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
                                     />
                                 </label>
@@ -330,12 +455,79 @@ const ConsoleStoreCommercialAccess = ({
                                 <p className="text-sm text-destructive" role="alert">{formError}</p>
                             ) : null}
                             <Button
-                                type="button"
+                                type="submit"
                                 className="rounded-full"
                                 disabled={createGrant.isPending}
-                                onClick={submitGrant}
                             >
                                 {createGrant.isPending ? "Creating grant..." : "Create Store Access Grant"}
+                            </Button>
+                        </form>
+
+                        <form
+                            className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                submitRefund(event.currentTarget);
+                            }}
+                        >
+                            <h3 className="text-sm font-medium text-foreground">Refund and revoke access</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Initiate a Razorpay refund and record the matching License Revocation.
+                                Refund amounts are entered manually; Hisab does not calculate a pro-rata refund.
+                            </p>
+                            <label className="block space-y-1.5 text-sm">
+                                <span className="font-medium">Paid commercial payment</span>
+                                <select
+                                    className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+                                    value={resolvedRefundPaymentId}
+                                    onChange={(event) => setSelectedRefundPaymentId(event.target.value)}
+                                    aria-label="Paid commercial payment"
+                                    disabled={refundablePayments.length === 0}
+                                >
+                                    {refundablePayments.map((payment) => (
+                                        <option key={payment.paymentEventId} value={payment.paymentEventId}>
+                                            {payment.accessSourceLabel}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="block space-y-1.5 text-sm">
+                                <span className="font-medium">Refund amount (paise)</span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={refundAmountPaise}
+                                    placeholder={selectedRefund ? String(selectedRefund.amountPaise) : ""}
+                                    onChange={(event) => setRefundAmountPaise(event.target.value)}
+                                    aria-label="Refund amount in paise"
+                                    className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+                                    disabled={!selectedRefund}
+                                />
+                            </label>
+                            {selectedRefund?.accessSourceStatus === "active" ? (
+                                <label className="block space-y-1.5 text-sm">
+                                    <span className="font-medium">Access ends at (Asia/Kolkata)</span>
+                                    <input
+                                        type="datetime-local"
+                                        name="refundEffectiveEndsAt"
+                                        value={refundEffectiveEndsAt}
+                                        onChange={(event) => setRefundEffectiveEndsAt(event.target.value)}
+                                        aria-label="Access ends at"
+                                        className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+                                    />
+                                </label>
+                            ) : null}
+                            {refundError ? (
+                                <p className="text-sm text-destructive" role="alert">{refundError}</p>
+                            ) : null}
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                className="rounded-full"
+                                disabled={createRefund.isPending || !selectedRefund}
+                            >
+                                {createRefund.isPending ? "Recording refund..." : "Refund and revoke access"}
                             </Button>
                         </form>
                     </>

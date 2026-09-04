@@ -986,3 +986,130 @@ describe("Co-Term Add-On checkout and verified fulfilment", () => {
         expect(status.data?.commercialStatus.availableCoTermAddOns).toEqual([]);
     });
 });
+
+describe("Console refunds and License Revocation", () => {
+    const purchaseActiveCore = async (memory: ReturnType<typeof createMemoryCommercialLicensing>) => {
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_purchase_refund",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_purchase_refund",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        return { checkout, paid, paymentEventId: memory.state.paymentEvents[0]?.id ?? "" };
+    };
+
+    test("surfaces refundable paid history to Platform Administrators", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+
+        const inspection = await memory.service.inspectStoreCommercialStatusForPlatform(organizationId, storeId);
+
+        expect(inspection.data?.refundablePayments).toEqual([
+            expect.objectContaining({
+                accessSourceKind: "store_license",
+                accessSourceLabel: "Core Store License",
+                accessSourceStatus: "active",
+                amountPaise: 299900,
+            }),
+        ]);
+        expect(inspection.data?.commercialStatus.commercialHistory.some((entry) => entry.kind === "payment")).toBe(true);
+    });
+
+    test("revokes a scheduled successor before it starts after a Razorpay refund", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        const renewal = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_renewal_refund",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: renewal.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_renewal_refund",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const renewalEventId = memory.state.paymentEvents.find((event) =>
+            event.razorpayPaymentId === "pay_core_renewal_refund",
+        )?.id;
+        expect(renewalEventId).toBeTruthy();
+
+        const refunded = await memory.service.refundAndRevokeLicense(
+            ownerUserId,
+            organizationId,
+            storeId,
+            { paymentEventId: renewalEventId!, amountPaise: 299900 },
+        );
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(refunded.status).toBe("success");
+        expect(status.data?.commercialStatus.scheduledSuccessor).toBeNull();
+        expect(memory.state.licenses.find((license) =>
+            license.commercialQuoteId === renewal.data?.quote.id,
+        )?.revokedAt?.getTime()).toBe(trialStart.getTime());
+        expect(refunded.data?.commercialStatus.commercialHistory.some((entry) => entry.kind === "refund")).toBe(true);
+        expect(refunded.data?.commercialStatus.commercialHistory.some((entry) => entry.kind === "revocation")).toBe(true);
+        expect(refunded.data?.refundablePayments.some((payment) => payment.paymentEventId === renewalEventId)).toBe(false);
+    });
+
+    test("ends active access at the Platform Administrator-selected timestamp", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const { paymentEventId } = await purchaseActiveCore(memory);
+        const effectiveEndsAt = upgradeMidpoint.toISOString();
+
+        const refunded = await memory.service.refundAndRevokeLicense(
+            ownerUserId,
+            organizationId,
+            storeId,
+            { paymentEventId, amountPaise: 299900, effectiveEndsAt },
+        );
+        const duringAccess = await memory.service.resolveFeatureEntitlement(storeId, "billing", trialStart);
+        const afterAccess = await memory.service.resolveFeatureEntitlement(storeId, "billing", upgradeMidpoint);
+
+        expect(refunded.status).toBe("success");
+        expect(duringAccess.entitled).toBe(true);
+        expect(afterAccess.entitled).toBe(false);
+        expect(memory.state.licenses[0]?.revokedAt?.toISOString()).toBe(effectiveEndsAt);
+    });
+
+    test("rejects duplicate refunds and invalid active end timestamps", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const { paymentEventId } = await purchaseActiveCore(memory);
+
+        const invalidEnd = await memory.service.refundAndRevokeLicense(
+            ownerUserId,
+            organizationId,
+            storeId,
+            {
+                paymentEventId,
+                amountPaise: 299900,
+                effectiveEndsAt: new Date(coreEnd.getTime() + 60_000).toISOString(),
+            },
+        );
+        const refunded = await memory.service.refundAndRevokeLicense(
+            ownerUserId,
+            organizationId,
+            storeId,
+            { paymentEventId, amountPaise: 299900, effectiveEndsAt: upgradeMidpoint.toISOString() },
+        );
+        const duplicate = await memory.service.refundAndRevokeLicense(
+            ownerUserId,
+            organizationId,
+            storeId,
+            { paymentEventId, amountPaise: 299900, effectiveEndsAt: upgradeMidpoint.toISOString() },
+        );
+
+        expect(invalidEnd.code).toBe(STATUS_CODES.BAD_REQUEST);
+        expect(refunded.status).toBe("success");
+        expect(duplicate.code).toBe(STATUS_CODES.CONFLICT);
+    });
+});

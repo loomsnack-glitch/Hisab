@@ -1,9 +1,10 @@
 import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
     ConsoleStoreCommercialInspectionResponse,
+    CreateCommercialRefundAndRevocationJSON,
     CreateStoreAccessGrantJSON,
     ServiceResponse,
 } from "@repo/types";
@@ -13,6 +14,11 @@ import ConsoleStoreCommercialAccess from "./console-store-commercial-access";
 afterEach(() => {
     cleanup();
 });
+
+const setDatetimeLocalValue = (input: HTMLInputElement, value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+};
 
 const organizationId = "33333333-3333-4333-8333-333333333333";
 const storeId = "77777777-7777-4777-8777-777777777777";
@@ -49,6 +55,7 @@ const emptyInspection: ConsoleStoreCommercialInspectionResponse = {
             { key: "integrations", displayName: "Integrations" },
         ],
     },
+    refundablePayments: [],
 };
 
 const migrationInspection: ConsoleStoreCommercialInspectionResponse = {
@@ -102,6 +109,7 @@ const migrationInspection: ConsoleStoreCommercialInspectionResponse = {
         },
     },
     grantableAccess: emptyInspection.grantableAccess,
+    refundablePayments: [],
 };
 
 const success = (
@@ -120,6 +128,11 @@ const renderAccess = (options: {
         storeId: string,
         input: CreateStoreAccessGrantJSON,
     ) => Promise<ServiceResponse<ConsoleStoreCommercialInspectionResponse | null>>;
+    refund?: (
+        organizationId: string,
+        storeId: string,
+        input: CreateCommercialRefundAndRevocationJSON,
+    ) => Promise<ServiceResponse<ConsoleStoreCommercialInspectionResponse | null>>;
 } = {}) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
@@ -129,6 +142,7 @@ const renderAccess = (options: {
                 storeId={storeId}
                 getPlatformStoreCommercialStatus={async () => success(options.inspection ?? emptyInspection)}
                 createStoreAccessGrant={options.create}
+                refundAndRevokeLicense={options.refund}
             />
         </QueryClientProvider>,
     );
@@ -198,11 +212,13 @@ describe("Console Store commercial access", () => {
 
         expect(await view.findByLabelText("Grant type")).toBeTruthy();
         fireEvent.change(view.getByLabelText("Grant type"), { target: { value: "custom_range" } });
-        expect(view.getByLabelText("Ends at")).toBeTruthy();
+        expect(view.getByLabelText("Grant ends at")).toBeTruthy();
         fireEvent.change(view.getByLabelText("Catalog selection"), { target: { value: "module" } });
         fireEvent.change(view.getByLabelText("Module"), { target: { value: "integrations" } });
-        fireEvent.change(view.getByLabelText("Ends at"), { target: { value: "2026-09-20T20:30" } });
-        fireEvent.click(view.getByRole("button", { name: "Create Store Access Grant" }));
+        setDatetimeLocalValue(view.getByLabelText("Grant ends at") as HTMLInputElement, "2026-09-20T20:30");
+        await act(async () => {
+            fireEvent.click(view.getByRole("button", { name: "Create Store Access Grant" }));
+        });
 
         await waitFor(() => {
             expect(created).toEqual({
@@ -216,5 +232,84 @@ describe("Console Store commercial access", () => {
         expect(view.getByText("WhatsApp")).toBeTruthy();
         expect(view.queryByText("Edit store")).toBeNull();
         expect(view.queryByText("Add device")).toBeNull();
+    });
+
+    test("records a refund and License Revocation without exposing Razorpay credentials", async () => {
+        const refundablePayment = {
+            paymentEventId: "00000000-0000-4000-8000-000000000501",
+            quoteId: "00000000-0000-4000-8000-000000000401",
+            razorpayPaymentId: "pay_core_refund",
+            razorpayOrderId: "order_core_refund",
+            amountInr: 2999,
+            amountPaise: 299900,
+            currency: "INR" as const,
+            paidAt: startsAt,
+            accessSourceKind: "store_license" as const,
+            accessSourceId: "00000000-0000-4000-8000-000000000301",
+            accessSourceLabel: "Core Store License",
+            accessSourceStatus: "active" as const,
+            accessSourceStartsAt: startsAt,
+            accessSourceEndsAt: migrationEndsAt,
+        };
+        let submitted: CreateCommercialRefundAndRevocationJSON | null = null;
+        const view = renderAccess({
+            inspection: {
+                ...migrationInspection,
+                refundablePayments: [refundablePayment],
+            },
+            refund: async (_organizationId, _storeId, input) => {
+                submitted = input;
+                return {
+                    status: "success",
+                    message: "Commercial Refund and License Revocation recorded successfully",
+                    code: 201,
+                    data: {
+                        ...migrationInspection,
+                        refundablePayments: [],
+                        commercialStatus: {
+                            ...migrationInspection.commercialStatus,
+                            commercialHistory: [
+                                {
+                                    kind: "refund",
+                                    id: "00000000-0000-4000-8000-000000000601",
+                                    occurredAt: startsAt,
+                                    title: "Commercial Refund",
+                                    detail: "₹2,999.00 · rfnd_test_001",
+                                    amountInr: 2999,
+                                    status: "refunded",
+                                },
+                                {
+                                    kind: "revocation",
+                                    id: "00000000-0000-4000-8000-000000000701",
+                                    occurredAt: startsAt,
+                                    title: "License Revocation · Core Store License",
+                                    detail: "Access end recorded",
+                                    amountInr: 2999,
+                                    status: "revoked",
+                                },
+                            ],
+                        },
+                    },
+                };
+            },
+        });
+
+        expect(await view.findByLabelText("Paid commercial payment")).toBeTruthy();
+        fireEvent.change(view.getByLabelText("Refund amount in paise"), { target: { value: "299900" } });
+        setDatetimeLocalValue(view.getByLabelText("Access ends at") as HTMLInputElement, "2026-09-10T20:30");
+        await act(async () => {
+            fireEvent.click(view.getByRole("button", { name: "Refund and revoke access" }));
+        });
+
+        await waitFor(() => {
+            expect(submitted).toEqual({
+                paymentEventId: refundablePayment.paymentEventId,
+                amountPaise: 299900,
+                effectiveEndsAt: new Date("2026-09-10T15:00:00.000Z").toISOString(),
+            });
+        });
+        expect(await view.findByText("Commercial Refund")).toBeTruthy();
+        expect(await view.findByText("License Revocation · Core Store License")).toBeTruthy();
+        expect(view.queryByText("rzp_")).toBeNull();
     });
 });

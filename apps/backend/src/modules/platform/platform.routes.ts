@@ -6,6 +6,7 @@ import {
     CreateCommercialModuleSchema,
     CreateCommercialPlanSchema,
     CreateOwnerUserSchema,
+    CreateCommercialRefundAndRevocationSchema,
     CreateStoreAccessGrantSchema,
     CommercialFeatureListQuerySchema,
     CommercialModuleListQuerySchema,
@@ -303,6 +304,45 @@ export const createPlatformRoutes = (
                 );
             } catch (error) {
                 return handleError("platform.routes", "createStoreAccessGrant", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/organizations/:organizationId/stores/:storeId/commercial/refunds",
+        validateSchema("json", CreateCommercialRefundAndRevocationSchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!storeId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid store id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await commercialLicensingService.refundAndRevokeLicense(
+                        c.get("authOwner").id,
+                        organizationId.data,
+                        storeId.data,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "refundAndRevokeLicense", c, error);
             }
         },
     );

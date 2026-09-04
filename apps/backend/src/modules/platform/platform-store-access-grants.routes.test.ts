@@ -76,16 +76,38 @@ type CommercialBody = {
             accessGrants?: Array<{ origin: string; label: string; termKind: string }>;
             entitlements?: { features: Array<{ key: string }> };
             baseAccess?: { planKey: string } | null;
+            commercialHistory?: Array<{ kind: string }>;
         };
         grantableAccess?: {
             plans: Array<{ key: string }>;
             modules: Array<{ key: string }>;
         };
+        refundablePayments?: Array<{ paymentEventId: string; accessSourceLabel: string }>;
     };
 };
 
 const readJson = async (response: { json: () => Promise<unknown> }): Promise<CommercialBody> =>
     (await response.json()) as CommercialBody;
+
+const purchaseActiveCore = async (memory: Awaited<ReturnType<typeof createHarness>>["memory"]) => {
+    const checkout = await memory.service.createPaidPlanCheckout(
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        organizationId,
+        storeId,
+        { planKey: "core" },
+    );
+    await memory.service.ingestRazorpayWebhook({
+        razorpayEventId: "evt_route_core",
+        eventType: "order.paid",
+        payload: { event: "order.paid" },
+        orderId: checkout.data?.checkout.orderId ?? "",
+        paymentId: "pay_route_core",
+        amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+        currency: "INR",
+        paidAt: new Date("2026-09-04T15:00:00.000Z"),
+    });
+    return memory.state.paymentEvents[0]?.id ?? "";
+};
 
 describe("Console Store Access Grant routes", () => {
     beforeEach(() => {
@@ -206,5 +228,55 @@ describe("Console Store Access Grant routes", () => {
 
         expect(inspection.status).toBe(401);
         expect(grant.status).toBe(401);
+    });
+});
+
+describe("Console refund and License Revocation routes", () => {
+    beforeEach(() => {
+        process.env.NODE_ENV = "test";
+    });
+
+    test("rejects unauthenticated refund requests", async () => {
+        const { app } = await createHarness();
+        const response = await app.request(
+            `/platform/organizations/${organizationId}/stores/${storeId}/commercial/refunds`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    paymentEventId: "00000000-0000-4000-8000-000000000001",
+                    amountPaise: 299900,
+                }),
+            },
+        );
+
+        expect(response.status).toBe(401);
+    });
+
+    test("records a refund and License Revocation for an authenticated Owner User", async () => {
+        const { app, memory } = await createHarness();
+        const paymentEventId = await purchaseActiveCore(memory);
+        const cookie = cookieFrom(await passwordLogin(app));
+        const effectiveEndsAt = new Date("2026-09-10T15:00:00.000Z").toISOString();
+
+        const refunded = await app.request(
+            `/platform/organizations/${organizationId}/stores/${storeId}/commercial/refunds`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json", cookie },
+                body: JSON.stringify({
+                    paymentEventId,
+                    amountPaise: 299900,
+                    effectiveEndsAt,
+                }),
+            },
+        );
+        const body = await readJson(refunded);
+
+        expect(refunded.status).toBe(201);
+        expect(body.message).toBe("Commercial Refund and License Revocation recorded successfully");
+        expect(body.data?.refundablePayments).toEqual([]);
+        expect(body.data?.commercialStatus?.commercialHistory?.some((entry) => entry.kind === "refund")).toBe(true);
+        expect(JSON.stringify(body)).not.toContain("rzp_");
     });
 });

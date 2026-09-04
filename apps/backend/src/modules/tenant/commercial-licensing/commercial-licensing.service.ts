@@ -2,6 +2,7 @@ import {
     addCommercialTerm,
     calculateCoTermAddOnCharge,
     calculatePlanUpgradeCharge,
+    commercialAccessSourceEffectiveEndsAt,
     commercialTermsMatch,
     COMMERCIAL_QUOTE_CURRENCY,
     COMMERCIAL_QUOTE_TTL_MS,
@@ -25,6 +26,7 @@ import {
     type CommercialQuoteRecord,
     type CommercialQuoteStatus,
     type ConsoleStoreCommercialInspectionResponse,
+    type CreateCommercialRefundAndRevocationSVC,
     type CoTermAddOnCheckoutResponse,
     type CreateCoTermAddOnCheckoutSVC,
     type CreatePaidPlanCheckoutSVC,
@@ -32,6 +34,7 @@ import {
     type GrantableCommercialAccessDTO,
     type PaidPlanCheckoutResponse,
     type PaidPlanCheckoutAction,
+    type RefundableCommercialPaymentDTO,
     type PurchasableCoTermAddOnDTO,
     type PurchasablePaidPlanDTO,
     type ServiceResponse,
@@ -93,6 +96,10 @@ type CommercialLicensingRepository = Pick<
     | "listPaymentEventsForStore"
     | "fulfillPaidPlanQuote"
     | "fulfillCoTermAddOnQuote"
+    | "listCommercialRefundsForStore"
+    | "listLicenseRevocationsForStore"
+    | "getCommercialPaymentEventById"
+    | "insertCommercialRefundAndRevocation"
 >;
 
 export type CommercialLicensingDependencies = {
@@ -213,18 +220,37 @@ const addOnCheckoutUnavailable = (): ServiceResponse<null> => ({
     code: STATUS_CODES.CONFLICT,
 });
 
+const refundUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "That payment cannot be refunded right now.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
+const invalidRevocationEnd = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Choose an access end timestamp within the paid term.",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const refundServiceUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Payment refunds are temporarily unavailable.",
+    data: null,
+    code: STATUS_CODES.SERVICE_UNAVAILABLE,
+});
+
 const licenseStatusAt = (
     source: { startsAt: Date; endsAt: Date; revokedAt: Date | null },
     at: Date,
 ): StoreLicenseStatus => {
-    if (source.revokedAt) {
-        return "revoked";
-    }
+    const effectiveEndsAt = commercialAccessSourceEffectiveEndsAt(source);
     if (source.startsAt.getTime() > at.getTime()) {
-        return "scheduled";
+        return source.revokedAt ? "revoked" : "scheduled";
     }
-    if (at.getTime() >= source.endsAt.getTime()) {
-        return "expired";
+    if (at.getTime() >= effectiveEndsAt.getTime()) {
+        return source.revokedAt ? "revoked" : "expired";
     }
     return "active";
 };
@@ -574,13 +600,25 @@ const buildUpgradeQuoteLineItems = (
 const formatInr = (amount: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
 
+const formatCommercialTimestamp = (value: Date) =>
+    value.toLocaleString("en-IN", {
+        timeZone: COMMERCIAL_TERM_TIMEZONE,
+        dateStyle: "medium",
+        timeStyle: "short",
+    });
+
 const buildCommercialHistory = (
     licenses: StoreLicenseRecord[],
     addOns: StoreCoTermAddOnRecord[],
     quotes: CommercialQuoteRecord[],
     events: Awaited<ReturnType<CommercialLicensingRepository["listPaymentEventsForStore"]>>,
+    refunds: Awaited<ReturnType<CommercialLicensingRepository["listCommercialRefundsForStore"]>>,
+    revocations: Awaited<ReturnType<CommercialLicensingRepository["listLicenseRevocationsForStore"]>>,
     at: Date,
 ): CommercialHistoryEntryDTO[] => {
+    const licenseById = new Map(licenses.map((license) => [license.id, license]));
+    const addOnById = new Map(addOns.map((addOn) => [addOn.id, addOn]));
+    const refundById = new Map(refunds.map((refund) => [refund.id, refund]));
     const entries: CommercialHistoryEntryDTO[] = [
         ...quotes.map((quote) => ({
             kind: "quote" as const,
@@ -618,6 +656,38 @@ const buildCommercialHistory = (
             amountInr: addOn.chargedAmountInr,
             status: licenseStatusAt(addOn, at),
         })),
+        ...refunds.map((refund) => ({
+            kind: "refund" as const,
+            id: refund.id,
+            occurredAt: refund.createdAt,
+            title: "Commercial Refund",
+            detail: `${formatInr(refund.amountInr)} · ${refund.razorpayRefundId}`,
+            amountInr: refund.amountInr,
+            status: "refunded",
+        })),
+        ...revocations.map((revocation) => {
+            const refund = refundById.get(revocation.commercialRefundId);
+            const license = revocation.accessSourceKind === "store_license"
+                ? licenseById.get(revocation.accessSourceId)
+                : null;
+            const addOn = revocation.accessSourceKind === "co_term_add_on"
+                ? addOnById.get(revocation.accessSourceId)
+                : null;
+            const label = license
+                ? `${license.planDisplayName} Store License`
+                : addOn
+                    ? `${addOn.moduleDisplayName} Co-Term Add-On`
+                    : "Commercial access";
+            return {
+                kind: "revocation" as const,
+                id: revocation.id,
+                occurredAt: revocation.recordedAt,
+                title: `License Revocation · ${label}`,
+                detail: `${formatCommercialTimestamp(revocation.effectiveEndsAt)} access end${refund ? ` · ${refund.razorpayRefundId}` : ""}`,
+                amountInr: refund?.amountInr ?? null,
+                status: "revoked",
+            };
+        }),
     ];
     return entries.sort((left, right) => toDate(right.occurredAt).getTime() - toDate(left.occurredAt).getTime());
 };
@@ -674,6 +744,80 @@ const toGrantableAccess = (
     })),
 });
 
+const buildRefundablePayments = (
+    licenses: StoreLicenseRecord[],
+    addOns: StoreCoTermAddOnRecord[],
+    quotes: CommercialQuoteRecord[],
+    events: Awaited<ReturnType<CommercialLicensingRepository["listPaymentEventsForStore"]>>,
+    refunds: Awaited<ReturnType<CommercialLicensingRepository["listCommercialRefundsForStore"]>>,
+    at: Date,
+): RefundableCommercialPaymentDTO[] => {
+    const refundedEventIds = new Set(refunds.map((refund) => refund.paymentEventId));
+    const quoteById = new Map(quotes.map((quote) => [quote.id, quote]));
+    const licenseById = new Map(licenses.map((license) => [license.id, license]));
+    const addOnById = new Map(addOns.map((addOn) => [addOn.id, addOn]));
+
+    return events
+        .filter((event) =>
+            event.fulfillmentStatus === "fulfilled"
+            && event.quoteId
+            && event.razorpayPaymentId
+            && event.amountPaise
+            && !refundedEventIds.has(event.id),
+        )
+        .flatMap((event) => {
+            const quote = quoteById.get(event.quoteId!);
+            if (!quote?.fulfilledAt) {
+                return [];
+            }
+            if (quote.fulfilledLicenseId) {
+                const license = licenseById.get(quote.fulfilledLicenseId);
+                if (!license || license.sourceKind !== "paid" || license.revokedAt) {
+                    return [];
+                }
+                return [{
+                    paymentEventId: event.id,
+                    quoteId: quote.id,
+                    razorpayPaymentId: event.razorpayPaymentId!,
+                    razorpayOrderId: quote.razorpayOrderId,
+                    amountInr: event.amountPaise! / 100,
+                    amountPaise: event.amountPaise!,
+                    currency: COMMERCIAL_QUOTE_CURRENCY,
+                    paidAt: event.processedAt ?? event.createdAt,
+                    accessSourceKind: "store_license" as const,
+                    accessSourceId: license.id,
+                    accessSourceLabel: `${license.planDisplayName} Store License`,
+                    accessSourceStatus: licenseStatusAt(license, at),
+                    accessSourceStartsAt: license.startsAt,
+                    accessSourceEndsAt: license.endsAt,
+                }];
+            }
+            if (quote.fulfilledCoTermAddOnId) {
+                const addOn = addOnById.get(quote.fulfilledCoTermAddOnId);
+                if (!addOn || addOn.revokedAt) {
+                    return [];
+                }
+                return [{
+                    paymentEventId: event.id,
+                    quoteId: quote.id,
+                    razorpayPaymentId: event.razorpayPaymentId!,
+                    razorpayOrderId: quote.razorpayOrderId,
+                    amountInr: event.amountPaise! / 100,
+                    amountPaise: event.amountPaise!,
+                    currency: COMMERCIAL_QUOTE_CURRENCY,
+                    paidAt: event.processedAt ?? event.createdAt,
+                    accessSourceKind: "co_term_add_on" as const,
+                    accessSourceId: addOn.id,
+                    accessSourceLabel: `${addOn.moduleDisplayName} Co-Term Add-On`,
+                    accessSourceStatus: licenseStatusAt(addOn, at),
+                    accessSourceStartsAt: addOn.startsAt,
+                    accessSourceEndsAt: addOn.endsAt,
+                }];
+            }
+            return [];
+        });
+};
+
 export const createCommercialLicensingService = (dependencies: CommercialLicensingDependencies) => {
     const authorizeStore = async (userId: string, organizationId: string, storeId: string) => {
         const organization = await dependencies.organization.getOrganizationByIdForUser(
@@ -707,7 +851,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         storeId: string,
         at: Date,
     ): Promise<StoreCommercialStatusDTO> => {
-        const [licenses, grants, addOns, trialPlan, paidPlans, purchasableModules, accessSources, quotes, paymentEvents] =
+        const [licenses, grants, addOns, trialPlan, paidPlans, purchasableModules, accessSources, quotes, paymentEvents, refunds, revocations] =
             await Promise.all([
             dependencies.repository.listStoreLicenses(storeId),
             dependencies.repository.listAccessGrantsForStore(storeId),
@@ -718,6 +862,8 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             dependencies.repository.listAccessSourcesForStore(storeId),
             dependencies.repository.listCommercialQuotesForStore(storeId),
             dependencies.repository.listPaymentEventsForStore(storeId),
+            dependencies.repository.listCommercialRefundsForStore(storeId),
+            dependencies.repository.listLicenseRevocationsForStore(storeId),
         ]);
         const entitlements = await dependencies.featureEntitlement.resolveStoreFeatureEntitlement(
             storeId,
@@ -750,7 +896,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
                 ? buildAvailableCoTermAddOns(activePaid, purchasableModules, accessSources, at)
                 : [],
             pendingCheckout: pendingCheckout ? toQuoteDto(pendingCheckout, at) : null,
-            commercialHistory: buildCommercialHistory(licenses, addOns, quotes, paymentEvents, at),
+            commercialHistory: buildCommercialHistory(licenses, addOns, quotes, paymentEvents, refunds, revocations, at),
             trial: trialAvailability(licenses, trialPlan !== null),
             entitlements,
         };
@@ -761,14 +907,27 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         storeId: string,
         at: Date,
     ): Promise<ConsoleStoreCommercialInspectionResponse> => {
-        const [commercialStatus, plans, modules] = await Promise.all([
+        const [commercialStatus, plans, modules, licenses, addOns, quotes, paymentEvents, refunds] = await Promise.all([
             buildStatus(organizationId, storeId, at),
             dependencies.repository.listActivePlanSnapshots(),
             dependencies.repository.listActiveModuleSnapshots(),
+            dependencies.repository.listStoreLicenses(storeId),
+            dependencies.repository.listCoTermAddOnsForStore(storeId),
+            dependencies.repository.listCommercialQuotesForStore(storeId),
+            dependencies.repository.listPaymentEventsForStore(storeId),
+            dependencies.repository.listCommercialRefundsForStore(storeId),
         ]);
         return {
             commercialStatus,
             grantableAccess: toGrantableAccess(plans, modules),
+            refundablePayments: buildRefundablePayments(
+                licenses,
+                addOns,
+                quotes,
+                paymentEvents,
+                refunds,
+                at,
+            ),
         };
     };
 
@@ -1401,6 +1560,141 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         }
     };
 
+    const refundAndRevokeLicense = async (
+        ownerUserId: string,
+        organizationId: string,
+        storeId: string,
+        input: CreateCommercialRefundAndRevocationSVC,
+    ): Promise<ServiceResponse<ConsoleStoreCommercialInspectionResponse | null>> => {
+        const authorized = await authorizePlatformStore(organizationId, storeId);
+        if (!authorized.ok) {
+            return authorized.response;
+        }
+
+        const now = dependencies.now();
+        const paymentEvent = await dependencies.repository.getCommercialPaymentEventById(input.paymentEventId);
+        if (
+            !paymentEvent
+            || paymentEvent.fulfillmentStatus !== "fulfilled"
+            || !paymentEvent.quoteId
+            || !paymentEvent.razorpayPaymentId
+            || !paymentEvent.amountPaise
+        ) {
+            return refundUnavailable();
+        }
+
+        const [quotes, licenses, addOns, refunds] = await Promise.all([
+            dependencies.repository.listCommercialQuotesForStore(storeId),
+            dependencies.repository.listStoreLicenses(storeId),
+            dependencies.repository.listCoTermAddOnsForStore(storeId),
+            dependencies.repository.listCommercialRefundsForStore(storeId),
+        ]);
+        if (refunds.some((refund) => refund.paymentEventId === paymentEvent.id)) {
+            return refundUnavailable();
+        }
+
+        const quote = quotes.find((item) => item.id === paymentEvent.quoteId);
+        if (!quote?.fulfilledAt) {
+            return refundUnavailable();
+        }
+
+        const refundable = buildRefundablePayments(
+            licenses,
+            addOns,
+            quotes,
+            [paymentEvent],
+            refunds,
+            now,
+        ).find((item) => item.paymentEventId === paymentEvent.id);
+        if (!refundable) {
+            return refundUnavailable();
+        }
+        if (input.amountPaise > refundable.amountPaise) {
+            return refundUnavailable();
+        }
+
+        const accessStatus = refundable.accessSourceStatus;
+        let effectiveEndsAt: Date;
+        if (accessStatus === "scheduled") {
+            effectiveEndsAt = now;
+        } else if (accessStatus === "active") {
+            if (!input.effectiveEndsAt) {
+                return invalidRevocationEnd();
+            }
+            effectiveEndsAt = toDate(input.effectiveEndsAt);
+            if (
+                Number.isNaN(effectiveEndsAt.getTime())
+                || effectiveEndsAt.getTime() < now.getTime()
+                || effectiveEndsAt.getTime() > refundable.accessSourceEndsAt.getTime()
+            ) {
+                return invalidRevocationEnd();
+            }
+        } else {
+            return refundUnavailable();
+        }
+
+        let razorpayRefund;
+        try {
+            razorpayRefund = await dependencies.razorpay.createRefund({
+                paymentId: paymentEvent.razorpayPaymentId,
+                amountPaise: input.amountPaise,
+            });
+        } catch (error) {
+            if (error instanceof RazorpayAdapterError && error.code === "missing_configuration") {
+                return refundServiceUnavailable();
+            }
+            return refundServiceUnavailable();
+        }
+
+        const refundId = dependencies.createId();
+        const revocationId = dependencies.createId();
+        const amountInr = input.amountPaise / 100;
+        const recorded = await dependencies.repository.insertCommercialRefundAndRevocation({
+            refund: {
+                id: refundId,
+                organizationId,
+                storeId,
+                quoteId: quote.id,
+                paymentEventId: paymentEvent.id,
+                accessSourceKind: refundable.accessSourceKind,
+                accessSourceId: refundable.accessSourceId,
+                razorpayPaymentId: paymentEvent.razorpayPaymentId,
+                razorpayRefundId: razorpayRefund.id,
+                amountInr,
+                amountPaise: input.amountPaise,
+                currency: COMMERCIAL_QUOTE_CURRENCY,
+                createdByOwnerUserId: ownerUserId,
+                createdAt: now,
+            },
+            revocation: {
+                id: revocationId,
+                organizationId,
+                storeId,
+                commercialRefundId: refundId,
+                accessSourceKind: refundable.accessSourceKind,
+                accessSourceId: refundable.accessSourceId,
+                effectiveEndsAt,
+                recordedAt: now,
+                createdByOwnerUserId: ownerUserId,
+                createdAt: now,
+            },
+        });
+
+        if (recorded === "duplicate-refund" || recorded === "duplicate-revocation") {
+            return refundUnavailable();
+        }
+        if (recorded === "access-source-not-found") {
+            return refundUnavailable();
+        }
+
+        return {
+            status: "success",
+            message: "Commercial Refund and License Revocation recorded successfully",
+            data: await buildConsoleInspection(organizationId, storeId, now),
+            code: STATUS_CODES.CREATED,
+        };
+    };
+
     return {
         getStoreCommercialStatus,
         inspectStoreCommercialStatusForPlatform,
@@ -1410,6 +1704,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         createPaidPlanCheckout,
         createCoTermAddOnCheckout,
         ingestRazorpayWebhook,
+        refundAndRevokeLicense,
         resolveStoreFeatureEntitlement: dependencies.featureEntitlement.resolveStoreFeatureEntitlement,
         resolveFeatureEntitlement: dependencies.featureEntitlement.resolveFeatureEntitlement,
     };

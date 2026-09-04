@@ -48,6 +48,14 @@ describe("Commercial Term Clock", () => {
             { ...source, revokedAt: new Date("2026-09-05T00:00:00.000Z") },
             new Date("2026-09-06T00:00:00.000Z"),
         )).toBe(false);
+        expect(isCommercialAccessSourceActiveAt(
+            {
+                startsAt,
+                endsAt,
+                revokedAt: new Date("2026-09-08T00:00:00.000Z"),
+            },
+            new Date("2026-09-06T00:00:00.000Z"),
+        )).toBe(true);
     });
 
     test("uses the exact remaining local-calendar-time fraction for proration", () => {

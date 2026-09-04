@@ -131,7 +131,14 @@ export const CommercialQuoteKindSchema = z.enum([
 export const PaidPlanCheckoutActionSchema = z.enum(["term_purchase", "renewal", "upgrade"]);
 export const CommercialQuoteStatusSchema = z.enum(["open", "expired", "fulfilled"]);
 export const CommercialQuoteLicenseTimingSchema = z.enum(["immediate", "scheduled"]);
-export const CommercialHistoryEntryKindSchema = z.enum(["quote", "payment", "license", "add_on"]);
+export const CommercialHistoryEntryKindSchema = z.enum([
+    "quote",
+    "payment",
+    "license",
+    "add_on",
+    "refund",
+    "revocation",
+]);
 export const CommercialPaymentEventFulfillmentStatusSchema = z.enum([
     "received",
     "fulfilled",
@@ -288,9 +295,55 @@ export const PaidPlanCheckoutResponseSchema = z.object({
 
 export const CoTermAddOnCheckoutResponseSchema = PaidPlanCheckoutResponseSchema;
 
+export const RefundableCommercialPaymentDTOSchema = z.object({
+    paymentEventId: z.uuid("Invalid Commercial Payment Event id"),
+    quoteId: z.uuid("Invalid Commercial Quote id"),
+    razorpayPaymentId: z.string().min(1),
+    razorpayOrderId: z.string().min(1),
+    amountInr: z.number(),
+    amountPaise: z.number().int().positive(),
+    currency: z.literal(COMMERCIAL_QUOTE_CURRENCY),
+    paidAt: dtoDateSchema,
+    accessSourceKind: z.enum(["store_license", "co_term_add_on"]),
+    accessSourceId: z.uuid("Invalid commercial access source id"),
+    accessSourceLabel: z.string().min(1),
+    accessSourceStatus: StoreLicenseStatusSchema,
+    accessSourceStartsAt: dtoDateSchema,
+    accessSourceEndsAt: dtoDateSchema,
+});
+
+export const CommercialRefundDTOSchema = z.object({
+    id: z.uuid("Invalid Commercial Refund id"),
+    quoteId: z.uuid("Invalid Commercial Quote id"),
+    paymentEventId: z.uuid("Invalid Commercial Payment Event id"),
+    razorpayPaymentId: z.string().min(1),
+    razorpayRefundId: z.string().min(1),
+    amountInr: z.number(),
+    amountPaise: z.number().int().positive(),
+    currency: z.literal(COMMERCIAL_QUOTE_CURRENCY),
+    createdAt: dtoDateSchema,
+});
+
+export const LicenseRevocationDTOSchema = z.object({
+    id: z.uuid("Invalid License Revocation id"),
+    accessSourceKind: z.enum(["store_license", "co_term_add_on"]),
+    accessSourceId: z.uuid("Invalid commercial access source id"),
+    accessSourceLabel: z.string().min(1),
+    effectiveEndsAt: dtoDateSchema,
+    recordedAt: dtoDateSchema,
+    refund: CommercialRefundDTOSchema,
+});
+
+export const CreateCommercialRefundAndRevocationSchema = z.object({
+    paymentEventId: z.uuid("Invalid Commercial Payment Event id"),
+    amountPaise: z.number().int().positive(),
+    effectiveEndsAt: dtoDateSchema.optional(),
+}).strict();
+
 export const ConsoleStoreCommercialInspectionResponseSchema = z.object({
     commercialStatus: StoreCommercialStatusDTOSchema,
     grantableAccess: GrantableCommercialAccessDTOSchema,
+    refundablePayments: z.array(RefundableCommercialPaymentDTOSchema),
 });
 
 export const StoreAccessGrantSelectionSchema = z.discriminatedUnion("kind", [

@@ -1,6 +1,7 @@
 import type {
     ConsoleStoreCommercialInspectionResponse,
     CoTermAddOnCheckoutResponse,
+    CreateCommercialRefundAndRevocationJSON,
     CreateCoTermAddOnCheckoutJSON,
     CreatePaidPlanCheckoutJSON,
     CreateStoreAccessGrantJSON,
@@ -93,6 +94,22 @@ export const createStoreAccessGrant = async (
     try {
         const response = await api.post(
             `/platform/organizations/${organizationId}/stores/${storeId}/commercial/grants`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const refundAndRevokeLicense = async (
+    organizationId: string,
+    storeId: string,
+    data: CreateCommercialRefundAndRevocationJSON,
+): Promise<ServiceResponse<ConsoleStoreCommercialInspectionResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/platform/organizations/${organizationId}/stores/${storeId}/commercial/refunds`,
             data,
         );
         return response.data;

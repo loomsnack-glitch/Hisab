@@ -8,7 +8,9 @@ import type {
     CommercialEnforcementLaunch,
     CommercialPaymentEventRecord,
     CommercialQuoteRecord,
+    CommercialRefundRecord,
     ExistingStoreRecord,
+    LicenseRevocationRecord,
     StoreAccessGrantOrigin,
     StoreAccessGrantRecord,
     StoreAccessGrantSelectionKind,
@@ -2037,5 +2039,260 @@ export const fulfillCoTermAddOnQuote = async (input: {
             return existing ?? "already-fulfilled";
         }
         throw error;
+    }
+};
+
+type RefundRow = {
+    id: string;
+    organization_id: string;
+    store_id: string;
+    quote_id: string;
+    payment_event_id: string;
+    access_source_kind: "store_license" | "co_term_add_on";
+    access_source_id: string;
+    razorpay_payment_id: string;
+    razorpay_refund_id: string;
+    amount_inr: string | number;
+    amount_paise: number;
+    currency: "INR";
+    created_by_owner_user_id: string;
+    created_at: string | Date;
+};
+
+type RevocationRow = {
+    id: string;
+    organization_id: string;
+    store_id: string;
+    commercial_refund_id: string;
+    access_source_kind: "store_license" | "co_term_add_on";
+    access_source_id: string;
+    effective_ends_at: string | Date;
+    recorded_at: string | Date;
+    created_by_owner_user_id: string;
+    created_at: string | Date;
+};
+
+const toRefundRecord = (row: RefundRow): CommercialRefundRecord => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    storeId: row.store_id,
+    quoteId: row.quote_id,
+    paymentEventId: row.payment_event_id,
+    accessSourceKind: row.access_source_kind,
+    accessSourceId: row.access_source_id,
+    razorpayPaymentId: row.razorpay_payment_id,
+    razorpayRefundId: row.razorpay_refund_id,
+    amountInr: Number(row.amount_inr),
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    createdByOwnerUserId: row.created_by_owner_user_id,
+    createdAt: toDate(row.created_at),
+});
+
+const toRevocationRecord = (row: RevocationRow): LicenseRevocationRecord => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    storeId: row.store_id,
+    commercialRefundId: row.commercial_refund_id,
+    accessSourceKind: row.access_source_kind,
+    accessSourceId: row.access_source_id,
+    effectiveEndsAt: toDate(row.effective_ends_at),
+    recordedAt: toDate(row.recorded_at),
+    createdByOwnerUserId: row.created_by_owner_user_id,
+    createdAt: toDate(row.created_at),
+});
+
+export const listCommercialRefundsForStore = async (storeId: string): Promise<CommercialRefundRecord[]> => {
+    const rows = await pg`
+        SELECT
+            id,
+            organization_id,
+            store_id,
+            quote_id,
+            payment_event_id,
+            access_source_kind,
+            access_source_id,
+            razorpay_payment_id,
+            razorpay_refund_id,
+            amount_inr,
+            amount_paise,
+            currency,
+            created_by_owner_user_id,
+            created_at
+        FROM commercial_refunds
+        WHERE store_id = ${storeId}
+        ORDER BY created_at DESC, id DESC
+    ` as RefundRow[];
+    return rows.map(toRefundRecord);
+};
+
+export const listLicenseRevocationsForStore = async (storeId: string): Promise<LicenseRevocationRecord[]> => {
+    const rows = await pg`
+        SELECT
+            id,
+            organization_id,
+            store_id,
+            commercial_refund_id,
+            access_source_kind,
+            access_source_id,
+            effective_ends_at,
+            recorded_at,
+            created_by_owner_user_id,
+            created_at
+        FROM license_revocations
+        WHERE store_id = ${storeId}
+        ORDER BY created_at DESC, id DESC
+    ` as RevocationRow[];
+    return rows.map(toRevocationRecord);
+};
+
+export const getCommercialPaymentEventById = async (
+    eventId: string,
+): Promise<CommercialPaymentEventRecord | null> => {
+    const [row] = await pg`
+        SELECT
+            id,
+            razorpay_event_id,
+            event_type,
+            razorpay_order_id,
+            razorpay_payment_id,
+            amount_paise,
+            currency,
+            quote_id,
+            fulfillment_status,
+            fulfillment_error,
+            payload,
+            created_at,
+            processed_at
+        FROM commercial_payment_events
+        WHERE id = ${eventId}
+        LIMIT 1
+    ` as PaymentEventRow[];
+    return row ? toPaymentEvent(row) : null;
+};
+
+export const insertCommercialRefundAndRevocation = async (input: {
+    refund: CommercialRefundRecord;
+    revocation: LicenseRevocationRecord;
+}): Promise<
+    | { refund: CommercialRefundRecord; revocation: LicenseRevocationRecord }
+    | "duplicate-refund"
+    | "duplicate-revocation"
+    | "access-source-not-found"
+> => {
+    try {
+        return await pg.begin(async (tx) => {
+            if (input.revocation.accessSourceKind === "store_license") {
+                const [license] = await tx`
+                    SELECT id
+                    FROM store_licenses
+                    WHERE id = ${input.revocation.accessSourceId}
+                      AND store_id = ${input.revocation.storeId}
+                      AND source_kind = 'paid'
+                      AND revoked_at IS NULL
+                    FOR UPDATE
+                ` as Array<{ id: string }>;
+                if (!license) {
+                    return "access-source-not-found";
+                }
+                await tx`
+                    UPDATE store_licenses
+                    SET revoked_at = ${input.revocation.effectiveEndsAt}
+                    WHERE id = ${input.revocation.accessSourceId}
+                `;
+            } else {
+                const [addOn] = await tx`
+                    SELECT id
+                    FROM store_co_term_add_ons
+                    WHERE id = ${input.revocation.accessSourceId}
+                      AND store_id = ${input.revocation.storeId}
+                      AND revoked_at IS NULL
+                    FOR UPDATE
+                ` as Array<{ id: string }>;
+                if (!addOn) {
+                    return "access-source-not-found";
+                }
+                await tx`
+                    UPDATE store_co_term_add_ons
+                    SET revoked_at = ${input.revocation.effectiveEndsAt}
+                    WHERE id = ${input.revocation.accessSourceId}
+                `;
+            }
+
+            await tx`
+                INSERT INTO commercial_refunds (
+                    id,
+                    organization_id,
+                    store_id,
+                    quote_id,
+                    payment_event_id,
+                    access_source_kind,
+                    access_source_id,
+                    razorpay_payment_id,
+                    razorpay_refund_id,
+                    amount_inr,
+                    amount_paise,
+                    currency,
+                    created_by_owner_user_id,
+                    created_at
+                ) VALUES (
+                    ${input.refund.id},
+                    ${input.refund.organizationId},
+                    ${input.refund.storeId},
+                    ${input.refund.quoteId},
+                    ${input.refund.paymentEventId},
+                    ${input.refund.accessSourceKind},
+                    ${input.refund.accessSourceId},
+                    ${input.refund.razorpayPaymentId},
+                    ${input.refund.razorpayRefundId},
+                    ${input.refund.amountInr},
+                    ${input.refund.amountPaise},
+                    ${input.refund.currency},
+                    ${input.refund.createdByOwnerUserId},
+                    ${input.refund.createdAt}
+                )
+            `;
+
+            await tx`
+                INSERT INTO license_revocations (
+                    id,
+                    organization_id,
+                    store_id,
+                    commercial_refund_id,
+                    access_source_kind,
+                    access_source_id,
+                    effective_ends_at,
+                    recorded_at,
+                    created_by_owner_user_id,
+                    created_at
+                ) VALUES (
+                    ${input.revocation.id},
+                    ${input.revocation.organizationId},
+                    ${input.revocation.storeId},
+                    ${input.revocation.commercialRefundId},
+                    ${input.revocation.accessSourceKind},
+                    ${input.revocation.accessSourceId},
+                    ${input.revocation.effectiveEndsAt},
+                    ${input.revocation.recordedAt},
+                    ${input.revocation.createdByOwnerUserId},
+                    ${input.revocation.createdAt}
+                )
+            `;
+
+            return {
+                refund: input.refund,
+                revocation: input.revocation,
+            };
+        });
+    } catch (error) {
+        if (!isUniqueViolation(error)) {
+            throw error;
+        }
+        const existingRefund = (await listCommercialRefundsForStore(input.refund.storeId))
+            .find((refund) => refund.paymentEventId === input.refund.paymentEventId);
+        if (existingRefund) {
+            return "duplicate-refund";
+        }
+        return "duplicate-revocation";
     }
 };

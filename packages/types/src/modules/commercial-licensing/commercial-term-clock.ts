@@ -78,13 +78,18 @@ export const addCommercialTerm = (start: Date, term: CommercialCatalogTerm): Dat
     return fromKolkataDateTimeParts(addKolkataMonths(parts, term.count * 12));
 };
 
+export const commercialAccessSourceEffectiveEndsAt = (
+    source: { endsAt: Date; revokedAt: Date | null },
+): Date => source.revokedAt ?? source.endsAt;
+
 export const isCommercialAccessSourceActiveAt = (
     source: { startsAt: Date; endsAt: Date; revokedAt: Date | null },
     at: Date,
-): boolean =>
-    source.revokedAt === null
-    && source.startsAt.getTime() <= at.getTime()
-    && at.getTime() < source.endsAt.getTime();
+): boolean => {
+    const effectiveEndsAt = commercialAccessSourceEffectiveEndsAt(source);
+    return source.startsAt.getTime() <= at.getTime()
+        && at.getTime() < effectiveEndsAt.getTime();
+};
 
 export const commercialTermRemainingFraction = (
     startsAt: Date,
