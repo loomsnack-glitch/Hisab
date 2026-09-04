@@ -98,6 +98,45 @@ const StoreCommercialStatus = ({ organizationId, storeId }: StoreCommercialStatu
                             )}
                         </div>
 
+                        {status.accessGrants.length > 0 ? (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-medium text-foreground">Access Grants</h3>
+                                <ul className="space-y-3">
+                                    {status.accessGrants.map((grant) => (
+                                        <li
+                                            key={grant.id}
+                                            className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-4"
+                                        >
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Badge variant="outline" className="rounded-full text-xs">
+                                                    {grant.label}
+                                                </Badge>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {grant.selectionLabel}
+                                                    {" · "}
+                                                    {formatCommercialTimestamp(grant.startsAt)}
+                                                    {" – "}
+                                                    {formatCommercialTimestamp(grant.endsAt)}
+                                                    {` (${status.timezone})`}
+                                                </p>
+                                            </div>
+                                            <ul className="flex flex-wrap gap-2">
+                                                {grant.modules.flatMap((moduleItem) =>
+                                                    moduleItem.features.map((feature) => (
+                                                        <li key={`${grant.id}-${moduleItem.key}-${feature.key}`}>
+                                                            <Badge variant="secondary" className="rounded-full text-xs">
+                                                                {feature.displayName}
+                                                            </Badge>
+                                                        </li>
+                                                    )),
+                                                )}
+                                            </ul>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ) : null}
+
                         <div className="space-y-2">
                             <h3 className="text-sm font-medium text-foreground">Available Features</h3>
                             {status.entitlements.features.length === 0 ? (

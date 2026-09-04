@@ -1,7 +1,11 @@
 import type {
+    ActivePlanSnapshot,
     ActiveTrialPlanSnapshot,
     CommercialAccessSourceModuleSnapshot,
     CommercialAccessSourceRecord,
+    CommercialEnforcementLaunch,
+    ExistingStoreRecord,
+    StoreAccessGrantRecord,
     StoreLicenseRecord,
 } from "@repo/types";
 import { createFeatureEntitlementService } from "./feature-entitlement.service";
@@ -14,8 +18,11 @@ export const otherOrganizationId = "99999999-9999-4999-8999-999999999999";
 export const storeId = "11111111-1111-4111-8111-111111111111";
 export const otherStoreId = "22222222-2222-4222-8222-222222222222";
 export const outsiderStoreId = "33333333-3333-4333-8333-333333333333";
+export const ownerUserId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 export const trialStart = new Date("2026-09-04T15:00:00.000Z");
 export const trialEnd = new Date("2026-09-11T15:00:00.000Z");
+export const migrationEnd = new Date("2026-10-04T15:00:00.000Z");
+export const storeCreatedAt = new Date("2026-08-01T10:00:00.000Z");
 
 export const billingFeature = {
     featureId: "aaaa1111-1111-4111-8111-111111111111",
@@ -83,15 +90,42 @@ export const createTrialPlanSnapshot = (
     };
 };
 
-type MemoryState = {
-    memberships: Array<{ organizationId: string; userId: string }>;
-    stores: Array<{ id: string; organizationId: string }>;
-    trialPlan: ActiveTrialPlanSnapshot | null;
-    licenses: StoreLicenseRecord[];
-    extraAccessSources: CommercialAccessSourceRecord[];
+export const createPaidPlanSnapshot = (
+    overrides: Partial<ActivePlanSnapshot> = {},
+): ActivePlanSnapshot => {
+    const base: ActivePlanSnapshot = {
+        planId: "ffff2222-1111-4111-8111-111111111111",
+        planRevisionId: "ffff2222-2222-4222-8222-222222222222",
+        key: "core",
+        displayName: "Core",
+        planType: "paid",
+        priceInr: 2999,
+        term: { count: 1, unit: "year" },
+        modules: cloneModules([coreOperationsModule]),
+    };
+    return {
+        ...base,
+        ...overrides,
+        term: overrides.term ?? { ...base.term },
+        modules: cloneModules(overrides.modules ?? base.modules),
+    };
 };
 
-const toAccessSource = (license: StoreLicenseRecord): CommercialAccessSourceRecord => ({
+type MemoryStore = ExistingStoreRecord;
+
+type MemoryState = {
+    memberships: Array<{ organizationId: string; userId: string }>;
+    stores: MemoryStore[];
+    trialPlan: ActiveTrialPlanSnapshot | null;
+    activePlans: ActivePlanSnapshot[];
+    activeModules: CommercialAccessSourceModuleSnapshot[];
+    licenses: StoreLicenseRecord[];
+    grants: StoreAccessGrantRecord[];
+    extraAccessSources: CommercialAccessSourceRecord[];
+    enforcementLaunch: CommercialEnforcementLaunch | null;
+};
+
+const toLicenseAccessSource = (license: StoreLicenseRecord): CommercialAccessSourceRecord => ({
     id: license.id,
     kind: "store_license",
     storeId: license.storeId,
@@ -106,28 +140,79 @@ const toAccessSource = (license: StoreLicenseRecord): CommercialAccessSourceReco
     modules: cloneModules(license.modules),
 });
 
+const toGrantAccessSource = (grant: StoreAccessGrantRecord): CommercialAccessSourceRecord => ({
+    id: grant.id,
+    kind: "store_access_grant",
+    storeId: grant.storeId,
+    organizationId: grant.organizationId,
+    startsAt: grant.startsAt,
+    endsAt: grant.endsAt,
+    revokedAt: grant.revokedAt,
+    planKey: grant.planKey,
+    planDisplayName: grant.planDisplayName,
+    planType: grant.planType,
+    term: grant.term,
+    modules: cloneModules(grant.modules),
+});
+
+const cloneGrant = (grant: StoreAccessGrantRecord): StoreAccessGrantRecord => ({
+    ...grant,
+    term: { ...grant.term },
+    modules: cloneModules(grant.modules),
+});
+
 export const createMemoryCommercialLicensing = (now = trialStart) => {
+    const trialPlan = createTrialPlanSnapshot();
+    const corePlan = createPaidPlanSnapshot();
     const state: MemoryState = {
         memberships: [
             { organizationId, userId },
             { organizationId: otherOrganizationId, userId },
         ],
         stores: [
-            { id: storeId, organizationId },
-            { id: otherStoreId, organizationId },
-            { id: outsiderStoreId, organizationId: otherOrganizationId },
+            { id: storeId, organizationId, createdAt: storeCreatedAt },
+            { id: otherStoreId, organizationId, createdAt: storeCreatedAt },
+            { id: outsiderStoreId, organizationId: otherOrganizationId, createdAt: storeCreatedAt },
         ],
-        trialPlan: createTrialPlanSnapshot(),
+        trialPlan,
+        activePlans: [trialPlan, corePlan],
+        activeModules: cloneModules([coreOperationsModule, integrationsModule]),
         licenses: [],
+        grants: [],
         extraAccessSources: [],
+        enforcementLaunch: null,
     };
 
     let currentTime = now;
     let nextId = 1;
 
     const repository = {
-        getActiveTrialPlanSnapshot: async () =>
-            state.trialPlan ? createTrialPlanSnapshot(state.trialPlan) : null,
+        getActiveTrialPlanSnapshot: async () => {
+            const plan = state.activePlans.find((item) => item.planType === "trial") ?? state.trialPlan;
+            return plan && plan.planType === "trial" ? createTrialPlanSnapshot(plan) : null;
+        },
+        getActivePlanSnapshotByKey: async (planKey: string) => {
+            const plan = state.activePlans.find((item) => item.key === planKey) ?? null;
+            if (!plan) return null;
+            return {
+                ...plan,
+                term: { ...plan.term },
+                modules: cloneModules(plan.modules),
+            };
+        },
+        getActiveModuleSnapshotByKey: async (moduleKey: string) => {
+            const moduleItem = state.activeModules.find((item) => item.key === moduleKey) ?? null;
+            return moduleItem
+                ? { ...moduleItem, features: moduleItem.features.map((feature) => ({ ...feature })) }
+                : null;
+        },
+        listActiveModuleSnapshots: async () => cloneModules(state.activeModules),
+        listActivePlanSnapshots: async () =>
+            state.activePlans.map((plan) => ({
+                ...plan,
+                term: { ...plan.term },
+                modules: cloneModules(plan.modules),
+            })),
         listStoreLicenses: async (targetStoreId: string) =>
             state.licenses
                 .filter((license) => license.storeId === targetStoreId)
@@ -136,8 +221,11 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                     term: { ...license.term },
                     modules: cloneModules(license.modules),
                 })),
+        listAccessGrantsForStore: async (targetStoreId: string) =>
+            state.grants.filter((grant) => grant.storeId === targetStoreId).map(cloneGrant),
         listAccessSourcesForStore: async (targetStoreId: string) => [
-            ...(await repository.listStoreLicenses(targetStoreId)).map(toAccessSource),
+            ...(await repository.listStoreLicenses(targetStoreId)).map(toLicenseAccessSource),
+            ...(await repository.listAccessGrantsForStore(targetStoreId)).map(toGrantAccessSource),
             ...state.extraAccessSources
                 .filter((source) => source.storeId === targetStoreId)
                 .map((source) => ({
@@ -145,6 +233,16 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                     modules: cloneModules(source.modules),
                 })),
         ],
+        listStoresExistingAt: async (at: Date) =>
+            state.stores
+                .filter((store) => store.createdAt.getTime() <= at.getTime())
+                .map((store) => ({ ...store })),
+        getEnforcementLaunch: async () =>
+            state.enforcementLaunch ? { launchedAt: state.enforcementLaunch.launchedAt } : null,
+        getOrCreateEnforcementLaunch: async (launchedAt: Date) => {
+            state.enforcementLaunch ??= { launchedAt };
+            return { launchedAt: state.enforcementLaunch.launchedAt };
+        },
         insertTrialLicense: async (input: {
             id: string;
             organizationId: string;
@@ -186,6 +284,19 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                 modules: cloneModules(created.modules),
             };
         },
+        insertStoreAccessGrant: async (grant: StoreAccessGrantRecord) => {
+            if (
+                grant.origin === "legacy_migration"
+                && state.grants.some(
+                    (existing) =>
+                        existing.storeId === grant.storeId && existing.origin === "legacy_migration",
+                )
+            ) {
+                return "duplicate-legacy-migration" as const;
+            }
+            state.grants.push(cloneGrant(grant));
+            return cloneGrant(grant);
+        },
     };
 
     const featureEntitlement = createFeatureEntitlementService({
@@ -200,6 +311,11 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                         membership.organizationId === targetOrganizationId
                         && membership.userId === targetUserId,
                 )
+                    ? { id: targetOrganizationId, name: "Org" }
+                    : null,
+            getOrganizationById: async (targetOrganizationId) =>
+                state.stores.some((store) => store.organizationId === targetOrganizationId)
+                    || state.memberships.some((membership) => membership.organizationId === targetOrganizationId)
                     ? { id: targetOrganizationId, name: "Org" }
                     : null,
             getStoreById: async (targetOrganizationId, targetStoreId) =>
@@ -225,9 +341,26 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         },
         setTrialPlan: (plan: ActiveTrialPlanSnapshot | null) => {
             state.trialPlan = plan;
+            state.activePlans = state.activePlans.filter((item) => item.planType !== "trial");
+            if (plan) {
+                state.activePlans.unshift(plan);
+            }
         },
         addAccessSource: (source: CommercialAccessSourceRecord) => {
             state.extraAccessSources.push(source);
+        },
+        addStore: (store: MemoryStore) => {
+            state.stores.push(store);
+        },
+        setActiveModules: (modules: CommercialAccessSourceModuleSnapshot[]) => {
+            state.activeModules = cloneModules(modules);
+        },
+        addActivePlan: (plan: ActivePlanSnapshot) => {
+            state.activePlans.push({
+                ...plan,
+                term: { ...plan.term },
+                modules: cloneModules(plan.modules),
+            });
         },
     };
 };

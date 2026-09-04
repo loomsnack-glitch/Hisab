@@ -18,6 +18,7 @@ const eligibleStatus: StoreCommercialStatusResponse = {
         timezone: "Asia/Kolkata",
         baseAccess: null,
         scheduledSuccessor: null,
+        accessGrants: [],
         activeAddOns: [],
         trial: {
             eligible: true,
@@ -71,6 +72,58 @@ const activeTrialStatus: StoreCommercialStatusResponse = {
     },
 };
 
+const migrationGrantStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...eligibleStatus.commercialStatus,
+        accessGrants: [
+            {
+                id: "00000000-0000-4000-8000-000000000101",
+                sourceKind: "store_access_grant",
+                origin: "legacy_migration",
+                termKind: "complimentary",
+                selectionKind: "all_current_modules",
+                label: "Legacy migration grant",
+                selectionLabel: "All current Modules",
+                planKey: null,
+                planDisplayName: null,
+                moduleKey: null,
+                moduleDisplayName: null,
+                term: { count: 30, unit: "day" },
+                startsAt,
+                endsAt: new Date("2026-10-04T15:00:00.000Z"),
+                status: "active",
+                modules: [
+                    {
+                        key: "core_operations",
+                        displayName: "Core Operations",
+                        features: [{ key: "billing", displayName: "Billing" }],
+                    },
+                ],
+            },
+        ],
+        entitlements: {
+            storeId,
+            features: [
+                {
+                    key: "billing",
+                    displayName: "Billing",
+                    sources: [
+                        {
+                            sourceKind: "store_access_grant",
+                            sourceId: "00000000-0000-4000-8000-000000000101",
+                            moduleKey: "core_operations",
+                            moduleDisplayName: "Core Operations",
+                            featureDisplayName: "Billing",
+                            startsAt,
+                            endsAt: new Date("2026-10-04T15:00:00.000Z"),
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+};
+
 const renderStatus = (data: StoreCommercialStatusResponse) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
@@ -108,5 +161,17 @@ describe("Store commercial status", () => {
         expect(markup).toContain("This Store has already used its standard Trial Plan.");
         expect(markup).not.toContain("Start Trial");
         expect(markup).not.toContain("This Store can start the standard Trial Plan once.");
+    });
+
+    test("shows a legacy migration grant's source, Features, and expiry separately from a Trial", () => {
+        const markup = renderStatus(migrationGrantStatus);
+
+        expect(markup).toContain("Access Grants");
+        expect(markup).toContain("Legacy migration grant");
+        expect(markup).toContain("All current Modules");
+        expect(markup).toContain("Billing");
+        expect(markup).toContain("Asia/Kolkata");
+        expect(markup).not.toContain("Complimentary Store Access Grant");
+        expect(markup).toContain("Start Trial");
     });
 });

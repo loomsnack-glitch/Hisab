@@ -3,9 +3,20 @@ import type { CommercialCatalogTerm, CommercialPlanType } from "../platform/comm
 import type {
     CommercialAccessSourceKindSchema,
     CommercialFeatureEntitlementEvidenceDTOSchema,
+    ConsoleStoreCommercialInspectionResponseSchema,
+    CreateStoreAccessGrantSchema,
     EntitledFeatureDTOSchema,
     FeatureEntitlementDecisionDTOSchema,
+    GrantableCommercialAccessDTOSchema,
+    GrantableModuleDTOSchema,
+    GrantablePlanDTOSchema,
     StartStoreTrialResponseSchema,
+    StoreAccessGrantDTOSchema,
+    StoreAccessGrantModuleDTOSchema,
+    StoreAccessGrantOriginSchema,
+    StoreAccessGrantSelectionKindSchema,
+    StoreAccessGrantSelectionSchema,
+    StoreAccessGrantTermKindSchema,
     StoreCommercialStatusDTOSchema,
     StoreCommercialStatusResponseSchema,
     StoreFeatureEntitlementDTOSchema,
@@ -27,6 +38,20 @@ export type StoreTrialAvailabilityDTO = z.infer<typeof StoreTrialAvailabilityDTO
 export type StoreCommercialStatusDTO = z.infer<typeof StoreCommercialStatusDTOSchema>;
 export type StoreCommercialStatusResponse = z.infer<typeof StoreCommercialStatusResponseSchema>;
 export type StartStoreTrialResponse = z.infer<typeof StartStoreTrialResponseSchema>;
+export type StoreAccessGrantOrigin = z.infer<typeof StoreAccessGrantOriginSchema>;
+export type StoreAccessGrantTermKind = z.infer<typeof StoreAccessGrantTermKindSchema>;
+export type StoreAccessGrantSelectionKind = z.infer<typeof StoreAccessGrantSelectionKindSchema>;
+export type StoreAccessGrantModuleDTO = z.infer<typeof StoreAccessGrantModuleDTOSchema>;
+export type StoreAccessGrantDTO = z.infer<typeof StoreAccessGrantDTOSchema>;
+export type GrantablePlanDTO = z.infer<typeof GrantablePlanDTOSchema>;
+export type GrantableModuleDTO = z.infer<typeof GrantableModuleDTOSchema>;
+export type GrantableCommercialAccessDTO = z.infer<typeof GrantableCommercialAccessDTOSchema>;
+export type ConsoleStoreCommercialInspectionResponse = z.infer<
+    typeof ConsoleStoreCommercialInspectionResponseSchema
+>;
+export type StoreAccessGrantSelection = z.infer<typeof StoreAccessGrantSelectionSchema>;
+export type CreateStoreAccessGrantJSON = z.input<typeof CreateStoreAccessGrantSchema>;
+export type CreateStoreAccessGrantSVC = z.output<typeof CreateStoreAccessGrantSchema>;
 
 export type CommercialAccessSourceFeatureSnapshot = {
     featureId: string;
@@ -58,15 +83,50 @@ export type CommercialAccessSourceRecord = {
     modules: CommercialAccessSourceModuleSnapshot[];
 };
 
-export type ActiveTrialPlanSnapshot = {
+export type ActivePlanSnapshot = {
     planId: string;
     planRevisionId: string;
     key: string;
     displayName: string;
-    planType: "trial";
+    planType: CommercialPlanType;
     priceInr: number;
     term: CommercialCatalogTerm;
     modules: CommercialAccessSourceModuleSnapshot[];
+};
+
+export type ActiveTrialPlanSnapshot = ActivePlanSnapshot & {
+    planType: "trial";
+};
+
+export type StoreAccessGrantRecord = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    origin: StoreAccessGrantOrigin;
+    termKind: StoreAccessGrantTermKind;
+    selectionKind: StoreAccessGrantSelectionKind;
+    planId: string | null;
+    planRevisionId: string | null;
+    planKey: string | null;
+    planDisplayName: string | null;
+    planType: CommercialPlanType | null;
+    term: CommercialCatalogTerm;
+    startsAt: Date;
+    endsAt: Date;
+    revokedAt: Date | null;
+    createdByOwnerUserId: string | null;
+    createdAt: Date;
+    modules: CommercialAccessSourceModuleSnapshot[];
+};
+
+export type ExistingStoreRecord = {
+    id: string;
+    organizationId: string;
+    createdAt: Date;
+};
+
+export type CommercialEnforcementLaunch = {
+    launchedAt: Date;
 };
 
 export type StoreLicenseRecord = {

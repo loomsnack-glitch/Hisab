@@ -6,6 +6,7 @@ import {
     CreateCommercialModuleSchema,
     CreateCommercialPlanSchema,
     CreateOwnerUserSchema,
+    CreateStoreAccessGrantSchema,
     CommercialFeatureListQuerySchema,
     CommercialModuleListQuerySchema,
     CommercialPlanListQuerySchema,
@@ -35,6 +36,10 @@ import { getCommercialCatalogService, type CommercialCatalogService } from "./co
 import { getOwnerAuthService, OWNER_SESSION_SECONDS, type OwnerAuthService } from "./owner-auth.service";
 import { getOwnerUserService, type OwnerUserService } from "./owner-user.service";
 import { getPlatformReportingService, type PlatformReportingService } from "./platform-reporting.service";
+import {
+    getCommercialLicensingService,
+    type CommercialLicensingService,
+} from "@/modules/tenant/commercial-licensing/commercial-licensing.service";
 
 const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     setCookie(c, OWNER_AUTH_COOKIE, token, {
@@ -51,6 +56,7 @@ export const createPlatformRoutes = (
     ownerUserService: OwnerUserService = getOwnerUserService(),
     reportingService: PlatformReportingService = getPlatformReportingService(),
     commercialCatalogService: CommercialCatalogService = getCommercialCatalogService(),
+    commercialLicensingService: CommercialLicensingService = getCommercialLicensingService(),
 ) => {
     const router = new Hono<{ Variables: AppVariables }>();
     const ownerAuthMiddleware = createOwnerAuthMiddleware(authService);
@@ -225,6 +231,78 @@ export const createPlatformRoutes = (
                 );
             } catch (error) {
                 return handleError("platform.routes", "getPlatformStore", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/stores/:storeId/commercial", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!storeId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid store id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await commercialLicensingService.inspectStoreCommercialStatusForPlatform(
+                    organizationId.data,
+                    storeId.data,
+                ),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "inspectStoreCommercialStatus", c, error);
+        }
+    });
+
+    router.post(
+        "/organizations/:organizationId/stores/:storeId/commercial/grants",
+        validateSchema("json", CreateStoreAccessGrantSchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!storeId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid store id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await commercialLicensingService.createStoreAccessGrant(
+                        c.get("authOwner").id,
+                        organizationId.data,
+                        storeId.data,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "createStoreAccessGrant", c, error);
             }
         },
     );
