@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 2 Execution Plan and Review Log
 
-Status: Phase 2 in progress; subphase 2.5 in progress
+Status: Phase 2 completed with native/API follow-up
 Phase: 2 — Catalog and Product selection
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -46,7 +46,7 @@ Not included in this phase:
 | 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
 | 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | `2ed696e` |
 | 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | `640010b` |
-| 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | in progress |
+| 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | `3655132` |
 
 ## Shared Phase 2 decisions
 
@@ -692,3 +692,71 @@ the existing POS service/routes/types, and the web POS configuration behavior.
   remains a later human decision if bundle billing is required on mobile.
 
 Plan review result: approved for implementation within the supported API scope.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added scoped TanStack Query boundaries for the existing POS Combo and
+  Product Add-on attachment services.
+- Added active-option filtering, selection-cap helpers, group min/max
+  validation, and pure tests without requiring Android or live API access.
+- Extended the mobile Cart handoff with configuration IDs and quantities,
+  stable configuration signatures, unique configured-line IDs, and merge
+  behavior that keeps different configurations as separate lines.
+- Added a compact in-place configuration flow on New Sale for supported
+  Product Add-ons and Combo choice groups, including nested Add-ons for
+  selected Combo options.
+- Kept ordinary Products as one-tap additions and recorded successful
+  configured additions as Recent Products.
+- Added translated configuration loading, error/retry, empty, cancel, and
+  add-to-Cart states in English, Gujarati, and Hindi.
+- Kept bundle Products unavailable for configuration because the current POS
+  service exposes no bundle-detail read contract; this is recorded as an API
+  follow-up rather than guessed client behavior.
+
+Standards/spec review:
+
+- Configuration is loaded from the active Device Session's existing POS API;
+  no organization-admin Catalog endpoint or new backend route was introduced.
+- Only IDs and quantities enter the Cart configuration; names and prices stay
+  server-owned Product data for later Draft Sale/Sale validation.
+- Inactive Add-ons and Combo options are filtered before presentation.
+- Configuration equality prevents different Combo/Add-on choices from being
+  merged into one Cart line, and unique line IDs prevent UI key collisions.
+- Camera, manual Product selection, Recent/Pinned shortcuts, Categories, and
+  ordinary one-tap additions remain available.
+- The missing bundle-detail API is the only named scope gap; no actionable
+  standards or spec findings remain within the supported 2.5 slice.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 39 passed.
+- Mobile TypeScript check — no new errors; the known WhatsApp asset import
+  remains the only baseline error.
+- `git diff --check` — passed.
+- Android build/device/API validation — intentionally not run; the user will
+  validate native camera/MMKV behavior and live combo/Add-on API responses.
+
+2.5 status: Completed with native/API follow-up. Focused commit: `3655132`.
+
+## Phase 2 final review
+
+Completed on 2026-09-05 after the 2.5 closeout.
+
+- 2.1–2.5 are implemented and individually committed with focused tests and
+  status evidence.
+- The New Sale path now covers scoped Catalog loading, search, Categories,
+  Android camera scanning, Recent/Pinned convenience, supported Add-ons, and
+  Combo configuration before Cart handoff.
+- Server Catalog authority is preserved for Product identity, prices,
+  discounts, availability, and configuration definitions.
+- MMKV is used only for the approved local session/preferences/convenience
+  boundaries; Catalog and configuration data remain TanStack Query state.
+- The phase has no build/device validation claim. Native camera, MMKV,
+  configuration API, and physical-device checks remain explicit follow-ups.
+- Phase 3 can now own Cart editing/totals, Draft Sale persistence, and mapping
+  the preserved configuration into shared Draft Sale inputs.
+
+Phase 2 final status: Completed with native/API follow-up. Bundle details are a
+named API follow-up and are not silently treated as supported.
