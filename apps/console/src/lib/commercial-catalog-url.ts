@@ -11,6 +11,7 @@ export const commercialCatalogPath = "/plans";
 export const commercialCatalogPlansPath = "/plans/list";
 export const commercialCatalogModulesPath = "/plans/modules";
 export const commercialCatalogFeaturesPath = "/plans/features";
+export const commercialCatalogStorefrontPath = "/plans/storefront";
 
 export const commercialFeaturePath = (featureId: string) => `/plans/features/${featureId}`;
 export const commercialModulePath = (moduleId: string) => `/plans/modules/${moduleId}`;
@@ -25,7 +26,8 @@ export type CommercialCatalogLocation =
     | { kind: "modules" }
     | { kind: "module"; moduleId: string }
     | { kind: "plans" }
-    | { kind: "plan"; planId: string };
+    | { kind: "plan"; planId: string }
+    | { kind: "storefront" };
 
 export const parseCommercialCatalogPath = (pathname: string): CommercialCatalogLocation => {
     const featureMatch = pathname.match(/^\/plans\/features\/([^/]+)$/);
@@ -39,6 +41,9 @@ export const parseCommercialCatalogPath = (pathname: string): CommercialCatalogL
     const planMatch = pathname.match(/^\/plans\/list\/([^/]+)$/);
     if (planMatch?.[1]) {
         return { kind: "plan", planId: planMatch[1] };
+    }
+    if (pathname === commercialCatalogStorefrontPath || pathname.startsWith(`${commercialCatalogStorefrontPath}/`)) {
+        return { kind: "storefront" };
     }
     if (pathname === commercialCatalogModulesPath || pathname.startsWith(`${commercialCatalogModulesPath}/`)) {
         return { kind: "modules" };

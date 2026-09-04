@@ -32,12 +32,13 @@ import {
     SheetTrigger,
 } from "@repo/ui/components/sheet";
 import { cn } from "@repo/ui/lib/utils";
-import { ChevronLeft, History, Layers3, Package2, Puzzle, Search, X } from "lucide-react";
+import { ChevronLeft, History, Layers3, Package2, Puzzle, Search, Store, X } from "lucide-react";
 
 import {
     commercialCatalogFeaturesListPath,
     commercialCatalogModulesListPath,
     commercialCatalogPlansListPath,
+    commercialCatalogStorefrontPath,
 } from "@/lib/commercial-catalog-url";
 
 export const commercialCatalogStatusLabels: Record<CommercialCatalogRevisionStatus, string> = {
@@ -106,7 +107,7 @@ export const commercialCatalogUnauthorizedCode = (error: unknown, response?: { s
     (error as { code?: number } | null)?.code
     ?? (response?.status === "error" ? response.code : undefined);
 
-type CatalogSection = "features" | "modules" | "plans";
+type CatalogSection = "features" | "modules" | "plans" | "storefront";
 
 type CommercialCatalogSectionNavProps = {
     current: CatalogSection;
@@ -116,6 +117,7 @@ const catalogTabs = [
     { id: "plans", label: "Plans", path: () => commercialCatalogPlansListPath(), icon: Package2 },
     { id: "modules", label: "Modules", path: () => commercialCatalogModulesListPath(), icon: Puzzle },
     { id: "features", label: "Features", path: () => commercialCatalogFeaturesListPath(), icon: Layers3 },
+    { id: "storefront", label: "Storefront", path: () => commercialCatalogStorefrontPath, icon: Store },
 ] as const;
 
 export const pushCommercialCatalogPath = (path: string) => {
@@ -127,7 +129,7 @@ export const pushCommercialCatalogPath = (path: string) => {
 
 export const CommercialCatalogSectionNav = ({ current }: CommercialCatalogSectionNavProps) => (
     <div className="border-b border-border/60">
-        <nav className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:justify-start" aria-label="Plans sections">
+        <nav className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 sm:flex sm:w-auto sm:justify-start" aria-label="Plans sections">
             {catalogTabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = current === tab.id;
