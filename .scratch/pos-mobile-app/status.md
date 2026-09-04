@@ -101,7 +101,7 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 | --- | --- | --- |
 | 1.1 Mobile POS application boundary | Completed | Authenticated mobile flow now enters a POS-owned nested navigator and POS shell instead of the generic Dashboard. |
 | 1.2 MMKV storage boundary | Completed with follow-up | MMKV-only session, preference, and convenience boundaries are implemented and focused-tested; native Android/device validation remains pending. |
-| 1.3 Localization foundation | Not started | Bundled resources, namespaces, fallback, and persistence are verified. |
+| 1.3 Localization foundation | Completed | English, Gujarati, and Hindi bundles, namespaces, English fallback, persistence, and focused tests are in place; device layout remains a follow-up. |
 | 1.4 Uniwind design foundation | Not started | Tokens and base components match the approved UI rules. |
 | 1.5 POS session state | Not started | Starting, Locked, Unlocking, Active, Expired/Revoked, and Logging Out states are covered. |
 | 1.6 POS Unlock screen | Not started | Store Device authentication works with validation and recovery states. |
@@ -199,4 +199,4 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 
 ## Current next step
 
-Execute Phase 1 subphase 1.3 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.
+Execute Phase 1 subphase 1.4 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.

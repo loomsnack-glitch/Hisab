@@ -48,8 +48,8 @@ Not included in this phase:
 | Subphase | Outcome | Depends on | Exit evidence | Commit |
 | --- | --- | --- | --- | --- |
 | 1.1 | POS app boundary | Phase 0 | Authenticated flow enters POS-owned navigator | `81a754c` |
-| 1.2 | MMKV storage boundary | 1.1 | Separate storage areas and encrypted session adapter tested | `Pending commit` |
-| 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | Pending |
+| 1.2 | MMKV storage boundary | 1.1 | Separate storage areas and encrypted session adapter tested | `7a040cd` |
+| 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `Pending commit` |
 | 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | Pending |
 | 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | Pending |
 | 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | Pending |
@@ -217,6 +217,122 @@ before each implementation begins. The order is intentional: localization and
 visual primitives are established before session/unlock screens, and the
 navigation/New Sale shell comes last so it can consume the final session and
 design seams.
+
+## 1.3 — Localization foundation
+
+### Plan
+
+User-facing outcome: every Phase 1 POS-owned label can be rendered in English,
+Gujarati, or Hindi. The app starts in the last selected supported language,
+falls back to English for missing resources, and keeps business data untouched.
+
+Implementation scope:
+
+- Add `i18next` and `react-i18next` to the mobile app.
+- Create a mobile-owned initialization module with bundled `en`, `gu`, and
+  `hi` resources.
+- Use feature-oriented namespaces, starting with `common` and `pos` labels
+  needed by the foundation screens.
+- Persist only the selected language code through the MMKV preferences boundary
+  from 1.2.
+- Define a supported-language type and reject unsupported persisted values by
+  falling back to English.
+- Add typed translation-resource declarations and a React provider.
+- Keep Product names, Customer names, notes, Store names, and other server
+  business data exactly as supplied by the API.
+
+Acceptance criteria:
+
+1. English, Gujarati, and Hindi resources are bundled and selectable.
+2. A missing/unsupported stored language resolves to English.
+3. Changing language updates the i18next instance and persists the supported
+   language code through MMKV preferences.
+4. Translation keys are grouped by namespace and typed at the app boundary.
+5. Foundation UI can consume `useTranslation` without manually selecting a
+   locale in each screen.
+6. Focused tests cover supported-language resolution and the English fallback.
+
+Non-goals:
+
+- Translating server-provided business data.
+- Translating the full future Catalog, Cart, Payment, Reports, or printer
+  surface in this slice.
+- Adding remote translation downloads or a runtime locale service.
+- Changing the approved English-only printed invoice template.
+
+Public seams and effects:
+
+- `i18n` is the single app localization instance initialized by the mobile
+  entrypoint.
+- `setAppLanguage` is the typed language-change seam used by Settings and the
+  Unlock screen later in Phase 1.
+- Language persistence uses `posStorage` preferences and never session data.
+
+Test and verification plan:
+
+- Focused pure localization-boundary tests for supported codes, invalid values,
+  and fallback behavior.
+- Static scan for all three resource bundles and the provider wiring.
+- Mobile TypeScript check, reporting only the known WhatsApp asset baseline if
+  it remains.
+- `git diff --check`; no Android build command will be run.
+
+Risks and rollback:
+
+- Gujarati/Hindi strings can expand beyond English and expose layout defects;
+  keep strings short in foundation UI and leave full layout validation to the
+  real Android check.
+- If a resource key is missing, i18next must show the English fallback rather
+  than an empty foundation action.
+- The slice can be reverted independently before the session and Unlock
+  screens depend on its language seam.
+
+### Internal plan review
+
+Reviewed against the approved language decision, Phase 0 localization findings,
+the MMKV preference API from 1.2, and the current Provider entrypoint on
+2026-09-05.
+
+- The plan adds only localization foundation behavior; no feature workflow is
+  pulled forward.
+- It uses the already-approved i18next/react-i18next choice.
+- It keeps sensitive data out of the preferences instance and keeps business
+  values out of translation resources.
+- It has a testable pure seam and does not require an Android build.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added `i18next` and `react-i18next` to the mobile package.
+- Added typed bundled `common` and `pos` namespaces for English, Gujarati,
+  and Hindi.
+- Added supported-language resolution with English fallback for invalid or
+  missing persisted values.
+- Persisted language selection through the MMKV preferences boundary from 1.2.
+- Wrapped the app with `I18nextProvider` and changed the POS shell labels and
+  logout/recovery alerts to use translations.
+- Added pure tests for the approved language list, resource bundle coverage,
+  supported persisted values, and fallback behavior.
+
+Standards/spec review findings and fixes:
+
+- The first i18next configuration used the removed `initImmediate` option from
+  older i18next versions; it was removed after the TypeScript check identified
+  the mismatch.
+- Server-provided business data remains outside translation resources.
+- Printed invoice language behavior remains unchanged and English-only.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- `bun test apps/mobile/src/lib/localization-boundary.test.ts apps/mobile/src/lib/storage-boundary.test.ts` — 8 passed.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- `git diff --check` — passed.
+
+1.3 status: Completed. The real Android Gujarati/Hindi layout check remains a
+device-validation follow-up.
 
 ## Phase-level closeout checklist
 
