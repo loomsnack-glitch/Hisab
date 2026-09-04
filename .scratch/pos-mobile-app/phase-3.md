@@ -47,7 +47,7 @@ Not included in this phase:
 | 3.1 | Local Cart state | Phase 2 | Lines can be added, removed, adjusted, and displayed with immediate totals | `66479e3` |
 | 3.2 | Cart Review screen | 3.1 | Product lines, configurations, totals, and Continue to Payment are clear | `0a16c2b` |
 | 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | `7356c4d` |
-| 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | Pending |
+| 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | `d1acce6` |
 | 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | Pending |
 | 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | Pending |
 
@@ -147,8 +147,8 @@ Plan review result: approved for implementation.
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
-| 3.4 Quick Customer creation | Ready to commit | Implementation and review complete; focused checks pass |
-| 3.5 Discounts | Not started | Depends on 3.2 |
+| 3.4 Quick Customer creation | Completed with follow-up | `d1acce6`; native/device/API validation remains pending |
+| 3.5 Discounts | In progress | Plan approved; implementation pending |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
 
 ## 3.1 Implementation and review result
@@ -523,5 +523,78 @@ Verification:
 - Android build, emulator, device, and live API checks — intentionally not run;
   these remain user-owned validation steps.
 
-3.4 status: Ready to commit. Implementation commit reference is recorded after
-the commit gate.
+3.4 status: Completed with follow-up. Implementation commit: `d1acce6`.
+
+## 3.5 — Discounts
+
+### Plan
+
+User-facing outcome: a cashier can optionally apply, edit, or remove a valid
+amount or percentage order discount in Cart Review and see the local display
+total update immediately.
+
+Implementation scope:
+
+- Add a pure Cart discount boundary for amount/percentage state, validation,
+  maximum handling, and conversion to an effective display amount.
+- Store only the local discount mode/value in the scoped Cart state; do not
+  persist it in MMKV or send it to the server until 3.6 maps the Cart to a
+  Draft Sale request.
+- Add a secondary inline discount editor in Cart Review with amount and
+  percentage modes, optional quick percentage presets, apply, edit, and clear.
+- Prevent discounts greater than the current pre-order-discount display total,
+  percentage values outside 0–100, negative values, and invalid input.
+- Recalculate the local display total immediately while preserving the clear
+  server-authoritative pricing note.
+- Keep Customer, Draft Sale, Payment, and Sale behavior outside this slice.
+- Add focused pure/store tests for amount, percentage, maximum validation,
+  removal, scope preservation, and total recalculation.
+
+Acceptance criteria:
+
+1. Discount entry remains optional and secondary to Cart Review.
+2. Amount and percentage modes are available and mutually understandable.
+3. Invalid, negative, over-maximum, and malformed discounts cannot be applied.
+4. A valid discount updates the local display total immediately.
+5. The cashier can edit or remove the discount before Payment.
+6. Cart lines and selected Customer remain intact through discount changes.
+7. The local discount is not treated as a server-authoritative final total.
+8. English, Gujarati, and Hindi labels cover discount actions and errors.
+
+Non-goals:
+
+- Server Draft Sale persistence or request mapping (3.6).
+- Customer behavior (3.3–3.4), Payment, or Sale completion (Phase 4).
+- Per-line discount allocation, tax, or client-side billing authority.
+
+Dependencies and public seams:
+
+- Completed 3.2 Cart Review and 3.1 local display-total boundary/store.
+- Approved order-level discount model in `CONTEXT.md` and billing types.
+- Existing POS UI primitives and localization resources.
+
+Test strategy and expected checks:
+
+- Add pure discount-boundary tests and scoped Cart-store discount tests.
+- Run `bun run --cwd apps/mobile test`.
+- Run the mobile TypeScript check and separate the known WhatsApp asset error.
+- Run `git diff --check`; do not run Android builds or device commands.
+
+Risks and rollback:
+
+- Order discounts must remain separate from catalog Product discounts and must
+  not be allocated across lines.
+- A discount must be clamped/rejected against the current local display base;
+  server validation remains authoritative later.
+- Rollback is limited to discount boundary/state/editor changes; prior Cart,
+  Review, and Customer slices remain independently committed.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, `CONTEXT.md`, completed 3.1–3.4,
+the approved order-level discount ADR/model, and the existing mobile Cart
+seams. The plan keeps discounts optional, order-level, local for immediate
+feedback, and separate from server Draft Sale persistence. No new product, API,
+security, or release decision is required.
+
+Plan review result: approved for implementation.
