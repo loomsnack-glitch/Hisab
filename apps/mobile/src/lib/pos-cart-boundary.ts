@@ -2,6 +2,13 @@ import type { CustomerDTO, ProductResponseDTO } from "@repo/types";
 
 export type PosCartCustomer = Pick<CustomerDTO, "id" | "name" | "phone">;
 
+export type PosCartDiscountMode = "amount" | "percent";
+
+export type PosCartDiscount = {
+    mode: PosCartDiscountMode;
+    value: number;
+};
+
 export const normalizePosCartCustomer = (
     customer: Pick<CustomerDTO, "id" | "name" | "phone">,
 ): PosCartCustomer => ({
@@ -9,6 +16,34 @@ export const normalizePosCartCustomer = (
     name: customer.name,
     phone: customer.phone ?? null,
 });
+
+const roundDisplayMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+const finiteDisplayMoney = (value: number) => Number.isFinite(value) ? Math.max(0, value) : 0;
+
+export const isPosCartDiscountValid = (discount: PosCartDiscount, baseTotal: number) => {
+    if (!Number.isFinite(discount.value) || discount.value < 0 || !Number.isFinite(baseTotal) || baseTotal < 0) {
+        return false;
+    }
+
+    return discount.mode === "amount"
+        ? discount.value <= baseTotal
+        : discount.value <= 100;
+};
+
+export const getPosCartOrderDiscountAmount = (
+    discount: PosCartDiscount | null | undefined,
+    baseTotal: number,
+) => {
+    const total = finiteDisplayMoney(baseTotal);
+    if (!discount || !isPosCartDiscountValid(discount, total)) {
+        return 0;
+    }
+
+    return discount.mode === "amount"
+        ? roundDisplayMoney(Math.min(discount.value, total))
+        : roundDisplayMoney(total * discount.value / 100);
+};
 
 export type PosCartAddOnSelection = {
     addOnId: string;
@@ -131,10 +166,6 @@ export const changeCartItemQuantity = (
     return item ? setCartItemQuantity(items, lineId, item.quantity + delta) : [...items];
 };
 
-const roundDisplayMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-
-const finiteDisplayMoney = (value: number) => Number.isFinite(value) ? Math.max(0, value) : 0;
-
 export const getCartLineDisplayTotals = (item: PosCartItem) => {
     const unitPrice = finiteDisplayMoney(Number(item.price));
     const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(item.discount)));
@@ -147,8 +178,8 @@ export const getCartLineDisplayTotals = (item: PosCartItem) => {
     };
 };
 
-export const getCartDisplayTotals = (items: readonly PosCartItem[]) =>
-    items.reduce(
+export const getCartDisplayTotals = (items: readonly PosCartItem[], orderDiscount?: PosCartDiscount | null) => {
+    const lineTotals = items.reduce(
         (totals, item) => {
             const lineTotals = getCartLineDisplayTotals(item);
             return {
@@ -159,6 +190,15 @@ export const getCartDisplayTotals = (items: readonly PosCartItem[]) =>
         },
         { subtotal: 0, discount: 0, total: 0 },
     );
+    const baseTotal = roundDisplayMoney(Math.max(0, lineTotals.subtotal - lineTotals.discount));
+    const orderDiscountAmount = getPosCartOrderDiscountAmount(orderDiscount, baseTotal);
+
+    return {
+        ...lineTotals,
+        orderDiscount: orderDiscountAmount,
+        total: roundDisplayMoney(Math.max(0, baseTotal - orderDiscountAmount)),
+    };
+};
 
 export const getCartItemCount = (items: readonly PosCartItem[]) =>
     items.reduce((total, item) => total + item.quantity, 0);

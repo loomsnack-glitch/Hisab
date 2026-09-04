@@ -6,6 +6,8 @@ import {
     changeCartItemQuantity,
     getCartDisplayTotals,
     getCartItemCount,
+    getPosCartOrderDiscountAmount,
+    isPosCartDiscountValid,
     normalizePosCartCustomer,
     removeCartItem,
     type PosCartItem,
@@ -86,7 +88,15 @@ describe("POS Cart handoff", () => {
         const items = addProductToCart([], { ...product, price: 40, discount: 5 });
         const twice = addProductToCart(items, { ...product, price: 40, discount: 5 });
 
-        expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, total: 70 });
+        expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, orderDiscount: 0, total: 70 });
+    });
+
+    it("validates amount and percentage order discounts against the display base", () => {
+        expect(isPosCartDiscountValid({ mode: "amount", value: 20 }, 100)).toBe(true);
+        expect(isPosCartDiscountValid({ mode: "amount", value: 101 }, 100)).toBe(false);
+        expect(isPosCartDiscountValid({ mode: "percent", value: 100 }, 100)).toBe(true);
+        expect(isPosCartDiscountValid({ mode: "percent", value: 101 }, 100)).toBe(false);
+        expect(getPosCartOrderDiscountAmount({ mode: "percent", value: 10 }, 75)).toBe(7.5);
     });
 
     it("normalizes selected Customer context without retaining unrelated fields", () => {

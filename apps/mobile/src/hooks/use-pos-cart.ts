@@ -1,5 +1,5 @@
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration } from "../lib/pos-cart-boundary";
+import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration, type PosCartDiscount } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 
@@ -10,12 +10,14 @@ export const usePosCart = () => {
         : null;
     const items = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.items : []));
     const customer = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.customer : null));
+    const discount = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.discount : null));
 
     return {
         items,
         customer,
+        discount,
         itemCount: getCartItemCount(items),
-        displayTotals: getCartDisplayTotals(items),
+        displayTotals: getCartDisplayTotals(items, discount),
         addProduct: (product: ProductResponseDTO) => {
             if (scopeKey && product.productType === "single") {
                 usePosCartStore.getState().addProduct(scopeKey, product);
@@ -47,6 +49,11 @@ export const usePosCart = () => {
         clearCustomer: () => {
             if (scopeKey) {
                 usePosCartStore.getState().clearCustomer(scopeKey);
+            }
+        },
+        setDiscount: (nextDiscount: PosCartDiscount | null) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setDiscount(scopeKey, nextDiscount);
             }
         },
         clear: () => usePosCartStore.getState().clear(),

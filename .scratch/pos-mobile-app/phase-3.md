@@ -48,7 +48,7 @@ Not included in this phase:
 | 3.2 | Cart Review screen | 3.1 | Product lines, configurations, totals, and Continue to Payment are clear | `0a16c2b` |
 | 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | `7356c4d` |
 | 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | `d1acce6` |
-| 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | Pending |
+| 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | `Pending` |
 | 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | Pending |
 
 ## Shared Phase 3 decisions
@@ -148,8 +148,46 @@ Plan review result: approved for implementation.
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
 | 3.4 Quick Customer creation | Completed with follow-up | `d1acce6`; native/device/API validation remains pending |
-| 3.5 Discounts | In progress | Plan approved; implementation pending |
+| 3.5 Discounts | Completed with follow-up | `Pending`; amount/percentage discount validation and display updates are implemented; native/device validation remains pending |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
+
+## 3.5 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added a pure order-discount boundary supporting amount and percentage modes,
+  rejecting negative, malformed, over-maximum, and out-of-range values.
+- Stored the optional discount with the active scoped Cart and recalculated the
+  local display total immediately without changing the existing Product-line
+  identity or selected Customer.
+- Added a secondary Cart Review editor with amount/percentage modes, simple
+  percentage presets, apply, edit, and remove actions.
+- Added English, Gujarati, and Hindi labels for the discount editor, actions,
+  and validation state.
+- Kept discount values local to the Cart; Draft Sale request mapping and server
+  authority remain reserved for 3.6.
+
+Standards/spec review:
+
+- The order discount is separate from catalog Product discounts and is never
+  allocated across lines in the mobile display layer.
+- Validation uses the current pre-order-discount display base, while the
+  server remains authoritative for Draft Sale pricing and final totals.
+- Discount changes remain scoped to the active Organization/Store/Device Cart
+  and preserve lines and Customer selection.
+- The editor stays secondary to Cart Review and does not introduce Payment or
+  Sale behavior before Phase 4.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 52 passed, 118 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.5 status: Completed with follow-up. Implementation commit: pending.
 
 ## 3.1 Implementation and review result
 

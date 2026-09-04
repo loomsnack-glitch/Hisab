@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { PosButton, PosCard, PosTextField } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosCart } from "../hooks/use-pos-cart";
-import { getCartLineDisplayTotals } from "../lib/pos-cart-boundary";
+import { getCartLineDisplayTotals, isPosCartDiscountValid, type PosCartDiscountMode } from "../lib/pos-cart-boundary";
 import { usePosConfiguration } from "../hooks/use-pos-configuration";
 import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 import { usePosCustomers } from "../hooks/use-pos-customers";
@@ -27,6 +27,10 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const [newCustomerName, setNewCustomerName] = useState("");
     const [newCustomerPhone, setNewCustomerPhone] = useState("");
     const [customerCreateFieldError, setCustomerCreateFieldError] = useState<"name" | "phone" | null>(null);
+    const [discountEditorOpen, setDiscountEditorOpen] = useState(false);
+    const [discountMode, setDiscountMode] = useState<PosCartDiscountMode>("percent");
+    const [discountValue, setDiscountValue] = useState("");
+    const [discountError, setDiscountError] = useState(false);
     const deferredCustomerSearch = useDeferredValue(customerSearch);
     const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
     const customerCreate = useCreatePosCustomer();
@@ -48,6 +52,25 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
         setNewCustomerPhone("");
         setCustomerCreateFieldError(null);
         customerCreate.reset();
+    };
+    const openDiscountEditor = () => {
+        setDiscountMode(cart.discount?.mode ?? "percent");
+        setDiscountValue(cart.discount?.value.toString() ?? "");
+        setDiscountError(false);
+        setDiscountEditorOpen(true);
+    };
+    const applyDiscount = () => {
+        const value = Number(discountValue.trim());
+        const baseTotal = Math.max(0, cart.displayTotals.subtotal - cart.displayTotals.discount);
+        const nextDiscount = { mode: discountMode, value } as const;
+        if (!Number.isFinite(value) || !isPosCartDiscountValid(nextDiscount, baseTotal)) {
+            setDiscountError(true);
+            return;
+        }
+
+        cart.setDiscount(value === 0 ? null : nextDiscount);
+        setDiscountError(false);
+        setDiscountEditorOpen(false);
     };
     const submitCustomerCreate = async () => {
         const result = normalizePosCustomerCreatePayload(newCustomerName, newCustomerPhone);
@@ -171,6 +194,55 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                                 </View>
                             ) : null}
                         </View>
+                        <View className="gap-2 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
+                            <View className="flex-row items-center justify-between gap-3">
+                                <View className="min-w-0 flex-1">
+                                    <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("orderDiscount")}</Text>
+                                    {cart.displayTotals.orderDiscount > 0 ? (
+                                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                                            − {formatCurrency(cart.displayTotals.orderDiscount)}
+                                        </Text>
+                                    ) : null}
+                                </View>
+                                <View className="flex-row flex-wrap justify-end gap-2">
+                                    <PosButton label={cart.discount ? t("editDiscount") : t("addDiscount")} variant="secondary" onPress={openDiscountEditor} />
+                                    {cart.discount ? (
+                                        <PosButton label={t("removeDiscount")} variant="secondary" onPress={() => cart.setDiscount(null)} />
+                                    ) : null}
+                                </View>
+                            </View>
+                            {discountEditorOpen ? (
+                                <View className="gap-3 border-t border-pos-border pt-3 dark:border-pos-border-dark">
+                                    <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("discountEditorTitle")}</Text>
+                                    <View className="flex-row flex-wrap gap-2">
+                                        <PosButton label={t("discountModeAmount")} variant={discountMode === "amount" ? "primary" : "secondary"} onPress={() => setDiscountMode("amount")} />
+                                        <PosButton label={t("discountModePercent")} variant={discountMode === "percent" ? "primary" : "secondary"} onPress={() => setDiscountMode("percent")} />
+                                    </View>
+                                    <PosTextField
+                                        label={t("discountValue")}
+                                        value={discountValue}
+                                        onChangeText={(value) => {
+                                            setDiscountValue(value);
+                                            setDiscountError(false);
+                                        }}
+                                        placeholder={discountMode === "percent" ? t("discountPercentPlaceholder") : t("discountAmountPlaceholder")}
+                                        keyboardType="decimal-pad"
+                                        error={discountError ? t("discountInvalid") : undefined}
+                                    />
+                                    {discountMode === "percent" ? (
+                                        <View className="flex-row flex-wrap gap-2">
+                                            {[5, 10, 15].map((preset) => (
+                                                <PosButton key={preset} label={`${preset}%`} variant="secondary" onPress={() => setDiscountValue(String(preset))} />
+                                            ))}
+                                        </View>
+                                    ) : null}
+                                    <View className="flex-row flex-wrap gap-2">
+                                        <PosButton label={t("cancelDiscount")} variant="secondary" onPress={() => setDiscountEditorOpen(false)} />
+                                        <PosButton label={t("applyDiscount")} onPress={applyDiscount} />
+                                    </View>
+                                </View>
+                            ) : null}
+                        </View>
                         {cart.items.map((item) => (
                             <View
                                 key={item.lineId}
@@ -236,6 +308,12 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                                 <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("catalogDiscount")}</Text>
                                 <Text className="text-sm text-pos-foreground dark:text-pos-foreground-dark">− {formatCurrency(cart.displayTotals.discount)}</Text>
                             </View>
+                            {cart.displayTotals.orderDiscount > 0 ? (
+                                <View className="flex-row justify-between gap-3">
+                                    <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("orderDiscount")}</Text>
+                                    <Text className="text-sm text-pos-foreground dark:text-pos-foreground-dark">− {formatCurrency(cart.displayTotals.orderDiscount)}</Text>
+                                </View>
+                            ) : null}
                             <View className="flex-row justify-between gap-3">
                                 <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("cartDisplayTotal")}</Text>
                                 <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(cart.displayTotals.total)}</Text>

@@ -46,6 +46,17 @@ describe("POS Cart store", () => {
         expect(usePosCartStore.getState().customer).toBeNull();
     });
 
+    it("keeps discount state with the active Cart scope", () => {
+        usePosCartStore.getState().clear();
+        usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);
+        usePosCartStore.getState().setDiscount("org-1:store-1:device-1", { mode: "percent", value: 10 });
+
+        expect(usePosCartStore.getState().discount).toEqual({ mode: "percent", value: 10 });
+        usePosCartStore.getState().setDiscount("other-scope", { mode: "amount", value: 5 });
+        expect(usePosCartStore.getState().items).toEqual([]);
+        expect(usePosCartStore.getState().discount).toEqual({ mode: "amount", value: 5 });
+    });
+
     it("clears handed-off items at the session boundary", () => {
         usePosCartStore.getState().clear();
         usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);
