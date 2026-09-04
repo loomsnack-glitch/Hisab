@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 3 Execution Plan and Review Log
 
-Status: Phase 3 in progress
+Status: Completed with follow-up
 Phase: 3 — Cart and Draft Sale
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -14,8 +14,8 @@ verification, standards/spec review, status update, and focused commit.
 Make Cart Review responsive and safe while preserving the distinction between
 the local Cart, a server Draft Sale, and a completed Sale. The phase exit
 condition is that a POS user can review and modify a Cart, choose optional
-Customer and discount details, save a Draft Sale, resume it, and discard it
-safely.
+Customer and discount details, save/update a Draft Sale, and discard it safely;
+the get-by-ID boundary is ready for the Phase 5 Bills resume surface.
 
 ## Scope guardrails
 
@@ -27,7 +27,8 @@ Included in this phase:
 - Minimal quick Customer creation from the Cart flow.
 - Optional amount and percentage discounts with validation and removal.
 - Hybrid local Cart/server Draft Sale persistence at approved boundaries.
-- Draft Sale retry, resume, and discard behavior without duplicate creation.
+- Draft Sale retry, get-by-ID/delete boundaries, and discard behavior without
+  duplicate creation. The full Draft browsing/resume UI is a Phase 5 surface.
 
 Not included in this phase:
 
@@ -49,7 +50,7 @@ Not included in this phase:
 | 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | `7356c4d` |
 | 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | `d1acce6` |
 | 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | `465a9c9` |
-| 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | `Pending` |
+| 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, delete, retry, and duplicate protection work; get-by-ID is ready for the Phase 5 Bills resume UI | `48e6e96` |
 
 ## Shared Phase 3 decisions
 
@@ -148,8 +149,8 @@ Plan review result: approved for implementation.
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
 | 3.4 Quick Customer creation | Completed with follow-up | `d1acce6`; native/device/API validation remains pending |
-| 3.5 Discounts | Completed with follow-up | `Pending`; amount/percentage discount validation and display updates are implemented; native/device validation remains pending |
-| 3.6 Server Draft Sale persistence | Completed with follow-up | Implementation complete; migration application and native/API validation remain pending |
+| 3.5 Discounts | Completed with follow-up | `465a9c9`; amount/percentage discount validation and display updates are implemented; native/device validation remains pending |
+| 3.6 Server Draft Sale persistence | Completed with follow-up | `48e6e96`; save/update/delete and duplicate protection are implemented; Bills resume UI, migration application, and native/API validation remain pending |
 
 ## 3.5 Implementation and review result
 
@@ -341,7 +342,7 @@ Verification:
 - Android build, emulator, device, live API, and migration-application checks —
   intentionally not run; these remain user-owned/release validation gates.
 
-3.6 status: Completed with follow-up. Implementation commit: pending.
+3.6 status: Completed with follow-up. Implementation commit: `48e6e96`.
 
 ## 3.1 Implementation and review result
 

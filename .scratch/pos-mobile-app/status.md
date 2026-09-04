@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 3 in progress
+Status: Phase 3 completed with follow-up
 
 Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), and the Phase 3 execution record is in [phase-3.md](./phase-3.md). Phase 3.6 Server Draft Sale persistence is in progress.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), and the Phase 3 execution record is in [phase-3.md](./phase-3.md). Phase 3 is completed with follow-up; Phase 4 Payment and Sale completion is next.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 3 in progress | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, and Phase 3.1–3.5 Cart slices are implemented; Phase 3.6 Draft Sale persistence is next. Native/device/API validation remains pending. |
+| Mobile POS implementation | Phase 3 completed with follow-up | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, and Phase 3.1–3.6 Cart/Draft slices are implemented; Bills resume UI and native/device/API validation remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
