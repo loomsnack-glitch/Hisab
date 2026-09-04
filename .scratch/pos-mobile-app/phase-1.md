@@ -50,8 +50,8 @@ Not included in this phase:
 | 1.1 | POS app boundary | Phase 0 | Authenticated flow enters POS-owned navigator | `81a754c` |
 | 1.2 | MMKV storage boundary | 1.1 | Separate storage areas and encrypted session adapter tested | `7a040cd` |
 | 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `2cb9d87` |
-| 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `Pending commit` |
-| 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | Pending |
+| 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `50a5be9` |
+| 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `Pending commit` |
 | 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | Pending |
 | 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | Pending |
 | 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | Pending |
@@ -372,6 +372,122 @@ mobile CSS, existing component APIs, and the simple-UX rule on 2026-09-05.
 - It does not change server behavior or pull later feature scope forward.
 - Semantic light/dark classes preserve the approved design-token direction.
 - Existing wrapper names are kept to reduce unrelated migration risk.
+
+## 1.5 — POS session state
+
+### Plan
+
+User-facing outcome: the app has a POS-specific session lifecycle and never
+shows POS data before the stored Device Session is checked with the server.
+Retryable boot/network failures remain recoverable and do not silently erase a
+valid local session.
+
+Implementation scope:
+
+- Add a pure POS session state model for `starting`, `locked`, `unlocking`,
+  `active`, `expired`, and `logging-out` states.
+- Add explicit transitions for boot, no session, unlock start/success, server
+  expiry/revocation, retryable boot failure, logout start/complete/failure, and
+  retry.
+- Add a `usePosSession` hook that hydrates the MMKV token/session boundary and
+  verifies an existing Device Session through `deviceAuthenticate`.
+- Treat HTTP 401/403/session-invalid responses as expired/revoked and clear
+  only credential/session data; keep language/preferences intact.
+- Treat network/unknown boot failures as retryable starting state and preserve
+  the stored credentials until the user retries or unlocks.
+- Make the root navigation choose the POS app only for an active POS session;
+  the Unlock screen replacement is the next subphase.
+
+Acceptance criteria:
+
+1. Session state transitions are exhaustive and tested independently of React
+   Native/network modules.
+2. Stored token and Device Session are verified before the POS navigator is
+   selected.
+3. Valid authentication produces `active` with the current Device Session.
+4. 401/403 invalidation produces `expired` and clears credentials/session.
+5. Network boot failure stays retryable and does not silently clear storage.
+6. Logout lifecycle has an explicit in-progress state and cannot leave the UI
+   claiming active after cleanup.
+
+Non-goals:
+
+- Collecting Device credentials or rendering the Unlock form (1.6).
+- Implementing the API login mutation or changing backend session behavior.
+- Adding feature destinations or New Sale content (1.7–1.8).
+
+Public seams and effects:
+
+- `pos-session.ts` is the pure state transition seam.
+- `usePosSession` is the root navigation/session-owner seam.
+- Shared `deviceAuthenticate`, `hydrateAuthToken`, and the MMKV Device Session
+  helpers are reused without changing shared package contracts.
+
+Test and verification plan:
+
+- Pure transition tests for every approved lifecycle state and recovery path.
+- Static TypeScript check and focused Bun tests only; no Android build command.
+- Review root navigation to ensure inactive sessions cannot enter POS data.
+
+Risks and rollback:
+
+- A server outage during boot must not force a device re-unlock; preserve the
+  stored session and expose retry.
+- Stale session data must never be trusted without server verification.
+- The root’s temporary auth route will be replaced immediately by 1.6; no
+  generic user-auth behavior is expanded in this slice.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added the pure `PosSessionSnapshot` state model and exhaustive lifecycle
+  transitions for starting, locked, unlocking, active, expired, and
+  logging-out.
+- Added `usePosSession` to hydrate the encrypted token/Device Session and call
+  shared `deviceAuthenticate` before selecting the POS navigator.
+- Added explicit handling for valid authentication, 401/403 expiry/revocation,
+  retryable boot failures, and retry actions.
+- Changed the root navigator to enter the POS app only for an active verified
+  POS session. Starting state shows a retryable loading surface; locked and
+  expired state stays outside POS data.
+- Added loading retry UI and localized its action through the i18next boundary.
+- Added focused lifecycle tests covering all approved state names and recovery
+  transitions.
+
+Standards/spec review findings and fixes:
+
+- Generic user-auth bootstrap and dashboard files remain in the repository but
+  are no longer selected by the root navigator. They are intentionally not
+  deleted in this slice because 1.6 replaces the temporary auth route and will
+  decide the final cleanup together.
+- Network failures preserve stored session data and expose retry; only
+  unauthorized/forbidden verification clears credentials/session data.
+- Loading and POS shell surfaces use semantic tokens and translated actions.
+- No backend contract, Catalog behavior, or billing behavior changed.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- Focused mobile tests — 14 passed across storage, localization, UI, and
+  session suites.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- `git diff --check` — passed.
+
+1.5 status: Completed. Native session persistence and real API expiry/retry
+behavior remain Android/device and integration follow-ups.
+
+### Internal plan review
+
+Reviewed against the approved POS lifecycle, shared Device Auth service, MMKV
+cleanup behavior, and current root navigator on 2026-09-05.
+
+- The model includes every approved state and distinguishes expiry from a
+  retryable boot failure.
+- Credential cleanup is limited to the session boundary and does not clear the
+  language preference.
+- The slice does not invent a backend contract or move Unlock UI forward.
 
 ### Implementation and review result
 
