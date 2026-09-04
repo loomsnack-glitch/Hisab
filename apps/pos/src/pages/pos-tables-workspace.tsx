@@ -47,6 +47,8 @@ import { toast } from "sonner";
 import PosServiceTableCard from "@/components/table-service/pos-service-table-card";
 import PosServiceTableLegend from "@/components/table-service/pos-service-table-legend";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
+import CommercialAccessDenied from "@/components/commercial-access-denied";
+import { isCommercialAccessDeniedMessage } from "@/lib/commercial-access";
 import { groupServiceTablesByArea } from "@/lib/service-area-tables";
 import { serviceAreaKeys, serviceTableKeys } from "@/lib/query-keys";
 import {
@@ -350,6 +352,22 @@ const PosTablesWorkspace = () => {
       }}
     />
   );
+
+  if (
+    tablesQuery.data?.status === "error" &&
+    isCommercialAccessDeniedMessage(tablesQuery.data.message)
+  ) {
+    return (
+      <div className={posTablesPageClassName} data-testid="pos-tables-page">
+        <div className={cn(posTablesScrollerClassName, "p-4 lg:p-6")} data-testid="pos-tables-scroller">
+          <CommercialAccessDenied
+            featureName="Table Management"
+            message={tablesQuery.data.message}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={posTablesPageClassName} data-testid="pos-tables-page">

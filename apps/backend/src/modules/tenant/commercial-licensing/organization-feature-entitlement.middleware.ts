@@ -3,13 +3,13 @@ import { z } from "zod";
 import type { AppVariables } from "@/types/hono";
 import {
     requireOrganizationFeatureEntitlement,
-    type AdminOperationalFeatureKey,
+    type StoreFeatureEntitlementKey,
 } from "./feature-entitlement-guard";
 
 const organizationIdSchema = z.uuid("Invalid organization id");
 
 export const createOrganizationFeatureEntitlementMiddleware = (
-    featureKey: AdminOperationalFeatureKey,
+    featureKey: StoreFeatureEntitlementKey,
 ): MiddlewareHandler<{ Variables: AppVariables }> => {
     return async (context, next) => {
         const organizationId = context.req.param("organizationId");

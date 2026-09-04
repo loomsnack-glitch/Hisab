@@ -63,6 +63,17 @@ import {
   googleContactsCustomerIsEligible,
 } from "@/modules/tenant/google-contacts/google-contacts.customer-sync";
 import * as googleContactsOutbox from "@/modules/tenant/google-contacts/google-contacts.outbox";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
+
+const requireBillingEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "billing");
+
+const requireKotSystemEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "kot_system");
 
 const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -2078,6 +2089,11 @@ const validateStandaloneKotGenerationRequest = async (
     };
   }
 
+  const kotEntitlementError = await requireKotSystemEntitlementForStore(storeId);
+  if (kotEntitlementError) {
+    return kotEntitlementError;
+  }
+
   return null;
 };
 
@@ -2292,6 +2308,11 @@ const createDraftSaleInStore = async (
   storeId: string,
   saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const customerId = normalizeOptionalUuid(saleData.customerId);
   const customerResult = await validateCustomerAssignment(
     organizationId,
@@ -2456,6 +2477,11 @@ const updateSaleInStore = async (
   saleData: UpdateDraftSaleSVC,
   additionalWrite?: (tx: Bun.TransactionSQL) => Promise<void>,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -2821,6 +2847,11 @@ const deleteDraftSaleInStore = async (
   storeId: string,
   saleId: string,
 ): Promise<ServiceResponse<null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await billingRepository.getSaleById(
     organizationId,
     storeId,
@@ -2882,6 +2913,11 @@ const commitSaleInStore = async (
   saleId: string,
   commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSaleSnapshot = await buildSaleDetails(
     organizationId,
     storeId,
@@ -3396,6 +3432,11 @@ const completeSaleInStore = async (
     return getSaleDetailsInStore(organizationId, storeId, existingSaleId);
   }
 
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const customerId = normalizeOptionalUuid(saleData.customerId);
   const customerResult = await validateCustomerAssignment(
     organizationId,
@@ -3549,6 +3590,11 @@ const replaceSaleInStore = async (
       storeId,
       existingReplacementId,
     );
+  }
+
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
   }
 
   const originalSale = await buildSaleDetails(
@@ -3766,6 +3812,11 @@ const collectPaymentInStore = async (
   saleId: string,
   paymentData: CreatePaymentSVC,
 ): Promise<ServiceResponse<PaymentResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -3974,6 +4025,11 @@ const voidSaleInStore = async (
   saleId: string,
   voidData: VoidSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -4565,6 +4621,13 @@ export const getCustomersForDevice = async (
   session: DeviceSessionDTO,
   query: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getCustomersInOrganization(session.organization.id, query);
 };
 
@@ -4572,6 +4635,13 @@ export const createCustomerForDevice = async (
   session: DeviceSessionDTO,
   customerData: CreateCustomerSVC,
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const organization = await getOrganizationById(session.organization.id);
   if (!organization) {
     return {
@@ -4594,6 +4664,13 @@ export const updateCustomerForDevice = async (
   customerId: string,
   customerData: UpdateCustomerSVC,
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const organization = await getOrganizationById(session.organization.id);
   if (!organization) {
     return {
@@ -4616,6 +4693,13 @@ export const getSalesForDevice = async (
   session: DeviceSessionDTO,
   query: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getSalesInStore(session.organization.id, session.store.id, query);
 };
 
@@ -4641,6 +4725,13 @@ export const getSaleDetailsForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getSaleDetailsInStore(
     session.organization.id,
     session.store.id,

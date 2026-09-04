@@ -370,6 +370,9 @@ mock.module("./billing-kot-read", () => ({
 
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 const billingService = await import("./billing.service");
 
 const resolveProductById = (productId: string) => {

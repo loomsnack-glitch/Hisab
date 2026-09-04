@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DeviceSessionDTO, ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
+import { installTableServiceRepositoryMock } from "./table-service.repository.test-harness";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -237,7 +238,7 @@ mock.module("@/modules/tenant/organization/organization.repository", () => ({
   getOrganizationByIdForUser,
   getStoreById,
 }));
-mock.module("./table-service.repository", () => ({
+installTableServiceRepositoryMock({
   getServiceTables,
   getServiceTableById,
   serviceTableLabelExists,
@@ -259,7 +260,7 @@ mock.module("./table-service.repository", () => ({
   releasePaidTableFromActiveState,
   releasePaidTable,
   releaseDueTable,
-}));
+});
 mock.module("@/modules/tenant/billing/billing.repository", () => ({
   createSale,
   lockDraftSale,
@@ -318,6 +319,10 @@ mock.module("@/modules/tenant/kot/kot.service", () => ({
   getActiveTableOrderForDevice,
   discardActiveTableOrderForDevice,
 }));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 
 const tableService = await import("./table-service.service");
 
@@ -1205,5 +1210,57 @@ describe("Service Area application service", () => {
     expect(lockServiceArea).not.toHaveBeenCalled();
     expect(assignServiceTableToArea).not.toHaveBeenCalled();
     expect(unassignServiceTableFromArea).not.toHaveBeenCalled();
+  });
+});
+
+describe("Table Management Feature Entitlement enforcement", () => {
+  test("forbids device table reads for an unentitled Store", async () => {
+    const { resolveFeatureEntitlement } = await import(
+      "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+    );
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: false,
+      featureKey,
+      evidence: [],
+    }));
+
+    const response = await tableService.getServiceTablesForDevice(deviceSession);
+
+    expect(response.code).toBe(403);
+    expect(response.message).toContain("Table Management");
+
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: true,
+      featureKey,
+      evidence: [],
+    }));
+  });
+
+  test("forbids admin table setup for an unentitled Store", async () => {
+    const { resolveFeatureEntitlement } = await import(
+      "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+    );
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: false,
+      featureKey,
+      evidence: [],
+    }));
+
+    const response = await tableService.createServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      { tableLabel: "B2", capacity: 4 },
+    );
+
+    expect(response.code).toBe(403);
+    expect(response.message).toContain("Table Management");
+    expect(createServiceTableRepo).not.toHaveBeenCalled();
+
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: true,
+      featureKey,
+      evidence: [],
+    }));
   });
 });

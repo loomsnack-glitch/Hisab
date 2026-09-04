@@ -397,6 +397,9 @@ mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => (
 }));
 
 const catalogRepository = await import("@/modules/tenant/catalog/catalog.repository");
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 const billingService = await import("./billing.service");
 
 const completeSalePayload = (overrides: Partial<CompleteSaleSVC> = {}): CompleteSaleSVC => ({

@@ -168,6 +168,7 @@ import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
+import CommercialAccessDenied from "@/components/commercial-access-denied";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type {
   PosComposerHandoff,
@@ -191,6 +192,7 @@ import {
   readCheckoutBillingAdjustmentsOpen,
   writeCheckoutBillingAdjustmentsOpen,
 } from "@/lib/checkout-billing-adjustments-preferences";
+import { isCommercialAccessDeniedMessage } from "@/lib/commercial-access";
 import {
   formatCurrency,
   formatDateTime,
@@ -3287,6 +3289,22 @@ const BillingPage = ({
             <div className="flex min-h-[50vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
             </div>
+        );
+    }
+
+    const commercialAccessMessage =
+        isDeviceMode && customersQuery.data?.status === "error"
+            ? customersQuery.data.message
+            : isDeviceMode && salesQuery.error instanceof Error
+              ? salesQuery.error.message
+              : null;
+
+    if (isDeviceMode && isCommercialAccessDeniedMessage(commercialAccessMessage)) {
+        return (
+            <CommercialAccessDenied
+                featureName="Billing"
+                message={commercialAccessMessage ?? undefined}
+            />
         );
     }
 

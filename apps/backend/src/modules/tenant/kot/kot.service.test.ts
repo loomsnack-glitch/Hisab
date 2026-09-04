@@ -588,6 +588,25 @@ mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
     markReadyDraftAsEngaged: mock(async () => false),
     setCommittedSaleTableState: mock(async () => null),
     syncCommittedSalePaymentState: mock(async () => null),
+    getServiceTables: mock(async () => []),
+    serviceTableLabelExists: mock(async () => false),
+    createServiceTable: mock(async () => null),
+    updateServiceTable: mock(async () => null),
+    transitionServiceTableState: mock(async () => null),
+    attachDraftSale: mock(async () => null),
+    clearDraftSale: mock(async () => null),
+    releasePaidTableFromActiveState: mock(async () => null),
+    releaseDueTable: mock(async () => null),
+    releasePaidTable: mock(async () => null),
+    assignServiceTableToArea: mock(async () => null),
+    unassignServiceTableFromArea: mock(async () => null),
+    lockServiceArea: mock(async () => null),
+    getServiceAreas: mock(async () => []),
+    getServiceAreaById: mock(async () => null),
+    serviceAreaTitleExists: mock(async () => false),
+    createServiceArea: mock(async () => null),
+    updateServiceArea: mock(async () => null),
+    deleteServiceArea: mock(async () => null),
 }));
 
 mock.module("./kot.repository", () => ({
@@ -625,6 +644,9 @@ mock.module("./kot.repository", () => ({
 
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 const billingService = await import("@/modules/tenant/billing/billing.service");
 const kotService = await import("./kot.service");
 
@@ -756,6 +778,32 @@ describe("Table Order KOT workflow", () => {
         expect(response.code).toBe(403);
         expect(response.message).toContain("Table Management");
         expect(createKot).not.toHaveBeenCalled();
+    });
+
+    test("forbids Table KOT generation when table_management is entitled without kot_system", async () => {
+        const { resolveFeatureEntitlement } = await import(
+            "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+        );
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: featureKey === "table_management",
+            featureKey,
+            evidence: [],
+        }));
+
+        const response = await createTableKot(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(403);
+        expect(response.message).toContain("KOT System");
+        expect(createKot).not.toHaveBeenCalled();
+
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
     });
 
     test("generates the first Table KOT with a Store-local KOT Number and trusted snapshots", async () => {

@@ -8,6 +8,7 @@ import {
   test,
 } from "bun:test";
 import type { DeviceSessionDTO } from "@repo/types";
+import { installTableServiceRepositoryMock } from "@/modules/tenant/table-service/table-service.repository.test-harness";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -472,6 +473,7 @@ mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser: mock(async () => organization),
     getOrganizationById: mock(async () => organization),
     getStoreById: mock(async () => store),
+    getStoresByOrganizationId: mock(async () => [store]),
 }));
 
 mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
@@ -518,23 +520,26 @@ mock.module("./billing.repository", () => ({
     getAddOnScopedSalesRollups,
 }));
 
-mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
+installTableServiceRepositoryMock({
     lockServiceTableForSale,
     markReadyDraftAsEngaged,
     setCommittedSaleTableState,
-    getServiceTableById: mock(async () => null),
-}));
+});
 
-mock.module("./billing-kot-read", () => ({
+mock.module("@/modules/tenant/billing/billing-kot-read", () => ({
   getKotNumbersBySaleId,
   getKotsBySaleId,
 }));
 
-mock.module("./billing-kot-write", () => ({
+mock.module("@/modules/tenant/billing/billing-kot-write", () => ({
   getStandaloneKotByGenerationRequestIdForActor,
   prepareStandaloneKotBatchForActor,
   persistPreparedStandaloneKotBatch,
 }));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
