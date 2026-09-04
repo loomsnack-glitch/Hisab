@@ -1126,7 +1126,7 @@ Goal: remove avoidable uncertainty before application work starts.
 
 Phase exit: approved scope, shared API audit, native dependency feasibility, and Android verification matrix are documented.
 
-The completed Phase 0 audit is recorded in [`phase-0.md`](./phase-0.md). It is the implementation reference for confirmed repository findings and named follow-ups. The scoped Draft commit idempotency follow-up has now been implemented; mobile POS feature implementation, native dependency installation, and printer selection remain separate work.
+The completed Phase 0 audit is recorded in [`phase-0.md`](./phase-0.md). It is the implementation reference for confirmed repository findings and named follow-ups. The scoped Draft commit idempotency follow-up and Phase 1.1 POS application boundary have now been implemented; the remaining mobile foundation work, native dependency installation, and printer selection remain separate work.
 
 #### Phase 0 findings that affect implementation
 

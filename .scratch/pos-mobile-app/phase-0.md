@@ -3,7 +3,7 @@
 Status: Completed with follow-ups; Draft commit retry fix implemented
 Validated: 2026-09-02
 Scope: Android-only Ganatri POS mobile app
-Implementation status: Draft commit idempotency fix implemented; mobile POS feature implementation not started
+Implementation status: Draft commit idempotency fix implemented; Phase 1.1 POS application boundary implemented
 
 This document records the Phase 0 validation work for the POS mobile app. It is the reference for the fixes, decisions, and validation gates that must be carried into later implementation phases.
 

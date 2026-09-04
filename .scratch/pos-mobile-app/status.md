@@ -42,15 +42,15 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Not started | Feature implementation remains unstarted; only the scoped Draft commit idempotency follow-up was implemented. |
+| Mobile POS implementation | In progress | Phase 1.1 POS application boundary is implemented; session, storage, localization, and feature screens remain. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
-| 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and Draft-commit hardening remain follow-ups. |
-| 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Not started | Store Device unlock reaches New Sale with Cart access. |
+| 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and integration/release verification remain follow-ups. |
+| 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | In progress | Store Device unlock reaches New Sale with Cart access. |
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Not started | Product selection reliably adds the intended Product to Cart. |
 | 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Not started | Cart can be reviewed, saved, resumed, and discarded safely. |
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Not started | Confirmed Sale reaches Sale Complete without duplicate submission. |
@@ -93,13 +93,13 @@ The detailed evidence is recorded in [phase-0.md](./phase-0.md). The key outcome
 | Camera dependency, permissions, and physical-device scan validation | Phase 2 | Planned |
 | Exact emulator, modern phone, and Store Device selection | Phase 0/8 | Pending input |
 
-Mobile POS feature implementation remains unstarted. The Draft commit idempotency follow-up changed the shared billing contract, backend persistence/replay path, and existing POS/Admin callers.
+Mobile POS implementation has started with the Phase 1.1 application boundary. The Draft commit idempotency follow-up remains complete, while the POS session, storage, localization, visual foundation, and feature screens are still pending.
 
 ### Phase 1 — POS foundation
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 1.1 Mobile POS application boundary | Not started | POS flow is separated from the generic mobile Dashboard. |
+| 1.1 Mobile POS application boundary | Completed | Authenticated mobile flow now enters a POS-owned nested navigator and POS shell instead of the generic Dashboard. |
 | 1.2 MMKV storage boundary | Not started | Session, preference, and convenience data boundaries are defined and tested. |
 | 1.3 Localization foundation | Not started | Bundled resources, namespaces, fallback, and persistence are verified. |
 | 1.4 Uniwind design foundation | Not started | Tokens and base components match the approved UI rules. |
