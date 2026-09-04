@@ -2,9 +2,9 @@
 
 Status: Phase 0 completed with follow-ups
 
-Last updated: 2026-09-02
+Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), and the Phase 0 audit is in [phase-0.md](./phase-0.md). No application implementation has started.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), and the Phase 1 execution record is in [phase-1.md](./phase-1.md). Phase 1 implementation is in progress.
 
 ## Current scope
 
@@ -100,7 +100,7 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
 | 1.1 Mobile POS application boundary | Completed | Authenticated mobile flow now enters a POS-owned nested navigator and POS shell instead of the generic Dashboard. |
-| 1.2 MMKV storage boundary | Not started | Session, preference, and convenience data boundaries are defined and tested. |
+| 1.2 MMKV storage boundary | Completed with follow-up | MMKV-only session, preference, and convenience boundaries are implemented and focused-tested; native Android/device validation remains pending. |
 | 1.3 Localization foundation | Not started | Bundled resources, namespaces, fallback, and persistence are verified. |
 | 1.4 Uniwind design foundation | Not started | Tokens and base components match the approved UI rules. |
 | 1.5 POS session state | Not started | Starting, Locked, Unlocking, Active, Expired/Revoked, and Logging Out states are covered. |
@@ -199,4 +199,4 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 
 ## Current next step
 
-Select the Android verification devices and review the Phase 1 implementation gates. Backend integration and real-database concurrency verification remain release checks. This does not authorize unrelated application implementation; implementation begins only after the relevant slice is explicitly started and reviewed.
+Execute Phase 1 subphase 1.3 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.

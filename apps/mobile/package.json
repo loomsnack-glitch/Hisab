@@ -12,11 +12,13 @@
     "expo": "~56.0.12",
     "expo-constants": "^56.0.18",
     "expo-device": "^56.0.4",
-    "expo-secure-store": "^56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-hook-form": "^7.80.0",
     "react-native": "0.85.3",
+    "react-native-keychain": "^10.0.0",
+    "react-native-mmkv": "^4.3.2",
+    "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.25.2",
     "tailwindcss": "^4.3.1",
@@ -37,7 +39,8 @@
     "prebuild:android": "expo prebuild --platform android --bun",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "uniwind:generate": "uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts"
+    "uniwind:generate": "uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts",
+    "test": "bun test"
   },
   "private": true
 }
