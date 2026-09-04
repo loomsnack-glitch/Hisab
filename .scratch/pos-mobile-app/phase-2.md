@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 2 Execution Plan and Review Log
 
-Status: Phase 2 in progress; subphase 2.4 in progress
+Status: Phase 2 in progress; subphase 2.4 completed with native follow-up
 Phase: 2 — Catalog and Product selection
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -45,7 +45,7 @@ Not included in this phase:
 | 2.1 | Catalog query and cache | Phase 1 | Product/Category queries have scoped cache and recoverable states | `08e5d5b` |
 | 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
 | 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | `2ed696e` |
-| 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | in progress |
+| 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | `640010b` |
 | 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | pending |
 
 ## Shared Phase 2 decisions
@@ -543,3 +543,49 @@ the approved MMKV-only storage decision, and the New Sale UX rules.
 - No new product, API, security, or release decision is required.
 
 Plan review result: approved for implementation.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added an ID-only Recent/Pinned convenience boundary with a bounded newest
+  first Recent list and toggleable Pinned IDs.
+- Persisted convenience data through the existing MMKV convenience storage,
+  using an Organization/Store/Device-scoped key.
+- Added safe parsing and write handling so malformed or unavailable local
+  convenience data cannot block New Sale or the server Catalog.
+- Added `usePosConvenience` to resolve saved IDs against the current Catalog;
+  stale or missing Product IDs are omitted without displaying cached Product
+  names, prices, or availability.
+- Recorded successful ordinary Product taps and barcode additions as Recent.
+- Added Recent and Pinned quick filters, a search-empty Recent section, and
+  accessible pin/unpin actions on Product cards.
+- Added English, Gujarati, and Hindi labels for the convenience actions.
+- Added pure tests for scope keys, bounded ordering, deduplication, pin
+  toggling, malformed data recovery, serialization, and current-Catalog
+  resolution.
+
+Standards/spec review:
+
+- Only Product IDs are persisted; the server Catalog remains authoritative for
+  every displayed and billable Product field.
+- Convenience state is separate from encrypted session storage and from the
+  TanStack Query Catalog cache, as approved.
+- The hook prevents the previous Store's shortcuts from rendering during a
+  session-scope transition before the new MMKV value hydrates.
+- Search, Categories, Barcode Scan, and direct Product-to-Cart remain usable;
+  Recent/Pinned are additive shortcuts.
+- Review found and fixed a potential cross-scope render window in the hook by
+  returning an empty convenience state until the current scope is hydrated.
+- No actionable standards or spec findings remain within 2.4.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 34 passed.
+- Mobile TypeScript check — no new errors; the known WhatsApp asset import
+  remains the only baseline error.
+- `git diff --check` — passed.
+- Android build/device/storage validation — intentionally not run; native
+  MMKV persistence and physical-device behavior remain user validation items.
+
+2.4 status: Completed with native follow-up. Focused commit: `640010b`.
