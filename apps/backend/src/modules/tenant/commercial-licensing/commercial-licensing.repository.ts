@@ -1,6 +1,7 @@
 import { sql } from "bun";
 import type {
     ActivePlanSnapshot,
+    ActivePurchasableModuleSnapshot,
     ActiveTrialPlanSnapshot,
     CommercialAccessSourceModuleSnapshot,
     CommercialAccessSourceRecord,
@@ -12,6 +13,7 @@ import type {
     StoreAccessGrantRecord,
     StoreAccessGrantSelectionKind,
     StoreAccessGrantTermKind,
+    StoreCoTermAddOnRecord,
     StoreLicenseRecord,
 } from "@repo/types";
 import { pg } from "@/config/db";
@@ -657,6 +659,41 @@ export const listActiveModuleSnapshots = async (): Promise<CommercialAccessSourc
     return loadFeaturesForModuleRevisions(moduleRows);
 };
 
+export const listActivePurchasableModuleSnapshots = async (): Promise<ActivePurchasableModuleSnapshot[]> => {
+    const moduleRows = await pg`
+        SELECT
+            modules.id AS module_id,
+            revisions.id AS module_revision_id,
+            modules.key,
+            revisions.display_name,
+            revisions.price_inr,
+            revisions.term_count,
+            revisions.term_unit
+        FROM commercial_module_revisions revisions
+        INNER JOIN commercial_modules modules ON modules.id = revisions.module_id
+        WHERE revisions.status = 'active'
+          AND revisions.is_separately_purchasable = TRUE
+        ORDER BY revisions.display_name ASC, modules.key ASC
+    ` as Array<{
+        module_id: string;
+        module_revision_id: string;
+        key: string;
+        display_name: string;
+        price_inr: string | number;
+        term_count: number;
+        term_unit: "day" | "month" | "year";
+    }>;
+    const snapshots = await loadFeaturesForModuleRevisions(moduleRows);
+    return snapshots.map((snapshot, index) => ({
+        ...snapshot,
+        priceInr: Number(moduleRows[index]?.price_inr ?? 0),
+        term: {
+            count: Number(moduleRows[index]?.term_count ?? 1),
+            unit: moduleRows[index]?.term_unit ?? "year",
+        },
+    }));
+};
+
 const loadPlanSnapshot = async (plan: {
     plan_id: string;
     plan_revision_id: string;
@@ -794,8 +831,141 @@ export const getActiveModuleSnapshotByKey = async (
 export const listAccessGrantsForStore = async (storeId: string): Promise<StoreAccessGrantRecord[]> =>
     loadGrantsForStore(pg, storeId);
 
+type CoTermAddOnRow = {
+    id: string;
+    organization_id: string;
+    store_id: string;
+    base_store_license_id: string;
+    module_id: string;
+    module_revision_id: string;
+    module_key: string;
+    module_display_name: string;
+    price_inr: string | number;
+    charged_amount_inr: string | number;
+    term_count: number;
+    term_unit: "day" | "month" | "year";
+    starts_at: string | Date;
+    ends_at: string | Date;
+    commercial_quote_id: string;
+    revoked_at: string | Date | null;
+    created_by_user_id: string;
+    created_at: string | Date;
+};
+
+type CoTermAddOnFeatureSnapshotRow = {
+    add_on_id: string;
+    feature_id: string;
+    feature_revision_id: string;
+    feature_key: string;
+    feature_display_name: string;
+};
+
+const attachCoTermAddOnFeatures = (
+    addOns: CoTermAddOnRow[],
+    featureRows: CoTermAddOnFeatureSnapshotRow[],
+): StoreCoTermAddOnRecord[] => {
+    const featuresByAddOn = new Map<string, CommercialAccessSourceModuleSnapshot["features"]>();
+    for (const row of featureRows) {
+        const features = featuresByAddOn.get(row.add_on_id) ?? [];
+        features.push({
+            featureId: row.feature_id,
+            featureRevisionId: row.feature_revision_id,
+            key: row.feature_key,
+            displayName: row.feature_display_name,
+        });
+        featuresByAddOn.set(row.add_on_id, features);
+    }
+
+    return addOns.map((row) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        storeId: row.store_id,
+        baseStoreLicenseId: row.base_store_license_id,
+        moduleId: row.module_id,
+        moduleRevisionId: row.module_revision_id,
+        moduleKey: row.module_key,
+        moduleDisplayName: row.module_display_name,
+        priceInr: Number(row.price_inr),
+        chargedAmountInr: Number(row.charged_amount_inr),
+        term: {
+            count: Number(row.term_count),
+            unit: row.term_unit,
+        },
+        startsAt: toDate(row.starts_at),
+        endsAt: toDate(row.ends_at),
+        revokedAt: toOptionalDate(row.revoked_at),
+        commercialQuoteId: row.commercial_quote_id,
+        createdByUserId: row.created_by_user_id,
+        createdAt: toDate(row.created_at),
+        modules: [{
+            moduleId: row.module_id,
+            moduleRevisionId: row.module_revision_id,
+            key: row.module_key,
+            displayName: row.module_display_name,
+            features: featuresByAddOn.get(row.id) ?? [],
+        }],
+    }));
+};
+
+const loadCoTermAddOnsForStore = async (tx: SqlClient, storeId: string): Promise<StoreCoTermAddOnRecord[]> => {
+    const addOns = await tx`
+        SELECT
+            id,
+            organization_id,
+            store_id,
+            base_store_license_id,
+            module_id,
+            module_revision_id,
+            module_key,
+            module_display_name,
+            price_inr,
+            charged_amount_inr,
+            term_count,
+            term_unit,
+            starts_at,
+            ends_at,
+            commercial_quote_id,
+            revoked_at,
+            created_by_user_id,
+            created_at
+        FROM store_co_term_add_ons
+        WHERE store_id = ${storeId}
+        ORDER BY starts_at ASC, created_at ASC
+    ` as CoTermAddOnRow[];
+    if (addOns.length === 0) {
+        return [];
+    }
+    const addOnIds = addOns.map((addOn) => addOn.id);
+    const featureRows = await tx`
+        SELECT add_on_id, feature_id, feature_revision_id, feature_key, feature_display_name
+        FROM store_co_term_add_on_feature_snapshots
+        WHERE add_on_id IN ${sql(addOnIds)}
+        ORDER BY feature_display_name ASC, feature_key ASC
+    ` as CoTermAddOnFeatureSnapshotRow[];
+    return attachCoTermAddOnFeatures(addOns, featureRows);
+};
+
+const toCoTermAddOnAccessSource = (addOn: StoreCoTermAddOnRecord): CommercialAccessSourceRecord => ({
+    id: addOn.id,
+    kind: "co_term_add_on",
+    storeId: addOn.storeId,
+    organizationId: addOn.organizationId,
+    startsAt: addOn.startsAt,
+    endsAt: addOn.endsAt,
+    revokedAt: addOn.revokedAt,
+    planKey: null,
+    planDisplayName: null,
+    planType: null,
+    term: addOn.term,
+    modules: cloneModules(addOn.modules),
+});
+
+export const listCoTermAddOnsForStore = async (storeId: string): Promise<StoreCoTermAddOnRecord[]> =>
+    loadCoTermAddOnsForStore(pg, storeId);
+
 export const listAccessSourcesForStore = async (storeId: string): Promise<CommercialAccessSourceRecord[]> => [
     ...(await loadLicensesForStore(pg, storeId)).map(toAccessSource),
+    ...(await loadCoTermAddOnsForStore(pg, storeId)).map(toCoTermAddOnAccessSource),
     ...(await loadGrantsForStore(pg, storeId)).map(toGrantAccessSource),
 ];
 
@@ -941,12 +1111,16 @@ type QuoteRow = {
     id: string;
     organization_id: string;
     store_id: string;
-    kind: "paid_plan" | "plan_renewal" | "plan_upgrade";
-    plan_id: string;
-    plan_revision_id: string;
-    plan_key: string;
-    plan_display_name: string;
-    plan_type: "paid";
+    kind: "paid_plan" | "plan_renewal" | "plan_upgrade" | "co_term_add_on";
+    plan_id: string | null;
+    plan_revision_id: string | null;
+    plan_key: string | null;
+    plan_display_name: string | null;
+    plan_type: "paid" | null;
+    module_id: string | null;
+    module_revision_id: string | null;
+    module_key: string | null;
+    module_display_name: string | null;
     price_inr: string | number;
     amount_inr: string | number;
     amount_paise: number;
@@ -961,6 +1135,7 @@ type QuoteRow = {
     expires_at: string | Date;
     fulfilled_at: string | Date | null;
     fulfilled_license_id: string | null;
+    fulfilled_co_term_add_on_id: string | null;
     created_by_user_id: string;
     created_at: string | Date;
 };
@@ -1019,6 +1194,10 @@ const toQuoteRecord = (
     planKey: row.plan_key,
     planDisplayName: row.plan_display_name,
     planType: row.plan_type,
+    moduleId: row.module_id,
+    moduleRevisionId: row.module_revision_id,
+    moduleKey: row.module_key,
+    moduleDisplayName: row.module_display_name,
     priceInr: Number(row.price_inr),
     amountInr: Number(row.amount_inr),
     amountPaise: Number(row.amount_paise),
@@ -1035,6 +1214,7 @@ const toQuoteRecord = (
     expiresAt: toDate(row.expires_at),
     fulfilledAt: toOptionalDate(row.fulfilled_at),
     fulfilledLicenseId: row.fulfilled_license_id,
+    fulfilledCoTermAddOnId: row.fulfilled_co_term_add_on_id,
     createdByUserId: row.created_by_user_id,
     createdAt: toDate(row.created_at),
     lineItems,
@@ -1116,34 +1296,42 @@ const loadQuotes = async (tx: SqlClient, quotes: QuoteRow[]): Promise<Commercial
     return attachQuoteSnapshots(quotes, lineRows, moduleRows, featureRows);
 };
 
+const quoteSelectColumns = sql`
+    id,
+    organization_id,
+    store_id,
+    kind,
+    plan_id,
+    plan_revision_id,
+    plan_key,
+    plan_display_name,
+    plan_type,
+    module_id,
+    module_revision_id,
+    module_key,
+    module_display_name,
+    price_inr,
+    amount_inr,
+    amount_paise,
+    currency,
+    term_count,
+    term_unit,
+    license_timing,
+    intended_starts_at,
+    intended_ends_at,
+    razorpay_order_id,
+    razorpay_receipt,
+    expires_at,
+    fulfilled_at,
+    fulfilled_license_id,
+    fulfilled_co_term_add_on_id,
+    created_by_user_id,
+    created_at
+`;
+
 const loadQuotesForStore = async (tx: SqlClient, storeId: string): Promise<CommercialQuoteRecord[]> => {
     const quotes = await tx`
-        SELECT
-            id,
-            organization_id,
-            store_id,
-            kind,
-            plan_id,
-            plan_revision_id,
-            plan_key,
-            plan_display_name,
-            plan_type,
-            price_inr,
-            amount_inr,
-            amount_paise,
-            currency,
-            term_count,
-            term_unit,
-            license_timing,
-            intended_starts_at,
-            intended_ends_at,
-            razorpay_order_id,
-            razorpay_receipt,
-            expires_at,
-            fulfilled_at,
-            fulfilled_license_id,
-            created_by_user_id,
-            created_at
+        SELECT ${quoteSelectColumns}
         FROM commercial_quotes
         WHERE store_id = ${storeId}
         ORDER BY created_at DESC, id DESC
@@ -1222,32 +1410,7 @@ export const getCommercialQuoteByRazorpayOrderId = async (
     razorpayOrderId: string,
 ): Promise<CommercialQuoteRecord | null> => {
     const quotes = await pg`
-        SELECT
-            id,
-            organization_id,
-            store_id,
-            kind,
-            plan_id,
-            plan_revision_id,
-            plan_key,
-            plan_display_name,
-            plan_type,
-            price_inr,
-            amount_inr,
-            amount_paise,
-            currency,
-            term_count,
-            term_unit,
-            license_timing,
-            intended_starts_at,
-            intended_ends_at,
-            razorpay_order_id,
-            razorpay_receipt,
-            expires_at,
-            fulfilled_at,
-            fulfilled_license_id,
-            created_by_user_id,
-            created_at
+        SELECT ${quoteSelectColumns}
         FROM commercial_quotes
         WHERE razorpay_order_id = ${razorpayOrderId}
         LIMIT 1
@@ -1269,6 +1432,10 @@ export const insertCommercialQuote = async (quote: CommercialQuoteRecord): Promi
                 plan_key,
                 plan_display_name,
                 plan_type,
+                module_id,
+                module_revision_id,
+                module_key,
+                module_display_name,
                 price_inr,
                 amount_inr,
                 amount_paise,
@@ -1293,6 +1460,10 @@ export const insertCommercialQuote = async (quote: CommercialQuoteRecord): Promi
                 ${quote.planKey},
                 ${quote.planDisplayName},
                 ${quote.planType},
+                ${quote.moduleId},
+                ${quote.moduleRevisionId},
+                ${quote.moduleKey},
+                ${quote.moduleDisplayName},
                 ${quote.priceInr},
                 ${quote.amountInr},
                 ${quote.amountPaise},
@@ -1550,32 +1721,7 @@ export const fulfillPaidPlanQuote = async (input: {
     try {
         return await pg.begin(async (tx) => {
             const lockedQuotes = await tx`
-                SELECT
-                    id,
-                    organization_id,
-                    store_id,
-                    kind,
-                    plan_id,
-                    plan_revision_id,
-                    plan_key,
-                    plan_display_name,
-                    plan_type,
-                    price_inr,
-                    amount_inr,
-                    amount_paise,
-                    currency,
-                    term_count,
-                    term_unit,
-                    license_timing,
-                    intended_starts_at,
-                    intended_ends_at,
-                    razorpay_order_id,
-                    razorpay_receipt,
-                    expires_at,
-                    fulfilled_at,
-                    fulfilled_license_id,
-                    created_by_user_id,
-                    created_at
+                SELECT ${quoteSelectColumns}
                 FROM commercial_quotes
                 WHERE id = ${input.quote.id}
                 FOR UPDATE
@@ -1694,6 +1840,199 @@ export const fulfillPaidPlanQuote = async (input: {
         if (isUniqueViolation(error)) {
             const existing = (await listStoreLicenses(input.quote.storeId)).find(
                 (license) => license.commercialQuoteId === input.quote.id,
+            );
+            return existing ?? "already-fulfilled";
+        }
+        throw error;
+    }
+};
+
+const writeCoTermAddOnFeatureSnapshots = async (
+    tx: SqlClient,
+    addOnId: string,
+    moduleItem: CommercialAccessSourceModuleSnapshot,
+) => {
+    for (const feature of moduleItem.features) {
+        await tx`
+            INSERT INTO store_co_term_add_on_feature_snapshots (
+                add_on_id,
+                feature_id,
+                feature_revision_id,
+                feature_key,
+                feature_display_name
+            ) VALUES (
+                ${addOnId},
+                ${feature.featureId},
+                ${feature.featureRevisionId},
+                ${feature.key},
+                ${feature.displayName}
+            )
+        `;
+    }
+};
+
+export const fulfillCoTermAddOnQuote = async (input: {
+    addOnId: string;
+    quote: CommercialQuoteRecord;
+    now: Date;
+}): Promise<StoreCoTermAddOnRecord | "already-fulfilled" | "duplicate-add-on"> => {
+    try {
+        return await pg.begin(async (tx) => {
+            const lockedQuotes = await tx`
+                SELECT ${quoteSelectColumns}
+                FROM commercial_quotes
+                WHERE id = ${input.quote.id}
+                FOR UPDATE
+            ` as QuoteRow[];
+            const [locked] = await loadQuotes(tx, lockedQuotes);
+            if (!locked) {
+                throw new Error("Commercial Quote not found");
+            }
+            if (locked.fulfilledAt && locked.fulfilledCoTermAddOnId) {
+                const existing = (await loadCoTermAddOnsForStore(tx, locked.storeId)).find(
+                    (addOn) => addOn.id === locked.fulfilledCoTermAddOnId,
+                );
+                return existing ?? "already-fulfilled";
+            }
+
+            const addOns = await tx`
+                SELECT
+                    id,
+                    organization_id,
+                    store_id,
+                    base_store_license_id,
+                    module_id,
+                    module_revision_id,
+                    module_key,
+                    module_display_name,
+                    price_inr,
+                    charged_amount_inr,
+                    term_count,
+                    term_unit,
+                    starts_at,
+                    ends_at,
+                    commercial_quote_id,
+                    revoked_at,
+                    created_by_user_id,
+                    created_at
+                FROM store_co_term_add_ons
+                WHERE store_id = ${locked.storeId}
+                FOR UPDATE
+            ` as CoTermAddOnRow[];
+
+            const moduleKey = locked.moduleKey;
+            if (!moduleKey) {
+                return "duplicate-add-on";
+            }
+
+            const hasActiveDuplicate = addOns.some((addOn) =>
+                addOn.module_key === moduleKey
+                && addOn.revoked_at === null
+                && toDate(addOn.starts_at).getTime() <= input.now.getTime()
+                && input.now.getTime() < toDate(addOn.ends_at).getTime(),
+            );
+            if (hasActiveDuplicate) {
+                return "duplicate-add-on";
+            }
+
+            const licenses = await tx`
+                SELECT
+                    id,
+                    organization_id,
+                    store_id,
+                    source_kind,
+                    plan_id,
+                    plan_revision_id,
+                    plan_key,
+                    plan_display_name,
+                    plan_type,
+                    price_inr,
+                    term_count,
+                    term_unit,
+                    starts_at,
+                    ends_at,
+                    revoked_at,
+                    commercial_quote_id,
+                    created_by_user_id,
+                    created_at
+                FROM store_licenses
+                WHERE store_id = ${locked.storeId}
+                FOR UPDATE
+            ` as LicenseRow[];
+            const activePaid = licenses.find((license) =>
+                license.source_kind === "paid"
+                && license.revoked_at === null
+                && toDate(license.starts_at).getTime() <= input.now.getTime()
+                && input.now.getTime() < toDate(license.ends_at).getTime(),
+            );
+            if (!activePaid || toDate(activePaid.ends_at).getTime() !== locked.intendedEndsAt.getTime()) {
+                return "duplicate-add-on";
+            }
+
+            const [moduleItem] = locked.modules;
+            if (!moduleItem || locked.moduleId === null) {
+                return "duplicate-add-on";
+            }
+
+            await tx`
+                INSERT INTO store_co_term_add_ons (
+                    id,
+                    organization_id,
+                    store_id,
+                    base_store_license_id,
+                    module_id,
+                    module_revision_id,
+                    module_key,
+                    module_display_name,
+                    price_inr,
+                    charged_amount_inr,
+                    term_count,
+                    term_unit,
+                    starts_at,
+                    ends_at,
+                    commercial_quote_id,
+                    created_by_user_id,
+                    created_at
+                ) VALUES (
+                    ${input.addOnId},
+                    ${locked.organizationId},
+                    ${locked.storeId},
+                    ${activePaid.id},
+                    ${locked.moduleId},
+                    ${locked.moduleRevisionId},
+                    ${locked.moduleKey},
+                    ${locked.moduleDisplayName},
+                    ${locked.priceInr},
+                    ${locked.amountInr},
+                    ${locked.term.count},
+                    ${locked.term.unit},
+                    ${locked.intendedStartsAt},
+                    ${locked.intendedEndsAt},
+                    ${locked.id},
+                    ${locked.createdByUserId},
+                    ${input.now}
+                )
+            `;
+            await writeCoTermAddOnFeatureSnapshots(tx, input.addOnId, moduleItem);
+            await tx`
+                UPDATE commercial_quotes
+                SET fulfilled_at = ${input.now}, fulfilled_co_term_add_on_id = ${input.addOnId}
+                WHERE id = ${locked.id}
+                  AND fulfilled_at IS NULL
+            `;
+
+            const created = (await loadCoTermAddOnsForStore(tx, locked.storeId)).find(
+                (addOn) => addOn.id === input.addOnId,
+            );
+            if (!created) {
+                throw new Error("Failed to load fulfilled Co-Term Add-On");
+            }
+            return created;
+        });
+    } catch (error) {
+        if (isUniqueViolation(error)) {
+            const existing = (await listCoTermAddOnsForStore(input.quote.storeId)).find(
+                (addOn) => addOn.commercialQuoteId === input.quote.id,
             );
             return existing ?? "already-fulfilled";
         }

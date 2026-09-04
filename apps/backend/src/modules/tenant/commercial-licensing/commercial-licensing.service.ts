@@ -1,6 +1,8 @@
 import {
     addCommercialTerm,
+    calculateCoTermAddOnCharge,
     calculatePlanUpgradeCharge,
+    commercialTermsMatch,
     COMMERCIAL_QUOTE_CURRENCY,
     COMMERCIAL_QUOTE_TTL_MS,
     COMMERCIAL_TERM_TIMEZONE,
@@ -12,6 +14,7 @@ import {
     storeAccessGrantLabel,
     storeAccessGrantSelectionLabel,
     type ActivePlanSnapshot,
+    type ActivePurchasableModuleSnapshot,
     type ActiveTrialPlanSnapshot,
     type CommercialAccessSourceModuleSnapshot,
     type CommercialAccessSourceRecord,
@@ -22,15 +25,20 @@ import {
     type CommercialQuoteRecord,
     type CommercialQuoteStatus,
     type ConsoleStoreCommercialInspectionResponse,
+    type CoTermAddOnCheckoutResponse,
+    type CreateCoTermAddOnCheckoutSVC,
     type CreatePaidPlanCheckoutSVC,
     type CreateStoreAccessGrantSVC,
     type GrantableCommercialAccessDTO,
     type PaidPlanCheckoutResponse,
     type PaidPlanCheckoutAction,
+    type PurchasableCoTermAddOnDTO,
     type PurchasablePaidPlanDTO,
     type ServiceResponse,
     type StoreAccessGrantDTO,
     type StoreAccessGrantRecord,
+    type StoreCoTermAddOnDTO,
+    type StoreCoTermAddOnRecord,
     type StoreCommercialStatusDTO,
     type StoreCommercialStatusResponse,
     type StoreLicenseBaseAccessDTO,
@@ -67,8 +75,10 @@ type CommercialLicensingRepository = Pick<
     | "getActivePlanSnapshotByKey"
     | "getActiveModuleSnapshotByKey"
     | "listActiveModuleSnapshots"
+    | "listActivePurchasableModuleSnapshots"
     | "listActivePlanSnapshots"
     | "listStoreLicenses"
+    | "listCoTermAddOnsForStore"
     | "listAccessGrantsForStore"
     | "listAccessSourcesForStore"
     | "listStoresExistingAt"
@@ -82,6 +92,7 @@ type CommercialLicensingRepository = Pick<
     | "updatePaymentEventFulfillment"
     | "listPaymentEventsForStore"
     | "fulfillPaidPlanQuote"
+    | "fulfillCoTermAddOnQuote"
 >;
 
 export type CommercialLicensingDependencies = {
@@ -188,6 +199,20 @@ const invalidCheckoutSelection = (): ServiceResponse<null> => ({
     code: STATUS_CODES.CONFLICT,
 });
 
+const addOnUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "That Module is not currently available as a Co-Term Add-On for this Store.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
+const addOnCheckoutUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Store cannot start a Co-Term Add-On checkout right now.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
 const licenseStatusAt = (
     source: { startsAt: Date; endsAt: Date; revokedAt: Date | null },
     at: Date,
@@ -286,7 +311,9 @@ const toQuoteDto = (quote: CommercialQuoteRecord, at: Date): CommercialQuoteDTO 
     status: quoteStatusAt(quote, at),
     planKey: quote.planKey,
     planDisplayName: quote.planDisplayName,
-    planType: "paid",
+    planType: quote.planType,
+    moduleKey: quote.moduleKey,
+    moduleDisplayName: quote.moduleDisplayName,
     priceInr: quote.priceInr,
     amountInr: quote.amountInr,
     amountPaise: quote.amountPaise,
@@ -362,7 +389,98 @@ const quoteKindLabel = (kind: CommercialQuoteKind) => {
     if (kind === "plan_upgrade") {
         return "Plan Upgrade";
     }
+    if (kind === "co_term_add_on") {
+        return "Co-Term Add-On";
+    }
     return "Term Purchase";
+};
+
+const quoteTitle = (quote: CommercialQuoteRecord) =>
+    quote.kind === "co_term_add_on"
+        ? `Commercial Quote for ${quote.moduleDisplayName ?? "Module"}`
+        : `Commercial Quote for ${quote.planDisplayName ?? "Plan"}`;
+
+const snapshotPurchasableModule = (
+    moduleItem: ActivePurchasableModuleSnapshot,
+): ActivePurchasableModuleSnapshot => ({
+    ...moduleItem,
+    term: { ...moduleItem.term },
+    features: moduleItem.features.map((feature) => ({ ...feature })),
+});
+
+const moduleKeysFromAccessSources = (
+    sources: CommercialAccessSourceRecord[],
+    at: Date,
+): Set<string> => {
+    const keys = new Set<string>();
+    for (const source of sources) {
+        if (!isCommercialAccessSourceActiveAt(source, at)) {
+            continue;
+        }
+        for (const moduleItem of source.modules) {
+            keys.add(moduleItem.key);
+        }
+    }
+    return keys;
+};
+
+const toCoTermAddOnDto = (addOn: StoreCoTermAddOnRecord, at: Date): StoreCoTermAddOnDTO => ({
+    id: addOn.id,
+    sourceKind: "co_term_add_on",
+    moduleKey: addOn.moduleKey,
+    moduleDisplayName: addOn.moduleDisplayName,
+    term: { ...addOn.term },
+    startsAt: addOn.startsAt,
+    endsAt: addOn.endsAt,
+    status: licenseStatusAt(addOn, at),
+});
+
+const toPurchasableCoTermAddOn = (
+    moduleItem: ActivePurchasableModuleSnapshot,
+    amountInr: number,
+    intendedStartsAt: Date,
+    intendedEndsAt: Date,
+): PurchasableCoTermAddOnDTO => ({
+    key: moduleItem.key,
+    displayName: moduleItem.displayName,
+    priceInr: moduleItem.priceInr,
+    amountInr,
+    term: { ...moduleItem.term },
+    intendedStartsAt,
+    intendedEndsAt,
+});
+
+const buildAvailableCoTermAddOns = (
+    activePaid: StoreLicenseRecord,
+    purchasableModules: ActivePurchasableModuleSnapshot[],
+    accessSources: CommercialAccessSourceRecord[],
+    at: Date,
+): PurchasableCoTermAddOnDTO[] => {
+    const ownedModuleKeys = moduleKeysFromAccessSources(accessSources, at);
+    return purchasableModules
+        .filter((moduleItem) =>
+            commercialTermsMatch(moduleItem.term, activePaid.term)
+            && !ownedModuleKeys.has(moduleItem.key),
+        )
+        .map((moduleItem) => {
+            const charge = calculateCoTermAddOnCharge(
+                moduleItem.priceInr,
+                activePaid.startsAt,
+                activePaid.endsAt,
+                at,
+                inrToPaise,
+            );
+            if (charge.amountPaise <= 0) {
+                return null;
+            }
+            return toPurchasableCoTermAddOn(
+                moduleItem,
+                charge.amountInr,
+                at,
+                activePaid.endsAt,
+            );
+        })
+        .filter((moduleItem): moduleItem is PurchasableCoTermAddOnDTO => moduleItem !== null);
 };
 
 const toPurchasablePlan = (
@@ -458,6 +576,7 @@ const formatInr = (amount: number) =>
 
 const buildCommercialHistory = (
     licenses: StoreLicenseRecord[],
+    addOns: StoreCoTermAddOnRecord[],
     quotes: CommercialQuoteRecord[],
     events: Awaited<ReturnType<CommercialLicensingRepository["listPaymentEventsForStore"]>>,
     at: Date,
@@ -467,7 +586,7 @@ const buildCommercialHistory = (
             kind: "quote" as const,
             id: quote.id,
             occurredAt: quote.createdAt,
-            title: `Commercial Quote for ${quote.planDisplayName}`,
+            title: quoteTitle(quote),
             detail: `${formatInr(quote.amountInr)} GST-inclusive · ${quoteKindLabel(quote.kind)}`,
             amountInr: quote.amountInr,
             status: quoteStatusAt(quote, at),
@@ -489,6 +608,15 @@ const buildCommercialHistory = (
             detail: `${formatInr(license.priceInr)} · ${license.planKey}`,
             amountInr: license.priceInr,
             status: licenseStatusAt(license, at),
+        })),
+        ...addOns.map((addOn) => ({
+            kind: "add_on" as const,
+            id: addOn.id,
+            occurredAt: addOn.createdAt,
+            title: `Co-Term Add-On · ${addOn.moduleDisplayName}`,
+            detail: `${formatInr(addOn.chargedAmountInr)} prorated · ${addOn.moduleKey}`,
+            amountInr: addOn.chargedAmountInr,
+            status: licenseStatusAt(addOn, at),
         })),
     ];
     return entries.sort((left, right) => toDate(right.occurredAt).getTime() - toDate(left.occurredAt).getTime());
@@ -579,11 +707,15 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         storeId: string,
         at: Date,
     ): Promise<StoreCommercialStatusDTO> => {
-        const [licenses, grants, trialPlan, paidPlans, quotes, paymentEvents] = await Promise.all([
+        const [licenses, grants, addOns, trialPlan, paidPlans, purchasableModules, accessSources, quotes, paymentEvents] =
+            await Promise.all([
             dependencies.repository.listStoreLicenses(storeId),
             dependencies.repository.listAccessGrantsForStore(storeId),
+            dependencies.repository.listCoTermAddOnsForStore(storeId),
             dependencies.repository.getActiveTrialPlanSnapshot(),
             dependencies.repository.listActivePlanSnapshots(),
+            dependencies.repository.listActivePurchasableModuleSnapshots(),
+            dependencies.repository.listAccessSourcesForStore(storeId),
             dependencies.repository.listCommercialQuotesForStore(storeId),
             dependencies.repository.listPaymentEventsForStore(storeId),
         ]);
@@ -594,9 +726,14 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         const currentBase = licenses.find((license) =>
             isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
         ) ?? null;
+        const activePaid = getActivePaidLicense(licenses, at);
         const scheduledSuccessor = getScheduledPaidSuccessor(licenses, at);
         const checkoutEligible = canOfferPaidPlanCheckout(licenses, at);
+        const addOnCheckoutEligible = activePaid !== null;
         const pendingCheckout = quotes.find((quote) => quoteStatusAt(quote, at) === "open") ?? null;
+        const activeAddOns = addOns
+            .filter((addOn) => licenseStatusAt(addOn, at) === "active")
+            .map((addOn) => toCoTermAddOnDto(addOn, at));
 
         return {
             storeId,
@@ -605,13 +742,15 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             baseAccess: currentBase ? toBaseAccess(currentBase, at) : null,
             scheduledSuccessor: scheduledSuccessor ? toBaseAccess(scheduledSuccessor, at) : null,
             accessGrants: grants.map((grant) => toGrantDto(grant, at)),
-            activeAddOns: [],
+            activeAddOns,
             availablePaidPlans: checkoutEligible
                 ? buildAvailablePaidPlans(licenses, paidPlans, at)
                 : [],
-            pendingCheckout:
-                checkoutEligible && pendingCheckout ? toQuoteDto(pendingCheckout, at) : null,
-            commercialHistory: buildCommercialHistory(licenses, quotes, paymentEvents, at),
+            availableCoTermAddOns: addOnCheckoutEligible
+                ? buildAvailableCoTermAddOns(activePaid, purchasableModules, accessSources, at)
+                : [],
+            pendingCheckout: pendingCheckout ? toQuoteDto(pendingCheckout, at) : null,
+            commercialHistory: buildCommercialHistory(licenses, addOns, quotes, paymentEvents, at),
             trial: trialAvailability(licenses, trialPlan !== null),
             entitlements,
         };
@@ -963,6 +1102,10 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             planKey: snapshot.key,
             planDisplayName: snapshot.displayName,
             planType: "paid",
+            moduleId: null,
+            moduleRevisionId: null,
+            moduleKey: null,
+            moduleDisplayName: null,
             priceInr: snapshot.priceInr,
             amountInr,
             amountPaise,
@@ -976,10 +1119,138 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             expiresAt: new Date(now.getTime() + COMMERCIAL_QUOTE_TTL_MS),
             fulfilledAt: null,
             fulfilledLicenseId: null,
+            fulfilledCoTermAddOnId: null,
+            fulfilledCoTermAddOnId: null,
             createdByUserId: userId,
             createdAt: now,
             lineItems,
             modules: snapshot.modules,
+        };
+        const stored = await dependencies.repository.insertCommercialQuote(quote);
+        const commercialStatus = await buildStatus(organizationId, storeId, now);
+
+        return {
+            status: "success",
+            message: "Commercial Quote created successfully",
+            data: {
+                quote: toQuoteDto(stored, now),
+                checkout: {
+                    keyId: dependencies.razorpay.getPublicKeyId(),
+                    orderId: stored.razorpayOrderId,
+                    amountPaise: stored.amountPaise,
+                    currency: stored.currency,
+                },
+                commercialStatus,
+            },
+            code: STATUS_CODES.CREATED,
+        };
+    };
+
+    const createCoTermAddOnCheckout = async (
+        userId: string,
+        organizationId: string,
+        storeId: string,
+        input: CreateCoTermAddOnCheckoutSVC,
+    ): Promise<ServiceResponse<CoTermAddOnCheckoutResponse | null>> => {
+        const authorized = await authorizeStore(userId, organizationId, storeId);
+        if (!authorized.ok) {
+            return authorized.response;
+        }
+
+        const now = dependencies.now();
+        const [licenses, purchasableModules, accessSources] = await Promise.all([
+            dependencies.repository.listStoreLicenses(storeId),
+            dependencies.repository.listActivePurchasableModuleSnapshots(),
+            dependencies.repository.listAccessSourcesForStore(storeId),
+        ]);
+        const activePaid = getActivePaidLicense(licenses, now);
+        if (!activePaid) {
+            return addOnCheckoutUnavailable();
+        }
+
+        const available = buildAvailableCoTermAddOns(
+            activePaid,
+            purchasableModules,
+            accessSources,
+            now,
+        );
+        const selected = available.find((moduleItem) => moduleItem.key === input.moduleKey);
+        if (!selected) {
+            return addOnUnavailable();
+        }
+
+        const moduleSnapshot = purchasableModules.find((moduleItem) => moduleItem.key === input.moduleKey);
+        if (!moduleSnapshot) {
+            return addOnUnavailable();
+        }
+        const snapshot = snapshotPurchasableModule(moduleSnapshot);
+        const charge = calculateCoTermAddOnCharge(
+            snapshot.priceInr,
+            activePaid.startsAt,
+            activePaid.endsAt,
+            now,
+            inrToPaise,
+        );
+        if (charge.amountPaise <= 0) {
+            return addOnUnavailable();
+        }
+
+        const amountPaise = charge.amountPaise;
+        const quoteId = dependencies.createId();
+        let order;
+        try {
+            order = await dependencies.razorpay.createOrder({
+                amountPaise,
+                currency: COMMERCIAL_QUOTE_CURRENCY,
+                receipt: quoteId,
+                notes: {
+                    quote_id: quoteId,
+                    store_id: storeId,
+                    module_key: snapshot.key,
+                },
+            });
+        } catch (error) {
+            if (error instanceof RazorpayAdapterError && error.code === "missing_configuration") {
+                return checkoutUnavailable();
+            }
+            return checkoutUnavailable();
+        }
+
+        const quote: CommercialQuoteRecord = {
+            id: quoteId,
+            organizationId,
+            storeId,
+            kind: "co_term_add_on",
+            planId: null,
+            planRevisionId: null,
+            planKey: null,
+            planDisplayName: null,
+            planType: null,
+            moduleId: snapshot.moduleId,
+            moduleRevisionId: snapshot.moduleRevisionId,
+            moduleKey: snapshot.key,
+            moduleDisplayName: snapshot.displayName,
+            priceInr: snapshot.priceInr,
+            amountInr: charge.amountInr,
+            amountPaise,
+            currency: COMMERCIAL_QUOTE_CURRENCY,
+            term: { ...snapshot.term },
+            licenseTiming: "immediate",
+            intendedStartsAt: now,
+            intendedEndsAt: activePaid.endsAt,
+            razorpayOrderId: order.id,
+            razorpayReceipt: order.receipt,
+            expiresAt: new Date(now.getTime() + COMMERCIAL_QUOTE_TTL_MS),
+            fulfilledAt: null,
+            fulfilledLicenseId: null,
+            fulfilledCoTermAddOnId: null,
+            createdByUserId: userId,
+            createdAt: now,
+            lineItems: [{
+                description: `${snapshot.displayName} Co-Term Add-On (prorated)`,
+                amountInr: charge.amountInr,
+            }],
+            modules: [snapshotModules([snapshot])[0]!],
         };
         const stored = await dependencies.repository.insertCommercialQuote(quote);
         const commercialStatus = await buildStatus(organizationId, storeId, now);
@@ -1083,6 +1354,21 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         }
 
         try {
+            if (quote.kind === "co_term_add_on") {
+                const fulfilled = await dependencies.repository.fulfillCoTermAddOnQuote({
+                    addOnId: dependencies.createId(),
+                    quote,
+                    now,
+                });
+                if (fulfilled === "duplicate-add-on") {
+                    return finish("mismatched", "This Store already has access to that Module");
+                }
+                if (fulfilled === "already-fulfilled") {
+                    return finish("fulfilled", null);
+                }
+                return finish("fulfilled", null);
+            }
+
             const fulfilled = await dependencies.repository.fulfillPaidPlanQuote({
                 licenseId: dependencies.createId(),
                 quote,
@@ -1122,6 +1408,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         applyLegacyStoreMigrationGrants,
         createStoreAccessGrant,
         createPaidPlanCheckout,
+        createCoTermAddOnCheckout,
         ingestRazorpayWebhook,
         resolveStoreFeatureEntitlement: dependencies.featureEntitlement.resolveStoreFeatureEntitlement,
         resolveFeatureEntitlement: dependencies.featureEntitlement.resolveFeatureEntitlement,

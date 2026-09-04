@@ -564,6 +564,7 @@ const successStoreCommercial = (
             ],
             activeAddOns: [],
             availablePaidPlans: [],
+            availableCoTermAddOns: [],
             pendingCheckout: null,
             commercialHistory: [],
             trial: {

@@ -1,5 +1,6 @@
 import type {
     ActivePlanSnapshot,
+    ActivePurchasableModuleSnapshot,
     ActiveTrialPlanSnapshot,
     CommercialAccessSourceModuleSnapshot,
     CommercialAccessSourceRecord,
@@ -8,6 +9,7 @@ import type {
     CommercialQuoteRecord,
     ExistingStoreRecord,
     StoreAccessGrantRecord,
+    StoreCoTermAddOnRecord,
     StoreLicenseRecord,
 } from "@repo/types";
 import { createFeatureEntitlementService } from "./feature-entitlement.service";
@@ -69,6 +71,12 @@ export const integrationsModule: CommercialAccessSourceModuleSnapshot = {
     key: "integrations",
     displayName: "Integrations",
     features: [whatsappFeature],
+};
+
+export const purchasableIntegrationsModule: ActivePurchasableModuleSnapshot = {
+    ...integrationsModule,
+    priceInr: 999,
+    term: { count: 1, unit: "year" },
 };
 
 export const cloneModules = (
@@ -150,7 +158,9 @@ type MemoryState = {
     trialPlan: ActiveTrialPlanSnapshot | null;
     activePlans: ActivePlanSnapshot[];
     activeModules: CommercialAccessSourceModuleSnapshot[];
+    purchasableModules: ActivePurchasableModuleSnapshot[];
     licenses: StoreLicenseRecord[];
+    coTermAddOns: StoreCoTermAddOnRecord[];
     grants: StoreAccessGrantRecord[];
     extraAccessSources: CommercialAccessSourceRecord[];
     enforcementLaunch: CommercialEnforcementLaunch | null;
@@ -171,6 +181,27 @@ const toLicenseAccessSource = (license: StoreLicenseRecord): CommercialAccessSou
     planType: license.planType,
     term: license.term,
     modules: cloneModules(license.modules),
+});
+
+const toCoTermAddOnAccessSource = (addOn: StoreCoTermAddOnRecord): CommercialAccessSourceRecord => ({
+    id: addOn.id,
+    kind: "co_term_add_on",
+    storeId: addOn.storeId,
+    organizationId: addOn.organizationId,
+    startsAt: addOn.startsAt,
+    endsAt: addOn.endsAt,
+    revokedAt: addOn.revokedAt,
+    planKey: null,
+    planDisplayName: null,
+    planType: null,
+    term: addOn.term,
+    modules: cloneModules(addOn.modules),
+});
+
+const cloneCoTermAddOn = (addOn: StoreCoTermAddOnRecord): StoreCoTermAddOnRecord => ({
+    ...addOn,
+    term: { ...addOn.term },
+    modules: cloneModules(addOn.modules),
 });
 
 const toGrantAccessSource = (grant: StoreAccessGrantRecord): CommercialAccessSourceRecord => ({
@@ -210,7 +241,9 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         trialPlan,
         activePlans: [trialPlan, corePlan, createProPlanSnapshot()],
         activeModules: cloneModules([coreOperationsModule, integrationsModule]),
+        purchasableModules: [purchasableIntegrationsModule],
         licenses: [],
+        coTermAddOns: [],
         grants: [],
         extraAccessSources: [],
         enforcementLaunch: null,
@@ -258,6 +291,12 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                 : null;
         },
         listActiveModuleSnapshots: async () => cloneModules(state.activeModules),
+        listActivePurchasableModuleSnapshots: async () =>
+            state.purchasableModules.map((moduleItem) => ({
+                ...moduleItem,
+                term: { ...moduleItem.term },
+                features: moduleItem.features.map((feature) => ({ ...feature })),
+            })),
         listActivePlanSnapshots: async () =>
             state.activePlans.map((plan) => ({
                 ...plan,
@@ -274,8 +313,13 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                 })),
         listAccessGrantsForStore: async (targetStoreId: string) =>
             state.grants.filter((grant) => grant.storeId === targetStoreId).map(cloneGrant),
+        listCoTermAddOnsForStore: async (targetStoreId: string) =>
+            state.coTermAddOns
+                .filter((addOn) => addOn.storeId === targetStoreId)
+                .map(cloneCoTermAddOn),
         listAccessSourcesForStore: async (targetStoreId: string) => [
             ...(await repository.listStoreLicenses(targetStoreId)).map(toLicenseAccessSource),
+            ...(await repository.listCoTermAddOnsForStore(targetStoreId)).map(toCoTermAddOnAccessSource),
             ...(await repository.listAccessGrantsForStore(targetStoreId)).map(toGrantAccessSource),
             ...state.extraAccessSources
                 .filter((source) => source.storeId === targetStoreId)
@@ -489,6 +533,74 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                 modules: cloneModules(created.modules),
             };
         },
+        fulfillCoTermAddOnQuote: async (input: {
+            addOnId: string;
+            quote: CommercialQuoteRecord;
+            now: Date;
+        }) => {
+            const quote = state.quotes.find((item) => item.id === input.quote.id);
+            if (!quote) {
+                throw new Error("Commercial Quote not found");
+            }
+            if (quote.fulfilledAt && quote.fulfilledCoTermAddOnId) {
+                const existing = state.coTermAddOns.find((addOn) => addOn.id === quote.fulfilledCoTermAddOnId);
+                return existing ? cloneCoTermAddOn(existing) : "already-fulfilled" as const;
+            }
+
+            const storeAddOns = state.coTermAddOns.filter((addOn) => addOn.storeId === quote.storeId);
+            if (
+                quote.moduleKey
+                && storeAddOns.some((addOn) =>
+                    addOn.moduleKey === quote.moduleKey
+                    && addOn.revokedAt === null
+                    && addOn.startsAt.getTime() <= input.now.getTime()
+                    && input.now.getTime() < addOn.endsAt.getTime(),
+                )
+            ) {
+                return "duplicate-add-on" as const;
+            }
+
+            const activePaid = state.licenses.find((license) =>
+                license.storeId === quote.storeId
+                && license.sourceKind === "paid"
+                && license.revokedAt === null
+                && license.startsAt.getTime() <= input.now.getTime()
+                && input.now.getTime() < license.endsAt.getTime(),
+            );
+            if (!activePaid || activePaid.endsAt.getTime() !== quote.intendedEndsAt.getTime()) {
+                return "duplicate-add-on" as const;
+            }
+
+            const [moduleItem] = quote.modules;
+            if (!moduleItem || !quote.moduleKey || !quote.moduleId || !quote.moduleRevisionId) {
+                return "duplicate-add-on" as const;
+            }
+
+            const created: StoreCoTermAddOnRecord = {
+                id: input.addOnId,
+                organizationId: quote.organizationId,
+                storeId: quote.storeId,
+                baseStoreLicenseId: activePaid.id,
+                moduleId: quote.moduleId,
+                moduleRevisionId: quote.moduleRevisionId,
+                moduleKey: quote.moduleKey,
+                moduleDisplayName: quote.moduleDisplayName ?? moduleItem.displayName,
+                priceInr: quote.priceInr,
+                chargedAmountInr: quote.amountInr,
+                term: { ...quote.term },
+                startsAt: quote.intendedStartsAt,
+                endsAt: quote.intendedEndsAt,
+                revokedAt: null,
+                commercialQuoteId: quote.id,
+                createdByUserId: quote.createdByUserId,
+                createdAt: input.now,
+                modules: cloneModules([moduleItem]),
+            };
+            state.coTermAddOns.push(created);
+            quote.fulfilledAt = input.now;
+            quote.fulfilledCoTermAddOnId = created.id;
+            return cloneCoTermAddOn(created);
+        },
     };
 
     const featureEntitlement = createFeatureEntitlementService({
@@ -548,6 +660,13 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         },
         setActiveModules: (modules: CommercialAccessSourceModuleSnapshot[]) => {
             state.activeModules = cloneModules(modules);
+        },
+        setPurchasableModules: (modules: ActivePurchasableModuleSnapshot[]) => {
+            state.purchasableModules = modules.map((moduleItem) => ({
+                ...moduleItem,
+                term: { ...moduleItem.term },
+                features: moduleItem.features.map((feature) => ({ ...feature })),
+            }));
         },
         addActivePlan: (plan: ActivePlanSnapshot) => {
             state.activePlans.push({

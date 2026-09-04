@@ -30,6 +30,7 @@ const emptyInspection: ConsoleStoreCommercialInspectionResponse = {
         accessGrants: [],
         activeAddOns: [],
         availablePaidPlans: [],
+        availableCoTermAddOns: [],
         pendingCheckout: null,
         commercialHistory: [],
         trial: {

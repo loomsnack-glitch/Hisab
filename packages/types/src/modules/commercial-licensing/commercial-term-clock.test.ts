@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
     addCommercialTerm,
+    calculateCoTermAddOnCharge,
     calculatePlanUpgradeCharge,
     commercialTermRemainingFraction,
     COMMERCIAL_TERM_TIMEZONE,
@@ -82,5 +83,17 @@ describe("Commercial Term Clock", () => {
 
         expect(upgrade.amountPaise).toBe(Math.round(upgrade.amountInr * 100));
         expect(upgrade.amountInr).toBeGreaterThan(0);
+    });
+
+    test("prorates a Co-Term Add-On charge to the nearest paise", () => {
+        const startsAt = new Date("2026-09-04T15:00:00.000Z");
+        const endsAt = new Date("2027-09-04T15:00:00.000Z");
+        const midpoint = new Date(startsAt.getTime() + (endsAt.getTime() - startsAt.getTime()) / 2);
+
+        const addOn = calculateCoTermAddOnCharge(999, startsAt, endsAt, midpoint, inrToPaise);
+
+        expect(addOn.remainingFraction).toBeCloseTo(0.5, 10);
+        expect(addOn.amountInr).toBe(499.5);
+        expect(addOn.amountPaise).toBe(49950);
     });
 });

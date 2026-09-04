@@ -18,6 +18,7 @@ const eligibleStatus: StoreCommercialStatusResponse = {
         accessGrants: [],
         activeAddOns: [],
         availablePaidPlans: [],
+        availableCoTermAddOns: [],
         pendingCheckout: null,
         commercialHistory: [],
         trial: {
@@ -337,5 +338,62 @@ describe("Store commercial status", () => {
         expect(markup).toContain("Activity &amp; billing history");
         expect(markup).toContain("Plan Upgrade");
         expect(markup).not.toContain("Choose Core");
+    });
+
+    test("shows eligible Co-Term Add-Ons and active add-on status from server state", () => {
+        const eligibleAddOnStatus: StoreCommercialStatusResponse = {
+            commercialStatus: {
+                ...activePaidStatus.commercialStatus,
+                availableCoTermAddOns: [
+                    {
+                        key: "integrations",
+                        displayName: "Integrations",
+                        priceInr: 999,
+                        amountInr: 499.5,
+                        term: { count: 1, unit: "year" },
+                        intendedStartsAt: startsAt,
+                        intendedEndsAt: new Date("2027-09-04T15:00:00.000Z"),
+                    },
+                ],
+            },
+        };
+        const activeAddOnStatus: StoreCommercialStatusResponse = {
+            commercialStatus: {
+                ...activePaidStatus.commercialStatus,
+                availableCoTermAddOns: [],
+                activeAddOns: [
+                    {
+                        id: "00000000-0000-4000-8000-000000000501",
+                        sourceKind: "co_term_add_on",
+                        moduleKey: "integrations",
+                        moduleDisplayName: "Integrations",
+                        term: { count: 1, unit: "year" },
+                        startsAt,
+                        endsAt: new Date("2027-09-04T15:00:00.000Z"),
+                        status: "active",
+                    },
+                ],
+                commercialHistory: [
+                    {
+                        kind: "add_on",
+                        id: "00000000-0000-4000-8000-000000000501",
+                        occurredAt: startsAt,
+                        title: "Co-Term Add-On · Integrations",
+                        detail: "₹499.50 prorated · integrations",
+                        amountInr: 499.5,
+                        status: "active",
+                    },
+                ],
+            },
+        };
+
+        const eligible = renderStatus(eligibleAddOnStatus);
+        const active = renderStatus(activeAddOnStatus);
+
+        expect(eligible).toContain("Add eligible modules");
+        expect(eligible).toContain("Add Integrations");
+        expect(eligible).toContain("Prorated from");
+        expect(active).toContain("Active add-ons");
+        expect(active).toContain("Integrations");
     });
 });

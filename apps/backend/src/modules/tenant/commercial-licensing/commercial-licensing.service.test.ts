@@ -19,6 +19,7 @@ import {
     renewalCoreEnd,
     upgradeMidpoint,
     quoteExpiresAt,
+    purchasableIntegrationsModule,
     userId,
 } from "./commercial-licensing.test-harness";
 
@@ -837,5 +838,151 @@ describe("Paid Plan renewal and upgrade lifecycle", () => {
             entry.kind === "quote"
             && entry.detail.includes("Early Renewal"),
         )).toBe(true);
+    });
+});
+
+describe("Co-Term Add-On checkout and verified fulfilment", () => {
+    const purchaseActiveCore = async (memory: ReturnType<typeof createMemoryCommercialLicensing>) => {
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_for_addon",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_for_addon",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+    };
+
+    test("offers only matching-term separately purchasable Modules not already owned", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(status.data?.commercialStatus.availableCoTermAddOns).toEqual([
+            expect.objectContaining({
+                key: "integrations",
+                priceInr: 999,
+                amountInr: 999,
+                intendedEndsAt: coreEnd,
+            }),
+        ]);
+    });
+
+    test("rejects add-on checkout without an active paid base Plan", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const checkout = await memory.service.createCoTermAddOnCheckout(userId, organizationId, storeId, {
+            moduleKey: "integrations",
+        });
+
+        expect(checkout.code).toBe(STATUS_CODES.CONFLICT);
+        expect(checkout.message).toBe("This Store cannot start a Co-Term Add-On checkout right now.");
+    });
+
+    test("creates a prorated Quote and activates access only after verified payment", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        memory.setNow(upgradeMidpoint);
+
+        const checkout = await memory.service.createCoTermAddOnCheckout(userId, organizationId, storeId, {
+            moduleKey: "integrations",
+        });
+        const beforePaid = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const whatsappBefore = await memory.service.resolveFeatureEntitlement(storeId, "whatsapp", upgradeMidpoint);
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_addon_paid",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_addon",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: upgradeMidpoint,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const whatsappAfter = await memory.service.resolveFeatureEntitlement(storeId, "whatsapp", upgradeMidpoint);
+
+        expect(checkout.status).toBe("success");
+        expect(checkout.data?.quote).toEqual(expect.objectContaining({
+            kind: "co_term_add_on",
+            moduleKey: "integrations",
+            amountInr: 499.5,
+            amountPaise: 49950,
+            intendedStartsAt: upgradeMidpoint,
+            intendedEndsAt: coreEnd,
+        }));
+        expect(beforePaid.data?.commercialStatus.activeAddOns).toEqual([]);
+        expect(whatsappBefore.entitled).toBe(false);
+        expect(paid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(status.data?.commercialStatus.activeAddOns).toEqual([
+            expect.objectContaining({
+                moduleKey: "integrations",
+                status: "active",
+                endsAt: coreEnd,
+            }),
+        ]);
+        expect(whatsappAfter.entitled).toBe(true);
+        expect(whatsappAfter.evidence[0]?.sourceKind).toBe("co_term_add_on");
+        expect(status.data?.commercialStatus.commercialHistory.some((entry) =>
+            entry.kind === "add_on" && entry.status === "active",
+        )).toBe(true);
+    });
+
+    test("rejects duplicate add-on checkout and ignores replayed webhook fulfilment", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+
+        const checkout = await memory.service.createCoTermAddOnCheckout(userId, organizationId, storeId, {
+            moduleKey: "integrations",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_addon_once",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_addon_once",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const duplicate = await memory.service.createCoTermAddOnCheckout(userId, organizationId, storeId, {
+            moduleKey: "integrations",
+        });
+        const replay = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_addon_once",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_addon_once",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+
+        expect(duplicate.code).toBe(STATUS_CODES.CONFLICT);
+        expect(replay.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(memory.state.coTermAddOns).toHaveLength(1);
+    });
+
+    test("hides mismatched-term Modules without inventing seeded add-ons", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        memory.setPurchasableModules([
+            {
+                ...purchasableIntegrationsModule,
+                key: "monthly_integrations",
+                displayName: "Monthly Integrations",
+                term: { count: 1, unit: "month" },
+            },
+        ]);
+
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(status.data?.commercialStatus.availableCoTermAddOns).toEqual([]);
     });
 });

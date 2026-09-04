@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreatePaidPlanCheckoutSchema, STATUS_CODES } from "@repo/types";
+import { CreateCoTermAddOnCheckoutSchema, CreatePaidPlanCheckoutSchema, STATUS_CODES } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -112,6 +112,37 @@ export const createCommercialLicensingRoutes = (
                 );
             } catch (error) {
                 return handleError(FILE_NAME, "createPaidPlanCheckout", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/stores/:storeId/commercial/checkout/add-on",
+        validateSchema("json", CreateCoTermAddOnCheckoutSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await licensingService.createCoTermAddOnCheckout(
+                        c.get("authUser").id,
+                        organizationId,
+                        storeId,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError(FILE_NAME, "createCoTermAddOnCheckout", c, error);
             }
         },
     );

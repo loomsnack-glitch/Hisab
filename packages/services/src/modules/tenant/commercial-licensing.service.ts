@@ -1,5 +1,7 @@
 import type {
     ConsoleStoreCommercialInspectionResponse,
+    CoTermAddOnCheckoutResponse,
+    CreateCoTermAddOnCheckoutJSON,
     CreatePaidPlanCheckoutJSON,
     CreateStoreAccessGrantJSON,
     PaidPlanCheckoutResponse,
@@ -45,6 +47,22 @@ export const createPaidPlanCheckout = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/stores/${storeId}/commercial/checkout`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createCoTermAddOnCheckout = async (
+    organizationId: string,
+    storeId: string,
+    data: CreateCoTermAddOnCheckoutJSON,
+): Promise<ServiceResponse<CoTermAddOnCheckoutResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/stores/${storeId}/commercial/checkout/add-on`,
             data,
         );
         return response.data;

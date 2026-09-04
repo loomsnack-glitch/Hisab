@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
     CreatePaidPlanCheckoutSchema,
+    CreateCoTermAddOnCheckoutSchema,
     CreateStoreAccessGrantSchema,
     CommercialQuoteDTOSchema,
     COMMERCIAL_QUOTE_TTL_MS,
@@ -22,6 +23,7 @@ describe("Store commercial status contract", () => {
             accessGrants: [],
             activeAddOns: [],
             availablePaidPlans: [],
+            availableCoTermAddOns: [],
             pendingCheckout: null,
             commercialHistory: [],
             trial: {
@@ -140,6 +142,8 @@ describe("Paid Plan checkout contract", () => {
             planKey: "core",
             planDisplayName: "Core",
             planType: "paid",
+            moduleKey: null,
+            moduleDisplayName: null,
             priceInr: 2999,
             amountInr: 2999,
             amountPaise: 299900,
@@ -155,5 +159,36 @@ describe("Paid Plan checkout contract", () => {
         });
         expect(parsed.amountPaise).toBe(299900);
         expect(parsed.licenseTiming).toBe("immediate");
+    });
+
+    test("quotes a prorated Co-Term Add-On with module selection fields", () => {
+        expect(CreateCoTermAddOnCheckoutSchema.parse({ moduleKey: "integrations" }).moduleKey)
+            .toBe("integrations");
+
+        const parsed = CommercialQuoteDTOSchema.parse({
+            id: "00000000-0000-4000-8000-000000000301",
+            kind: "co_term_add_on",
+            status: "open",
+            planKey: null,
+            planDisplayName: null,
+            planType: null,
+            moduleKey: "integrations",
+            moduleDisplayName: "Integrations",
+            priceInr: 999,
+            amountInr: 499.5,
+            amountPaise: 49950,
+            currency: "INR",
+            term: { count: 1, unit: "year" },
+            licenseTiming: "immediate",
+            intendedStartsAt: "2026-09-04T15:00:00.000Z",
+            intendedEndsAt: "2027-09-04T15:00:00.000Z",
+            expiresAt: "2026-09-04T15:30:00.000Z",
+            razorpayOrderId: "order_test_addon",
+            lineItems: [{ description: "Integrations Co-Term Add-On (prorated)", amountInr: 499.5 }],
+            fulfilledAt: null,
+        });
+
+        expect(parsed.moduleKey).toBe("integrations");
+        expect(parsed.amountPaise).toBe(49950);
     });
 });

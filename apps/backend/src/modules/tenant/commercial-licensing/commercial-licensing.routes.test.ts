@@ -180,4 +180,60 @@ describe("Store commercial licensing routes", () => {
         expect(JSON.stringify(body)).not.toContain("webhook");
         expect(memory.state.licenses).toHaveLength(0);
     });
+
+    test("creates a Co-Term Add-On Quote only when an active paid base Plan exists", async () => {
+        const { routes, memory } = createApp();
+
+        const withoutPaid = await routes.request(
+            `http://localhost/${organizationId}/stores/${storeId}/commercial/checkout/add-on`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ moduleKey: "integrations" }),
+            },
+        );
+        expect(withoutPaid.status).toBe(409);
+
+        const coreCheckout = await routes.request(
+            `http://localhost/${organizationId}/stores/${storeId}/commercial/checkout`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ planKey: "core" }),
+            },
+        );
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_route_core",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: (await coreCheckout.json() as { data?: { checkout?: { orderId: string } } }).data?.checkout?.orderId ?? "",
+            paymentId: "pay_route_core",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+
+        const response = await routes.request(
+            `http://localhost/${organizationId}/stores/${storeId}/commercial/checkout/add-on`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ moduleKey: "integrations" }),
+            },
+        );
+        const body = await response.json() as {
+            message?: string;
+            data?: {
+                quote?: { kind: string; moduleKey: string | null; amountPaise: number };
+                commercialStatus?: { activeAddOns: unknown[]; availableCoTermAddOns: unknown[] };
+            };
+        };
+
+        expect(response.status).toBe(201);
+        expect(body.data?.quote?.kind).toBe("co_term_add_on");
+        expect(body.data?.quote?.moduleKey).toBe("integrations");
+        expect(body.data?.quote?.amountPaise).toBe(99900);
+        expect(body.data?.commercialStatus?.activeAddOns).toEqual([]);
+        expect(memory.state.coTermAddOns).toHaveLength(0);
+    });
 });

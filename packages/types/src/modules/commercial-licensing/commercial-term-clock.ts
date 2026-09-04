@@ -132,3 +132,33 @@ export const calculatePlanUpgradeCharge = (
         amountPaise: inrToPaise(amountInr),
     };
 };
+
+export type CoTermAddOnChargeBreakdown = {
+    remainingFraction: number;
+    chargeInr: number;
+    amountInr: number;
+    amountPaise: number;
+};
+
+export const calculateCoTermAddOnCharge = (
+    catalogPriceInr: number,
+    basePlanStartsAt: Date,
+    basePlanEndsAt: Date,
+    at: Date,
+    inrToPaise: (amountInr: number) => number,
+): CoTermAddOnChargeBreakdown => {
+    const remainingFraction = commercialTermRemainingFraction(basePlanStartsAt, basePlanEndsAt, at);
+    const chargeInr = catalogPriceInr * remainingFraction;
+    const amountInr = inrToPaise(chargeInr) / 100;
+    return {
+        remainingFraction,
+        chargeInr,
+        amountInr,
+        amountPaise: inrToPaise(amountInr),
+    };
+};
+
+export const commercialTermsMatch = (
+    left: CommercialCatalogTerm,
+    right: CommercialCatalogTerm,
+): boolean => left.count === right.count && left.unit === right.unit;

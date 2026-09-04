@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+    createCoTermAddOnCheckout as createCoTermAddOnCheckoutRequest,
     createPaidPlanCheckout as createPaidPlanCheckoutRequest,
     getStoreCommercialStatus,
     startStoreTrial,
@@ -9,6 +10,7 @@ import {
     COMMERCIAL_TERM_TIMEZONE,
     type CommercialHistoryEntryDTO,
     type CommercialQuoteDTO,
+    type CoTermAddOnCheckoutResponse,
     type PaidPlanCheckoutResponse,
     type StoreCommercialStatusDTO,
     type StoreLicenseBaseAccessDTO,
@@ -37,6 +39,7 @@ type StoreCommercialStatusProps = {
     organizationId: string;
     storeId: string;
     createPaidPlanCheckout?: typeof createPaidPlanCheckoutRequest;
+    createCoTermAddOnCheckout?: typeof createCoTermAddOnCheckoutRequest;
     openRazorpayCheckout?: OpenRazorpayCheckout;
 };
 const formatCommercialTimestamp = (value: string | Date) =>
@@ -91,6 +94,9 @@ const planActionLabel = (plan: StoreCommercialStatusDTO["availablePaidPlans"][nu
 const planTimingLabel = (
     plan: StoreCommercialStatusDTO["availablePaidPlans"][number] | CommercialQuoteDTO,
 ) => {
+    if ("kind" in plan && plan.kind === "co_term_add_on") {
+        return "Starts immediately after payment is verified and ends with your current plan";
+    }
     if ("checkoutAction" in plan && plan.checkoutAction === "upgrade") {
         return "Keeps your current expiry after payment is verified";
     }
@@ -108,6 +114,14 @@ const planTimingLabel = (
     }
     return "Starts immediately after payment is verified";
 };
+
+const quoteDisplayName = (quote: CommercialQuoteDTO) =>
+    quote.kind === "co_term_add_on"
+        ? quote.moduleDisplayName ?? "Module"
+        : quote.planDisplayName ?? "Plan";
+
+const quoteSelectionKey = (quote: CommercialQuoteDTO) =>
+    quote.kind === "co_term_add_on" ? quote.moduleKey ?? "" : quote.planKey ?? "";
 
 const prepareCommercialHistory = (entries: CommercialHistoryEntryDTO[]): CommercialHistoryEntryDTO[] => {
     const openQuotes = entries.filter((entry) => entry.kind === "quote" && entry.status === "open");
@@ -244,7 +258,9 @@ const QuoteCheckoutPanel = ({
         <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
                 <p className="text-sm font-medium text-primary">Checkout ready</p>
-                <p className="font-display text-xl font-semibold text-foreground">{quote.planDisplayName} Plan</p>
+                <p className="font-display text-xl font-semibold text-foreground">
+                    {quote.kind === "co_term_add_on" ? `${quoteDisplayName(quote)} Add-On` : `${quoteDisplayName(quote)} Plan`}
+                </p>
             </div>
             <p className="font-display text-2xl font-semibold text-foreground">{formatCurrency(quote.amountInr)}</p>
         </div>
@@ -286,6 +302,45 @@ const QuoteCheckoutPanel = ({
                 Pay {formatCurrency(quote.amountInr)} with Razorpay
             </Button>
         )}
+    </div>
+);
+const CoTermAddOnCards = ({
+    addOns,
+    isCreating,
+    onSelectAddOn,
+}: {
+    addOns: StoreCommercialStatusDTO["availableCoTermAddOns"];
+    isCreating: boolean;
+    onSelectAddOn: (moduleKey: string) => void;
+}) => (
+    <div className="grid gap-3 sm:grid-cols-2">
+        {addOns.map((addOn) => (
+            <div
+                key={addOn.key}
+                className="flex h-full flex-col justify-between gap-4 rounded-2xl border border-border/70 bg-card p-5 shadow-sm"
+            >
+                <div className="space-y-2">
+                    <p className="font-display text-lg font-semibold text-foreground">{addOn.displayName}</p>
+                    <p className="font-display text-2xl font-semibold text-foreground">
+                        {formatCurrency(addOn.amountInr)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                        Prorated from {formatCurrency(addOn.priceInr)} GST-inclusive · {addOn.term.count} {addOn.term.unit}
+                        {addOn.term.count === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Starts immediately after payment is verified and ends with your current plan
+                    </p>
+                </div>
+                <Button
+                    className="rounded-full"
+                    disabled={isCreating}
+                    onClick={() => onSelectAddOn(addOn.key)}
+                >
+                    {isCreating ? "Preparing checkout..." : `Add ${addOn.displayName}`}
+                </Button>
+            </div>
+        ))}
     </div>
 );
 const PaidPlanCards = ({
@@ -389,11 +444,12 @@ const StoreCommercialStatus = ({
     organizationId,
     storeId,
     createPaidPlanCheckout = createPaidPlanCheckoutRequest,
+    createCoTermAddOnCheckout = createCoTermAddOnCheckoutRequest,
     openRazorpayCheckout = defaultOpenRazorpayCheckout,
 }: StoreCommercialStatusProps) => {
     const queryClient = useQueryClient();
     const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
-    const [checkoutQuote, setCheckoutQuote] = useState<PaidPlanCheckoutResponse | null>(null);
+    const [checkoutQuote, setCheckoutQuote] = useState<PaidPlanCheckoutResponse | CoTermAddOnCheckoutResponse | null>(null);
     const statusQuery = useQuery({
         queryKey: commercialLicenseKeys.status(organizationId, storeId),
         queryFn: () => getStoreCommercialStatus(organizationId, storeId),
@@ -431,6 +487,23 @@ const StoreCommercialStatus = ({
             toast.error(error.message ?? "Unable to create a Commercial Quote");
         },
     });
+    const createAddOnCheckout = useMutation({
+        mutationFn: (moduleKey: string) => createCoTermAddOnCheckout(organizationId, storeId, { moduleKey }),
+        onSuccess: (response) => {
+            if (response.status === "error" || !response.data) {
+                toast.error(response.message ?? "Unable to create a Commercial Quote");
+                return;
+            }
+            setCheckoutQuote(response.data);
+            queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
+                ...response,
+                data: { commercialStatus: response.data.commercialStatus },
+            });
+        },
+        onError: (error: { message?: string }) => {
+            toast.error(error.message ?? "Unable to create a Commercial Quote");
+        },
+    });
     const status =
         statusQuery.data?.status === "success" ? statusQuery.data.data?.commercialStatus ?? null : null;
     const hasActivePaidAccess = Boolean(
@@ -440,10 +513,13 @@ const StoreCommercialStatus = ({
         || Boolean(status?.scheduledSuccessor?.planType === "paid");
     const canPurchase = Boolean(
         status
-        && (status.availablePaidPlans.length > 0 || status.pendingCheckout),
+        && (status.availablePaidPlans.length > 0
+            || status.availableCoTermAddOns.length > 0
+            || status.pendingCheckout),
     );
     const visibleQuote = status?.pendingCheckout ?? checkoutQuote?.quote ?? null;
     const showPaidPlans = Boolean(status?.availablePaidPlans.length) && !visibleQuote;
+    const showCoTermAddOns = Boolean(status?.availableCoTermAddOns.length) && !visibleQuote;
     const showTrialOffer = Boolean(status?.trial.eligible);
     const trialUsed = Boolean(status && !status.trial.eligible && status.baseAccess?.planType === "trial");
     const commercialHistory = useMemo(() => {
@@ -454,11 +530,11 @@ const StoreCommercialStatus = ({
         return prepareCommercialHistory(withoutStaleOpens);
     }, [hasActivePaidAccess, status?.commercialHistory, status?.pendingCheckout]);
     useEffect(() => {
-        if (awaitingConfirmation && accessGranted) {
+        if (awaitingConfirmation && (accessGranted || (status?.activeAddOns.length ?? 0) > 0)) {
             setAwaitingConfirmation(false);
             setCheckoutQuote(null);
         }
-    }, [accessGranted, awaitingConfirmation]);
+    }, [accessGranted, awaitingConfirmation, status?.activeAddOns.length]);
     useEffect(() => {
         if (!canPurchase && !hasActivePaidAccess) {
             setCheckoutQuote(null);
@@ -467,7 +543,9 @@ const StoreCommercialStatus = ({
     const payQuote = async (quote: CommercialQuoteDTO) => {
         const checkout = checkoutQuote?.quote.id === quote.id ? checkoutQuote.checkout : null;
         if (!checkout) {
-            const created = await createPaidPlanCheckout(organizationId, storeId, { planKey: quote.planKey });
+            const created = quote.kind === "co_term_add_on"
+                ? await createCoTermAddOnCheckout(organizationId, storeId, { moduleKey: quoteSelectionKey(quote) })
+                : await createPaidPlanCheckout(organizationId, storeId, { planKey: quoteSelectionKey(quote) });
             if (created.status === "error" || !created.data) {
                 toast.error(created.message ?? "Unable to create a Commercial Quote");
                 return;
@@ -478,7 +556,9 @@ const StoreCommercialStatus = ({
                 orderId: created.data.checkout.orderId,
                 amountPaise: created.data.checkout.amountPaise,
                 currency: created.data.checkout.currency,
-                description: `${created.data.quote.planDisplayName} Plan`,
+                description: quote.kind === "co_term_add_on"
+                    ? `${quoteDisplayName(quote)} Add-On`
+                    : `${quoteDisplayName(quote)} Plan`,
             });
             if (result.outcome === "browser-success") {
                 setAwaitingConfirmation(true);
@@ -490,7 +570,9 @@ const StoreCommercialStatus = ({
             orderId: checkout.orderId,
             amountPaise: checkout.amountPaise,
             currency: checkout.currency,
-            description: `${quote.planDisplayName} Plan`,
+            description: quote.kind === "co_term_add_on"
+                ? `${quoteDisplayName(quote)} Add-On`
+                : `${quoteDisplayName(quote)} Plan`,
         });
         if (result.outcome === "browser-success") {
             setAwaitingConfirmation(true);
@@ -544,6 +626,32 @@ const StoreCommercialStatus = ({
                                 <AccessGrantSummaries status={status} />
                             </section>
                         ) : null}
+                        {status.activeAddOns.length > 0 ? (
+                            <section className="space-y-3">
+                                <SectionHeading>Active add-ons</SectionHeading>
+                                <ul className="space-y-2">
+                                    {status.activeAddOns.map((addOn) => (
+                                        <li
+                                            key={addOn.id}
+                                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/15 px-4 py-3"
+                                        >
+                                            <div className="min-w-0 space-y-1">
+                                                <p className="text-sm font-medium text-foreground">{addOn.moduleDisplayName}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {formatCommercialDate(addOn.startsAt)}
+                                                    {" – "}
+                                                    {formatCommercialDate(addOn.endsAt)}
+                                                    {` (${status.timezone})`}
+                                                </p>
+                                            </div>
+                                            <Badge variant="secondary" className="rounded-full text-xs capitalize">
+                                                {addOn.status}
+                                            </Badge>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        ) : null}
                         {visibleQuote ? (
                             <section className="space-y-3">
                                 <SectionHeading>Complete your purchase</SectionHeading>
@@ -563,6 +671,16 @@ const StoreCommercialStatus = ({
                                     plans={status.availablePaidPlans}
                                     isCreating={createCheckout.isPending}
                                     onSelectPlan={(planKey) => createCheckout.mutate(planKey)}
+                                />
+                            </section>
+                        ) : null}
+                        {showCoTermAddOns ? (
+                            <section className="space-y-3">
+                                <SectionHeading>Add eligible modules</SectionHeading>
+                                <CoTermAddOnCards
+                                    addOns={status.availableCoTermAddOns}
+                                    isCreating={createAddOnCheckout.isPending}
+                                    onSelectAddOn={(moduleKey) => createAddOnCheckout.mutate(moduleKey)}
                                 />
                             </section>
                         ) : null}

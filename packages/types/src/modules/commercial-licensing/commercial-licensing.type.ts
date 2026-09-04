@@ -12,6 +12,7 @@ import type {
     CommercialQuoteStatusSchema,
     ConsoleStoreCommercialInspectionResponseSchema,
     CreatePaidPlanCheckoutSchema,
+    CreateCoTermAddOnCheckoutSchema,
     CreateStoreAccessGrantSchema,
     EntitledFeatureDTOSchema,
     FeatureEntitlementDecisionDTOSchema,
@@ -19,8 +20,11 @@ import type {
     GrantableModuleDTOSchema,
     GrantablePlanDTOSchema,
     PaidPlanCheckoutResponseSchema,
+    CoTermAddOnCheckoutResponseSchema,
     PaidPlanCheckoutActionSchema,
+    PurchasableCoTermAddOnDTOSchema,
     PurchasablePaidPlanDTOSchema,
+    StoreCoTermAddOnDTOSchema,
     RazorpayCheckoutBootstrapDTOSchema,
     StartStoreTrialResponseSchema,
     StoreAccessGrantDTOSchema,
@@ -56,14 +60,19 @@ export type CommercialQuoteLicenseTiming = z.infer<typeof CommercialQuoteLicense
 export type CommercialQuoteLineItemDTO = z.infer<typeof CommercialQuoteLineItemDTOSchema>;
 export type CommercialQuoteDTO = z.infer<typeof CommercialQuoteDTOSchema>;
 export type PurchasablePaidPlanDTO = z.infer<typeof PurchasablePaidPlanDTOSchema>;
+export type StoreCoTermAddOnDTO = z.infer<typeof StoreCoTermAddOnDTOSchema>;
+export type PurchasableCoTermAddOnDTO = z.infer<typeof PurchasableCoTermAddOnDTOSchema>;
 export type CommercialHistoryEntryDTO = z.infer<typeof CommercialHistoryEntryDTOSchema>;
 export type CommercialPaymentEventFulfillmentStatus = z.infer<
     typeof CommercialPaymentEventFulfillmentStatusSchema
 >;
 export type CreatePaidPlanCheckoutJSON = z.input<typeof CreatePaidPlanCheckoutSchema>;
 export type CreatePaidPlanCheckoutSVC = z.output<typeof CreatePaidPlanCheckoutSchema>;
+export type CreateCoTermAddOnCheckoutJSON = z.input<typeof CreateCoTermAddOnCheckoutSchema>;
+export type CreateCoTermAddOnCheckoutSVC = z.output<typeof CreateCoTermAddOnCheckoutSchema>;
 export type RazorpayCheckoutBootstrapDTO = z.infer<typeof RazorpayCheckoutBootstrapDTOSchema>;
 export type PaidPlanCheckoutResponse = z.infer<typeof PaidPlanCheckoutResponseSchema>;
+export type CoTermAddOnCheckoutResponse = z.infer<typeof CoTermAddOnCheckoutResponseSchema>;
 export type PaidPlanCheckoutAction = z.infer<typeof PaidPlanCheckoutActionSchema>;
 export type StoreAccessGrantOrigin = z.infer<typeof StoreAccessGrantOriginSchema>;
 export type StoreAccessGrantTermKind = z.infer<typeof StoreAccessGrantTermKindSchema>;
@@ -182,16 +191,46 @@ export type CommercialQuoteLineItemRecord = {
     amountInr: number;
 };
 
+export type ActivePurchasableModuleSnapshot = CommercialAccessSourceModuleSnapshot & {
+    priceInr: number;
+    term: CommercialCatalogTerm;
+};
+
+export type StoreCoTermAddOnRecord = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    baseStoreLicenseId: string;
+    moduleId: string;
+    moduleRevisionId: string;
+    moduleKey: string;
+    moduleDisplayName: string;
+    priceInr: number;
+    chargedAmountInr: number;
+    term: CommercialCatalogTerm;
+    startsAt: Date;
+    endsAt: Date;
+    revokedAt: Date | null;
+    commercialQuoteId: string;
+    createdByUserId: string;
+    createdAt: Date;
+    modules: CommercialAccessSourceModuleSnapshot[];
+};
+
 export type CommercialQuoteRecord = {
     id: string;
     organizationId: string;
     storeId: string;
     kind: CommercialQuoteKind;
-    planId: string;
-    planRevisionId: string;
-    planKey: string;
-    planDisplayName: string;
-    planType: "paid";
+    planId: string | null;
+    planRevisionId: string | null;
+    planKey: string | null;
+    planDisplayName: string | null;
+    planType: "paid" | null;
+    moduleId: string | null;
+    moduleRevisionId: string | null;
+    moduleKey: string | null;
+    moduleDisplayName: string | null;
     priceInr: number;
     amountInr: number;
     amountPaise: number;
@@ -205,6 +244,7 @@ export type CommercialQuoteRecord = {
     expiresAt: Date;
     fulfilledAt: Date | null;
     fulfilledLicenseId: string | null;
+    fulfilledCoTermAddOnId: string | null;
     createdByUserId: string;
     createdAt: Date;
     lineItems: CommercialQuoteLineItemRecord[];
