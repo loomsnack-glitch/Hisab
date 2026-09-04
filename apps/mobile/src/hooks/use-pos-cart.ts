@@ -1,5 +1,5 @@
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { getCartItemCount } from "../lib/pos-cart-boundary";
+import { getCartItemCount, type PosCartConfiguration } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 
@@ -16,6 +16,11 @@ export const usePosCart = () => {
         addProduct: (product: ProductResponseDTO) => {
             if (scopeKey && product.productType === "single") {
                 usePosCartStore.getState().addProduct(scopeKey, product);
+            }
+        },
+        addConfiguredProduct: (product: ProductResponseDTO, configuration: PosCartConfiguration) => {
+            if (scopeKey) {
+                usePosCartStore.getState().addConfiguredProduct(scopeKey, product, configuration);
             }
         },
         clear: () => usePosCartStore.getState().clear(),

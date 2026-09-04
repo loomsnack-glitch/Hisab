@@ -30,7 +30,7 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                     <View className="gap-2">
                         {cart.items.map((item) => (
                             <View
-                                key={item.id}
+                                key={item.lineId}
                                 className="flex-row items-center justify-between rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark"
                             >
                                 <Text className="flex-1 text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">

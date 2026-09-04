@@ -16,6 +16,15 @@ import {
 } from "../lib/pos-barcode-boundary";
 import { usePosCart } from "../hooks/use-pos-cart";
 import { usePosConvenience } from "../hooks/use-pos-convenience";
+import { usePosConfiguration } from "../hooks/use-pos-configuration";
+import {
+    clampSelectionQuantity,
+    countGroupSelections,
+    getActiveChoiceGroups,
+    getActiveProductAddOns,
+    isComboConfigurationValid,
+} from "../lib/pos-configuration-boundary";
+import type { PosCartConfiguration } from "../lib/pos-cart-boundary";
 
 type NewSaleScreenProps = NativeStackScreenProps<PosStackParamList, "NewSale">;
 type ProductQuickFilter = "all" | "recent" | "pinned";
@@ -26,6 +35,10 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const [search, setSearch] = useState("");
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
     const [productQuickFilter, setProductQuickFilter] = useState<ProductQuickFilter>("all");
+    const [configuredProductId, setConfiguredProductId] = useState<string | null>(null);
+    const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
+    const [comboQuantities, setComboQuantities] = useState<Record<string, number>>({});
+    const [comboAddOnQuantities, setComboAddOnQuantities] = useState<Record<string, number>>({});
     const [showScanner, setShowScanner] = useState(false);
     const [scanLocked, setScanLocked] = useState(false);
     const [scanFeedback, setScanFeedback] = useState<
@@ -43,6 +56,7 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const catalog = usePosCatalog();
     const cart = usePosCart();
     const convenience = usePosConvenience(catalog.products);
+    const configuration = usePosConfiguration();
     const filteredCatalogProducts = filterCatalogProducts(catalog.products, search, selectedCategoryId);
     const filteredRecentProducts = filterCatalogProducts(convenience.recentProducts, search, selectedCategoryId);
     const filteredPinnedProducts = filterCatalogProducts(convenience.pinnedProducts, search, selectedCategoryId);
@@ -55,6 +69,38 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const recentProducts = search.trim() === "" && productQuickFilter === "all"
         ? filterCatalogProducts(convenience.recentProducts, "", selectedCategoryId)
         : [];
+    const configuredProduct = catalog.products.find((product) => product.id === configuredProductId) ?? null;
+    const configuredCombo = configuration.combos.find((combo) => combo.product.id === configuredProductId) ?? null;
+    const configuredChoiceGroups = configuredCombo ? getActiveChoiceGroups(configuredCombo.choiceGroups) : [];
+    const configuredAddOns = configuredProductId
+        ? getActiveProductAddOns(configuration.attachments, configuredProductId)
+        : [];
+    const selectedComboSelections = configuredChoiceGroups.flatMap((group) =>
+        group.options.flatMap((option) => {
+            const quantity = comboQuantities[`${group.id}:${option.optionProductId}`] ?? 0;
+            const optionAddOns = getActiveProductAddOns(configuration.attachments, option.optionProductId);
+            return quantity > 0
+                ? [{
+                    groupId: group.id,
+                    optionProductId: option.optionProductId,
+                    quantity,
+                    addOns: optionAddOns.flatMap((attachment) => {
+                        const addOnQuantity = comboAddOnQuantities[`${group.id}:${option.optionProductId}:${attachment.addOnId}`] ?? 0;
+                        return addOnQuantity > 0 ? [{ addOnId: attachment.addOnId, quantity: addOnQuantity }] : [];
+                    }),
+                }]
+                : [];
+        }),
+    );
+    const configurationPending = configuredProduct?.productType === "combo"
+        ? configuration.combosPending
+        : configuration.addOnsPending;
+    const configurationError = configuredProduct?.productType === "combo"
+        ? configuration.combosError
+        : configuration.addOnsError;
+    const canConfirmConfiguration = configuredProduct?.productType === "combo"
+        ? !configuration.combosPending && !configuration.combosError && Boolean(configuredCombo) && isComboConfigurationValid(configuredChoiceGroups, selectedComboSelections)
+        : Boolean(configuredProduct) && !configuration.addOnsPending && !configuration.addOnsError;
 
     useEffect(
         () => () => {
@@ -82,6 +128,21 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         setShowScanner(false);
         setScanLocked(false);
         setScanFeedback(null);
+    };
+
+    const resetConfiguration = () => {
+        setConfiguredProductId(null);
+        setAddOnQuantities({});
+        setComboQuantities({});
+        setComboAddOnQuantities({});
+    };
+
+    const openConfiguration = (product: (typeof catalog.products)[number]) => {
+        setScanFeedback(null);
+        setAddOnQuantities({});
+        setComboQuantities({});
+        setComboAddOnQuantities({});
+        setConfiguredProductId(product.id);
     };
 
     const handleBarcodeScanned = ({ data }: BarcodeScanningResult) => {
@@ -118,6 +179,22 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
             return;
         }
 
+        if (resolution.product.productType === "combo") {
+            setShowScanner(false);
+            openConfiguration(resolution.product);
+            return;
+        }
+
+        if (resolution.product.productType === "single" && (
+            configuration.addOnsPending ||
+            configuration.addOnsError ||
+            getActiveProductAddOns(configuration.attachments, resolution.product.id).length > 0
+        )) {
+            setShowScanner(false);
+            openConfiguration(resolution.product);
+            return;
+        }
+
         if (resolution.product.productType !== "single") {
             setScanFeedback("scannerConfigurationComingSoon");
             return;
@@ -137,8 +214,80 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         convenience.recordRecent(product.id);
     };
 
+    const handleProductPress = (product: (typeof catalog.products)[number]) => {
+        const productAddOns = getActiveProductAddOns(configuration.attachments, product.id);
+        const productCombo = configuration.combos.find((combo) => combo.product.id === product.id);
+        if (product.productType === "single" && !configuration.addOnsPending && !configuration.addOnsError && productAddOns.length === 0) {
+            addProduct(product);
+            return;
+        }
+
+        if (product.productType === "combo" && productCombo && getActiveChoiceGroups(productCombo.choiceGroups).length === 0) {
+            cart.addConfiguredProduct(product, { addOns: [], comboSelections: [] });
+            convenience.recordRecent(product.id);
+            return;
+        }
+
+        openConfiguration(product);
+    };
+
+    const updateAddOnQuantity = (addOnId: string, cap: number, delta: number) => {
+        setAddOnQuantities((current) => ({
+            ...current,
+            [addOnId]: clampSelectionQuantity(current[addOnId] ?? 0, delta, cap),
+        }));
+    };
+
+    const updateComboQuantity = (groupId: string, optionProductId: string, optionCap: number, delta: number) => {
+        const group = configuredChoiceGroups.find((candidate) => candidate.id === groupId);
+        if (!group) {
+            return;
+        }
+
+        const key = `${groupId}:${optionProductId}`;
+        const current = comboQuantities[key] ?? 0;
+        const currentGroupCount = countGroupSelections(
+            Object.entries(comboQuantities).map(([selectionKey, quantity]) => {
+                const [selectionGroupId, selectionOptionProductId] = selectionKey.split(":");
+                return { groupId: selectionGroupId!, optionProductId: selectionOptionProductId!, quantity };
+            }),
+            groupId,
+        );
+        const groupRemaining = Math.max(0, group.maxSelections - currentGroupCount);
+        const cap = delta > 0 ? Math.min(optionCap, current + groupRemaining) : optionCap;
+        setComboQuantities((state) => ({
+            ...state,
+            [key]: clampSelectionQuantity(current, delta, cap),
+        }));
+    };
+
+    const updateComboAddOnQuantity = (key: string, cap: number, delta: number) => {
+        setComboAddOnQuantities((current) => ({
+            ...current,
+            [key]: clampSelectionQuantity(current[key] ?? 0, delta, cap),
+        }));
+    };
+
+    const confirmConfiguration = () => {
+        if (!configuredProduct || !canConfirmConfiguration) {
+            return;
+        }
+
+        const cartConfiguration: PosCartConfiguration = {
+            addOns: configuredAddOns.flatMap((attachment) => {
+                const quantity = addOnQuantities[attachment.addOnId] ?? 0;
+                return quantity > 0 ? [{ addOnId: attachment.addOnId, quantity }] : [];
+            }),
+            comboSelections: selectedComboSelections,
+        };
+        cart.addConfiguredProduct(configuredProduct, cartConfiguration);
+        convenience.recordRecent(configuredProduct.id);
+        resetConfiguration();
+    };
+
     const renderProductCard = (product: (typeof catalog.products)[number]) => {
-        const isAddable = product.productType === "single";
+        const hasAddOns = getActiveProductAddOns(configuration.attachments, product.id).length > 0;
+        const isInteractive = product.productType === "single" || product.productType === "combo";
         const quantity = cart.items.find((item) => item.id === product.id)?.quantity ?? 0;
         const price = Math.max(0, Number(product.price) - Number(product.discount ?? 0));
         const isPinned = convenience.isPinned(product.id);
@@ -150,18 +299,21 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
             >
                 <Pressable
                     className="min-w-0 flex-1 flex-row items-center justify-between gap-3 px-2 py-1"
-                    disabled={!isAddable}
-                    onPress={() => addProduct(product)}
+                    disabled={!isInteractive}
+                    onPress={() => handleProductPress(product)}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: !isAddable }}
+                    accessibilityState={{ disabled: !isInteractive }}
                 >
                     <View className="min-w-0 flex-1 gap-1">
                         <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{product.name}</Text>
                         <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
                             {new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(price)}
                         </Text>
-                        {!isAddable ? (
+                        {!isInteractive ? (
                             <Text className="text-xs text-pos-warning dark:text-pos-warning-dark">{t("configurationComingSoon")}</Text>
+                        ) : null}
+                        {isInteractive && (hasAddOns || product.productType === "combo") ? (
+                            <Text className="text-xs text-pos-primary">{t("configureProduct")}</Text>
                         ) : null}
                     </View>
                     {quantity > 0 ? (
@@ -238,6 +390,111 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                 ) : null}
                 {scanFeedback ? (
                     <Text className="text-sm leading-5 text-pos-muted dark:text-pos-muted-dark">{t(scanFeedback)}</Text>
+                ) : null}
+                {configuredProduct ? (
+                    <View className="gap-3 rounded-2xl border border-pos-primary/30 bg-pos-primary/5 p-4">
+                        <View className="gap-1">
+                            <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">
+                                {t("configureProduct")}: {configuredProduct.name}
+                            </Text>
+                            <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("configurationRequired")}</Text>
+                        </View>
+                        {configurationPending ? (
+                            <View className="flex-row items-center gap-2">
+                                <ActivityIndicator />
+                                <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("configurationLoading")}</Text>
+                            </View>
+                        ) : null}
+                        {configurationError ? (
+                            <View className="gap-2">
+                                <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("configurationLoadFailed")}</Text>
+                                <PosButton label={t("retry", { ns: "common" })} variant="secondary" onPress={configuration.retry} />
+                            </View>
+                        ) : null}
+                        {!configurationPending && !configurationError && configuredProduct.productType === "combo" ? (
+                            configuredChoiceGroups.length === 0 ? (
+                                <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("noConfigurationOptions")}</Text>
+                            ) : (
+                                configuredChoiceGroups.map((group) => {
+                                    const groupSelections = countGroupSelections(selectedComboSelections, group.id);
+                                    return (
+                                        <View key={group.id} className="gap-2">
+                                            <View className="flex-row items-center justify-between gap-2">
+                                                <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{group.name}</Text>
+                                                <Text className="text-xs text-pos-muted dark:text-pos-muted-dark">
+                                                    {groupSelections}/{group.maxSelections}
+                                                </Text>
+                                            </View>
+                                            {group.options.map((option) => {
+                                                const key = `${group.id}:${option.optionProductId}`;
+                                                const quantity = comboQuantities[key] ?? 0;
+                                                const optionAddOns = getActiveProductAddOns(configuration.attachments, option.optionProductId);
+                                                return (
+                                                    <View key={option.id} className="gap-2 rounded-xl bg-pos-surface px-3 py-2 dark:bg-pos-surface-dark">
+                                                        <View className="flex-row items-center justify-between gap-2">
+                                                            <Text className="min-w-0 flex-1 text-sm text-pos-foreground dark:text-pos-foreground-dark">{option.product.name}</Text>
+                                                            <View className="flex-row items-center gap-1">
+                                                                <PosButton
+                                                                    label="−"
+                                                                    variant="secondary"
+                                                                    disabled={quantity === 0}
+                                                                    onPress={() => updateComboQuantity(group.id, option.optionProductId, option.maxQuantity, -1)}
+                                                                />
+                                                                <Text className="w-6 text-center text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{quantity}</Text>
+                                                                <PosButton
+                                                                    label="+"
+                                                                    variant="secondary"
+                                                                    disabled={quantity >= option.maxQuantity || groupSelections >= group.maxSelections}
+                                                                    onPress={() => updateComboQuantity(group.id, option.optionProductId, option.maxQuantity, 1)}
+                                                                />
+                                                            </View>
+                                                        </View>
+                                                        {quantity > 0 ? optionAddOns.map((attachment) => {
+                                                            const addOnKey = `${group.id}:${option.optionProductId}:${attachment.addOnId}`;
+                                                            const addOnQuantity = comboAddOnQuantities[addOnKey] ?? 0;
+                                                            return (
+                                                                <View key={attachment.id} className="flex-row items-center justify-between gap-2 border-t border-pos-border pt-2 dark:border-pos-border-dark">
+                                                                    <Text className="min-w-0 flex-1 text-xs text-pos-muted dark:text-pos-muted-dark">+ {attachment.addOn.name}</Text>
+                                                                    <View className="flex-row items-center gap-1">
+                                                                        <PosButton label="−" variant="secondary" disabled={addOnQuantity === 0} onPress={() => updateComboAddOnQuantity(addOnKey, attachment.selectionCap, -1)} />
+                                                                        <Text className="w-6 text-center text-xs text-pos-foreground dark:text-pos-foreground-dark">{addOnQuantity}</Text>
+                                                                        <PosButton label="+" variant="secondary" disabled={addOnQuantity >= attachment.selectionCap} onPress={() => updateComboAddOnQuantity(addOnKey, attachment.selectionCap, 1)} />
+                                                                    </View>
+                                                                </View>
+                                                            );
+                                                        }) : null}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })
+                            )
+                        ) : null}
+                        {!configurationPending && !configurationError && configuredProduct.productType === "single" ? (
+                            configuredAddOns.length === 0 ? (
+                                <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("noConfigurationOptions")}</Text>
+                            ) : (
+                                configuredAddOns.map((attachment) => {
+                                    const quantity = addOnQuantities[attachment.addOnId] ?? 0;
+                                    return (
+                                        <View key={attachment.id} className="flex-row items-center justify-between gap-2 rounded-xl bg-pos-surface px-3 py-2 dark:bg-pos-surface-dark">
+                                            <Text className="min-w-0 flex-1 text-sm text-pos-foreground dark:text-pos-foreground-dark">{attachment.addOn.name}</Text>
+                                            <View className="flex-row items-center gap-1">
+                                                <PosButton label="−" variant="secondary" disabled={quantity === 0} onPress={() => updateAddOnQuantity(attachment.addOnId, attachment.selectionCap, -1)} />
+                                                <Text className="w-6 text-center text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{quantity}</Text>
+                                                <PosButton label="+" variant="secondary" disabled={quantity >= attachment.selectionCap} onPress={() => updateAddOnQuantity(attachment.addOnId, attachment.selectionCap, 1)} />
+                                            </View>
+                                        </View>
+                                    );
+                                })
+                            )
+                        ) : null}
+                        <View className="flex-row gap-3">
+                            <View className="min-w-0 flex-1"><PosButton label={t("cancelConfiguration")} variant="secondary" onPress={resetConfiguration} /></View>
+                            <View className="min-w-0 flex-1"><PosButton label={t("addConfiguredProduct")} disabled={!canConfirmConfiguration} onPress={confirmConfiguration} /></View>
+                        </View>
+                    </View>
                 ) : null}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
                     <PosButton
