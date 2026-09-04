@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 1 Execution Plan and Review Log
 
-Status: In progress — 1.2 completed with native-device follow-up
+Status: Completed with native/device follow-ups
 Phase: 1 — POS foundation
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-04
@@ -54,7 +54,7 @@ Not included in this phase:
 | 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `011ec05` |
 | 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | `6cc51e5` |
 | 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | `d4be6e3` |
-| 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | `Pending commit` |
+| 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | `65a27b2` |
 
 ## Cross-phase verification baseline
 
@@ -901,11 +901,56 @@ device-validation follow-up.
 
 ## Phase-level closeout checklist
 
-- [ ] 1.1–1.8 each have a focused commit and evidence.
-- [ ] Phase 1 exit flow reaches New Sale with Cart access.
-- [ ] Android native development-build gate is run or explicitly recorded as
+- [x] 1.1–1.8 each have a focused commit and evidence. The 1.6 unlock-failure
+      coverage correction is in `21d35ea`.
+- [x] Phase 1 exit flow reaches New Sale with Cart access in the implemented
+      shell.
+- [x] Android native development-build gate is explicitly recorded as
       pending external/device validation.
-- [ ] English, Gujarati, and Hindi layout checks are recorded.
-- [ ] No SecureStore fallback or unrelated feature work remains.
-- [ ] Final standards/spec review completed.
-- [ ] `status.md` marks Phase 1 accurately, including follow-ups.
+- [x] English, Gujarati, and Hindi resource/layout follow-up is recorded.
+- [x] No SecureStore fallback or unrelated feature work remains in the selected
+      POS flow.
+- [x] Final standards/spec review completed.
+- [x] `status.md` marks Phase 1 accurately, including follow-ups.
+
+## Phase-level final review
+
+Completed on 2026-09-05.
+
+Commit sequence:
+
+- `81a754c` — establish POS app boundary.
+- `7a040cd` — add MMKV storage boundary.
+- `2cb9d87` — add POS localization foundation.
+- `50a5be9` — add POS design primitives.
+- `011ec05` — add POS session lifecycle.
+- `6cc51e5` — add POS Device Unlock.
+- `21d35ea` — add unlock-failure session coverage correction.
+- `d4be6e3` — add POS navigation shell.
+- `65a27b2` — add New Sale shell.
+
+Final standards review:
+
+- Work remains scoped to `apps/mobile` and the POS planning tracker.
+- Existing shared service/type seams are reused; no backend contract was
+  changed.
+- MMKV is the only app-data persistence layer; SecureStore is absent.
+- Device Session, language, capability gating, logout, New Sale, and Cart
+  boundaries are explicit and separately testable.
+- Legacy generic auth files remain unused by the POS root route and are not
+  needed for the Phase 1 exit flow.
+- No printer, Catalog, billing, offline, iOS, or unrelated feature work was
+  added.
+
+Final verification:
+
+- Complete focused mobile suite — 18 passed, 0 failed.
+- Mobile TypeScript check — one pre-existing WhatsApp asset import error remains
+  in `apps/mobile/src/screens/login-screen.tsx`; no Phase 1 error was added.
+- `git diff --check` — passed.
+- Android Gradle/build/device validation — intentionally not run per user
+  instruction; this remains the required user-owned follow-up.
+
+Phase 1 is complete with follow-ups. The next implementation boundary is Phase
+2 Catalog and Product selection, after the user runs the Android development
+build and confirms the native MMKV/Keystore/translation behavior.
