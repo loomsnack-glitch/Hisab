@@ -16,6 +16,8 @@ import {
     migrationEnd,
     coreEnd,
     scheduledCoreEnd,
+    renewalCoreEnd,
+    upgradeMidpoint,
     quoteExpiresAt,
     userId,
 } from "./commercial-licensing.test-harness";
@@ -582,7 +584,7 @@ describe("Paid Plan checkout and verified fulfilment", () => {
         expect(memory.state.licenses.filter((license) => license.sourceKind === "paid")).toHaveLength(1);
     });
 
-    test("rejects a paid Plan checkout that is not currently eligible", async () => {
+    test("rejects invalid paid Plan checkout selections while active paid access exists", async () => {
         const memory = createMemoryCommercialLicensing();
         const trialPlan = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
             planKey: "trial",
@@ -598,13 +600,242 @@ describe("Paid Plan checkout and verified fulfilment", () => {
             currency: "INR",
             paidAt: trialStart,
         });
-        const afterPaid = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+        const renewalAsUpgrade = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const upgrade = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
             planKey: "pro",
         });
 
         expect(trialPlan.code).toBe(STATUS_CODES.CONFLICT);
         expect(trialPlan.message).toBe("That paid Plan is not currently available.");
-        expect(afterPaid.code).toBe(STATUS_CODES.CONFLICT);
-        expect(afterPaid.message).toBe("This Store cannot start a new paid Plan checkout right now.");
+        expect(renewalAsUpgrade.status).toBe("success");
+        expect(renewalAsUpgrade.data?.quote.kind).toBe("plan_renewal");
+        expect(upgrade.status).toBe("success");
+        expect(upgrade.data?.quote.kind).toBe("plan_upgrade");
+    });
+});
+
+describe("Paid Plan renewal and upgrade lifecycle", () => {
+    const purchaseActiveCore = async (memory: ReturnType<typeof createMemoryCommercialLicensing>) => {
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_purchase",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_purchase",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        return checkout;
+    };
+
+    test("creates one scheduled successor for an early renewal at the active term end", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+
+        const renewal = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_renewal",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: renewal.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_renewal",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(renewal.data?.quote.kind).toBe("plan_renewal");
+        expect(renewal.data?.quote.licenseTiming).toBe("scheduled");
+        expect(renewal.data?.quote.intendedStartsAt).toEqual(coreEnd);
+        expect(renewal.data?.quote.intendedEndsAt).toEqual(renewalCoreEnd);
+        expect(paid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(status.data?.commercialStatus.baseAccess).toEqual(expect.objectContaining({
+            planKey: "core",
+            status: "active",
+            endsAt: coreEnd,
+        }));
+        expect(status.data?.commercialStatus.scheduledSuccessor).toEqual(expect.objectContaining({
+            planKey: "core",
+            status: "scheduled",
+            startsAt: coreEnd,
+            endsAt: renewalCoreEnd,
+        }));
+        expect(memory.state.licenses.filter((license) =>
+            license.sourceKind === "paid" && license.revokedAt === null,
+        )).toHaveLength(2);
+    });
+
+    test("replaces an existing scheduled successor instead of stacking prepaid years", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+
+        const firstRenewal = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_first_renewal",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: firstRenewal.data?.checkout.orderId ?? "",
+            paymentId: "pay_first_renewal",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+
+        const downgradeRenewal = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_downgrade_renewal",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: downgradeRenewal.data?.checkout.orderId ?? "",
+            paymentId: "pay_downgrade_renewal",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(status.data?.commercialStatus.scheduledSuccessor?.planKey).toBe("core");
+        expect(memory.state.licenses.filter((license) =>
+            license.sourceKind === "paid"
+            && license.startsAt.getTime() === coreEnd.getTime()
+            && license.revokedAt === null,
+        )).toHaveLength(1);
+        expect(memory.state.licenses.filter((license) =>
+            license.sourceKind === "paid"
+            && license.startsAt.getTime() === coreEnd.getTime()
+            && license.revokedAt !== null,
+        )).toHaveLength(1);
+    });
+
+    test("schedules a downgrade for the next term without removing active-term Features", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        memory.setNow(upgradeMidpoint);
+        const upgradeCheckout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "pro",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_pro_upgrade",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: upgradeCheckout.data?.checkout.orderId ?? "",
+            paymentId: "pay_pro_upgrade",
+            amountPaise: upgradeCheckout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: upgradeMidpoint,
+        });
+
+        const downgradeRenewal = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core_downgrade",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: downgradeRenewal.data?.checkout.orderId ?? "",
+            paymentId: "pay_core_downgrade",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: upgradeMidpoint,
+        });
+        const duringActive = await memory.service.resolveFeatureEntitlement(storeId, "whatsapp", upgradeMidpoint);
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(duringActive.entitled).toBe(true);
+        expect(status.data?.commercialStatus.baseAccess?.planKey).toBe("pro");
+        expect(status.data?.commercialStatus.scheduledSuccessor).toEqual(expect.objectContaining({
+            planKey: "core",
+            status: "scheduled",
+            startsAt: coreEnd,
+        }));
+    });
+
+    test("upgrades immediately with prorated credit and charge while preserving expiry", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        memory.setNow(upgradeMidpoint);
+
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "pro",
+        });
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_pro_upgrade",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? "",
+            paymentId: "pay_pro_upgrade",
+            amountPaise: checkout.data?.checkout.amountPaise ?? 0,
+            currency: "INR",
+            paidAt: upgradeMidpoint,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const whatsapp = await memory.service.resolveFeatureEntitlement(storeId, "whatsapp", upgradeMidpoint);
+
+        expect(checkout.data?.quote.kind).toBe("plan_upgrade");
+        expect(checkout.data?.quote.licenseTiming).toBe("immediate");
+        expect(checkout.data?.quote.amountInr).toBe(1000);
+        expect(checkout.data?.quote.amountPaise).toBe(100000);
+        expect(checkout.data?.quote.intendedEndsAt).toEqual(coreEnd);
+        expect(checkout.data?.quote.lineItems).toEqual([
+            expect.objectContaining({
+                description: "Pro Plan charge for remaining term",
+                amountInr: expect.closeTo(2499.5, 5),
+            }),
+            expect.objectContaining({
+                description: "Credit for unused current Plan term",
+                amountInr: expect.closeTo(1499.5, 5),
+            }),
+            expect.objectContaining({
+                description: "Pro Plan Upgrade total",
+                amountInr: 1000,
+            }),
+        ]);
+        expect(paid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(status.data?.commercialStatus.baseAccess).toEqual(expect.objectContaining({
+            planKey: "pro",
+            status: "active",
+            endsAt: coreEnd,
+        }));
+        expect(whatsapp.entitled).toBe(true);
+        expect(memory.state.licenses.find((license) =>
+            license.planKey === "core"
+            && license.revokedAt?.getTime() === upgradeMidpoint.getTime(),
+        )).toBeTruthy();
+    });
+
+    test("surfaces renewal, upgrade, and history details to the Organization administrator", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await purchaseActiveCore(memory);
+        memory.setNow(upgradeMidpoint);
+
+        const statusBefore = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const renewalCheckout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+
+        expect(statusBefore.data?.commercialStatus.availablePaidPlans.map((plan) => ({
+            key: plan.key,
+            checkoutAction: plan.checkoutAction,
+        })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "core", checkoutAction: "renewal" },
+            { key: "pro", checkoutAction: "upgrade" },
+        ]);
+        expect(renewalCheckout.data?.commercialStatus.commercialHistory.some((entry) =>
+            entry.kind === "quote"
+            && entry.detail.includes("Early Renewal"),
+        )).toBe(true);
     });
 });

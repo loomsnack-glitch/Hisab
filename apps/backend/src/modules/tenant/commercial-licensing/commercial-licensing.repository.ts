@@ -941,7 +941,7 @@ type QuoteRow = {
     id: string;
     organization_id: string;
     store_id: string;
-    kind: "paid_plan";
+    kind: "paid_plan" | "plan_renewal" | "plan_upgrade";
     plan_id: string;
     plan_revision_id: string;
     plan_key: string;
@@ -1513,6 +1513,35 @@ export const listPaymentEventsForStore = async (storeId: string): Promise<Commer
     return rows.map(toPaymentEvent);
 };
 
+const revokeScheduledPaidSuccessors = async (
+    tx: SqlClient,
+    storeId: string,
+    revokedAt: Date,
+) => {
+    await tx`
+        UPDATE store_licenses
+        SET revoked_at = ${revokedAt}
+        WHERE store_id = ${storeId}
+          AND source_kind = 'paid'
+          AND revoked_at IS NULL
+          AND starts_at > ${revokedAt}
+    `;
+};
+
+const revokeActivePaidLicense = async (
+    tx: SqlClient,
+    licenseId: string,
+    revokedAt: Date,
+) => {
+    await tx`
+        UPDATE store_licenses
+        SET revoked_at = ${revokedAt}
+        WHERE id = ${licenseId}
+          AND source_kind = 'paid'
+          AND revoked_at IS NULL
+    `;
+};
+
 export const fulfillPaidPlanQuote = async (input: {
     licenseId: string;
     quote: CommercialQuoteRecord;
@@ -1587,7 +1616,22 @@ export const fulfillPaidPlanQuote = async (input: {
                 FOR UPDATE
             ` as LicenseRow[];
             const current = attachModules(licenses, [], []);
-            if (current.some((license) => licensesOverlap(license, locked.intendedStartsAt, locked.intendedEndsAt))) {
+            if (locked.kind === "plan_upgrade") {
+                const activePaid = current.find((license) =>
+                    license.sourceKind === "paid"
+                    && license.revokedAt === null
+                    && license.startsAt.getTime() <= input.now.getTime()
+                    && input.now.getTime() < license.endsAt.getTime(),
+                );
+                if (!activePaid) {
+                    return "overlapping-license";
+                }
+                await revokeActivePaidLicense(tx, activePaid.id, input.now);
+            } else if (locked.kind === "plan_renewal") {
+                await revokeScheduledPaidSuccessors(tx, locked.storeId, input.now);
+            } else if (current.some((license) =>
+                licensesOverlap(license, locked.intendedStartsAt, locked.intendedEndsAt),
+            )) {
                 return "overlapping-license";
             }
 

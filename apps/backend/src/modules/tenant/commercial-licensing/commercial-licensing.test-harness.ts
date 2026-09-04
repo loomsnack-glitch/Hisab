@@ -27,6 +27,10 @@ export const trialEnd = new Date("2026-09-11T15:00:00.000Z");
 export const migrationEnd = new Date("2026-10-04T15:00:00.000Z");
 export const coreEnd = new Date("2027-09-04T15:00:00.000Z");
 export const scheduledCoreEnd = new Date("2027-09-11T15:00:00.000Z");
+export const renewalCoreEnd = new Date("2028-09-04T15:00:00.000Z");
+export const upgradeMidpoint = new Date(
+    trialStart.getTime() + (coreEnd.getTime() - trialStart.getTime()) / 2,
+);
 export const quoteExpiresAt = new Date("2026-09-04T15:30:00.000Z");
 export const storeCreatedAt = new Date("2026-08-01T10:00:00.000Z");
 
@@ -425,14 +429,37 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                     ? { ...existing, term: { ...existing.term }, modules: cloneModules(existing.modules) }
                     : "already-fulfilled" as const;
             }
-            if (state.licenses.some((license) =>
-                license.storeId === quote.storeId
-                && license.revokedAt === null
+
+            const storeLicenses = state.licenses.filter((license) => license.storeId === quote.storeId);
+            if (quote.kind === "plan_upgrade") {
+                const activePaid = storeLicenses.find((license) =>
+                    license.sourceKind === "paid"
+                    && license.revokedAt === null
+                    && license.startsAt.getTime() <= input.now.getTime()
+                    && input.now.getTime() < license.endsAt.getTime(),
+                );
+                if (!activePaid) {
+                    return "overlapping-license" as const;
+                }
+                activePaid.revokedAt = input.now;
+            } else if (quote.kind === "plan_renewal") {
+                for (const license of storeLicenses) {
+                    if (
+                        license.sourceKind === "paid"
+                        && license.revokedAt === null
+                        && license.startsAt.getTime() > input.now.getTime()
+                    ) {
+                        license.revokedAt = input.now;
+                    }
+                }
+            } else if (storeLicenses.some((license) =>
+                license.revokedAt === null
                 && license.startsAt.getTime() < quote.intendedEndsAt.getTime()
                 && quote.intendedStartsAt.getTime() < license.endsAt.getTime(),
             )) {
                 return "overlapping-license" as const;
             }
+
             const created: StoreLicenseRecord = {
                 id: input.licenseId,
                 organizationId: quote.organizationId,

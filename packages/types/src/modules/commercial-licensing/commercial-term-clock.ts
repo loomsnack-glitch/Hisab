@@ -85,3 +85,50 @@ export const isCommercialAccessSourceActiveAt = (
     source.revokedAt === null
     && source.startsAt.getTime() <= at.getTime()
     && at.getTime() < source.endsAt.getTime();
+
+export const commercialTermRemainingFraction = (
+    startsAt: Date,
+    endsAt: Date,
+    at: Date,
+): number => {
+    const totalMs = endsAt.getTime() - startsAt.getTime();
+    if (totalMs <= 0) {
+        return 0;
+    }
+    if (at.getTime() <= startsAt.getTime()) {
+        return 1;
+    }
+    if (at.getTime() >= endsAt.getTime()) {
+        return 0;
+    }
+    return (endsAt.getTime() - at.getTime()) / totalMs;
+};
+
+export type PlanUpgradeChargeBreakdown = {
+    remainingFraction: number;
+    creditInr: number;
+    chargeInr: number;
+    amountInr: number;
+    amountPaise: number;
+};
+
+export const calculatePlanUpgradeCharge = (
+    originalPurchasedPriceInr: number,
+    upgradedPlanPriceInr: number,
+    startsAt: Date,
+    endsAt: Date,
+    at: Date,
+    inrToPaise: (amountInr: number) => number,
+): PlanUpgradeChargeBreakdown => {
+    const remainingFraction = commercialTermRemainingFraction(startsAt, endsAt, at);
+    const creditInr = originalPurchasedPriceInr * remainingFraction;
+    const chargeInr = upgradedPlanPriceInr * remainingFraction;
+    const amountInr = inrToPaise(chargeInr - creditInr) / 100;
+    return {
+        remainingFraction,
+        creditInr,
+        chargeInr,
+        amountInr,
+        amountPaise: inrToPaise(amountInr),
+    };
+};

@@ -78,6 +78,37 @@ const daysRemainingLabel = (endsAt: string | Date) => {
     if (days === 1) return "1 day remaining";
     return `${days} days remaining`;
 };
+const planActionLabel = (plan: StoreCommercialStatusDTO["availablePaidPlans"][number]) => {
+    if (plan.checkoutAction === "upgrade") {
+        return `Upgrade to ${plan.displayName}`;
+    }
+    if (plan.checkoutAction === "renewal") {
+        return `Renew with ${plan.displayName}`;
+    }
+    return `Choose ${plan.displayName}`;
+};
+
+const planTimingLabel = (
+    plan: StoreCommercialStatusDTO["availablePaidPlans"][number] | CommercialQuoteDTO,
+) => {
+    if ("checkoutAction" in plan && plan.checkoutAction === "upgrade") {
+        return "Keeps your current expiry after payment is verified";
+    }
+    if ("kind" in plan && plan.kind === "plan_upgrade") {
+        return "Keeps your current expiry after payment is verified";
+    }
+    if (plan.licenseTiming === "scheduled") {
+        if ("kind" in plan && plan.kind === "plan_renewal") {
+            return "Starts when your current paid term ends";
+        }
+        if ("checkoutAction" in plan && plan.checkoutAction === "renewal") {
+            return "Starts when your current paid term ends";
+        }
+        return "Starts when your current trial ends";
+    }
+    return "Starts immediately after payment is verified";
+};
+
 const prepareCommercialHistory = (entries: CommercialHistoryEntryDTO[]): CommercialHistoryEntryDTO[] => {
     const openQuotes = entries.filter((entry) => entry.kind === "quote" && entry.status === "open");
     if (openQuotes.length <= 1) return entries;
@@ -224,15 +255,23 @@ const QuoteCheckoutPanel = ({
                 Quote expires {formatCommercialTimestamp(quote.expiresAt)}
             </p>
             <p className="sm:col-span-2">
-                {quote.licenseTiming === "scheduled"
-                    ? "Starts when your current trial ends"
-                    : "Starts immediately after payment is verified"}
+                {planTimingLabel(quote)}
                 {" · "}
                 {formatCommercialDate(quote.intendedStartsAt)}
                 {" – "}
                 {formatCommercialDate(quote.intendedEndsAt)}
             </p>
         </div>
+        {quote.lineItems.length > 1 ? (
+            <ul className="space-y-1 rounded-xl border border-border/60 bg-background/80 px-4 py-3 text-sm">
+                {quote.lineItems.map((line) => (
+                    <li key={line.description} className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">{line.description}</span>
+                        <span className="font-medium text-foreground">{formatCurrency(line.amountInr)}</span>
+                    </li>
+                ))}
+            </ul>
+        ) : null}
         {awaitingConfirmation ? (
             <Alert variant="info">
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -267,16 +306,14 @@ const PaidPlanCards = ({
                 <div className="space-y-2">
                     <p className="font-display text-lg font-semibold text-foreground">{plan.displayName}</p>
                     <p className="font-display text-2xl font-semibold text-foreground">
-                        {formatCurrency(plan.priceInr)}
+                        {formatCurrency(plan.amountInr)}
                     </p>
                     <p className="text-sm text-muted-foreground">
                         GST-inclusive · {plan.term.count} {plan.term.unit}
                         {plan.term.count === 1 ? "" : "s"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        {plan.licenseTiming === "scheduled"
-                            ? "Starts when your current trial ends"
-                            : "Starts immediately after payment"}
+                        {planTimingLabel(plan)}
                     </p>
                 </div>
                 <Button
@@ -284,7 +321,7 @@ const PaidPlanCards = ({
                     disabled={isCreating}
                     onClick={() => onSelectPlan(plan.key)}
                 >
-                    {isCreating ? "Preparing checkout..." : `Choose ${plan.displayName}`}
+                    {isCreating ? "Preparing checkout..." : planActionLabel(plan)}
                 </Button>
             </div>
         ))}
@@ -396,27 +433,26 @@ const StoreCommercialStatus = ({
     });
     const status =
         statusQuery.data?.status === "success" ? statusQuery.data.data?.commercialStatus ?? null : null;
-    const accessGranted = Boolean(
+    const hasActivePaidAccess = Boolean(
         status?.baseAccess?.planType === "paid" && status.baseAccess.status === "active",
-    ) || Boolean(status?.scheduledSuccessor?.planType === "paid");
+    );
+    const accessGranted = hasActivePaidAccess
+        || Boolean(status?.scheduledSuccessor?.planType === "paid");
     const canPurchase = Boolean(
         status
-        && !accessGranted
         && (status.availablePaidPlans.length > 0 || status.pendingCheckout),
     );
-    const visibleQuote = canPurchase
-        ? status?.pendingCheckout ?? checkoutQuote?.quote ?? null
-        : null;
+    const visibleQuote = status?.pendingCheckout ?? checkoutQuote?.quote ?? null;
     const showPaidPlans = Boolean(status?.availablePaidPlans.length) && !visibleQuote;
     const showTrialOffer = Boolean(status?.trial.eligible);
     const trialUsed = Boolean(status && !status.trial.eligible && status.baseAccess?.planType === "trial");
     const commercialHistory = useMemo(() => {
         const entries = status?.commercialHistory ?? [];
-        const withoutStaleOpens = accessGranted
+        const withoutStaleOpens = hasActivePaidAccess && !status?.pendingCheckout
             ? entries.filter((entry) => !(entry.kind === "quote" && entry.status === "open"))
             : entries;
         return prepareCommercialHistory(withoutStaleOpens);
-    }, [accessGranted, status?.commercialHistory]);
+    }, [hasActivePaidAccess, status?.commercialHistory, status?.pendingCheckout]);
     useEffect(() => {
         if (awaitingConfirmation && accessGranted) {
             setAwaitingConfirmation(false);
@@ -424,10 +460,10 @@ const StoreCommercialStatus = ({
         }
     }, [accessGranted, awaitingConfirmation]);
     useEffect(() => {
-        if (!canPurchase) {
+        if (!canPurchase && !hasActivePaidAccess) {
             setCheckoutQuote(null);
         }
-    }, [canPurchase]);
+    }, [canPurchase, hasActivePaidAccess]);
     const payQuote = async (quote: CommercialQuoteDTO) => {
         const checkout = checkoutQuote?.quote.id === quote.id ? checkoutQuote.checkout : null;
         if (!checkout) {
@@ -520,7 +556,9 @@ const StoreCommercialStatus = ({
                         ) : null}
                         {showPaidPlans ? (
                             <section className="space-y-3">
-                                <SectionHeading>Choose a paid plan</SectionHeading>
+                                <SectionHeading>
+                                    {hasActivePaidAccess ? "Renew or upgrade this plan" : "Choose a paid plan"}
+                                </SectionHeading>
                                 <PaidPlanCards
                                     plans={status.availablePaidPlans}
                                     isCreating={createCheckout.isPending}

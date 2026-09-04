@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
     addCommercialTerm,
+    calculatePlanUpgradeCharge,
+    commercialTermRemainingFraction,
     COMMERCIAL_TERM_TIMEZONE,
     isCommercialAccessSourceActiveAt,
 } from "./commercial-term-clock";
+import { inrToPaise } from "./commercial-licensing.schema";
 
 describe("Commercial Term Clock", () => {
     test("uses Asia/Kolkata as the commercial timezone", () => {
@@ -44,5 +47,40 @@ describe("Commercial Term Clock", () => {
             { ...source, revokedAt: new Date("2026-09-05T00:00:00.000Z") },
             new Date("2026-09-06T00:00:00.000Z"),
         )).toBe(false);
+    });
+
+    test("uses the exact remaining local-calendar-time fraction for proration", () => {
+        const startsAt = new Date("2026-09-04T15:00:00.000Z");
+        const endsAt = new Date("2027-09-04T15:00:00.000Z");
+        const midpoint = new Date(startsAt.getTime() + (endsAt.getTime() - startsAt.getTime()) / 2);
+
+        expect(commercialTermRemainingFraction(startsAt, endsAt, startsAt)).toBe(1);
+        expect(commercialTermRemainingFraction(startsAt, endsAt, endsAt)).toBe(0);
+        expect(commercialTermRemainingFraction(startsAt, endsAt, midpoint)).toBeCloseTo(0.5, 10);
+    });
+
+    test("credits the original purchased price and charges the higher Plan price for the remaining fraction", () => {
+        const startsAt = new Date("2026-09-04T15:00:00.000Z");
+        const endsAt = new Date("2027-09-04T15:00:00.000Z");
+        const midpoint = new Date(startsAt.getTime() + (endsAt.getTime() - startsAt.getTime()) / 2);
+
+        const upgrade = calculatePlanUpgradeCharge(2999, 4999, startsAt, endsAt, midpoint, inrToPaise);
+
+        expect(upgrade.remainingFraction).toBeCloseTo(0.5, 10);
+        expect(upgrade.creditInr).toBeCloseTo(1499.5, 10);
+        expect(upgrade.chargeInr).toBeCloseTo(2499.5, 10);
+        expect(upgrade.amountInr).toBe(1000);
+        expect(upgrade.amountPaise).toBe(100000);
+    });
+
+    test("rounds only the final upgrade charge to the nearest paise", () => {
+        const startsAt = new Date("2026-03-15T10:15:30.000Z");
+        const endsAt = addCommercialTerm(startsAt, { count: 1, unit: "year" });
+        const at = new Date("2026-09-04T15:00:00.000Z");
+
+        const upgrade = calculatePlanUpgradeCharge(2999, 4999, startsAt, endsAt, at, inrToPaise);
+
+        expect(upgrade.amountPaise).toBe(Math.round(upgrade.amountInr * 100));
+        expect(upgrade.amountInr).toBeGreaterThan(0);
     });
 });

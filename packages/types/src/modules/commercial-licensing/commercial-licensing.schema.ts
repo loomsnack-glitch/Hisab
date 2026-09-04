@@ -122,7 +122,8 @@ export const COMMERCIAL_QUOTE_CURRENCY = "INR" as const;
 
 export const inrToPaise = (amountInr: number): number => Math.round(amountInr * 100);
 
-export const CommercialQuoteKindSchema = z.literal("paid_plan");
+export const CommercialQuoteKindSchema = z.enum(["paid_plan", "plan_renewal", "plan_upgrade"]);
+export const PaidPlanCheckoutActionSchema = z.enum(["term_purchase", "renewal", "upgrade"]);
 export const CommercialQuoteStatusSchema = z.enum(["open", "expired", "fulfilled"]);
 export const CommercialQuoteLicenseTimingSchema = z.enum(["immediate", "scheduled"]);
 export const CommercialHistoryEntryKindSchema = z.enum(["quote", "payment", "license"]);
@@ -163,7 +164,9 @@ export const CommercialQuoteDTOSchema = z.object({
 export const PurchasablePaidPlanDTOSchema = z.object({
     key: CommercialCatalogKeySchema,
     displayName: CommercialCatalogDisplayNameSchema,
+    checkoutAction: PaidPlanCheckoutActionSchema,
     priceInr: z.number(),
+    amountInr: z.number(),
     term: CommercialCatalogTermSchema,
     licenseTiming: CommercialQuoteLicenseTimingSchema,
     intendedStartsAt: dtoDateSchema,

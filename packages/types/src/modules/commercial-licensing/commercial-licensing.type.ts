@@ -19,6 +19,7 @@ import type {
     GrantableModuleDTOSchema,
     GrantablePlanDTOSchema,
     PaidPlanCheckoutResponseSchema,
+    PaidPlanCheckoutActionSchema,
     PurchasablePaidPlanDTOSchema,
     RazorpayCheckoutBootstrapDTOSchema,
     StartStoreTrialResponseSchema,
@@ -63,6 +64,7 @@ export type CreatePaidPlanCheckoutJSON = z.input<typeof CreatePaidPlanCheckoutSc
 export type CreatePaidPlanCheckoutSVC = z.output<typeof CreatePaidPlanCheckoutSchema>;
 export type RazorpayCheckoutBootstrapDTO = z.infer<typeof RazorpayCheckoutBootstrapDTOSchema>;
 export type PaidPlanCheckoutResponse = z.infer<typeof PaidPlanCheckoutResponseSchema>;
+export type PaidPlanCheckoutAction = z.infer<typeof PaidPlanCheckoutActionSchema>;
 export type StoreAccessGrantOrigin = z.infer<typeof StoreAccessGrantOriginSchema>;
 export type StoreAccessGrantTermKind = z.infer<typeof StoreAccessGrantTermKindSchema>;
 export type StoreAccessGrantSelectionKind = z.infer<typeof StoreAccessGrantSelectionKindSchema>;

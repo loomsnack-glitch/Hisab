@@ -37,7 +37,9 @@ const availablePlansStatus: StoreCommercialStatusResponse = {
             {
                 key: "core",
                 displayName: "Core",
+                checkoutAction: "term_purchase",
                 priceInr: 2999,
+                amountInr: 2999,
                 term: { count: 1, unit: "year" },
                 licenseTiming: "immediate",
                 intendedStartsAt: startsAt,
@@ -187,12 +189,76 @@ const activePaidStatus: StoreCommercialStatusResponse = {
             endsAt: new Date("2027-09-04T15:00:00.000Z"),
             status: "active",
         },
-        availablePaidPlans: [],
+        availablePaidPlans: [
+            {
+                key: "core",
+                displayName: "Core",
+                checkoutAction: "renewal",
+                priceInr: 2999,
+                amountInr: 2999,
+                term: { count: 1, unit: "year" },
+                licenseTiming: "scheduled",
+                intendedStartsAt: new Date("2027-09-04T15:00:00.000Z"),
+                intendedEndsAt: new Date("2028-09-04T15:00:00.000Z"),
+            },
+            {
+                key: "pro",
+                displayName: "Pro",
+                checkoutAction: "upgrade",
+                priceInr: 4999,
+                amountInr: 1000,
+                term: { count: 1, unit: "year" },
+                licenseTiming: "immediate",
+                intendedStartsAt: startsAt,
+                intendedEndsAt: new Date("2027-09-04T15:00:00.000Z"),
+            },
+        ],
         pendingCheckout: null,
         trial: {
             eligible: false,
             message: "This Store has already used its standard Trial Plan.",
         },
+    },
+};
+const activePaidUpgradeQuoteStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...activePaidStatus.commercialStatus,
+        pendingCheckout: {
+            id: "00000000-0000-4000-8000-000000000401",
+            kind: "plan_upgrade",
+            status: "open",
+            planKey: "pro",
+            planDisplayName: "Pro",
+            planType: "paid",
+            priceInr: 4999,
+            amountInr: 1000,
+            amountPaise: 100000,
+            currency: "INR",
+            term: { count: 1, unit: "year" },
+            licenseTiming: "immediate",
+            intendedStartsAt: startsAt,
+            intendedEndsAt: new Date("2027-09-04T15:00:00.000Z"),
+            expiresAt: new Date("2026-09-04T15:30:00.000Z"),
+            razorpayOrderId: "order_test_upgrade",
+            lineItems: [
+                { description: "Pro Plan charge for remaining term", amountInr: 2499.5 },
+                { description: "Credit for unused current Plan term", amountInr: 1499.5 },
+                { description: "Pro Plan Upgrade total", amountInr: 1000 },
+            ],
+            fulfilledAt: null,
+        },
+        availablePaidPlans: [],
+        commercialHistory: [
+            {
+                kind: "quote",
+                id: "00000000-0000-4000-8000-000000000401",
+                occurredAt: startsAt,
+                title: "Commercial Quote for Pro",
+                detail: "₹1,000.00 GST-inclusive · Plan Upgrade",
+                amountInr: 1000,
+                status: "open",
+            },
+        ],
     },
 };
 const renderStatus = (data: StoreCommercialStatusResponse) => {
@@ -253,13 +319,23 @@ describe("Store commercial status", () => {
         expect(pending).toContain("No active plan");
         expect(pending).not.toContain(">Active<");
     });
-    test("hides checkout and trial actions after paid access is active", () => {
+    test("shows renewal and upgrade actions while a paid term is active", () => {
         const markup = renderStatus(activePaidStatus);
         expect(markup).toContain("Active");
         expect(markup).toContain("Core");
-        expect(markup).not.toContain("Complete your purchase");
-        expect(markup).not.toContain("Choose Core");
+        expect(markup).toContain("Renew or upgrade this plan");
+        expect(markup).toContain("Renew with Core");
+        expect(markup).toContain("Upgrade to Pro");
         expect(markup).not.toContain("Start Trial");
-        expect(markup).not.toContain("Commercial Quote for Core");
+    });
+    test("shows prorated upgrade quote evidence without treating browser checkout as access", () => {
+        const markup = renderStatus(activePaidUpgradeQuoteStatus);
+        expect(markup).toContain("Complete your purchase");
+        expect(markup).toContain("Credit for unused current Plan term");
+        expect(markup).toContain("Pro Plan Upgrade total");
+        expect(markup).toContain("Keeps your current expiry after payment is verified");
+        expect(markup).toContain("Activity &amp; billing history");
+        expect(markup).toContain("Plan Upgrade");
+        expect(markup).not.toContain("Choose Core");
     });
 });

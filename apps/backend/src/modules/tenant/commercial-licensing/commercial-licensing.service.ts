@@ -1,5 +1,6 @@
 import {
     addCommercialTerm,
+    calculatePlanUpgradeCharge,
     COMMERCIAL_QUOTE_CURRENCY,
     COMMERCIAL_QUOTE_TTL_MS,
     COMMERCIAL_TERM_TIMEZONE,
@@ -17,6 +18,7 @@ import {
     type CommercialCatalogTerm,
     type CommercialHistoryEntryDTO,
     type CommercialQuoteDTO,
+    type CommercialQuoteKind,
     type CommercialQuoteRecord,
     type CommercialQuoteStatus,
     type ConsoleStoreCommercialInspectionResponse,
@@ -24,6 +26,7 @@ import {
     type CreateStoreAccessGrantSVC,
     type GrantableCommercialAccessDTO,
     type PaidPlanCheckoutResponse,
+    type PaidPlanCheckoutAction,
     type PurchasablePaidPlanDTO,
     type ServiceResponse,
     type StoreAccessGrantDTO,
@@ -178,6 +181,13 @@ const invalidCustomRange = (): ServiceResponse<null> => ({
     code: STATUS_CODES.BAD_REQUEST,
 });
 
+const invalidCheckoutSelection = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "That paid Plan checkout is not currently available for this Store.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
 const licenseStatusAt = (
     source: { startsAt: Date; endsAt: Date; revokedAt: Date | null },
     at: Date,
@@ -291,14 +301,29 @@ const toQuoteDto = (quote: CommercialQuoteRecord, at: Date): CommercialQuoteDTO 
     fulfilledAt: quote.fulfilledAt,
 });
 
-const canStartPaidPlanCheckout = (licenses: StoreLicenseRecord[], at: Date) => {
-    const hasActivePaid = licenses.some((license) =>
+const getActivePaidLicense = (licenses: StoreLicenseRecord[], at: Date) =>
+    licenses.find((license) =>
         license.sourceKind === "paid"
         && isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
-    );
-    const hasScheduled = licenses.some((license) => licenseStatusAt(license, at) === "scheduled");
+    ) ?? null;
+
+const getScheduledPaidSuccessor = (licenses: StoreLicenseRecord[], at: Date) =>
+    licenses.find((license) =>
+        license.sourceKind === "paid"
+        && licenseStatusAt(license, at) === "scheduled",
+    ) ?? null;
+
+const comparePaidPlanTier = (leftPriceInr: number, rightPriceInr: number) =>
+    leftPriceInr - rightPriceInr;
+
+const canStartInitialPaidPlanCheckout = (licenses: StoreLicenseRecord[], at: Date) => {
+    const hasActivePaid = getActivePaidLicense(licenses, at) !== null;
+    const hasScheduled = getScheduledPaidSuccessor(licenses, at) !== null;
     return !hasActivePaid && !hasScheduled;
 };
+
+const canOfferPaidPlanCheckout = (licenses: StoreLicenseRecord[], at: Date) =>
+    getActivePaidLicense(licenses, at) !== null || canStartInitialPaidPlanCheckout(licenses, at);
 
 const paidPlanTiming = (licenses: StoreLicenseRecord[], at: Date, term: CommercialCatalogTerm) => {
     const activeBase = licenses.find((license) =>
@@ -318,20 +343,115 @@ const paidPlanTiming = (licenses: StoreLicenseRecord[], at: Date, term: Commerci
     };
 };
 
+const renewalTiming = (activePaid: StoreLicenseRecord, term: CommercialCatalogTerm) => ({
+    licenseTiming: "scheduled" as const,
+    intendedStartsAt: activePaid.endsAt,
+    intendedEndsAt: addCommercialTerm(activePaid.endsAt, term),
+});
+
+const upgradeTiming = (activePaid: StoreLicenseRecord, at: Date) => ({
+    licenseTiming: "immediate" as const,
+    intendedStartsAt: at,
+    intendedEndsAt: activePaid.endsAt,
+});
+
+const quoteKindLabel = (kind: CommercialQuoteKind) => {
+    if (kind === "plan_renewal") {
+        return "Early Renewal · Scheduled Store License";
+    }
+    if (kind === "plan_upgrade") {
+        return "Plan Upgrade";
+    }
+    return "Term Purchase";
+};
+
 const toPurchasablePlan = (
     plan: ActivePlanSnapshot,
+    checkoutAction: PaidPlanCheckoutAction,
+    amountInr: number,
+    timing: {
+        licenseTiming: PurchasablePaidPlanDTO["licenseTiming"];
+        intendedStartsAt: Date;
+        intendedEndsAt: Date;
+    },
+): PurchasablePaidPlanDTO => ({
+    key: plan.key,
+    displayName: plan.displayName,
+    checkoutAction,
+    priceInr: plan.priceInr,
+    amountInr,
+    term: { ...plan.term },
+    ...timing,
+});
+
+const buildAvailablePaidPlans = (
     licenses: StoreLicenseRecord[],
+    paidPlans: ActivePlanSnapshot[],
     at: Date,
-): PurchasablePaidPlanDTO => {
-    const timing = paidPlanTiming(licenses, at, plan.term);
-    return {
-        key: plan.key,
-        displayName: plan.displayName,
-        priceInr: plan.priceInr,
-        term: { ...plan.term },
-        ...timing,
-    };
+): PurchasablePaidPlanDTO[] => {
+    const activePaid = getActivePaidLicense(licenses, at);
+    if (activePaid) {
+        return paidPlans
+            .filter((plan) => plan.planType === "paid")
+            .flatMap((plan) => {
+                const tierDelta = comparePaidPlanTier(plan.priceInr, activePaid.priceInr);
+                if (tierDelta > 0) {
+                    const upgrade = calculatePlanUpgradeCharge(
+                        activePaid.priceInr,
+                        plan.priceInr,
+                        activePaid.startsAt,
+                        activePaid.endsAt,
+                        at,
+                        inrToPaise,
+                    );
+                    if (upgrade.amountPaise <= 0) {
+                        return [];
+                    }
+                    return [toPurchasablePlan(
+                        plan,
+                        "upgrade",
+                        upgrade.amountInr,
+                        upgradeTiming(activePaid, at),
+                    )];
+                }
+                return [toPurchasablePlan(
+                    plan,
+                    "renewal",
+                    plan.priceInr,
+                    renewalTiming(activePaid, plan.term),
+                )];
+            });
+    }
+    if (!canStartInitialPaidPlanCheckout(licenses, at)) {
+        return [];
+    }
+    return paidPlans
+        .filter((plan) => plan.planType === "paid")
+        .map((plan) => toPurchasablePlan(
+            plan,
+            "term_purchase",
+            plan.priceInr,
+            paidPlanTiming(licenses, at, plan.term),
+        ));
 };
+
+const buildUpgradeQuoteLineItems = (
+    planDisplayName: string,
+    upgrade: ReturnType<typeof calculatePlanUpgradeCharge>,
+) => [
+    {
+        description: `${planDisplayName} Plan charge for remaining term`,
+        amountInr: upgrade.chargeInr,
+    },
+    {
+        description: "Credit for unused current Plan term",
+        amountInr: upgrade.creditInr,
+    },
+    {
+        description: `${planDisplayName} Plan Upgrade total`,
+        amountInr: upgrade.amountInr,
+    },
+];
 
 const formatInr = (amount: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
@@ -348,7 +468,7 @@ const buildCommercialHistory = (
             id: quote.id,
             occurredAt: quote.createdAt,
             title: `Commercial Quote for ${quote.planDisplayName}`,
-            detail: `${formatInr(quote.amountInr)} GST-inclusive · ${quote.licenseTiming === "scheduled" ? "Scheduled Store License" : "Term Purchase"}`,
+            detail: `${formatInr(quote.amountInr)} GST-inclusive · ${quoteKindLabel(quote.kind)}`,
             amountInr: quote.amountInr,
             status: quoteStatusAt(quote, at),
         })),
@@ -474,8 +594,8 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         const currentBase = licenses.find((license) =>
             isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
         ) ?? null;
-        const scheduledSuccessor = licenses.find((license) => licenseStatusAt(license, at) === "scheduled") ?? null;
-        const checkoutEligible = canStartPaidPlanCheckout(licenses, at);
+        const scheduledSuccessor = getScheduledPaidSuccessor(licenses, at);
+        const checkoutEligible = canOfferPaidPlanCheckout(licenses, at);
         const pendingCheckout = quotes.find((quote) => quoteStatusAt(quote, at) === "open") ?? null;
 
         return {
@@ -487,9 +607,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             accessGrants: grants.map((grant) => toGrantDto(grant, at)),
             activeAddOns: [],
             availablePaidPlans: checkoutEligible
-                ? paidPlans
-                    .filter((plan) => plan.planType === "paid")
-                    .map((plan) => toPurchasablePlan(plan, licenses, at))
+                ? buildAvailablePaidPlans(licenses, paidPlans, at)
                 : [],
             pendingCheckout:
                 checkoutEligible && pendingCheckout ? toQuoteDto(pendingCheckout, at) : null,
@@ -771,13 +889,50 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         if (!plan || plan.planType !== "paid") {
             return paidPlanUnavailable();
         }
-        if (!canStartPaidPlanCheckout(licenses, now)) {
+        if (!canOfferPaidPlanCheckout(licenses, now)) {
             return paidCheckoutUnavailable();
         }
 
         const snapshot = snapshotPaidPlan(plan);
-        const timing = paidPlanTiming(licenses, now, snapshot.term);
-        const amountPaise = inrToPaise(snapshot.priceInr);
+        const activePaid = getActivePaidLicense(licenses, now);
+        let quoteKind: CommercialQuoteKind = "paid_plan";
+        let timing: {
+            licenseTiming: CommercialQuoteRecord["licenseTiming"];
+            intendedStartsAt: Date;
+            intendedEndsAt: Date;
+        };
+        let amountInr = snapshot.priceInr;
+        let lineItems: CommercialQuoteRecord["lineItems"];
+
+        if (activePaid) {
+            const tierDelta = comparePaidPlanTier(snapshot.priceInr, activePaid.priceInr);
+            if (tierDelta > 0) {
+                const upgrade = calculatePlanUpgradeCharge(
+                    activePaid.priceInr,
+                    snapshot.priceInr,
+                    activePaid.startsAt,
+                    activePaid.endsAt,
+                    now,
+                    inrToPaise,
+                );
+                if (upgrade.amountPaise <= 0) {
+                    return invalidCheckoutSelection();
+                }
+                quoteKind = "plan_upgrade";
+                timing = upgradeTiming(activePaid, now);
+                amountInr = upgrade.amountInr;
+                lineItems = buildUpgradeQuoteLineItems(snapshot.displayName, upgrade);
+            } else {
+                quoteKind = "plan_renewal";
+                timing = renewalTiming(activePaid, snapshot.term);
+                lineItems = [{ description: `${snapshot.displayName} Plan renewal`, amountInr: snapshot.priceInr }];
+            }
+        } else {
+            timing = paidPlanTiming(licenses, now, snapshot.term);
+            lineItems = [{ description: `${snapshot.displayName} Plan`, amountInr: snapshot.priceInr }];
+        }
+
+        const amountPaise = inrToPaise(amountInr);
         const quoteId = dependencies.createId();
         let order;
         try {
@@ -802,14 +957,14 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             id: quoteId,
             organizationId,
             storeId,
-            kind: "paid_plan",
+            kind: quoteKind,
             planId: snapshot.planId,
             planRevisionId: snapshot.planRevisionId,
             planKey: snapshot.key,
             planDisplayName: snapshot.displayName,
             planType: "paid",
             priceInr: snapshot.priceInr,
-            amountInr: snapshot.priceInr,
+            amountInr,
             amountPaise,
             currency: COMMERCIAL_QUOTE_CURRENCY,
             term: { ...snapshot.term },
@@ -823,7 +978,7 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             fulfilledLicenseId: null,
             createdByUserId: userId,
             createdAt: now,
-            lineItems: [{ description: `${snapshot.displayName} Plan`, amountInr: snapshot.priceInr }],
+            lineItems,
             modules: snapshot.modules,
         };
         const stored = await dependencies.repository.insertCommercialQuote(quote);
