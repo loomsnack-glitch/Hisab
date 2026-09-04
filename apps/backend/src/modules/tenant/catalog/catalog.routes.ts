@@ -23,6 +23,7 @@ import {
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
+import { createOrganizationFeatureEntitlementMiddleware } from "@/modules/tenant/commercial-licensing/organization-feature-entitlement.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as catalogService from "./catalog.service";
@@ -46,6 +47,10 @@ const validateUuidParam = (value: string, message: string) => {
 };
 
 router.use("*", authMiddleware);
+router.use(
+    "/:organizationId/*",
+    createOrganizationFeatureEntitlementMiddleware("catalog_products"),
+);
 
 router.get("/:organizationId/categories", async (c) => {
     try {

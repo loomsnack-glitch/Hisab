@@ -4,6 +4,7 @@ import {
     createVendorRepo,
     freshFarmsVendor,
     getOrganizationByIdForUser,
+    getStoresByOrganizationId,
     getUnitById,
     getVendorById,
     getVendorItemById,
@@ -20,6 +21,7 @@ import {
     organization,
     organizationId,
     otherOrganizationId,
+    resolveFeatureEntitlement,
     tomatoItem,
     unitId,
     updateVendorItemRepo,
@@ -28,11 +30,14 @@ import {
     vendorId,
     vendorItemId,
     vendorsService,
+    store,
 } from "./vendors.service.test-harness";
 
 describe("Organization Vendor service", () => {
     beforeEach(() => {
         getOrganizationByIdForUser.mockClear();
+        getStoresByOrganizationId.mockClear();
+        resolveFeatureEntitlement.mockClear();
         getVendorsByOrganizationId.mockClear();
         getVendorById.mockClear();
         getUnitById.mockClear();
@@ -44,6 +49,12 @@ describe("Organization Vendor service", () => {
         updateVendorItemRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store]);
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         getVendorsByOrganizationId.mockResolvedValue([freshFarmsVendor, millersVendor]);
         getVendorById.mockResolvedValue(freshFarmsVendor);
         getUnitById.mockResolvedValue(kilogramUnit);
@@ -198,6 +209,8 @@ describe("Organization Vendor service", () => {
 describe("Organization Vendor Item service", () => {
     beforeEach(() => {
         getOrganizationByIdForUser.mockClear();
+        getStoresByOrganizationId.mockClear();
+        resolveFeatureEntitlement.mockClear();
         getVendorsByOrganizationId.mockClear();
         getVendorById.mockClear();
         getUnitById.mockClear();
@@ -209,6 +222,12 @@ describe("Organization Vendor Item service", () => {
         updateVendorItemRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store]);
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         getVendorsByOrganizationId.mockResolvedValue([freshFarmsVendor, millersVendor]);
         getVendorById.mockResolvedValue(freshFarmsVendor);
         getUnitById.mockResolvedValue(kilogramUnit);

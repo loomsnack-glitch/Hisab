@@ -33,6 +33,7 @@ import {
     recordedPurchase,
     replacePurchaseLinesRepo,
     resetStoredPurchase,
+    resolveFeatureEntitlement,
     restoreCreateMoneyAccountMovementRepo,
     storeId,
     tomatoItem,
@@ -75,9 +76,15 @@ describe("Organization Purchase service", () => {
         lockMoneyAccountById.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         isMoneyAccountTrackingActive.mockClear();
+        resolveFeatureEntitlement.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue({ id: organizationId, name: "Demo Org" });
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         isMoneyAccountTrackingActive.mockResolvedValue(false);
         lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
         resetStoredPurchase(draftPurchase);

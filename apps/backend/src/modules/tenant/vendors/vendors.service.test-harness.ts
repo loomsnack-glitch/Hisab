@@ -1,4 +1,9 @@
 import { mock } from "bun:test";
+import { resolveFeatureEntitlement, ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
+import {
+    getOrganizationByIdForUser,
+    getStoresByOrganizationId,
+} from "@/modules/tenant/test-support/organization-repository.test-harness";
 import type { UnitDTO, VendorDTO, VendorItemDTO } from "@repo/types";
 
 export const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -14,6 +19,7 @@ export const onionItemId = "77777777-7777-4777-8777-777777777777";
 export const now = new Date("2026-08-31T12:00:00.000Z");
 
 export const organization = { id: organizationId, name: "Demo Org" };
+export const store = { id: "11111111-1111-4111-8111-111111111111", organizationId, name: "Adajan" };
 
 export const kilogramUnit: UnitDTO = {
     id: unitId,
@@ -109,7 +115,8 @@ export const onionItem: VendorItemDTO = {
     updatedAt: now,
 };
 
-export const getOrganizationByIdForUser = mock(async () => organization);
+export { getOrganizationByIdForUser, getStoresByOrganizationId, resolveFeatureEntitlement };
+
 export const getVendorsByOrganizationId = mock(async () => [freshFarmsVendor, millersVendor]);
 export const getVendorById = mock(async () => freshFarmsVendor);
 export const getUnitById = mock(async () => kilogramUnit);
@@ -188,15 +195,11 @@ export const updateVendorItemRepo = mock(async (data: UpdateVendorItemRepoArg) =
     updatedAt: now,
 }));
 
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-}));
-
 mock.module("@/modules/tenant/units/units.repository", () => ({
     getUnitById,
 }));
 
-mock.module("./vendors.repository", () => ({
+mock.module("@/modules/tenant/vendors/vendors.repository", () => ({
     getVendorsByOrganizationId,
     getVendorById,
     createVendor: createVendorRepo,
@@ -206,5 +209,7 @@ mock.module("./vendors.repository", () => ({
     createVendorItem: createVendorItemRepo,
     updateVendorItem: updateVendorItemRepo,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const vendorsService = await import("./vendors.service");

@@ -27,6 +27,7 @@ import {
   decryptDeviceSecret,
   encryptDeviceSecret,
 } from "@/helpers/deviceSecret.helper";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
@@ -506,6 +507,20 @@ export const updateStore = async (
     }
   }
 
+  const nextMoneyAccountTrackingEnabled =
+    storeData.moneyAccountTrackingEnabled === undefined
+      ? store.moneyAccountTrackingEnabled
+      : storeData.moneyAccountTrackingEnabled;
+  if (nextMoneyAccountTrackingEnabled && !store.moneyAccountTrackingEnabled) {
+    const moneyAccountTrackingEntitlementError = await requireStoreFeatureEntitlement(
+      storeId,
+      "money_account_tracking",
+    );
+    if (moneyAccountTrackingEntitlementError) {
+      return moneyAccountTrackingEntitlementError;
+    }
+  }
+
   const updatedStore = await organizationRepository.updateStore({
     id: storeId,
     name: nextName,
@@ -535,10 +550,7 @@ export const updateStore = async (
       storeData.tableManagementEnabled === undefined
         ? store.tableManagementEnabled
         : storeData.tableManagementEnabled,
-    moneyAccountTrackingEnabled:
-      storeData.moneyAccountTrackingEnabled === undefined
-        ? store.moneyAccountTrackingEnabled
-        : storeData.moneyAccountTrackingEnabled,
+    moneyAccountTrackingEnabled: nextMoneyAccountTrackingEnabled,
     updatedBy: userId,
   });
 

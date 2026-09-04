@@ -28,6 +28,7 @@ import {
     recordedExpense,
     rentCategory,
     resetStoredExpense,
+    resolveFeatureEntitlement,
     restoreCreateMoneyAccountMovementRepo,
     reverseOutgoingPaymentRepo,
     storeId,
@@ -63,9 +64,15 @@ describe("Organization Expense service", () => {
         lockMoneyAccountById.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         isMoneyAccountTrackingActive.mockClear();
+        resolveFeatureEntitlement.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue({ id: organizationId, name: "Demo Org" });
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         isMoneyAccountTrackingActive.mockResolvedValue(false);
         lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
         resetStoredExpense(draftExpense);

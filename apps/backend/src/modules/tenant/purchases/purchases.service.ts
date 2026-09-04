@@ -31,6 +31,10 @@ import {
     type VoidPurchaseSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
+import {
+    requireOrganizationFeatureEntitlement,
+    requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
@@ -129,6 +133,16 @@ const requireStore = async (
         return { ok: false, error: storeNotFound() };
     }
     return { ok: true, value: store };
+};
+
+const requirePurchasesEntitlementForStore = async (
+    storeId: string,
+): Promise<LookupResult<null>> => {
+    const denial = await requireStoreFeatureEntitlement(storeId, "purchases");
+    if (denial) {
+        return { ok: false, error: denial };
+    }
+    return { ok: true, value: null };
 };
 
 const requireActiveVendor = async (
@@ -409,6 +423,14 @@ export const getPurchases = async (
         return organizationNotFound();
     }
 
+    const purchasesEntitlementError = await requireOrganizationFeatureEntitlement(
+        organizationId,
+        "purchases",
+    );
+    if (purchasesEntitlementError) {
+        return purchasesEntitlementError;
+    }
+
     const purchases = await purchasesRepository.getPurchasesByOrganizationId(organizationId);
     return {
         status: "success",
@@ -436,6 +458,11 @@ export const getPurchaseDetails = async (
         return purchaseNotFound();
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(purchase.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     return {
         status: "success",
         data: { purchase },
@@ -457,6 +484,11 @@ export const createDraftPurchase = async (
     const storeResult = await requireStore(organizationId, purchaseData.storeId);
     if (!storeResult.ok) {
         return storeResult.error;
+    }
+
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(storeResult.value.id);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
     }
 
     const vendorResult = await requireActiveVendor(organizationId, purchaseData.vendorId);
@@ -584,6 +616,11 @@ export const updateDraftPurchase = async (
         return storeResult.error;
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(storeResult.value.id);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     const nextVendorId = purchaseData.vendorId ?? existing.vendorId;
     const vendorResult = await requireActiveVendor(organizationId, nextVendorId);
     if (!vendorResult.ok) {
@@ -706,6 +743,11 @@ export const discardDraftPurchase = async (
         return purchaseNotFound();
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(existing.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     if (existing.lifecycle !== "draft") {
         return {
             status: "error",
@@ -747,6 +789,11 @@ export const recordPurchase = async (
     const existing = await purchasesRepository.getPurchaseById(organizationId, purchaseId);
     if (!existing) {
         return purchaseNotFound();
+    }
+
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(existing.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
     }
 
     if (existing.lifecycle !== "draft") {
@@ -906,6 +953,16 @@ export const createOutgoingPurchasePayment = async (
                 return null;
             }
 
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
+            }
+
             return applyOutgoingPurchasePaymentInTx(tx, {
                 userId,
                 organizationId,
@@ -1042,6 +1099,16 @@ export const reverseOutgoingPurchasePayment = async (
                 return null;
             }
 
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
+            }
+
             const payment = existing.outgoingPayments.find((item) => item.id === paymentId);
             if (!payment) {
                 throw Object.assign(new Error("Outgoing Payment not found"), {
@@ -1141,6 +1208,16 @@ export const voidPurchase = async (
             );
             if (!existing) {
                 return null;
+            }
+
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
             }
 
             if (existing.lifecycle === "voided") {

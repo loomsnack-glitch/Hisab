@@ -12,6 +12,7 @@ import {
     type UpdateVendorSVC,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as vendorsRepository from "./vendors.repository";
 
@@ -53,6 +54,11 @@ const inactiveUnitCannotBeAssigned = (): ServiceResponse<null> => ({
     code: STATUS_CODES.BAD_REQUEST,
 });
 
+const denyUnlessVendorsEntitled = async (
+    organizationId: string,
+): Promise<ServiceResponse<null> | null> =>
+    requireOrganizationFeatureEntitlement(organizationId, "vendors");
+
 const normalizeDescription = (description: string | null | undefined): string | null => {
     if (description === undefined || description === null) {
         return null;
@@ -68,6 +74,11 @@ export const getVendors = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const vendors = await vendorsRepository.getVendorsByOrganizationId(organizationId);
@@ -87,6 +98,11 @@ export const getVendorDetails = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const vendor = await vendorsRepository.getVendorById(organizationId, vendorId);
@@ -110,6 +126,11 @@ export const createVendor = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const vendor = await vendorsRepository.createVendor({
@@ -147,6 +168,11 @@ export const updateVendor = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const existing = await vendorsRepository.getVendorById(organizationId, vendorId);
@@ -192,6 +218,11 @@ export const getVendorItems = async (
         return organizationNotFound();
     }
 
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
+    }
+
     const vendorItems = await vendorsRepository.getVendorItemsByOrganizationId(organizationId);
     return {
         status: "success",
@@ -209,6 +240,11 @@ export const getVendorItemDetails = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const vendorItem = await vendorsRepository.getVendorItemById(organizationId, vendorItemId);
@@ -232,6 +268,11 @@ export const createVendorItem = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const vendor = await vendorsRepository.getVendorById(organizationId, vendorItemData.vendorId);
@@ -285,6 +326,11 @@ export const updateVendorItem = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
+    if (vendorsEntitlementError) {
+        return vendorsEntitlementError;
     }
 
     const existing = await vendorsRepository.getVendorItemById(organizationId, vendorItemId);

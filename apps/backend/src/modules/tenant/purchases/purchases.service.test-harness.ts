@@ -1,4 +1,11 @@
 import { mock } from "bun:test";
+import { resolveFeatureEntitlement, ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
+import { isMoneyAccountTrackingActive } from "@/modules/tenant/test-support/money-account-tracking.test-harness";
+import {
+    getOrganizationByIdForUser,
+    getStoreById,
+    getStoresByOrganizationId,
+} from "@/modules/tenant/test-support/organization-repository.test-harness";
 import type {
     CreateOutgoingPaymentREPO,
     CreatePurchaseLineREPO,
@@ -211,12 +218,14 @@ export const resetStoredPurchase = (purchase: PurchaseDTO | null) => {
     storedMovements = [];
 };
 
-export const getOrganizationByIdForUser = mock(
-    async (): Promise<{ id: string; name: string } | null> => organization,
-);
-export const getStoreById = mock(
-    async (): Promise<{ id: string; organizationId: string; name: string } | null> => store,
-);
+export {
+    getOrganizationByIdForUser,
+    getStoreById,
+    getStoresByOrganizationId,
+    resolveFeatureEntitlement,
+    isMoneyAccountTrackingActive,
+};
+
 export const getVendorById = mock(async (_organizationId: string, id: string) => {
     if (id === inactiveVendorId) return millersVendor;
     if (id === vendorId) return freshFarmsVendor;
@@ -284,7 +293,6 @@ export const lockPurchaseById = mock(async (_organizationId: string, id: string)
     return storedPurchase;
 });
 
-export const isMoneyAccountTrackingActive = mock(async () => false);
 export const lockMoneyAccountById = mock(async () => adajanCashAccount);
 
 const createMoneyAccountMovementImpl = async (
@@ -403,19 +411,29 @@ mock.module("@/config/db", () => ({
     pg: { begin },
 }));
 
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-    getStoreById,
-}));
-
-mock.module("@/modules/tenant/units/units.repository", () => ({
+export const unitsRepositoryMocks = {
     getUnitById,
-}));
+    getUnitsByOrganizationId: mock(async () => []),
+    unitTokenExistsInOrganization: mock(async () => false),
+    createUnit: mock(async () => null),
+    updateUnit: mock(async () => null),
+    seedDefaultUnits: mock(async () => []),
+};
 
-mock.module("@/modules/tenant/vendors/vendors.repository", () => ({
+export const vendorsRepositoryMocks = {
     getVendorById,
     getVendorItemById,
-}));
+    getVendorsByOrganizationId: mock(async () => []),
+    getVendorItemsByOrganizationId: mock(async () => []),
+    createVendor: mock(async () => null),
+    updateVendor: mock(async () => null),
+    createVendorItem: mock(async () => null),
+    updateVendorItem: mock(async () => null),
+};
+
+mock.module("@/modules/tenant/units/units.repository", () => unitsRepositoryMocks);
+
+mock.module("@/modules/tenant/vendors/vendors.repository", () => vendorsRepositoryMocks);
 
 mock.module("./purchases.repository", () => ({
     getPurchasesByOrganizationId,
@@ -434,15 +452,13 @@ mock.module("@/modules/tenant/outgoing-payments/outgoing-payments.repository", (
     getOutgoingPaymentById: mock(async () => storedOutgoingPayments[0] ?? null),
 }));
 
-mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
-    isMoneyAccountTrackingActive,
-}));
-
 mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
     lockMoneyAccountById,
     createMoneyAccountMovement: createMoneyAccountMovementRepo,
     getMovementByOutgoingPaymentId,
     lockPaymentRouteByStoreAndMethod,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const purchasesService = await import("./purchases.service");
