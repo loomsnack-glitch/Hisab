@@ -147,7 +147,7 @@ Plan review result: approved for implementation.
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
-| 3.4 Quick Customer creation | In progress | Plan approved; implementation pending |
+| 3.4 Quick Customer creation | Ready to commit | Implementation and review complete; focused checks pass |
 | 3.5 Discounts | Not started | Depends on 3.2 |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
 
@@ -487,3 +487,41 @@ editing and Draft Sale behavior outside this subphase. No new product, API,
 security, or release decision is required.
 
 Plan review result: approved for implementation.
+
+## 3.4 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added the existing POS Customer create service behind a mobile mutation
+  boundary with scoped Customer-query invalidation after success.
+- Added an inline Quick Customer form with required name, optional shared-format
+  phone, local validation, loading, success, and recoverable error states.
+- Selected the server-returned Customer in the active Cart after successful
+  creation and preserved every Cart line and configuration.
+- Kept entered form values and the Cart intact when creation fails, allowing a
+  retry without losing the billing context.
+- Added focused tests for name/phone payload normalization and retained Cart
+  Customer scope/preservation coverage.
+
+Standards/spec review:
+
+- The mutation uses the existing `createPosCustomer` service and shared
+  `CreateCustomerJSON`/phone normalization contract.
+- No Customer record is fabricated locally and no Customer data is persisted in
+  MMKV.
+- `useMutation` loading state prevents duplicate create submissions, while
+  errors remain visible and retryable.
+- Customer creation remains secondary and does not block Cart or Payment flow.
+- English, Gujarati, and Hindi labels cover the form and states.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 50 passed, 110 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.4 status: Ready to commit. Implementation commit reference is recorded after
+the commit gate.

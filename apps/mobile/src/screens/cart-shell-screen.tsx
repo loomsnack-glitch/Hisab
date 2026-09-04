@@ -10,6 +10,8 @@ import { getCartLineDisplayTotals } from "../lib/pos-cart-boundary";
 import { usePosConfiguration } from "../hooks/use-pos-configuration";
 import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 import { usePosCustomers } from "../hooks/use-pos-customers";
+import { useCreatePosCustomer } from "../hooks/use-create-pos-customer";
+import { normalizePosCustomerCreatePayload } from "../lib/pos-customer-boundary";
 
 type CartShellScreenProps = NativeStackScreenProps<PosStackParamList, "Cart">;
 
@@ -21,8 +23,13 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const [showPaymentNotice, setShowPaymentNotice] = useState(false);
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [customerSearch, setCustomerSearch] = useState("");
+    const [customerCreateOpen, setCustomerCreateOpen] = useState(false);
+    const [newCustomerName, setNewCustomerName] = useState("");
+    const [newCustomerPhone, setNewCustomerPhone] = useState("");
+    const [customerCreateFieldError, setCustomerCreateFieldError] = useState<"name" | "phone" | null>(null);
     const deferredCustomerSearch = useDeferredValue(customerSearch);
     const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
+    const customerCreate = useCreatePosCustomer();
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
     const configurationLookup = {
         addOnNames: new Map(configuration.attachments.map((attachment) => [attachment.addOnId, attachment.addOn.name])),
@@ -36,6 +43,26 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
         cart.selectCustomer(customer);
         setCustomerSearch("");
         setCustomerPickerOpen(false);
+        setCustomerCreateOpen(false);
+        setNewCustomerName("");
+        setNewCustomerPhone("");
+        setCustomerCreateFieldError(null);
+        customerCreate.reset();
+    };
+    const submitCustomerCreate = async () => {
+        const result = normalizePosCustomerCreatePayload(newCustomerName, newCustomerPhone);
+        if (result.kind === "invalid") {
+            setCustomerCreateFieldError(result.field);
+            return;
+        }
+
+        setCustomerCreateFieldError(null);
+        try {
+            const response = await customerCreate.create(result.payload);
+            selectCustomer(response.customer);
+        } catch {
+            // Keep the form and Cart intact so the cashier can retry.
+        }
     };
 
     return (
@@ -104,6 +131,43 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                                             onPress={() => selectCustomer(customer)}
                                         />
                                     ))}
+                                    {customerCreateOpen ? (
+                                        <View className="gap-3 border-t border-pos-border pt-3 dark:border-pos-border-dark">
+                                            <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("quickCustomer")}</Text>
+                                            <PosTextField
+                                                label={t("customerName")}
+                                                value={newCustomerName}
+                                                onChangeText={setNewCustomerName}
+                                                placeholder={t("customerNamePlaceholder")}
+                                                error={customerCreateFieldError === "name" ? t("customerNameRequired") : undefined}
+                                            />
+                                            <PosTextField
+                                                label={t("customerPhone")}
+                                                value={newCustomerPhone}
+                                                onChangeText={setNewCustomerPhone}
+                                                placeholder={t("customerPhonePlaceholder")}
+                                                keyboardType="phone-pad"
+                                                error={customerCreateFieldError === "phone" ? t("customerPhoneInvalid") : undefined}
+                                            />
+                                            {customerCreate.error ? (
+                                                <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("customerCreateFailed")}</Text>
+                                            ) : null}
+                                            <View className="flex-row flex-wrap gap-2">
+                                                <PosButton label={t("cancelCustomerCreation")} variant="secondary" onPress={() => setCustomerCreateOpen(false)} />
+                                                <PosButton label={t("saveCustomer")} loading={customerCreate.isPending} onPress={submitCustomerCreate} />
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <PosButton
+                                            label={t("createCustomer")}
+                                            variant="secondary"
+                                            onPress={() => {
+                                                setCustomerCreateOpen(true);
+                                                customerCreate.reset();
+                                                setCustomerCreateFieldError(null);
+                                            }}
+                                        />
+                                    )}
                                 </View>
                             ) : null}
                         </View>
