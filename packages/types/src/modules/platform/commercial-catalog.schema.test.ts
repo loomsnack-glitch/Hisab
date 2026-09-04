@@ -14,6 +14,11 @@ import {
     UpdateCommercialModuleDraftSchema,
     UpdateCommercialPlanDraftSchema,
 } from "./commercial-catalog.schema";
+import {
+    SEEDED_COMMERCIAL_FEATURES,
+    SEEDED_COMMERCIAL_MODULES,
+    SEEDED_COMMERCIAL_PLANS,
+} from "./seeded-commercial-catalog";
 
 describe("Commercial Catalog Feature contracts", () => {
     test("accepts a unique lowercase Commercial Catalog Key and trims Feature fields", () => {
@@ -113,12 +118,14 @@ describe("Commercial Catalog Feature contracts", () => {
             },
             revisions: [],
             referencingModules: [],
+            affectedPlans: [],
         });
 
         expect(parsed.currentRevision.status).toBe("active");
         expect(parsed.currentRevision.publishedBy?.firstName).toBe("Asha");
         expect(parsed.key).toBe("billing");
         expect(parsed.referencingModules).toEqual([]);
+        expect(parsed.affectedPlans).toEqual([]);
     });
 });
 
@@ -425,5 +432,88 @@ describe("Commercial Catalog Plan contracts", () => {
         expect(parsed.currentRevision.modules).toHaveLength(1);
         expect(parsed.currentRevision.resolvedFeatures.map((item) => item.key)).toEqual(["billing"]);
         expect(parsed.currentRevision.publishedBy?.firstName).toBe("Asha");
+    });
+});
+
+describe("Initial Commercial Catalog composition", () => {
+    test("seeds the agreed Feature, Module, and Plan identities", () => {
+        expect(SEEDED_COMMERCIAL_FEATURES).toEqual([
+            { key: "billing", displayName: "Billing" },
+            { key: "catalog_products", displayName: "Catalog Products" },
+            { key: "units", displayName: "Units" },
+            { key: "reports", displayName: "Reports" },
+            { key: "vendors", displayName: "Vendors" },
+            { key: "purchases", displayName: "Purchases" },
+            { key: "expenses", displayName: "Expenses" },
+            { key: "money_account_tracking", displayName: "Money Account Tracking" },
+            { key: "kot_system", displayName: "KOT System" },
+            { key: "table_management", displayName: "Table Management" },
+            { key: "whatsapp", displayName: "WhatsApp" },
+            { key: "google_contacts_synchronization", displayName: "Google Contacts Synchronization" },
+        ]);
+        expect(SEEDED_COMMERCIAL_MODULES.map((moduleItem) => ({
+            key: moduleItem.key,
+            displayName: moduleItem.displayName,
+            featureKeys: [...moduleItem.featureKeys],
+            isSeparatelyPurchasable: moduleItem.isSeparatelyPurchasable,
+        }))).toEqual([
+            { key: "core_operations", displayName: "Core Operations", featureKeys: ["billing", "reports"], isSeparatelyPurchasable: false },
+            { key: "basic_catalog", displayName: "Basic Catalog", featureKeys: ["catalog_products", "units"], isSeparatelyPurchasable: false },
+            { key: "finance", displayName: "Finance", featureKeys: ["vendors", "purchases", "expenses", "money_account_tracking"], isSeparatelyPurchasable: false },
+            { key: "kot_system", displayName: "KOT System", featureKeys: ["kot_system"], isSeparatelyPurchasable: false },
+            { key: "restaurant_operations", displayName: "Restaurant Operations", featureKeys: ["kot_system", "table_management"], isSeparatelyPurchasable: false },
+            { key: "integrations", displayName: "Integrations", featureKeys: ["whatsapp", "google_contacts_synchronization"], isSeparatelyPurchasable: true },
+        ]);
+        expect(SEEDED_COMMERCIAL_PLANS.map((planItem) => ({
+            key: planItem.key,
+            displayName: planItem.displayName,
+            planType: planItem.planType,
+            priceInr: planItem.priceInr,
+            term: planItem.term,
+            moduleKeys: [...planItem.moduleKeys],
+        }))).toEqual([
+            {
+                key: "trial",
+                displayName: "Trial",
+                planType: "trial",
+                priceInr: 0,
+                term: { count: 7, unit: "day" },
+                moduleKeys: ["core_operations", "basic_catalog", "finance", "kot_system", "restaurant_operations", "integrations"],
+            },
+            {
+                key: "core",
+                displayName: "Core",
+                planType: "paid",
+                priceInr: 2999,
+                term: { count: 1, unit: "year" },
+                moduleKeys: ["core_operations", "basic_catalog"],
+            },
+            {
+                key: "pro",
+                displayName: "Pro",
+                planType: "paid",
+                priceInr: 4999,
+                term: { count: 1, unit: "year" },
+                moduleKeys: ["core_operations", "basic_catalog", "finance", "restaurant_operations"],
+            },
+        ]);
+    });
+
+    test("offers Table Management only with KOT System, while KOT System can stand alone", () => {
+        const kotOnly = SEEDED_COMMERCIAL_MODULES.find((moduleItem) => moduleItem.key === "kot_system");
+        const restaurant = SEEDED_COMMERCIAL_MODULES.find((moduleItem) => moduleItem.key === "restaurant_operations");
+        const tableOnly = SEEDED_COMMERCIAL_MODULES.filter((moduleItem) =>
+            moduleItem.featureKeys.includes("table_management") && !moduleItem.featureKeys.includes("kot_system"),
+        );
+
+        expect(kotOnly?.featureKeys).toEqual(["kot_system"]);
+        expect(restaurant?.featureKeys).toEqual(["kot_system", "table_management"]);
+        expect(tableOnly).toEqual([]);
+        expect(SEEDED_COMMERCIAL_PLANS.find((planItem) => planItem.key === "pro")?.moduleKeys).not.toContain("integrations");
+        expect(SEEDED_COMMERCIAL_MODULES.find((moduleItem) => moduleItem.key === "integrations")).toMatchObject({
+            isSeparatelyPurchasable: true,
+            priceInr: 2999,
+            term: { count: 1, unit: "year" },
+        });
     });
 });

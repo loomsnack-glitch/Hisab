@@ -11,12 +11,14 @@ import {
     type CommercialFeatureDetailResponse,
     type CommercialFeatureListItemDTO,
     type CommercialFeatureListQuerySVC,
+    type CommercialFeatureListResponse,
     type CommercialFeatureRevisionDTO,
     type CommercialModuleDetailDTO,
     type CommercialModuleDetailResponse,
     type CommercialModuleFeatureMembershipDTO,
     type CommercialModuleListItemDTO,
     type CommercialModuleListQuerySVC,
+    type CommercialModuleListResponse,
     type CommercialModuleRevisionDTO,
     type CommercialPlanDetailDTO,
     type CommercialPlanDetailResponse,
@@ -31,6 +33,7 @@ import {
 } from "@repo/types";
 
 import { createCommercialCatalogService } from "./commercial-catalog.service";
+import { seedInitialCommercialCatalog } from "./commercial-catalog-initial";
 import { createOwnerAuthService, createOwnerTokenProvider } from "./owner-auth.service";
 import { createPlatformRoutes } from "./platform.routes";
 
@@ -227,6 +230,40 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             .filter((item): item is CommercialCatalogReferenceDTO => item !== null)
             .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.key.localeCompare(right.key));
 
+    const referencingModulesOf = (featureId: string): CommercialCatalogReferenceDTO[] =>
+        modules
+            .map((moduleItem) => {
+                const revisions = moduleRevisions
+                    .filter((revision) => revision.moduleId === moduleItem.id)
+                    .map((revision) => toModuleRevision(revision, moduleItem.key));
+                if (revisions.length === 0) return null;
+                const current = currentOf(revisions);
+                if (current.status === "discarded") return null;
+                if (!current.features.some((feature) => feature.featureId === featureId)) return null;
+                return {
+                    id: moduleItem.id,
+                    key: moduleItem.key,
+                    revisionId: current.id,
+                    revisionNumber: current.revisionNumber,
+                    status: current.status,
+                    displayName: current.displayName,
+                };
+            })
+            .filter((item): item is CommercialCatalogReferenceDTO => item !== null)
+            .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.key.localeCompare(right.key));
+
+    const affectedPlansOf = (featureId: string): CommercialCatalogReferenceDTO[] => {
+        const seen = new Set<string>();
+        return referencingModulesOf(featureId)
+            .flatMap((moduleItem) => referencingPlansOf(moduleItem.id))
+            .filter((planItem) => {
+                if (seen.has(planItem.id)) return false;
+                seen.add(planItem.id);
+                return true;
+            })
+            .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.key.localeCompare(right.key));
+    };
+
     const featureDetailOf = (featureId: string): CommercialFeatureDetailDTO | null => {
         const feature = features.find((item) => item.id === featureId);
         if (!feature) return null;
@@ -240,7 +277,8 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             key: feature.key,
             currentRevision: currentOf(revisions),
             revisions,
-            referencingModules: [],
+            referencingModules: referencingModulesOf(featureId),
+            affectedPlans: affectedPlansOf(featureId),
         };
     };
 
@@ -361,7 +399,7 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
         discardedAt: null,
     });
 
-    return {
+    const catalog = {
         listFeatures: async (query: CommercialFeatureListQuerySVC): Promise<CommercialFeatureListItemDTO[]> => {
             const search = query.search?.trim().toLowerCase() ?? "";
             return features
@@ -692,6 +730,13 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             return { status: "created" as const, plan: planDetailOf(input.planId)! };
         },
     };
+
+    return {
+        ...catalog,
+        ensureInitialCatalog: async (input: { actorId: string; now: Date; createId: () => string }) => {
+            await seedInitialCommercialCatalog(catalog, input);
+        },
+    };
 };
 
 const createHarness = async () => {
@@ -776,6 +821,21 @@ const createPlan = (app: Hono, cookie: string, body: Record<string, unknown>) =>
         headers: jsonHeaders(cookie),
         body: JSON.stringify(body),
     });
+
+const listFeatures = (app: Hono, cookie: string, query = "") =>
+    app.request(`/platform/catalog/features${query}`, { headers: { cookie } });
+
+const getFeature = (app: Hono, cookie: string, featureId: string) =>
+    app.request(`/platform/catalog/features/${featureId}`, { headers: { cookie } });
+
+const listModules = (app: Hono, cookie: string, query = "") =>
+    app.request(`/platform/catalog/modules${query}`, { headers: { cookie } });
+
+const getModule = (app: Hono, cookie: string, moduleId: string) =>
+    app.request(`/platform/catalog/modules/${moduleId}`, { headers: { cookie } });
+
+const getPlan = (app: Hono, cookie: string, planId: string) =>
+    app.request(`/platform/catalog/plans/${planId}`, { headers: { cookie } });
 
 const listPlans = (app: Hono, cookie: string, query = "") =>
     app.request(`/platform/catalog/plans${query}`, { headers: { cookie } });
@@ -1227,5 +1287,119 @@ describe("Plan Catalog management API", () => {
             body: JSON.stringify({ name: "Acme" }),
         });
         expect(tenantCreate.status).toBe(404);
+    });
+
+    test("seeds the agreed initial catalog composition for an empty catalog", async () => {
+        const { app } = await createHarness();
+        const cookie = await authCookie(app);
+
+        const featuresResponse = await listFeatures(app, cookie);
+        const modulesResponse = await listModules(app, cookie);
+        const plansResponse = await listPlans(app, cookie);
+        const features = (await featuresResponse.json() as ServiceResponse<CommercialFeatureListResponse>).data?.features ?? [];
+        const modules = (await modulesResponse.json() as ServiceResponse<CommercialModuleListResponse>).data?.modules ?? [];
+        const plans = (await plansResponse.json() as ServiceResponse<CommercialPlanListResponse>).data?.plans ?? [];
+
+        expect(features.map((item) => ({ key: item.key, displayName: item.displayName, status: item.status })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "billing", displayName: "Billing", status: "active" },
+            { key: "catalog_products", displayName: "Catalog Products", status: "active" },
+            { key: "expenses", displayName: "Expenses", status: "active" },
+            { key: "google_contacts_synchronization", displayName: "Google Contacts Synchronization", status: "active" },
+            { key: "kot_system", displayName: "KOT System", status: "active" },
+            { key: "money_account_tracking", displayName: "Money Account Tracking", status: "active" },
+            { key: "purchases", displayName: "Purchases", status: "active" },
+            { key: "reports", displayName: "Reports", status: "active" },
+            { key: "table_management", displayName: "Table Management", status: "active" },
+            { key: "units", displayName: "Units", status: "active" },
+            { key: "vendors", displayName: "Vendors", status: "active" },
+            { key: "whatsapp", displayName: "WhatsApp", status: "active" },
+        ]);
+        expect(modules.map((item) => ({
+            key: item.key,
+            displayName: item.displayName,
+            isSeparatelyPurchasable: item.isSeparatelyPurchasable,
+            priceInr: item.priceInr,
+            term: item.term,
+        })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "basic_catalog", displayName: "Basic Catalog", isSeparatelyPurchasable: false, priceInr: null, term: null },
+            { key: "core_operations", displayName: "Core Operations", isSeparatelyPurchasable: false, priceInr: null, term: null },
+            { key: "finance", displayName: "Finance", isSeparatelyPurchasable: false, priceInr: null, term: null },
+            { key: "integrations", displayName: "Integrations", isSeparatelyPurchasable: true, priceInr: 2999, term: { count: 1, unit: "year" } },
+            { key: "kot_system", displayName: "KOT System", isSeparatelyPurchasable: false, priceInr: null, term: null },
+            { key: "restaurant_operations", displayName: "Restaurant Operations", isSeparatelyPurchasable: false, priceInr: null, term: null },
+        ]);
+        expect(plans.map((item) => ({
+            key: item.key,
+            displayName: item.displayName,
+            planType: item.planType,
+            priceInr: item.priceInr,
+            term: item.term,
+        })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "core", displayName: "Core", planType: "paid", priceInr: 2999, term: { count: 1, unit: "year" } },
+            { key: "pro", displayName: "Pro", planType: "paid", priceInr: 4999, term: { count: 1, unit: "year" } },
+            { key: "trial", displayName: "Trial", planType: "trial", priceInr: 0, term: { count: 7, unit: "day" } },
+        ]);
+
+        const byKey = <T extends { key: string }>(items: T[]) => Object.fromEntries(items.map((item) => [item.key, item]));
+        const moduleByKey = byKey(modules);
+        const planByKey = byKey(plans);
+        const featureByKey = byKey(features);
+
+        const trial = (await (await getPlan(app, cookie, planByKey.trial!.id)).json() as ServiceResponse<CommercialPlanDetailResponse>).data!.plan;
+        const core = (await (await getPlan(app, cookie, planByKey.core!.id)).json() as ServiceResponse<CommercialPlanDetailResponse>).data!.plan;
+        const pro = (await (await getPlan(app, cookie, planByKey.pro!.id)).json() as ServiceResponse<CommercialPlanDetailResponse>).data!.plan;
+        expect(trial.currentRevision.modules.map((item) => item.key).sort()).toEqual([
+            "basic_catalog",
+            "core_operations",
+            "finance",
+            "integrations",
+            "kot_system",
+            "restaurant_operations",
+        ]);
+        expect(core.currentRevision.modules.map((item) => item.key).sort()).toEqual(["basic_catalog", "core_operations"]);
+        expect(pro.currentRevision.modules.map((item) => item.key).sort()).toEqual([
+            "basic_catalog",
+            "core_operations",
+            "finance",
+            "restaurant_operations",
+        ]);
+        expect(pro.currentRevision.modules.map((item) => item.key)).not.toContain("integrations");
+        expect(core.currentRevision.resolvedFeatures.map((item) => item.key).sort()).toEqual([
+            "billing",
+            "catalog_products",
+            "reports",
+            "units",
+        ]);
+        expect(pro.currentRevision.resolvedFeatures.map((item) => item.key).sort()).toEqual([
+            "billing",
+            "catalog_products",
+            "expenses",
+            "kot_system",
+            "money_account_tracking",
+            "purchases",
+            "reports",
+            "table_management",
+            "units",
+            "vendors",
+        ]);
+
+        const kotModule = (await (await getModule(app, cookie, moduleByKey.kot_system!.id)).json() as ServiceResponse<CommercialModuleDetailResponse>).data!.module;
+        const restaurant = (await (await getModule(app, cookie, moduleByKey.restaurant_operations!.id)).json() as ServiceResponse<CommercialModuleDetailResponse>).data!.module;
+        const integrations = (await (await getModule(app, cookie, moduleByKey.integrations!.id)).json() as ServiceResponse<CommercialModuleDetailResponse>).data!.module;
+        expect(kotModule.currentRevision.features.map((item) => item.key)).toEqual(["kot_system"]);
+        expect(restaurant.currentRevision.features.map((item) => item.key).sort()).toEqual(["kot_system", "table_management"]);
+        expect(integrations.currentRevision.isSeparatelyPurchasable).toBe(true);
+        expect(integrations.referencingPlans.map((item) => item.key).sort()).toEqual(["trial"]);
+        expect(restaurant.referencingPlans.map((item) => item.key).sort()).toEqual(["pro", "trial"]);
+
+        const tableManagement = (await (await getFeature(app, cookie, featureByKey.table_management!.id)).json() as ServiceResponse<CommercialFeatureDetailResponse>).data!.feature;
+        const kotFeature = (await (await getFeature(app, cookie, featureByKey.kot_system!.id)).json() as ServiceResponse<CommercialFeatureDetailResponse>).data!.feature;
+        expect(tableManagement.referencingModules.map((item) => item.key)).toEqual(["restaurant_operations"]);
+        expect(tableManagement.affectedPlans.map((item) => item.key).sort()).toEqual(["pro", "trial"]);
+        expect(kotFeature.referencingModules.map((item) => item.key).sort()).toEqual(["kot_system", "restaurant_operations"]);
+        expect(kotFeature.affectedPlans.map((item) => item.key).sort()).toEqual(["pro", "trial"]);
+
+        const secondList = await listFeatures(app, cookie);
+        expect((await secondList.json() as ServiceResponse<CommercialFeatureListResponse>).data?.features).toHaveLength(12);
     });
 });

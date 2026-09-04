@@ -23,6 +23,7 @@ import {
     type CommercialPlanType,
 } from "@repo/types";
 import { pg } from "@/config/db";
+import { seedInitialCommercialCatalog, type EnsureInitialCatalogInput } from "./commercial-catalog-initial";
 
 type SqlClient = typeof pg | Bun.TransactionSQL;
 
@@ -149,6 +150,7 @@ const loadFeatureDetail = async (tx: SqlClient, featureId: string): Promise<Comm
         currentRevision: currentRevisionOf(revisions),
         revisions,
         referencingModules: await loadReferencingModules(tx, featureId),
+        affectedPlans: await loadAffectedPlans(tx, featureId),
     };
 };
 
@@ -218,6 +220,95 @@ const loadReferencingModules = async (tx: SqlClient, featureId: string): Promise
     }>;
 
     return rows.map(toCatalogReference);
+};
+
+const uniqueCatalogReferences = (items: CommercialCatalogReferenceDTO[]): CommercialCatalogReferenceDTO[] => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+    });
+};
+
+const loadAffectedPlans = async (tx: SqlClient, featureId: string): Promise<CommercialCatalogReferenceDTO[]> => {
+    const rows = await tx`
+        WITH current_modules AS (
+            SELECT
+                r.id,
+                r.module_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.module_id
+                    ORDER BY
+                        CASE r.status
+                            WHEN 'draft' THEN 0
+                            WHEN 'active' THEN 1
+                            WHEN 'retired' THEN 2
+                            WHEN 'discarded' THEN 3
+                        END ASC,
+                        r.revision_number DESC
+                ) AS revision_rank,
+                r.status
+            FROM commercial_module_revisions r
+        ),
+        current_plans AS (
+            SELECT
+                r.id,
+                r.plan_id,
+                p.key,
+                r.revision_number,
+                r.status,
+                r.display_name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.plan_id
+                    ORDER BY
+                        CASE r.status
+                            WHEN 'draft' THEN 0
+                            WHEN 'active' THEN 1
+                            WHEN 'retired' THEN 2
+                            WHEN 'discarded' THEN 3
+                        END ASC,
+                        r.revision_number DESC
+                ) AS revision_rank
+            FROM commercial_plan_revisions r
+            INNER JOIN commercial_plans p ON p.id = r.plan_id
+        ),
+        modules_with_feature AS (
+            SELECT current_modules.module_id
+            FROM current_modules
+            INNER JOIN commercial_module_revision_features memberships
+                ON memberships.module_revision_id = current_modules.id
+            INNER JOIN commercial_feature_revisions feature_revisions
+                ON feature_revisions.id = memberships.feature_revision_id
+            WHERE current_modules.revision_rank = 1
+                AND current_modules.status <> 'discarded'
+                AND feature_revisions.feature_id = ${featureId}
+        )
+        SELECT
+            current_plans.plan_id AS id,
+            current_plans.key,
+            current_plans.id AS revision_id,
+            current_plans.revision_number,
+            current_plans.status,
+            current_plans.display_name
+        FROM current_plans
+        INNER JOIN commercial_plan_revision_modules memberships
+            ON memberships.plan_revision_id = current_plans.id
+        INNER JOIN modules_with_feature
+            ON modules_with_feature.module_id = memberships.module_id
+        WHERE current_plans.revision_rank = 1
+            AND current_plans.status <> 'discarded'
+        ORDER BY current_plans.display_name ASC, current_plans.key ASC, current_plans.plan_id ASC
+    ` as Array<{
+        id: string;
+        key: string;
+        revision_id: string;
+        revision_number: number;
+        status: CommercialCatalogRevisionStatus;
+        display_name: string;
+    }>;
+
+    return uniqueCatalogReferences(rows.map(toCatalogReference));
 };
 
 const loadReferencingPlans = async (tx: SqlClient, moduleId: string): Promise<CommercialCatalogReferenceDTO[]> => {
@@ -2137,3 +2228,18 @@ export const createSuccessorPlanRevision = async (
         }
         return { status: "created" as const, plan: planDetail };
     });
+
+export const ensureInitialCatalog = async (input: EnsureInitialCatalogInput): Promise<void> => {
+    await seedInitialCommercialCatalog({
+        listFeatures,
+        listModules,
+        listPlans,
+        createDraftFeature,
+        publishRevision,
+        createDraftModule,
+        publishModuleRevision,
+        createDraftPlan,
+        publishPlanRevision,
+    }, input);
+};
+

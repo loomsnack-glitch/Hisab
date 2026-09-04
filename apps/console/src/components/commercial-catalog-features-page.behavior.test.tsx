@@ -59,6 +59,7 @@ const billingFeature = (revision: CommercialFeatureRevisionDTO = billingRevision
     currentRevision: extra[0] ?? revision,
     revisions: extra.length > 0 ? extra : [revision],
     referencingModules: [],
+    affectedPlans: [],
 });
 
 const billingListItem = (overrides: Partial<CommercialFeatureListItemDTO> = {}): CommercialFeatureListItemDTO => ({
@@ -263,6 +264,7 @@ describe("Commercial Catalog Features console destination", () => {
                 currentRevision: second,
                 revisions: [second, first],
                 referencingModules: [],
+                affectedPlans: [],
             }),
         });
 
@@ -308,5 +310,79 @@ describe("Commercial Catalog Features console destination", () => {
         });
 
         await waitFor(() => expect(unauthorized).toBe(true));
+    });
+
+    test("reviews referencing Modules and indirectly affected Plans", async () => {
+        window.history.replaceState(null, "", "/catalog/features/11111111-1111-4111-8111-111111111111");
+        const view = renderPage({
+            getCommercialFeature: async () => successDetail({
+                ...billingFeature(billingRevision({ status: "active", publishedBy: ashaActor, publishedAt: "2026-09-04T01:00:00.000Z" })),
+                referencingModules: [{
+                    id: "aaaa1111-1111-4111-8111-111111111111",
+                    key: "core_operations",
+                    revisionId: "bbbb2222-2222-4222-8222-222222222222",
+                    revisionNumber: 1,
+                    status: "active",
+                    displayName: "Core Operations",
+                }],
+                affectedPlans: [{
+                    id: "ffff6666-6666-4666-8666-666666666666",
+                    key: "trial",
+                    revisionId: "eeee5555-5555-4555-8555-555555555555",
+                    revisionNumber: 1,
+                    status: "active",
+                    displayName: "Trial",
+                }],
+            }),
+        });
+
+        expect(await view.findByText("Referencing Modules")).toBeTruthy();
+        expect(view.getByText(/Core Operations/)).toBeTruthy();
+        expect(view.getByText("Affected Plans")).toBeTruthy();
+        expect(view.getByText(/Trial/)).toBeTruthy();
+        expect(view.queryByText(/KOT System can be offered on its own/)).toBeNull();
+    });
+
+    test("explains that Table Management is offered with KOT System in the initial catalog", async () => {
+        window.history.replaceState(null, "", "/catalog/features/33333333-3333-4333-8333-333333333333");
+        const tableRevision = billingRevision({
+            id: "44444444-4444-4444-8444-444444444444",
+            featureId: "33333333-3333-4333-8333-333333333333",
+            key: "table_management",
+            displayName: "Table Management",
+            status: "active",
+            publishedBy: ashaActor,
+            publishedAt: "2026-09-04T01:00:00.000Z",
+        });
+        const view = renderPage({
+            getCommercialFeature: async () => successDetail({
+                id: tableRevision.featureId,
+                key: "table_management",
+                currentRevision: tableRevision,
+                revisions: [tableRevision],
+                referencingModules: [{
+                    id: "cccc3333-3333-4333-8333-333333333333",
+                    key: "restaurant_operations",
+                    revisionId: "dddd4444-4444-4444-8444-444444444444",
+                    revisionNumber: 1,
+                    status: "active",
+                    displayName: "Restaurant Operations",
+                }],
+                affectedPlans: [{
+                    id: "ffff6666-6666-4666-8666-666666666666",
+                    key: "pro",
+                    revisionId: "eeee5555-5555-4555-8555-555555555555",
+                    revisionNumber: 1,
+                    status: "active",
+                    displayName: "Pro",
+                }],
+            }),
+        });
+
+        expect(await view.findByRole("heading", { name: "Table Management" })).toBeTruthy();
+        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
+        expect(view.getAllByText(/Restaurant Operations/).length).toBeGreaterThan(0);
+        expect(view.getByText("Affected Plans")).toBeTruthy();
+        expect(view.getByText(/Pro/)).toBeTruthy();
     });
 });

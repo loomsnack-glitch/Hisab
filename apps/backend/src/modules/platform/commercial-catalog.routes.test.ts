@@ -97,6 +97,7 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             currentRevision: currentRevisionOf(featureRevisions),
             revisions: featureRevisions,
             referencingModules: [],
+            affectedPlans: [],
         };
     };
 
@@ -270,6 +271,7 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
         retirePlanRevision: async () => ({ status: "not-found" as const }),
         discardPlanRevision: async () => ({ status: "not-found" as const }),
         createSuccessorPlanRevision: async () => ({ status: "not-found" as const }),
+        ensureInitialCatalog: async () => {},
     };
 };
 

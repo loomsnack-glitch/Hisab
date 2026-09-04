@@ -48,6 +48,7 @@ type CommercialCatalogRepository = Pick<
     | "retirePlanRevision"
     | "discardPlanRevision"
     | "createSuccessorPlanRevision"
+    | "ensureInitialCatalog"
 >;
 
 type CommercialCatalogDependencies = {
@@ -236,17 +237,34 @@ const planMembershipError = (
     };
 };
 
-export const createCommercialCatalogService = (dependencies: CommercialCatalogDependencies) => ({
+export const createCommercialCatalogService = (dependencies: CommercialCatalogDependencies) => {
+    const ensureInitialCatalog = async (actor: OwnerUserDTO) => {
+        await dependencies.repository.ensureInitialCatalog({
+            actorId: actor.id,
+            now: dependencies.now(),
+            createId: dependencies.createId,
+        });
+    };
+
+    return {
     listFeatures: async (
         query: CommercialFeatureListQuerySVC,
-    ): Promise<ServiceResponse<CommercialFeatureListResponse>> => ({
-        status: "success",
-        message: "Features retrieved successfully",
-        data: { features: await dependencies.repository.listFeatures(query) },
-        code: STATUS_CODES.SUCCESS,
-    }),
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialFeatureListResponse>> => {
+        await ensureInitialCatalog(actor);
+        return {
+            status: "success",
+            message: "Features retrieved successfully",
+            data: { features: await dependencies.repository.listFeatures(query) },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
 
-    getFeature: async (featureId: string): Promise<ServiceResponse<CommercialFeatureDetailResponse | null>> => {
+    getFeature: async (
+        featureId: string,
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialFeatureDetailResponse | null>> => {
+        await ensureInitialCatalog(actor);
         const feature = await dependencies.repository.getFeatureDetail(featureId);
         if (!feature) {
             return notFound();
@@ -413,14 +431,22 @@ export const createCommercialCatalogService = (dependencies: CommercialCatalogDe
 
     listModules: async (
         query: CommercialModuleListQuerySVC,
-    ): Promise<ServiceResponse<CommercialModuleListResponse>> => ({
-        status: "success",
-        message: "Modules retrieved successfully",
-        data: { modules: await dependencies.repository.listModules(query) },
-        code: STATUS_CODES.SUCCESS,
-    }),
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialModuleListResponse>> => {
+        await ensureInitialCatalog(actor);
+        return {
+            status: "success",
+            message: "Modules retrieved successfully",
+            data: { modules: await dependencies.repository.listModules(query) },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
 
-    getModule: async (moduleId: string): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+    getModule: async (
+        moduleId: string,
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialModuleDetailResponse | null>> => {
+        await ensureInitialCatalog(actor);
         const moduleDetail = await dependencies.repository.getModuleDetail(moduleId);
         if (!moduleDetail) {
             return notFoundModule();
@@ -604,14 +630,22 @@ export const createCommercialCatalogService = (dependencies: CommercialCatalogDe
 
     listPlans: async (
         query: CommercialPlanListQuerySVC,
-    ): Promise<ServiceResponse<CommercialPlanListResponse>> => ({
-        status: "success",
-        message: "Plans retrieved successfully",
-        data: { plans: await dependencies.repository.listPlans(query) },
-        code: STATUS_CODES.SUCCESS,
-    }),
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialPlanListResponse>> => {
+        await ensureInitialCatalog(actor);
+        return {
+            status: "success",
+            message: "Plans retrieved successfully",
+            data: { plans: await dependencies.repository.listPlans(query) },
+            code: STATUS_CODES.SUCCESS,
+        };
+    },
 
-    getPlan: async (planId: string): Promise<ServiceResponse<CommercialPlanDetailResponse | null>> => {
+    getPlan: async (
+        planId: string,
+        actor: OwnerUserDTO,
+    ): Promise<ServiceResponse<CommercialPlanDetailResponse | null>> => {
+        await ensureInitialCatalog(actor);
         const planDetail = await dependencies.repository.getPlanDetail(planId);
         if (!planDetail) {
             return notFoundPlan();
@@ -792,7 +826,8 @@ export const createCommercialCatalogService = (dependencies: CommercialCatalogDe
         }
         return successPlan("Successor Plan revision created successfully", result.plan, STATUS_CODES.CREATED);
     },
-});
+    };
+};
 
 const defaultDependencies = (): CommercialCatalogDependencies => ({
     repository: commercialCatalogRepository,

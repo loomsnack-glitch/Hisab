@@ -64,6 +64,9 @@ export const commercialCatalogPlanTypeLabels: Record<"trial" | "paid", string> =
     paid: "Paid",
 };
 
+export const commercialCatalogKotTableNote =
+    "KOT System can be offered on its own. Table Management is initially offered only through Restaurant Operations together with KOT System.";
+
 export const commercialCatalogUnauthorizedCode = (error: unknown, response?: { status?: string; code?: number }) =>
     (error as { code?: number } | null)?.code
     ?? (response?.status === "error" ? response.code : undefined);

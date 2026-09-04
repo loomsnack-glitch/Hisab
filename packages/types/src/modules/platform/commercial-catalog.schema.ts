@@ -142,6 +142,7 @@ export const CommercialFeatureDetailDTOSchema = z.object({
     currentRevision: CommercialFeatureRevisionDTOSchema,
     revisions: z.array(CommercialFeatureRevisionDTOSchema),
     referencingModules: z.array(CommercialCatalogReferenceDTOSchema),
+    affectedPlans: z.array(CommercialCatalogReferenceDTOSchema),
 });
 
 export const CommercialFeatureDetailResponseSchema = z.object({

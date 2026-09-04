@@ -212,6 +212,8 @@ describe("Commercial Catalog Modules console destination", () => {
         expect(view.getByText("Not separately purchasable")).toBeTruthy();
         expect(view.getByText(/₹2,999/)).toBeTruthy();
         expect(view.getByText(/1 year/)).toBeTruthy();
+        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
+        expect(view.getByText(/Table Management is initially offered only through Restaurant Operations/)).toBeTruthy();
     });
 
     test("searches Modules by name or key", async () => {

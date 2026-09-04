@@ -627,7 +627,7 @@ export const createPlatformRoutes = (
 
     router.get("/catalog/features", validateSchema("query", CommercialFeatureListQuerySchema), async (c) => {
         try {
-            return handleServiceResponse(c, await commercialCatalogService.listFeatures(c.req.valid("query")));
+            return handleServiceResponse(c, await commercialCatalogService.listFeatures(c.req.valid("query"), c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "listCommercialFeatures", c, error);
         }
@@ -655,7 +655,7 @@ export const createPlatformRoutes = (
                     code: STATUS_CODES.BAD_REQUEST,
                 });
             }
-            return handleServiceResponse(c, await commercialCatalogService.getFeature(featureId.data));
+            return handleServiceResponse(c, await commercialCatalogService.getFeature(featureId.data, c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "getCommercialFeature", c, error);
         }
@@ -775,7 +775,7 @@ export const createPlatformRoutes = (
 
     router.get("/catalog/modules", validateSchema("query", CommercialModuleListQuerySchema), async (c) => {
         try {
-            return handleServiceResponse(c, await commercialCatalogService.listModules(c.req.valid("query")));
+            return handleServiceResponse(c, await commercialCatalogService.listModules(c.req.valid("query"), c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "listCommercialModules", c, error);
         }
@@ -803,7 +803,7 @@ export const createPlatformRoutes = (
                     code: STATUS_CODES.BAD_REQUEST,
                 });
             }
-            return handleServiceResponse(c, await commercialCatalogService.getModule(moduleId.data));
+            return handleServiceResponse(c, await commercialCatalogService.getModule(moduleId.data, c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "getCommercialModule", c, error);
         }
@@ -923,7 +923,7 @@ export const createPlatformRoutes = (
 
     router.get("/catalog/plans", validateSchema("query", CommercialPlanListQuerySchema), async (c) => {
         try {
-            return handleServiceResponse(c, await commercialCatalogService.listPlans(c.req.valid("query")));
+            return handleServiceResponse(c, await commercialCatalogService.listPlans(c.req.valid("query"), c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "listCommercialPlans", c, error);
         }
@@ -951,7 +951,7 @@ export const createPlatformRoutes = (
                     code: STATUS_CODES.BAD_REQUEST,
                 });
             }
-            return handleServiceResponse(c, await commercialCatalogService.getPlan(planId.data));
+            return handleServiceResponse(c, await commercialCatalogService.getPlan(planId.data, c.get("authOwner")));
         } catch (error) {
             return handleError("platform.routes", "getCommercialPlan", c, error);
         }

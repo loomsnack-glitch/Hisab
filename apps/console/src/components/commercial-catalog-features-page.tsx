@@ -31,6 +31,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@repo/ui/components/textarea";
 
 import {
+    commercialCatalogKotTableNote,
+} from "@/components/commercial-catalog-ui";
+import {
     commercialCatalogListPath,
     commercialFeaturePath,
     parseCommercialCatalogPath,
@@ -540,6 +543,13 @@ const FeatureDetail = ({
                 </div>
             </div>
 
+            {feature.key === "kot_system" || feature.key === "table_management" ? (
+                <Alert>
+                    <AlertTitle>Initial catalog relationship</AlertTitle>
+                    <AlertDescription>{commercialCatalogKotTableNote}</AlertDescription>
+                </Alert>
+            ) : null}
+
             {pendingAction ? (
                 <div role="alertdialog" aria-labelledby="feature-action-title" className="rounded-xl border bg-card p-4 shadow-sm">
                     <h2 id="feature-action-title" className="text-lg font-semibold">{confirmCopy[pendingAction.kind].title}</h2>
@@ -643,6 +653,26 @@ const FeatureDetail = ({
                             {feature.referencingModules.map((moduleItem) => (
                                 <li key={moduleItem.revisionId}>
                                     {moduleItem.displayName} · <code>{moduleItem.key}</code> · revision {moduleItem.revisionNumber}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Affected Plans</CardTitle>
+                    <CardDescription>Plans that currently include this Feature through a Module. This is review only.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {feature.affectedPlans.length === 0 ? (
+                        <p>No Plans currently include this Feature.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {feature.affectedPlans.map((planItem) => (
+                                <li key={planItem.revisionId}>
+                                    {planItem.displayName} · <code>{planItem.key}</code> · revision {planItem.revisionNumber}
                                 </li>
                             ))}
                         </ul>

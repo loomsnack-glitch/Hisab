@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@repo/ui/components/textarea";
 
 import {
+    commercialCatalogKotTableNote,
     commercialCatalogActorName,
     commercialCatalogStatusBadge,
     commercialCatalogStatusFilterOptions,
@@ -205,6 +206,7 @@ const CommercialCatalogModulesPage = ({
                     <p className="text-muted-foreground">
                         Bundle Features into reusable workflow packages. A Feature may appear in multiple Modules, and a Module may later appear in multiple Plans.
                     </p>
+                    <p className="text-sm text-muted-foreground">{commercialCatalogKotTableNote}</p>
                 </div>
                 <Button type="button" onClick={() => { setShowCreateForm(true); setFormError(null); }}>
                     <PackagePlus className="size-4" /> Add Module
@@ -406,7 +408,7 @@ const ModuleEditor = ({
             <CardHeader>
                 <CardTitle>{title}</CardTitle>
                 <CardDescription>
-                    Select one or more exact Feature revisions. You are responsible for composing a complete workflow; Ganatri Console does not check Feature dependencies.
+                    Select one or more exact Feature revisions. You are responsible for composing a complete workflow; Ganatri Console does not check Feature dependencies. {commercialCatalogKotTableNote}
                 </CardDescription>
             </CardHeader>
             <CardContent>
