@@ -15,14 +15,17 @@ import {
     POS_BARCODE_SCAN_COOLDOWN_MS,
 } from "../lib/pos-barcode-boundary";
 import { usePosCart } from "../hooks/use-pos-cart";
+import { usePosConvenience } from "../hooks/use-pos-convenience";
 
 type NewSaleScreenProps = NativeStackScreenProps<PosStackParamList, "NewSale">;
+type ProductQuickFilter = "all" | "recent" | "pinned";
 
 const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     const [search, setSearch] = useState("");
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+    const [productQuickFilter, setProductQuickFilter] = useState<ProductQuickFilter>("all");
     const [showScanner, setShowScanner] = useState(false);
     const [scanLocked, setScanLocked] = useState(false);
     const [scanFeedback, setScanFeedback] = useState<
@@ -39,7 +42,19 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const scanUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const catalog = usePosCatalog();
     const cart = usePosCart();
-    const filteredProducts = filterCatalogProducts(catalog.products, search, selectedCategoryId);
+    const convenience = usePosConvenience(catalog.products);
+    const filteredCatalogProducts = filterCatalogProducts(catalog.products, search, selectedCategoryId);
+    const filteredRecentProducts = filterCatalogProducts(convenience.recentProducts, search, selectedCategoryId);
+    const filteredPinnedProducts = filterCatalogProducts(convenience.pinnedProducts, search, selectedCategoryId);
+    const filteredProducts =
+        productQuickFilter === "recent"
+            ? filteredRecentProducts
+            : productQuickFilter === "pinned"
+              ? filteredPinnedProducts
+              : filteredCatalogProducts;
+    const recentProducts = search.trim() === "" && productQuickFilter === "all"
+        ? filterCatalogProducts(convenience.recentProducts, "", selectedCategoryId)
+        : [];
 
     useEffect(
         () => () => {
@@ -109,7 +124,62 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         }
 
         cart.addProduct(resolution.product);
+        convenience.recordRecent(resolution.product.id);
         setScanFeedback("scannerAdded");
+    };
+
+    const addProduct = (product: (typeof catalog.products)[number]) => {
+        if (product.productType !== "single") {
+            return;
+        }
+
+        cart.addProduct(product);
+        convenience.recordRecent(product.id);
+    };
+
+    const renderProductCard = (product: (typeof catalog.products)[number]) => {
+        const isAddable = product.productType === "single";
+        const quantity = cart.items.find((item) => item.id === product.id)?.quantity ?? 0;
+        const price = Math.max(0, Number(product.price) - Number(product.discount ?? 0));
+        const isPinned = convenience.isPinned(product.id);
+
+        return (
+            <View
+                key={product.id}
+                className="min-h-16 flex-row items-center gap-2 rounded-2xl border border-pos-border bg-pos-surface-muted px-2 py-2 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark"
+            >
+                <Pressable
+                    className="min-w-0 flex-1 flex-row items-center justify-between gap-3 px-2 py-1"
+                    disabled={!isAddable}
+                    onPress={() => addProduct(product)}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !isAddable }}
+                >
+                    <View className="min-w-0 flex-1 gap-1">
+                        <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{product.name}</Text>
+                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                            {new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(price)}
+                        </Text>
+                        {!isAddable ? (
+                            <Text className="text-xs text-pos-warning dark:text-pos-warning-dark">{t("configurationComingSoon")}</Text>
+                        ) : null}
+                    </View>
+                    {quantity > 0 ? (
+                        <Text className="rounded-full bg-pos-primary px-3 py-1 text-sm font-bold text-pos-primary-foreground">
+                            {quantity}
+                        </Text>
+                    ) : null}
+                </Pressable>
+                <Pressable
+                    className="min-h-12 min-w-12 items-center justify-center rounded-xl bg-pos-surface dark:bg-pos-surface-dark"
+                    onPress={() => convenience.togglePinned(product.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(isPinned ? "unpinProduct" : "pinProduct")}
+                >
+                    <Text className="text-2xl text-pos-primary">{isPinned ? "★" : "☆"}</Text>
+                </Pressable>
+            </View>
+        );
     };
 
     return (
@@ -171,6 +241,23 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                 ) : null}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
                     <PosButton
+                        label={t("allProducts")}
+                        variant={productQuickFilter === "all" ? "primary" : "secondary"}
+                        onPress={() => setProductQuickFilter("all")}
+                    />
+                    <PosButton
+                        label={t("recentProducts")}
+                        variant={productQuickFilter === "recent" ? "primary" : "secondary"}
+                        onPress={() => setProductQuickFilter("recent")}
+                    />
+                    <PosButton
+                        label={t("pinnedProducts")}
+                        variant={productQuickFilter === "pinned" ? "primary" : "secondary"}
+                        onPress={() => setProductQuickFilter("pinned")}
+                    />
+                </ScrollView>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+                    <PosButton
                         label={t("allCategories")}
                         variant={selectedCategoryId === null ? "primary" : "secondary"}
                         onPress={() => setSelectedCategoryId(null)}
@@ -201,39 +288,16 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                 ) : null}
                 {catalog.isSuccess && (catalog.products.length > 0 || catalog.categories.length > 0) ? (
                     <View className="gap-3">
+                        {recentProducts.length > 0 ? (
+                            <View className="gap-2">
+                                <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("recentProducts")}</Text>
+                                <View className="gap-3">{recentProducts.map(renderProductCard)}</View>
+                            </View>
+                        ) : null}
                         {filteredProducts.length === 0 ? (
                             <Text className="text-sm leading-5 text-pos-muted dark:text-pos-muted-dark">{t("noProductsFound")}</Text>
                         ) : (
-                            filteredProducts.map((product) => {
-                                const isAddable = product.productType === "single";
-                                const quantity = cart.items.find((item) => item.id === product.id)?.quantity ?? 0;
-                                const price = Math.max(0, Number(product.price) - Number(product.discount ?? 0));
-                                return (
-                                    <Pressable
-                                        key={product.id}
-                                        className="min-h-16 flex-row items-center justify-between gap-3 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark"
-                                        disabled={!isAddable}
-                                        onPress={() => cart.addProduct(product)}
-                                        accessibilityRole="button"
-                                        accessibilityState={{ disabled: !isAddable }}
-                                    >
-                                        <View className="min-w-0 flex-1 gap-1">
-                                            <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{product.name}</Text>
-                                            <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
-                                                {new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(price)}
-                                            </Text>
-                                            {!isAddable ? (
-                                                <Text className="text-xs text-pos-warning dark:text-pos-warning-dark">{t("configurationComingSoon")}</Text>
-                                            ) : null}
-                                        </View>
-                                        {quantity > 0 ? (
-                                            <Text className="rounded-full bg-pos-primary px-3 py-1 text-sm font-bold text-pos-primary-foreground">
-                                                {quantity}
-                                            </Text>
-                                        ) : null}
-                                    </Pressable>
-                                );
-                            })
+                            filteredProducts.map(renderProductCard)
                         )}
                     </View>
                 ) : null}
