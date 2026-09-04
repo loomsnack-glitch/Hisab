@@ -123,8 +123,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; local line controls and display totals are implemented; native/device validation remains pending. |
-| 3.2 Cart Review screen | Ready to commit | Implementation and review are complete; focused tests pass. |
-| 3.3 Customer picker and Walk-in | Not started | Walk-in default and optional name/phone selection work. |
+| 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; Cart Review and guarded Payment action are implemented; native/device validation remains pending. |
+| 3.3 Customer picker and Walk-in | In progress | Plan approved; Walk-in default and optional name/phone Customer selection are being implemented. |
 | 3.4 Quick Customer creation | Not started | Name/phone creation returns to the active Cart safely. |
 | 3.5 Discounts | Not started | Amount/percentage discounts validate and update totals. |
 | 3.6 Server Draft Sale persistence | Not started | Hybrid local/server Draft behavior, resume, delete, and retry are verified. |
