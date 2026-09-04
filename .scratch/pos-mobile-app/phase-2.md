@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 2 Execution Plan and Review Log
 
-Status: Phase 2 in progress; subphase 2.1 completed with follow-up
+Status: Phase 2 in progress; subphase 2.3 completed with native follow-up
 Phase: 2 — Catalog and Product selection
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -44,7 +44,7 @@ Not included in this phase:
 | --- | --- | --- | --- | --- |
 | 2.1 | Catalog query and cache | Phase 1 | Product/Category queries have scoped cache and recoverable states | `08e5d5b` |
 | 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
-| 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | pending |
+| 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | `2ed696e` |
 | 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | pending |
 | 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | pending |
 
@@ -398,3 +398,52 @@ and the Expo SDK 56 camera documentation.
 - No new product, API, security, or release decision is required.
 
 Plan review result: approved for implementation.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added the Expo SDK 56-compatible `expo-camera` package and configured the
+  Android camera permission without requesting audio recording permission.
+- Added a camera-scanning action beside the Product search and kept the manual
+  search field visible while the scanner is open.
+- Added an explicit common retail barcode-format allowlist to `CameraView`.
+- Requests camera permission only after the user opens the scanner. Denied
+  permission, camera mount failure, and close/cancel all preserve a recoverable
+  manual-search path.
+- Added a pure mobile barcode boundary that trims scanner data, resolves only
+  exact Product Codes from the active server Product list, rejects ambiguous
+  duplicate codes, and applies a short repeated-callback cooldown.
+- Added ordinary `single` Products to the existing session-scoped Cart handoff
+  and left configuration-required Products for 2.5.
+- Unknown and ambiguous scan results populate the manual search field and show
+  translated feedback in English, Gujarati, and Hindi.
+- Added focused pure tests for whitespace normalization, exact resolution,
+  ambiguous codes, unknown results, and cooldown behavior.
+
+Standards/spec review:
+
+- The camera is only a presentation/input capability; Product identity, price,
+  discount, availability, and type still come from the active server Catalog.
+- No backend route, shared service, Catalog persistence, external scanner, or
+  offline billing behavior was introduced.
+- The short callback lock and pure cooldown prevent a held barcode from
+  creating accidental duplicate Cart quantities.
+- Manual search remains available after permission, mount, unknown-code, and
+  configuration outcomes.
+- Review found and fixed the stale pre-Catalog New Sale subtitle so the screen
+  now describes the implemented search/scan/select flow in all supported
+  interface languages.
+- No actionable standards or spec findings remain within 2.3.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 29 passed.
+- Mobile TypeScript check — no new errors; the known WhatsApp asset import
+  remains the only baseline error.
+- `git diff --check` — passed.
+- Android build/device/camera validation — intentionally not run; the user will
+  validate the native permission, camera mount, barcode formats, and physical
+  device behavior.
+
+2.3 status: Completed with native follow-up. Focused commit: `2ed696e`.
