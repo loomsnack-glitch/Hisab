@@ -12,6 +12,21 @@ const product = {
 } as ProductResponseDTO;
 
 describe("POS Cart store", () => {
+    it("changes and removes scoped Cart lines", () => {
+        usePosCartStore.getState().clear();
+        usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);
+        const lineId = usePosCartStore.getState().items[0]!.lineId;
+
+        usePosCartStore.getState().changeQuantity("org-1:store-1:device-1", lineId, 1);
+        expect(usePosCartStore.getState().items[0]?.quantity).toBe(2);
+
+        usePosCartStore.getState().removeItem("other-scope", lineId);
+        expect(usePosCartStore.getState().items).toHaveLength(1);
+
+        usePosCartStore.getState().removeItem("org-1:store-1:device-1", lineId);
+        expect(usePosCartStore.getState().items).toEqual([]);
+    });
+
     it("clears handed-off items at the session boundary", () => {
         usePosCartStore.getState().clear();
         usePosCartStore.getState().addProduct("org-1:store-1:device-1", product);

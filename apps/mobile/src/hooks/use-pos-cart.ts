@@ -1,5 +1,5 @@
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { getCartItemCount, type PosCartConfiguration } from "../lib/pos-cart-boundary";
+import { getCartDisplayTotals, getCartItemCount, type PosCartConfiguration } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 
@@ -13,6 +13,7 @@ export const usePosCart = () => {
     return {
         items,
         itemCount: getCartItemCount(items),
+        displayTotals: getCartDisplayTotals(items),
         addProduct: (product: ProductResponseDTO) => {
             if (scopeKey && product.productType === "single") {
                 usePosCartStore.getState().addProduct(scopeKey, product);
@@ -21,6 +22,16 @@ export const usePosCart = () => {
         addConfiguredProduct: (product: ProductResponseDTO, configuration: PosCartConfiguration) => {
             if (scopeKey) {
                 usePosCartStore.getState().addConfiguredProduct(scopeKey, product, configuration);
+            }
+        },
+        changeQuantity: (lineId: string, delta: number) => {
+            if (scopeKey) {
+                usePosCartStore.getState().changeQuantity(scopeKey, lineId, delta);
+            }
+        },
+        removeItem: (lineId: string) => {
+            if (scopeKey) {
+                usePosCartStore.getState().removeItem(scopeKey, lineId);
             }
         },
         clear: () => usePosCartStore.getState().clear(),

@@ -122,7 +122,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 3.1 Local Cart state | In progress | Plan approved; add, remove, quantity, and immediate display totals are being implemented. |
+| 3.1 Local Cart state | Ready to commit | Implementation and review are complete; focused tests pass. |
 | 3.2 Cart Review screen | Not started | Product lines, totals, and Continue to Payment work. |
 | 3.3 Customer picker and Walk-in | Not started | Walk-in default and optional name/phone selection work. |
 | 3.4 Quick Customer creation | Not started | Name/phone creation returns to the active Cart safely. |

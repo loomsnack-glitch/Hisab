@@ -144,9 +144,46 @@ Plan review result: approved for implementation.
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
-| 3.1 Local Cart state | In progress | Plan approved; implementation pending |
+| 3.1 Local Cart state | Ready to commit | Implementation and review complete; focused checks pass |
 | 3.2 Cart Review screen | Not started | Depends on 3.1 |
 | 3.3 Customer picker and Walk-in | Not started | Depends on 3.2 |
 | 3.4 Quick Customer creation | Not started | Depends on 3.3 |
 | 3.5 Discounts | Not started | Depends on 3.2 |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
+
+## 3.1 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added line-ID-safe Cart quantity changes and removal. Final-unit decreases
+  remove the line, and scoped store mutations cannot affect another Device.
+- Exposed local display subtotal, catalog discount, and total through the Cart
+  hook and rendered the controls in the existing Cart screen.
+- Preserved configured Cart-line identity and configuration data through local
+  quantity changes and removals.
+- Added English, Gujarati, and Hindi labels for Cart controls and display-total
+  messaging.
+- Kept display totals presentation-only; Draft Sale and Sale totals remain
+  server-authoritative for later subphases.
+
+Standards/spec review:
+
+- Cart mutations use the existing pure boundary, Zustand store, and mobile hook
+  seams; no new API or persistence behavior was introduced.
+- Quantity changes target `lineId`, preserving separate configured lines.
+- Invalid, fractional, non-finite, zero, and negative quantity states cannot
+  remain in the Cart.
+- Empty-state, removal, scoped mutation, merge, and display-total behavior are
+  covered by focused tests.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 44 passed, 100 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.1 status: Ready to commit. Implementation commit reference is recorded after
+the commit gate.

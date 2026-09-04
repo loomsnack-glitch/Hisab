@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import type { ProductResponseDTO } from "@repo/types";
-import { addConfiguredProductToCart, addProductToCart, getCartItemCount, type PosCartItem } from "./pos-cart-boundary";
+import {
+    addConfiguredProductToCart,
+    addProductToCart,
+    changeCartItemQuantity,
+    getCartDisplayTotals,
+    getCartItemCount,
+    removeCartItem,
+    type PosCartItem,
+} from "./pos-cart-boundary";
 
 const product = {
     id: "product-1",
@@ -56,5 +64,27 @@ describe("POS Cart handoff", () => {
 
         expect(items).toHaveLength(2);
         expect(items.map((item) => item.quantity)).toEqual([1, 1]);
+    });
+
+    it("changes and removes only the requested Cart line", () => {
+        const configured = addConfiguredProductToCart([], product, {
+            addOns: [{ addOnId: "extra-sugar", quantity: 1 }],
+            comboSelections: [],
+        });
+        const items = addProductToCart(configured, product);
+        const changed = changeCartItemQuantity(items, configured[0]!.lineId, 1);
+
+        expect(changed[0]?.quantity).toBe(2);
+        expect(changed[1]?.quantity).toBe(1);
+        const decreased = changeCartItemQuantity(changed, configured[0]!.lineId, -2);
+        expect(decreased).toHaveLength(1);
+        expect(removeCartItem(decreased, product.id)).toHaveLength(0);
+    });
+
+    it("calculates immediate display totals from Product catalog values", () => {
+        const items = addProductToCart([], { ...product, price: 40, discount: 5 });
+        const twice = addProductToCart(items, { ...product, price: 40, discount: 5 });
+
+        expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, total: 70 });
     });
 });
