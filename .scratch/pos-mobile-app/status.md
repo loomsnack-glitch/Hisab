@@ -105,7 +105,7 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 | 1.4 Uniwind design foundation | Completed | Semantic light/dark tokens and small POS primitives are implemented and focused-tested; device visual validation remains a follow-up. |
 | 1.5 POS session state | Completed | POS-specific lifecycle transitions and verified-session root gating are implemented and focused-tested; native/API validation remains a follow-up. |
 | 1.6 POS Unlock screen | Completed with follow-up | POS Device unlock form, token/session persistence, language selection, and recovery states are implemented; real Android/API validation remains pending. |
-| 1.7 POS navigation shell | Not started | Shared and capability-gated destinations are reachable. |
+| 1.7 POS navigation shell | Completed with follow-up | Shared destinations, capability-gated Tables, and Device logout are implemented; real Android/API validation remains pending. |
 | 1.8 New Sale shell | Not started | Successful Unlock opens New Sale with Cart entry. |
 
 ### Phase 2 — Catalog and Product selection
@@ -199,4 +199,4 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 
 ## Current next step
 
-Execute Phase 1 subphase 1.7 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.
+Execute Phase 1 subphase 1.8 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.

@@ -39,6 +39,15 @@ export const appResources = {
             inactiveDevice: "This Device is inactive. Contact your administrator.",
             networkFailure: "Could not reach the POS service. Check the connection and try again.",
             unlockFailed: "POS could not be unlocked. Please try again.",
+            newSale: "New Sale",
+            bills: "Bills",
+            customers: "Customers",
+            reports: "Reports",
+            settings: "Settings",
+            tables: "Tables",
+            comingSoon: "This workspace will be added in its planned phase.",
+            back: "Back",
+            restaurantTools: "Restaurant tools",
         },
     },
     gu: {
@@ -75,6 +84,15 @@ export const appResources = {
             inactiveDevice: "આ ડિવાઇસ નિષ્ક્રિય છે. તમારા એડમિનિસ્ટ્રેટરનો સંપર્ક કરો.",
             networkFailure: "POS સેવા સુધી પહોંચી શકાયું નથી. કનેક્શન તપાસી ફરી પ્રયાસ કરો.",
             unlockFailed: "POS અનલૉક થઈ શક્યું નથી. કૃપા કરીને ફરી પ્રયાસ કરો.",
+            newSale: "નવું વેચાણ",
+            bills: "બિલ્સ",
+            customers: "ગ્રાહકો",
+            reports: "રિપોર્ટ્સ",
+            settings: "સેટિંગ્સ",
+            tables: "ટેબલ્સ",
+            comingSoon: "આ કાર્યસ્થળ તેના નિર્ધારિત તબક્કામાં ઉમેરવામાં આવશે.",
+            back: "પાછા",
+            restaurantTools: "રેસ્ટોરન્ટ સાધનો",
         },
     },
     hi: {
@@ -111,9 +129,20 @@ export const appResources = {
             inactiveDevice: "यह डिवाइस निष्क्रिय है। अपने एडमिनिस्ट्रेटर से संपर्क करें।",
             networkFailure: "POS सेवा से संपर्क नहीं हो सका। कनेक्शन जाँचकर फिर कोशिश करें।",
             unlockFailed: "POS अनलॉक नहीं हो सका। कृपया फिर कोशिश करें।",
+            newSale: "नई बिक्री",
+            bills: "बिल",
+            customers: "ग्राहक",
+            reports: "रिपोर्ट",
+            settings: "सेटिंग्स",
+            tables: "टेबल",
+            comingSoon: "यह कार्यक्षेत्र अपने निर्धारित चरण में जोड़ा जाएगा।",
+            back: "वापस",
+            restaurantTools: "रेस्टोरेंट टूल्स",
         },
     },
 } as const;
+
+export type PosTranslationKey = keyof typeof appResources.en.pos;
 
 export const isAppLanguage = (value: string | null | undefined): value is AppLanguage =>
     Boolean(value && APP_LANGUAGES.includes(value as AppLanguage));

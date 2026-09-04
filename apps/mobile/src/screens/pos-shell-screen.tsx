@@ -1,32 +1,60 @@
-import { Alert, ScrollView, Text, View } from "react-native";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useMutation } from "@tanstack/react-query";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
-import { clearAuthToken, userLogout } from "@repo/services";
+import { clearAuthToken, deviceLogout } from "@repo/services";
 
 import PrimaryButton from "../components/primary-button";
 import { PosCard } from "../components/pos-ui";
-import { AUTH_QUERY_KEY } from "../hooks/use-auth-bootstrap";
-import { useAuthActions } from "../store/auth.store";
+import { getPosDestinations, type PosDestination } from "../lib/pos-navigation-boundary";
+import type { PosTranslationKey } from "../lib/localization-boundary";
+import { posStorage } from "../lib/storage";
+import type { PosStackParamList } from "../navigation/pos-navigator";
+import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
 
-const PosShellScreen = () => {
+type PosShellScreenProps = NativeStackScreenProps<PosStackParamList, "PosHome">;
+
+const destinationKeys: Record<PosDestination, PosTranslationKey> = {
+    NewSale: "newSale",
+    Bills: "bills",
+    Customers: "customers",
+    Reports: "reports",
+    Settings: "settings",
+    Tables: "tables",
+};
+
+const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
     const insets = useSafeAreaInsets();
-    const { t } = useTranslation(["common", "pos"]);
-    const { clearUser } = useAuthActions();
-    const queryClient = useQueryClient();
+    const { t: tCommon } = useTranslation("common");
+    const { t: tPos } = useTranslation("pos");
+    const session = usePosSessionSnapshot().session;
+    const dispatch = usePosSessionDispatch();
 
     const logoutMutation = useMutation({
-        mutationFn: userLogout,
-        onSuccess: async () => {
+        mutationFn: deviceLogout,
+        onMutate: () => {
+            dispatch({ type: "LOGOUT_STARTED" });
+        },
+        onSuccess: async (response) => {
+            if (response.status !== "success") {
+                dispatch({ type: "LOGOUT_FAILED", message: response.message });
+                Alert.alert(tCommon("logoutFailedTitle"), tCommon("genericError"));
+                return;
+            }
+
             await clearAuthToken();
-            clearUser();
-            queryClient.removeQueries({ queryKey: AUTH_QUERY_KEY });
-            Alert.alert(t("loggedOutTitle"), t("loggedOutMessage"));
+            await posStorage.clearSession();
+            dispatch({ type: "LOGOUT_COMPLETED" });
+            Alert.alert(tCommon("loggedOutTitle"), tCommon("loggedOutMessage"));
         },
         onError: (error: { message?: string }) => {
-            Alert.alert(t("logoutFailedTitle"), error.message ?? t("genericError"));
+            dispatch({ type: "LOGOUT_FAILED", message: error.message ?? tCommon("genericError") });
+            Alert.alert(tCommon("logoutFailedTitle"), error.message ?? tCommon("genericError"));
         },
     });
+
+    const destinations = getPosDestinations(session);
 
     return (
         <ScrollView
@@ -35,13 +63,28 @@ const PosShellScreen = () => {
             contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
         >
             <PosCard>
-                <Text className="text-xs font-bold uppercase tracking-[2px] text-pos-primary dark:text-pos-primary-dark">{t("appName")}</Text>
-                <Text className="text-2xl font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("workspaceTitle", { ns: "pos" })}</Text>
+                <Text className="text-xs font-bold uppercase tracking-[2px] text-pos-primary dark:text-pos-primary-dark">{tCommon("appName")}</Text>
+                <Text className="text-2xl font-semibold text-pos-foreground dark:text-pos-foreground-dark">{tPos("workspaceTitle")}</Text>
                 <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">
-                    {t("foundationMessage", { ns: "pos" })}
+                    {tPos("foundationMessage")}
                 </Text>
+                <View className="gap-2">
+                    {destinations.map((destination) => (
+                        <Pressable
+                            key={destination}
+                            className="min-h-12 flex-row items-center justify-between rounded-2xl border border-pos-border bg-pos-surface-muted px-4 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark"
+                            onPress={() => navigation.navigate(destination)}
+                            accessibilityRole="button"
+                        >
+                            <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">
+                                {tPos(destinationKeys[destination])}
+                            </Text>
+                            <Text className="text-lg text-pos-muted dark:text-pos-muted-dark">›</Text>
+                        </Pressable>
+                    ))}
+                </View>
                 <PrimaryButton
-                    label={logoutMutation.isPending ? t("loggingOut") : t("logout")}
+                    label={logoutMutation.isPending ? tCommon("loggingOut") : tCommon("logout")}
                     loading={logoutMutation.isPending}
                     onPress={() => logoutMutation.mutate()}
                 />

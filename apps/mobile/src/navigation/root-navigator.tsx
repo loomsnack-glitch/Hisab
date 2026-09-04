@@ -16,10 +16,12 @@ const RootNavigator = () => {
         return <LoadingScreen message={posSession.message ?? undefined} onRetry={posSession.canRetry ? posSession.retry : undefined} />;
     }
 
+    const staysInPosFlow = posSession.state === "active" || posSession.state === "logging-out";
+
     return (
         <NavigationContainer>
-            <Stack.Navigator key={posSession.state === "active" ? "app" : "auth"} screenOptions={{ headerShown: false }}>
-                {posSession.state === "active" ? (
+            <Stack.Navigator key={staysInPosFlow ? "app" : "auth"} screenOptions={{ headerShown: false }}>
+                {staysInPosFlow ? (
                     <Stack.Screen name="Pos" component={PosNavigator} />
                 ) : (
                     <Stack.Screen name="PosUnlock" component={PosUnlockScreen} />

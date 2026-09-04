@@ -52,8 +52,8 @@ Not included in this phase:
 | 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `2cb9d87` |
 | 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `50a5be9` |
 | 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `011ec05` |
-| 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | `Pending commit` |
-| 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | Pending |
+| 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | `6cc51e5` |
+| 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | `Pending commit` |
 | 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | Pending |
 
 ## Cross-phase verification baseline
@@ -566,6 +566,123 @@ language list, and 1.5 state owner on 2026-09-05.
   the same unlock transition.
 - Generic auth files remain untouched as legacy code, but are removed from the
   selected POS route.
+
+## 1.7 — POS navigation shell
+
+### Plan
+
+User-facing outcome: after unlock, the operator can reach every shared POS
+workspace from one simple home surface. Restaurant-only Tables is shown only
+when the active Store Device Session advertises table management capability.
+
+Implementation scope:
+
+- Extend the POS native stack with New Sale, Bills, Customers, Reports,
+  Settings, and conditional Tables destinations.
+- Turn the POS home shell into a clear destination hub with large touch targets
+  and short labels; destination screens are intentionally placeholders until
+  their later phases.
+- Read Store capabilities from the active Device Session, not a hard-coded
+  device or role assumption.
+- Replace generic User logout with shared Device logout, credential/session
+  cleanup, and the POS session store's logging-out/completed/failed transitions.
+- Keep invalid-session routing owned by the root POS session gate.
+- Add translated navigation labels and capability messaging for all supported
+  interface languages.
+
+Acceptance criteria:
+
+1. Active POS can navigate to all five shared destinations.
+2. Tables is reachable only when `tableManagementEnabled` is true.
+3. Logout calls shared `deviceLogout`, clears the token and Device Session on
+   success, and returns to Unlock.
+4. Logout failure leaves the active POS session intact and offers recovery.
+5. Destination placeholders clearly identify the later phase without
+   pretending the feature is implemented.
+6. Focused tests cover capability gating and navigation destination vocabulary.
+
+Non-goals:
+
+- Implementing Catalog, Cart, Bills, Customers, Reports, Settings, Tables, or
+  printer behavior.
+- Adding a bottom-tab dependency; the approved simple stack/home hub is enough
+  for this foundation.
+- Changing Store roles or inventing owner/cashier permissions.
+
+Public seams and effects:
+
+- `PosNavigator` owns the destination stack and its route types.
+- `PosShellScreen` owns the home hub and Device logout action.
+- Active `DeviceSessionDTO.store` capabilities determine restaurant route
+  visibility.
+- Logout uses shared `deviceLogout` and the POS session store; it does not use
+  generic User Auth endpoints.
+
+Test and verification plan:
+
+- Pure tests for shared/capability-gated destination lists.
+- Focused session lifecycle tests for logout success/failure.
+- Mobile TypeScript check and focused Bun tests only; no Android build command.
+- `git diff --check` and route/static review.
+
+Risks and rollback:
+
+- Capability checks must fail closed when session data is absent.
+- Logout must not clear language/preferences or Device ID.
+- Placeholder screens must not be mistaken for implemented later-phase
+  behavior; keep their copy explicit.
+
+### Internal plan review
+
+Reviewed against the approved shared-workspace list, Tables capability rule,
+POS session owner, and simple-UX direction on 2026-09-05.
+
+- A stack/home hub avoids adding a dependency before the core flow is proven.
+- Existing Store capability fields are sufficient; no role assumptions or API
+  changes are needed.
+- Logout behavior is moved to Device Auth, matching the POS session boundary.
+- Later feature work remains outside this slice.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added the shared destination vocabulary for New Sale, Bills, Customers,
+  Reports, Settings, and Tables.
+- Extended `PosNavigator` with typed routes and explicit placeholder screens
+  for the later feature phases.
+- Turned the POS home into a simple large-target destination hub.
+- Gated Tables on the active Device Session's
+  `store.tableManagementEnabled` capability.
+- Replaced generic User logout with shared Device logout, token/session
+  cleanup, and explicit POS logging-out/completed/failed transitions.
+- Added translated labels for all navigation workspaces in English, Gujarati,
+  and Hindi.
+- Added focused capability-gating tests.
+
+Standards/spec review findings and fixes:
+
+- The first logout transition caused root navigation to switch to Unlock while
+  the request was still pending. Root navigation now keeps the POS flow for
+  both `active` and `logging-out`, so the button loading state remains visible.
+- Navigation uses the active Store capability and fails closed when no session
+  exists; it does not infer restaurant access from roles or hard-coded data.
+- Placeholder screens explicitly say their workspace is planned and do not
+  claim Catalog, billing, reporting, or Tables behavior is implemented.
+- No bottom-tab dependency or later feature implementation was added.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- Focused mobile tests — 17 passed across storage, localization, UI, session,
+  and navigation suites.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- Static route/logout/capability review — passed.
+- `git diff --check` — passed.
+
+1.7 status: Completed. Real navigation and Device logout require the user’s
+Android/API validation.
 
 ### Implementation and review result
 
