@@ -199,8 +199,9 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 2 implementation and review are complete. Continue with Phase 3 Cart and
-Draft Sale planning/implementation after the user-owned Android development-
-build/device checks. Backend integration, live configuration API behavior, and
-real-database concurrency verification remain release checks. Keep Bluetooth
-printer validation deferred to Phase 6.
+Phase 3 implementation and review are complete. Continue with Phase 4 Payment
+and Sale completion after the user-owned Android development-build/device
+checks. Bills resume UI remains in Phase 5, the Draft migration must be applied
+before live use, and backend integration/live API/real-database concurrency
+verification remain release checks. Keep Bluetooth printer validation deferred
+to Phase 6.
