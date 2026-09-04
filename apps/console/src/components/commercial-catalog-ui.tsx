@@ -32,13 +32,12 @@ import {
     SheetTrigger,
 } from "@repo/ui/components/sheet";
 import { cn } from "@repo/ui/lib/utils";
-import { ChevronLeft, History, Layers3, Package2, Puzzle, Search, Store, X } from "lucide-react";
+import { ChevronLeft, History, Layers3, Package2, Puzzle, Search, X } from "lucide-react";
 
 import {
     commercialCatalogFeaturesListPath,
     commercialCatalogModulesListPath,
     commercialCatalogPlansListPath,
-    commercialCatalogStorefrontPath,
 } from "@/lib/commercial-catalog-url";
 
 export const commercialCatalogStatusLabels: Record<CommercialCatalogRevisionStatus, string> = {
@@ -107,7 +106,7 @@ export const commercialCatalogUnauthorizedCode = (error: unknown, response?: { s
     (error as { code?: number } | null)?.code
     ?? (response?.status === "error" ? response.code : undefined);
 
-type CatalogSection = "features" | "modules" | "plans" | "storefront";
+type CatalogSection = "features" | "modules" | "plans";
 
 type CommercialCatalogSectionNavProps = {
     current: CatalogSection;
@@ -117,7 +116,6 @@ const catalogTabs = [
     { id: "plans", label: "Plans", path: () => commercialCatalogPlansListPath(), icon: Package2 },
     { id: "modules", label: "Modules", path: () => commercialCatalogModulesListPath(), icon: Puzzle },
     { id: "features", label: "Features", path: () => commercialCatalogFeaturesListPath(), icon: Layers3 },
-    { id: "storefront", label: "Storefront", path: () => commercialCatalogStorefrontPath, icon: Store },
 ] as const;
 
 export const pushCommercialCatalogPath = (path: string) => {

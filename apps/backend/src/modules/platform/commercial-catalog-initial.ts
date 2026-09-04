@@ -83,17 +83,20 @@ export const seedInitialCommercialCatalog = async (
     repository: InitialCommercialCatalogSeedRepository,
     input: EnsureInitialCatalogInput,
 ): Promise<void> => {
-    const [features, modules, plans] = await Promise.all([
+    const [existingFeatures, existingModules, existingPlans] = await Promise.all([
         repository.listFeatures({ status: "all" }),
         repository.listModules({ status: "all" }),
         repository.listPlans({ status: "all" }),
     ]);
-    if (features.length > 0 || modules.length > 0 || plans.length > 0) {
-        return;
-    }
 
-    const featureRevisionIds = new Map<string, string>();
+    const existingFeatureKeys = new Set(existingFeatures.map((feature) => feature.key));
+    const featureRevisionIds = new Map(
+        (await repository.listFeatures({ status: "active" })).map((feature) => [feature.key, feature.currentRevisionId]),
+    );
     for (const feature of SEEDED_COMMERCIAL_FEATURES) {
+        if (existingFeatureKeys.has(feature.key)) {
+            continue;
+        }
         const created = await repository.createDraftFeature({
             featureId: input.createId(),
             revisionId: input.createId(),
@@ -104,7 +107,7 @@ export const seedInitialCommercialCatalog = async (
             now: input.now,
         });
         if (created.status !== "created" || !("feature" in created)) {
-            return;
+            continue;
         }
         const published = await repository.publishRevision({
             featureId: created.feature.id,
@@ -113,13 +116,24 @@ export const seedInitialCommercialCatalog = async (
             now: input.now,
         });
         if (published.status !== "published") {
-            return;
+            continue;
         }
         featureRevisionIds.set(feature.key, created.feature.currentRevision.id);
     }
 
-    const moduleRevisionIds = new Map<string, string>();
+    const existingModuleKeys = new Set(existingModules.map((moduleItem) => moduleItem.key));
+    const moduleRevisionIds = new Map(
+        (await repository.listModules({ status: "active" })).map((moduleItem) => [moduleItem.key, moduleItem.currentRevisionId]),
+    );
     for (const moduleItem of SEEDED_COMMERCIAL_MODULES) {
+        if (existingModuleKeys.has(moduleItem.key)) {
+            continue;
+        }
+        const featureRevisionIdsForModule = moduleItem.featureKeys
+            .map((key) => featureRevisionIds.get(key));
+        if (featureRevisionIdsForModule.some((id) => !id)) {
+            continue;
+        }
         const created = await repository.createDraftModule({
             moduleId: input.createId(),
             revisionId: input.createId(),
@@ -129,12 +143,12 @@ export const seedInitialCommercialCatalog = async (
             isSeparatelyPurchasable: moduleItem.isSeparatelyPurchasable,
             priceInr: moduleItem.priceInr,
             term: moduleItem.term,
-            featureRevisionIds: moduleItem.featureKeys.map((key) => featureRevisionIds.get(key)!),
+            featureRevisionIds: featureRevisionIdsForModule as string[],
             actorId: input.actorId,
             now: input.now,
         });
         if (created.status !== "created" || !("module" in created)) {
-            return;
+            continue;
         }
         const published = await repository.publishModuleRevision({
             moduleId: created.module.id,
@@ -143,12 +157,20 @@ export const seedInitialCommercialCatalog = async (
             now: input.now,
         });
         if (published.status !== "published") {
-            return;
+            continue;
         }
         moduleRevisionIds.set(moduleItem.key, created.module.currentRevision.id);
     }
 
     for (const planItem of SEEDED_COMMERCIAL_PLANS) {
+        if (existingPlans.some((plan) => plan.key === planItem.key)) {
+            continue;
+        }
+        const moduleRevisionIdsForPlan = planItem.moduleKeys
+            .map((key) => moduleRevisionIds.get(key));
+        if (moduleRevisionIdsForPlan.some((id) => !id)) {
+            continue;
+        }
         const created = await repository.createDraftPlan({
             planId: input.createId(),
             revisionId: input.createId(),
@@ -158,12 +180,12 @@ export const seedInitialCommercialCatalog = async (
             planType: planItem.planType,
             priceInr: planItem.priceInr,
             term: planItem.term,
-            moduleRevisionIds: planItem.moduleKeys.map((key) => moduleRevisionIds.get(key)!),
+            moduleRevisionIds: moduleRevisionIdsForPlan as string[],
             actorId: input.actorId,
             now: input.now,
         });
         if (created.status !== "created" || !("plan" in created)) {
-            return;
+            continue;
         }
         await repository.publishPlanRevision({
             planId: created.plan.id,

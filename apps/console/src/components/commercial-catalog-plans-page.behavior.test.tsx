@@ -146,7 +146,7 @@ const successPlanList = (plans: CommercialPlanListItemDTO[]): ServiceResponse<Co
     code: 200,
 });
 
-const successPlanDetail = (planDetail: CommercialPlanDetailDTO, code = 200): ServiceResponse<CommercialPlanDetailResponse> => ({
+const successPlanDetail = (planDetail: CommercialPlanDetailDTO, code: 200 | 201 = 200): ServiceResponse<CommercialPlanDetailResponse> => ({
     status: "success",
     data: { plan: planDetail },
     message: "Plan retrieved successfully",
@@ -162,14 +162,15 @@ const successModuleList = (modules: CommercialModuleListItemDTO[]): ServiceRespo
 
 const filterFeaturesByQuery = (
     items: CommercialFeatureListItemDTO[],
-    query: { status?: string; search?: string },
+    query?: { status?: string; search?: string },
 ) => {
+    const safeQuery = query ?? {};
     let filtered = items;
-    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
-    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
-    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
-    if (query.search?.trim()) {
-        const term = query.search.trim().toLowerCase();
+    if (safeQuery.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (safeQuery.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (safeQuery.status) filtered = filtered.filter((item) => item.status === safeQuery.status);
+    if (safeQuery.search?.trim()) {
+        const term = safeQuery.search.trim().toLowerCase();
         filtered = filtered.filter((item) =>
             item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
     }
@@ -178,14 +179,15 @@ const filterFeaturesByQuery = (
 
 const filterPlansByQuery = (
     items: CommercialPlanListItemDTO[],
-    query: { status?: string; search?: string },
+    query?: { status?: string; search?: string },
 ) => {
+    const safeQuery = query ?? {};
     let filtered = items;
-    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
-    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
-    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
-    if (query.search?.trim()) {
-        const term = query.search.trim().toLowerCase();
+    if (safeQuery.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (safeQuery.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (safeQuery.status) filtered = filtered.filter((item) => item.status === safeQuery.status);
+    if (safeQuery.search?.trim()) {
+        const term = safeQuery.search.trim().toLowerCase();
         filtered = filtered.filter((item) =>
             item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
     }
@@ -268,8 +270,8 @@ describe("Commercial Catalog Plans console destination", () => {
             initialSearch: "trial",
             initialStatuses: ["draft", "active"],
             listCommercialPlans: async (query) => {
-                requested.push(query);
-                if (query.search === "trial") return successPlanList([trialListItem()]);
+                requested.push(query ?? {});
+                if (query?.search === "trial") return successPlanList([trialListItem()]);
                 return successPlanList([trialListItem(), coreListItem]);
             },
         });
@@ -474,7 +476,7 @@ describe("Commercial Catalog Plans console destination", () => {
                 status: "error",
                 data: null,
                 message: "Owner session is no longer active",
-                code: 401,
+                code: 401 as const,
             }),
             onUnauthorized: async () => { unauthorized = true; },
         });
@@ -502,7 +504,7 @@ describe("Commercial Catalog Plans console destination", () => {
                         message: "Features retrieved successfully",
                         code: 200,
                     })}
-                    listCommercialModules={async (query) => successModuleList(filterModulesByQuery([coreModuleListItem], query))}
+                    listCommercialModules={async () => successModuleList([coreModuleListItem])}
                     listCommercialPlans={async (query) => successPlanList(filterPlansByQuery([trialListItem(), coreListItem], query))}
                 />
             </QueryClientProvider>,

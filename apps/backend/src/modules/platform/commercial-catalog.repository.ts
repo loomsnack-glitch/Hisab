@@ -377,6 +377,9 @@ export const listFeatures = async (
     const statusClause = query.status === "all"
         ? sql`AND current_revisions.status <> 'discarded'`
         : sql`AND current_revisions.status = ${query.status}`;
+    const revisionStatusClause = query.status === "all"
+        ? sql``
+        : sql`WHERE r.status = ${query.status}`;
 
     const rows = await pg`
         WITH current_revisions AS (
@@ -401,6 +404,7 @@ export const listFeatures = async (
                 ) AS revision_rank
             FROM commercial_feature_revisions r
             INNER JOIN commercial_features f ON f.id = r.feature_id
+            ${revisionStatusClause}
         )
         SELECT
             current_revisions.feature_id AS id,
@@ -1006,6 +1010,9 @@ export const listModules = async (
     const statusClause = query.status === "all"
         ? sql`AND current_revisions.status <> 'discarded'`
         : sql`AND current_revisions.status = ${query.status}`;
+    const revisionStatusClause = query.status === "all"
+        ? sql``
+        : sql`WHERE r.status = ${query.status}`;
 
     const rows = await pg`
         WITH current_revisions AS (
@@ -1034,6 +1041,7 @@ export const listModules = async (
                 ) AS revision_rank
             FROM commercial_module_revisions r
             INNER JOIN commercial_modules m ON m.id = r.module_id
+            ${revisionStatusClause}
         )
         SELECT
             current_revisions.module_id AS id,
@@ -1757,6 +1765,9 @@ export const listPlans = async (
     const statusClause = query.status === "all"
         ? sql`AND current_revisions.status <> 'discarded'`
         : sql`AND current_revisions.status = ${query.status}`;
+    const revisionStatusClause = query.status === "all"
+        ? sql``
+        : sql`WHERE r.status = ${query.status}`;
 
     const rows = await pg`
         WITH current_revisions AS (
@@ -1785,6 +1796,7 @@ export const listPlans = async (
                 ) AS revision_rank
             FROM commercial_plan_revisions r
             INNER JOIN commercial_plans p ON p.id = r.plan_id
+            ${revisionStatusClause}
         )
         SELECT
             current_revisions.plan_id AS id,

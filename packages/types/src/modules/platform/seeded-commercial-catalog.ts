@@ -81,9 +81,9 @@ export const SEEDED_COMMERCIAL_MODULES = [
         key: "integrations",
         displayName: "Integrations",
         featureKeys: ["whatsapp", "google_contacts_synchronization"],
-        isSeparatelyPurchasable: true,
-        priceInr: 2999,
-        term: { count: 1, unit: "year" },
+        isSeparatelyPurchasable: false,
+        priceInr: null,
+        term: null,
     },
 ] as const satisfies readonly SeededCommercialModuleDefinition[];
 

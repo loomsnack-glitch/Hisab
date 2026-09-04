@@ -2,11 +2,11 @@ import type { CommercialCatalogRevisionStatus, CommercialFeatureListStatusFilter
 
 import { commercialCatalogRevisionStatuses } from "@/lib/commercial-catalog-url";
 
-export const commercialCatalogDefaultStatusSelection = (): Set<string> => new Set(["active"]);
+export const commercialCatalogDefaultStatusSelection = (): Set<CommercialCatalogRevisionStatus> => new Set(["active"]);
 
 export const commercialCatalogStatusSelectionFromStatuses = (
     statuses?: readonly CommercialCatalogRevisionStatus[] | null,
-): Set<string> => {
+): Set<CommercialCatalogRevisionStatus> => {
     if (!statuses?.length) return commercialCatalogDefaultStatusSelection();
     const valid = statuses.filter((status) => commercialCatalogRevisionStatuses.includes(status));
     return valid.length > 0 ? new Set(valid) : commercialCatalogDefaultStatusSelection();
@@ -28,7 +28,7 @@ export const commercialCatalogResolveInitialStatusSelection = ({
     return commercialCatalogDefaultStatusSelection();
 };
 
-export const commercialCatalogNormalizeStatusSelection = (selection: Set<string>): Set<string> =>
+export const commercialCatalogNormalizeStatusSelection = (selection: Set<string>): Set<CommercialCatalogRevisionStatus> =>
     commercialCatalogStatusSelectionFromStatuses(
         [...selection].filter((value): value is CommercialCatalogRevisionStatus =>
             commercialCatalogRevisionStatuses.includes(value as CommercialCatalogRevisionStatus)),

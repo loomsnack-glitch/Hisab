@@ -462,7 +462,7 @@ describe("Initial Commercial Catalog composition", () => {
             { key: "finance", displayName: "Finance", featureKeys: ["vendors", "purchases", "expenses", "money_account_tracking"], isSeparatelyPurchasable: false },
             { key: "kot_system", displayName: "KOT System", featureKeys: ["kot_system"], isSeparatelyPurchasable: false },
             { key: "restaurant_operations", displayName: "Restaurant Operations", featureKeys: ["kot_system", "table_management"], isSeparatelyPurchasable: false },
-            { key: "integrations", displayName: "Integrations", featureKeys: ["whatsapp", "google_contacts_synchronization"], isSeparatelyPurchasable: true },
+            { key: "integrations", displayName: "Integrations", featureKeys: ["whatsapp", "google_contacts_synchronization"], isSeparatelyPurchasable: false },
         ]);
         expect(SEEDED_COMMERCIAL_PLANS.map((planItem) => ({
             key: planItem.key,
@@ -511,9 +511,9 @@ describe("Initial Commercial Catalog composition", () => {
         expect(tableOnly).toEqual([]);
         expect(SEEDED_COMMERCIAL_PLANS.find((planItem) => planItem.key === "pro")?.moduleKeys).not.toContain("integrations");
         expect(SEEDED_COMMERCIAL_MODULES.find((moduleItem) => moduleItem.key === "integrations")).toMatchObject({
-            isSeparatelyPurchasable: true,
-            priceInr: 2999,
-            term: { count: 1, unit: "year" },
+            isSeparatelyPurchasable: false,
+            priceInr: null,
+            term: null,
         });
     });
 });

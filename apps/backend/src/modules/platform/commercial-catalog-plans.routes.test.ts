@@ -1324,7 +1324,7 @@ describe("Plan Catalog management API", () => {
             { key: "basic_catalog", displayName: "Basic Catalog", isSeparatelyPurchasable: false, priceInr: null, term: null },
             { key: "core_operations", displayName: "Core Operations", isSeparatelyPurchasable: false, priceInr: null, term: null },
             { key: "finance", displayName: "Finance", isSeparatelyPurchasable: false, priceInr: null, term: null },
-            { key: "integrations", displayName: "Integrations", isSeparatelyPurchasable: true, priceInr: 2999, term: { count: 1, unit: "year" } },
+            { key: "integrations", displayName: "Integrations", isSeparatelyPurchasable: false, priceInr: null, term: null },
             { key: "kot_system", displayName: "KOT System", isSeparatelyPurchasable: false, priceInr: null, term: null },
             { key: "restaurant_operations", displayName: "Restaurant Operations", isSeparatelyPurchasable: false, priceInr: null, term: null },
         ]);
@@ -1388,7 +1388,7 @@ describe("Plan Catalog management API", () => {
         const integrations = (await (await getModule(app, cookie, moduleByKey.integrations!.id)).json() as ServiceResponse<CommercialModuleDetailResponse>).data!.module;
         expect(kotModule.currentRevision.features.map((item) => item.key)).toEqual(["kot_system"]);
         expect(restaurant.currentRevision.features.map((item) => item.key).sort()).toEqual(["kot_system", "table_management"]);
-        expect(integrations.currentRevision.isSeparatelyPurchasable).toBe(true);
+        expect(integrations.currentRevision.isSeparatelyPurchasable).toBe(false);
         expect(integrations.referencingPlans.map((item) => item.key).sort()).toEqual(["trial"]);
         expect(restaurant.referencingPlans.map((item) => item.key).sort()).toEqual(["pro", "trial"]);
 
@@ -1401,5 +1401,31 @@ describe("Plan Catalog management API", () => {
 
         const secondList = await listFeatures(app, cookie);
         expect((await secondList.json() as ServiceResponse<CommercialFeatureListResponse>).data?.features).toHaveLength(12);
+    });
+
+    test("seeds every missing initial item when the catalog already contains custom work", async () => {
+        const { app } = await createHarness();
+        const cookie = await authCookie(app);
+
+        expect((await createFeature(app, cookie, { key: "payroll", displayName: "Payroll" })).status).toBe(201);
+
+        const featuresResponse = await listFeatures(app, cookie);
+        const modulesResponse = await listModules(app, cookie);
+        const plansResponse = await listPlans(app, cookie);
+        const features = (await featuresResponse.json() as ServiceResponse<CommercialFeatureListResponse>).data?.features ?? [];
+        const modules = (await modulesResponse.json() as ServiceResponse<CommercialModuleListResponse>).data?.modules ?? [];
+        const plans = (await plansResponse.json() as ServiceResponse<CommercialPlanListResponse>).data?.plans ?? [];
+
+        expect(features.map((item) => item.key)).toContain("payroll");
+        expect(features).toHaveLength(13);
+        expect(modules.map((item) => item.key).sort()).toEqual([
+            "basic_catalog",
+            "core_operations",
+            "finance",
+            "integrations",
+            "kot_system",
+            "restaurant_operations",
+        ]);
+        expect(plans.map((item) => item.key).sort()).toEqual(["core", "pro", "trial"]);
     });
 });

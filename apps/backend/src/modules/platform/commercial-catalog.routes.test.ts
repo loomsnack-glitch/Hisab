@@ -55,6 +55,16 @@ const currentRevisionOf = (revisions: CommercialFeatureRevisionDTO[]): Commercia
         return rank !== 0 ? rank : right.revisionNumber - left.revisionNumber;
     })[0]!;
 
+const listRevisionOf = (
+    revisions: CommercialFeatureRevisionDTO[],
+    status: CommercialFeatureListQuerySVC["status"],
+): CommercialFeatureRevisionDTO | null => {
+    const matching = status === "all"
+        ? revisions.filter((revision) => revision.status !== "discarded")
+        : revisions.filter((revision) => revision.status === status);
+    return matching.length > 0 ? currentRevisionOf(matching) : null;
+};
+
 const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
     const features: StoredFeature[] = [];
     const revisions: StoredRevision[] = [];
@@ -108,24 +118,25 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
         listFeatures: async (query: CommercialFeatureListQuerySVC): Promise<CommercialFeatureListItemDTO[]> => {
             const search = query.search?.trim().toLowerCase() ?? "";
             return features
-                .map((feature) => detailOf(feature.id))
-                .filter((detail): detail is CommercialFeatureDetailDTO => detail !== null)
-                .filter((detail) => {
-                    if (query.status === "all") return detail.currentRevision.status !== "discarded";
-                    return detail.currentRevision.status === query.status;
+                .flatMap((feature) => {
+                    const detail = detailOf(feature.id);
+                    if (!detail) return [];
+                    const currentRevision = listRevisionOf(detail.revisions, query.status);
+                    return currentRevision ? [{ detail, currentRevision }] : [];
                 })
                 .filter((detail) => {
                     if (!search) return true;
-                    return detail.key.includes(search) || detail.currentRevision.displayName.toLowerCase().includes(search);
+                    return detail.detail.key.includes(search)
+                        || detail.currentRevision.displayName.toLowerCase().includes(search);
                 })
                 .sort((left, right) =>
                     left.currentRevision.displayName.localeCompare(right.currentRevision.displayName)
-                    || left.key.localeCompare(right.key)
-                    || left.id.localeCompare(right.id)
+                    || left.detail.key.localeCompare(right.detail.key)
+                    || left.detail.id.localeCompare(right.detail.id)
                 )
                 .map((detail) => ({
-                    id: detail.id,
-                    key: detail.key,
+                    id: detail.detail.id,
+                    key: detail.detail.key,
                     currentRevisionId: detail.currentRevision.id,
                     revisionNumber: detail.currentRevision.revisionNumber,
                     status: detail.currentRevision.status,
@@ -577,6 +588,13 @@ describe("Feature Catalog management API", () => {
             description: "v1",
             createdBy: ashaActor,
         });
+
+        const activeList = await listFeatures(app, cookie, "?status=active");
+        expect((await activeList.json() as ServiceResponse<CommercialFeatureListResponse>).data?.features).toMatchObject([{
+            key: "billing",
+            revisionNumber: 1,
+            status: "active",
+        }]);
 
         const updated = await updateDraft(app, cookie, createdBody.data!.feature.id, draft.id, {
             displayName: "Billing",
