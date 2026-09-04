@@ -46,7 +46,7 @@ Not included in this phase:
 | --- | --- | --- | --- | --- |
 | 3.1 | Local Cart state | Phase 2 | Lines can be added, removed, adjusted, and displayed with immediate totals | `66479e3` |
 | 3.2 | Cart Review screen | 3.1 | Product lines, configurations, totals, and Continue to Payment are clear | `0a16c2b` |
-| 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | Pending |
+| 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | `7356c4d` |
 | 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | Pending |
 | 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | Pending |
 | 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | Pending |
@@ -146,8 +146,8 @@ Plan review result: approved for implementation.
 | --- | --- | --- |
 | 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; native/device validation remains pending |
-| 3.3 Customer picker and Walk-in | Ready to commit | Implementation and review complete; focused checks pass |
-| 3.4 Quick Customer creation | Not started | Depends on 3.3 |
+| 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
+| 3.4 Quick Customer creation | In progress | Plan approved; implementation pending |
 | 3.5 Discounts | Not started | Depends on 3.2 |
 | 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
 
@@ -305,42 +305,6 @@ Verification:
 
 3.2 status: Completed with follow-up. Implementation commit: `0a16c2b`.
 
-## 3.3 Implementation and review result
-
-Completed on 2026-09-05.
-
-- Added a Store/Device-scoped React Query boundary for server-backed active
-  Customer search by name or phone.
-- Added minimal Cart Customer context containing only ID, name, and phone;
-  switching Customer or returning to Walk-in preserves all Cart lines.
-- Added inline Cart Review Customer selection with search, loading, empty,
-  error/retry, selection, change, and clear states.
-- Kept Customer selection optional and non-blocking for Continue to Payment.
-- Added focused tests for Customer normalization, scope isolation, and Cart
-  preservation.
-
-Standards/spec review:
-
-- The picker uses the existing `getPosCustomers` POS service and does not
-  construct an ad-hoc endpoint or load an unbounded local directory.
-- Walk-in is represented by `null`; no fake Customer record or Customer data is
-  persisted in MMKV.
-- Customer selection is scoped and cannot clear or mutate Cart lines.
-- Quick Customer creation remains correctly deferred to 3.4.
-- English, Gujarati, and Hindi labels cover the Customer states and actions.
-
-Verification:
-
-- `bun run --cwd apps/mobile test` — 48 passed, 107 expectations.
-- Mobile TypeScript check — only the pre-existing missing
-  `@repo/assets/services/whatsapp.webp` declaration remains.
-- `git diff --check` — passed.
-- Android build, emulator, device, and live API checks — intentionally not run;
-  these remain user-owned validation steps.
-
-3.3 status: Ready to commit. Implementation commit reference is recorded after
-the commit gate.
-
 ## 3.3 — Customer picker and Walk-in
 
 ### Plan
@@ -411,5 +375,115 @@ existing POS Customer service/schema, and the approved Walk-in/default rule.
 The plan reuses the existing POS API, keeps Customer optional, and leaves
 Customer creation and Draft Sale persistence outside this subphase. No new
 product, API, security, or release decision is required.
+
+Plan review result: approved for implementation.
+
+## 3.3 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added a Store/Device-scoped React Query boundary for server-backed active
+  Customer search by name or phone.
+- Added minimal Cart Customer context containing only ID, name, and phone;
+  switching Customer or returning to Walk-in preserves all Cart lines.
+- Added inline Cart Review Customer selection with search, loading, empty,
+  error/retry, selection, change, and clear states.
+- Kept Customer selection optional and non-blocking for Continue to Payment.
+- Added focused tests for Customer normalization, scope isolation, and Cart
+  preservation.
+
+Standards/spec review:
+
+- The picker uses the existing `getPosCustomers` POS service and does not
+  construct an ad-hoc endpoint or load an unbounded local directory.
+- Walk-in is represented by `null`; no fake Customer record or Customer data is
+  persisted in MMKV.
+- Customer selection is scoped and cannot clear or mutate Cart lines.
+- Quick Customer creation remains correctly deferred to 3.4.
+- English, Gujarati, and Hindi labels cover the Customer states and actions.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 48 passed, 107 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- `git diff --check` — passed.
+- Android build, emulator, device, and live API checks — intentionally not run;
+  these remain user-owned validation steps.
+
+3.3 status: Completed with follow-up. Implementation commit: `7356c4d`.
+
+## 3.4 — Quick Customer creation
+
+### Plan
+
+User-facing outcome: when the needed Customer is not found, the cashier can
+create a minimal Customer with a required name and optional phone, return to the
+same Cart with that Customer selected, and keep the Cart intact if creation
+fails.
+
+Implementation scope:
+
+- Add a small mobile mutation boundary for the existing `createPosCustomer`
+  POS service.
+- Add an inline create form from the 3.3 Customer picker with required name,
+  optional phone, client-side validation, loading, success, and error states.
+- Normalize the optional phone through the shared type boundary before sending
+  it to the server; do not invent Customer fields or marketing behavior.
+- On success, select the returned Customer in the current Cart and close the
+  picker while invalidating the scoped Customer search cache.
+- On failure, keep the current Cart, entered form values, and useful error state
+  available for retry.
+- Keep Customer creation optional and secondary to Cart Review/Payment.
+- Add focused tests for create payload normalization and failure-safe local
+  state behavior where the existing seams allow.
+
+Acceptance criteria:
+
+1. A cashier can open Quick Customer creation from the Customer picker.
+2. Name is required and whitespace-only submission is rejected locally.
+3. Phone is optional but, when entered, follows the shared phone contract.
+4. A successful response selects the new Customer in the active Cart and
+   preserves every Cart line and configuration.
+5. Loading prevents duplicate create submissions and shows clear progress.
+6. A failed create keeps the Cart and form recoverable with a retry path.
+7. Customer search results are refreshed after successful creation.
+8. English, Gujarati, and Hindi labels cover the form and states.
+
+Non-goals:
+
+- Customer editing, due management, marketing preferences, or Customer
+  Directory behavior (Phase 5).
+- Draft Sale persistence or Payment changes.
+- Offline Customer creation or local-only Customer records.
+
+Dependencies and public seams:
+
+- Completed 3.3 Customer picker and scoped Cart Customer context.
+- Existing `createPosCustomer`, `CreateCustomerJSON`, and shared phone schema.
+- Existing POS React Query client and localization resources.
+
+Test strategy and expected checks:
+
+- Add pure tests for payload normalization and preserve Cart-store tests.
+- Run `bun run --cwd apps/mobile test`.
+- Run the mobile TypeScript check and separate the known WhatsApp asset error.
+- Run `git diff --check`; do not run Android builds or device commands.
+
+Risks and rollback:
+
+- The server response, not locally entered values, is the selected Customer
+  authority after creation.
+- A failed mutation must not clear Cart lines or replace the current Customer.
+- Rollback is limited to the create mutation/form and cache invalidation;
+  picker and Cart selection remain independently committed.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, `CONTEXT.md`, completed 3.3, the
+existing POS Customer service/schema, and the approved optional-Customer rule.
+The plan uses the existing create contract, keeps the form minimal, and leaves
+editing and Draft Sale behavior outside this subphase. No new product, API,
+security, or release decision is required.
 
 Plan review result: approved for implementation.
