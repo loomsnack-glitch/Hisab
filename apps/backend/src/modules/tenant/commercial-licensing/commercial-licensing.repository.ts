@@ -5,6 +5,8 @@ import type {
     CommercialAccessSourceModuleSnapshot,
     CommercialAccessSourceRecord,
     CommercialEnforcementLaunch,
+    CommercialPaymentEventRecord,
+    CommercialQuoteRecord,
     ExistingStoreRecord,
     StoreAccessGrantOrigin,
     StoreAccessGrantRecord,
@@ -16,8 +18,22 @@ import { pg } from "@/config/db";
 
 type SqlClient = typeof pg | Bun.TransactionSQL;
 
-const isUniqueViolation = (error: unknown) =>
-    typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+const isUniqueViolation = (error: unknown): boolean => {
+    if (typeof error !== "object" || error === null) {
+        return false;
+    }
+    if ("code" in error && error.code === "23505") {
+        return true;
+    }
+    // Bun's native SQL driver surfaces Postgres codes on `errno`, not `code`.
+    if ("errno" in error && error.errno === "23505") {
+        return true;
+    }
+    if ("cause" in error) {
+        return isUniqueViolation(error.cause);
+    }
+    return false;
+};
 
 type LicenseRow = {
     id: string;
@@ -35,6 +51,7 @@ type LicenseRow = {
     starts_at: string | Date;
     ends_at: string | Date;
     revoked_at: string | Date | null;
+    commercial_quote_id: string | null;
     created_by_user_id: string;
     created_at: string | Date;
 };
@@ -90,6 +107,7 @@ const toLicenseRecord = (
     startsAt: toDate(row.starts_at),
     endsAt: toDate(row.ends_at),
     revokedAt: toOptionalDate(row.revoked_at),
+    commercialQuoteId: row.commercial_quote_id,
     createdByUserId: row.created_by_user_id,
     createdAt: toDate(row.created_at),
     modules: cloneModules(modules),
@@ -162,6 +180,7 @@ const loadLicensesForStore = async (tx: SqlClient, storeId: string): Promise<Sto
             starts_at,
             ends_at,
             revoked_at,
+            commercial_quote_id,
             created_by_user_id,
             created_at
         FROM store_licenses
@@ -329,6 +348,7 @@ export const insertTrialLicense = async (input: {
                     term_unit,
                     starts_at,
                     ends_at,
+                    commercial_quote_id,
                     created_by_user_id,
                     created_at
                 ) VALUES (
@@ -346,6 +366,7 @@ export const insertTrialLicense = async (input: {
                     ${input.plan.term.unit},
                     ${input.startsAt},
                     ${input.endsAt},
+                    NULL,
                     ${input.createdByUserId},
                     ${input.now}
                 )
@@ -911,6 +932,726 @@ export const insertStoreAccessGrant = async (
     } catch (error) {
         if (isUniqueViolation(error) && grant.origin === "legacy_migration") {
             return "duplicate-legacy-migration";
+        }
+        throw error;
+    }
+};
+
+type QuoteRow = {
+    id: string;
+    organization_id: string;
+    store_id: string;
+    kind: "paid_plan";
+    plan_id: string;
+    plan_revision_id: string;
+    plan_key: string;
+    plan_display_name: string;
+    plan_type: "paid";
+    price_inr: string | number;
+    amount_inr: string | number;
+    amount_paise: number;
+    currency: "INR";
+    term_count: number;
+    term_unit: "day" | "month" | "year";
+    license_timing: "immediate" | "scheduled";
+    intended_starts_at: string | Date;
+    intended_ends_at: string | Date;
+    razorpay_order_id: string;
+    razorpay_receipt: string;
+    expires_at: string | Date;
+    fulfilled_at: string | Date | null;
+    fulfilled_license_id: string | null;
+    created_by_user_id: string;
+    created_at: string | Date;
+};
+
+type QuoteLineItemRow = {
+    quote_id: string;
+    position: number;
+    description: string;
+    amount_inr: string | number;
+};
+
+type QuoteModuleSnapshotRow = {
+    quote_id: string;
+    module_id: string;
+    module_revision_id: string;
+    module_key: string;
+    module_display_name: string;
+};
+
+type QuoteFeatureSnapshotRow = {
+    quote_id: string;
+    module_id: string;
+    feature_id: string;
+    feature_revision_id: string;
+    feature_key: string;
+    feature_display_name: string;
+};
+
+type PaymentEventRow = {
+    id: string;
+    razorpay_event_id: string;
+    event_type: string;
+    razorpay_order_id: string | null;
+    razorpay_payment_id: string | null;
+    amount_paise: number | null;
+    currency: string | null;
+    quote_id: string | null;
+    fulfillment_status: CommercialPaymentEventRecord["fulfillmentStatus"];
+    fulfillment_error: string | null;
+    payload: unknown;
+    created_at: string | Date;
+    processed_at: string | Date | null;
+};
+
+const toQuoteRecord = (
+    row: QuoteRow,
+    lineItems: CommercialQuoteRecord["lineItems"],
+    modules: CommercialAccessSourceModuleSnapshot[],
+): CommercialQuoteRecord => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    storeId: row.store_id,
+    kind: row.kind,
+    planId: row.plan_id,
+    planRevisionId: row.plan_revision_id,
+    planKey: row.plan_key,
+    planDisplayName: row.plan_display_name,
+    planType: row.plan_type,
+    priceInr: Number(row.price_inr),
+    amountInr: Number(row.amount_inr),
+    amountPaise: Number(row.amount_paise),
+    currency: row.currency,
+    term: {
+        count: Number(row.term_count),
+        unit: row.term_unit,
+    },
+    licenseTiming: row.license_timing,
+    intendedStartsAt: toDate(row.intended_starts_at),
+    intendedEndsAt: toDate(row.intended_ends_at),
+    razorpayOrderId: row.razorpay_order_id,
+    razorpayReceipt: row.razorpay_receipt,
+    expiresAt: toDate(row.expires_at),
+    fulfilledAt: toOptionalDate(row.fulfilled_at),
+    fulfilledLicenseId: row.fulfilled_license_id,
+    createdByUserId: row.created_by_user_id,
+    createdAt: toDate(row.created_at),
+    lineItems,
+    modules: cloneModules(modules),
+});
+
+const attachQuoteSnapshots = (
+    quotes: QuoteRow[],
+    lineRows: QuoteLineItemRow[],
+    moduleRows: QuoteModuleSnapshotRow[],
+    featureRows: QuoteFeatureSnapshotRow[],
+): CommercialQuoteRecord[] => {
+    const linesByQuote = new Map<string, CommercialQuoteRecord["lineItems"]>();
+    for (const row of lineRows) {
+        const lines = linesByQuote.get(row.quote_id) ?? [];
+        lines.push({
+            description: row.description,
+            amountInr: Number(row.amount_inr),
+        });
+        linesByQuote.set(row.quote_id, lines);
+    }
+
+    const featuresByModule = new Map<string, CommercialAccessSourceModuleSnapshot["features"]>();
+    for (const row of featureRows) {
+        const key = `${row.quote_id}:${row.module_id}`;
+        const features = featuresByModule.get(key) ?? [];
+        features.push({
+            featureId: row.feature_id,
+            featureRevisionId: row.feature_revision_id,
+            key: row.feature_key,
+            displayName: row.feature_display_name,
+        });
+        featuresByModule.set(key, features);
+    }
+
+    const modulesByQuote = new Map<string, CommercialAccessSourceModuleSnapshot[]>();
+    for (const row of moduleRows) {
+        const modules = modulesByQuote.get(row.quote_id) ?? [];
+        modules.push({
+            moduleId: row.module_id,
+            moduleRevisionId: row.module_revision_id,
+            key: row.module_key,
+            displayName: row.module_display_name,
+            features: featuresByModule.get(`${row.quote_id}:${row.module_id}`) ?? [],
+        });
+        modulesByQuote.set(row.quote_id, modules);
+    }
+
+    return quotes.map((row) => toQuoteRecord(
+        row,
+        linesByQuote.get(row.id) ?? [],
+        modulesByQuote.get(row.id) ?? [],
+    ));
+};
+
+const loadQuotes = async (tx: SqlClient, quotes: QuoteRow[]): Promise<CommercialQuoteRecord[]> => {
+    if (quotes.length === 0) {
+        return [];
+    }
+    const quoteIds = quotes.map((quote) => quote.id);
+    const lineRows = await tx`
+        SELECT quote_id, position, description, amount_inr
+        FROM commercial_quote_line_items
+        WHERE quote_id IN ${sql(quoteIds)}
+        ORDER BY position ASC
+    ` as QuoteLineItemRow[];
+    const moduleRows = await tx`
+        SELECT quote_id, module_id, module_revision_id, module_key, module_display_name
+        FROM commercial_quote_module_snapshots
+        WHERE quote_id IN ${sql(quoteIds)}
+        ORDER BY module_display_name ASC, module_key ASC
+    ` as QuoteModuleSnapshotRow[];
+    const featureRows = await tx`
+        SELECT quote_id, module_id, feature_id, feature_revision_id, feature_key, feature_display_name
+        FROM commercial_quote_feature_snapshots
+        WHERE quote_id IN ${sql(quoteIds)}
+        ORDER BY feature_display_name ASC, feature_key ASC
+    ` as QuoteFeatureSnapshotRow[];
+    return attachQuoteSnapshots(quotes, lineRows, moduleRows, featureRows);
+};
+
+const loadQuotesForStore = async (tx: SqlClient, storeId: string): Promise<CommercialQuoteRecord[]> => {
+    const quotes = await tx`
+        SELECT
+            id,
+            organization_id,
+            store_id,
+            kind,
+            plan_id,
+            plan_revision_id,
+            plan_key,
+            plan_display_name,
+            plan_type,
+            price_inr,
+            amount_inr,
+            amount_paise,
+            currency,
+            term_count,
+            term_unit,
+            license_timing,
+            intended_starts_at,
+            intended_ends_at,
+            razorpay_order_id,
+            razorpay_receipt,
+            expires_at,
+            fulfilled_at,
+            fulfilled_license_id,
+            created_by_user_id,
+            created_at
+        FROM commercial_quotes
+        WHERE store_id = ${storeId}
+        ORDER BY created_at DESC, id DESC
+    ` as QuoteRow[];
+    return loadQuotes(tx, quotes);
+};
+
+const toPaymentEvent = (row: PaymentEventRow): CommercialPaymentEventRecord => ({
+    id: row.id,
+    razorpayEventId: row.razorpay_event_id,
+    eventType: row.event_type,
+    razorpayOrderId: row.razorpay_order_id,
+    razorpayPaymentId: row.razorpay_payment_id,
+    amountPaise: row.amount_paise === null ? null : Number(row.amount_paise),
+    currency: row.currency,
+    quoteId: row.quote_id,
+    fulfillmentStatus: row.fulfillment_status,
+    fulfillmentError: row.fulfillment_error,
+    payload: row.payload,
+    createdAt: toDate(row.created_at),
+    processedAt: toOptionalDate(row.processed_at),
+});
+
+const writeLicenseSnapshots = async (
+    tx: SqlClient,
+    licenseId: string,
+    modules: CommercialAccessSourceModuleSnapshot[],
+) => {
+    for (const moduleItem of modules) {
+        await tx`
+            INSERT INTO store_license_module_snapshots (
+                license_id,
+                module_id,
+                module_revision_id,
+                module_key,
+                module_display_name
+            ) VALUES (
+                ${licenseId},
+                ${moduleItem.moduleId},
+                ${moduleItem.moduleRevisionId},
+                ${moduleItem.key},
+                ${moduleItem.displayName}
+            )
+        `;
+        for (const feature of moduleItem.features) {
+            await tx`
+                INSERT INTO store_license_feature_snapshots (
+                    license_id,
+                    module_id,
+                    feature_id,
+                    feature_revision_id,
+                    feature_key,
+                    feature_display_name
+                ) VALUES (
+                    ${licenseId},
+                    ${moduleItem.moduleId},
+                    ${feature.featureId},
+                    ${feature.featureRevisionId},
+                    ${feature.key},
+                    ${feature.displayName}
+                )
+            `;
+        }
+    }
+};
+
+const licensesOverlap = (left: StoreLicenseRecord, startsAt: Date, endsAt: Date) =>
+    left.revokedAt === null
+    && left.startsAt.getTime() < endsAt.getTime()
+    && startsAt.getTime() < left.endsAt.getTime();
+
+export const listCommercialQuotesForStore = async (storeId: string): Promise<CommercialQuoteRecord[]> =>
+    loadQuotesForStore(pg, storeId);
+
+export const getCommercialQuoteByRazorpayOrderId = async (
+    razorpayOrderId: string,
+): Promise<CommercialQuoteRecord | null> => {
+    const quotes = await pg`
+        SELECT
+            id,
+            organization_id,
+            store_id,
+            kind,
+            plan_id,
+            plan_revision_id,
+            plan_key,
+            plan_display_name,
+            plan_type,
+            price_inr,
+            amount_inr,
+            amount_paise,
+            currency,
+            term_count,
+            term_unit,
+            license_timing,
+            intended_starts_at,
+            intended_ends_at,
+            razorpay_order_id,
+            razorpay_receipt,
+            expires_at,
+            fulfilled_at,
+            fulfilled_license_id,
+            created_by_user_id,
+            created_at
+        FROM commercial_quotes
+        WHERE razorpay_order_id = ${razorpayOrderId}
+        LIMIT 1
+    ` as QuoteRow[];
+    const [quote] = await loadQuotes(pg, quotes);
+    return quote ?? null;
+};
+
+export const insertCommercialQuote = async (quote: CommercialQuoteRecord): Promise<CommercialQuoteRecord> =>
+    pg.begin(async (tx) => {
+        await tx`
+            INSERT INTO commercial_quotes (
+                id,
+                organization_id,
+                store_id,
+                kind,
+                plan_id,
+                plan_revision_id,
+                plan_key,
+                plan_display_name,
+                plan_type,
+                price_inr,
+                amount_inr,
+                amount_paise,
+                currency,
+                term_count,
+                term_unit,
+                license_timing,
+                intended_starts_at,
+                intended_ends_at,
+                razorpay_order_id,
+                razorpay_receipt,
+                expires_at,
+                created_by_user_id,
+                created_at
+            ) VALUES (
+                ${quote.id},
+                ${quote.organizationId},
+                ${quote.storeId},
+                ${quote.kind},
+                ${quote.planId},
+                ${quote.planRevisionId},
+                ${quote.planKey},
+                ${quote.planDisplayName},
+                ${quote.planType},
+                ${quote.priceInr},
+                ${quote.amountInr},
+                ${quote.amountPaise},
+                ${quote.currency},
+                ${quote.term.count},
+                ${quote.term.unit},
+                ${quote.licenseTiming},
+                ${quote.intendedStartsAt},
+                ${quote.intendedEndsAt},
+                ${quote.razorpayOrderId},
+                ${quote.razorpayReceipt},
+                ${quote.expiresAt},
+                ${quote.createdByUserId},
+                ${quote.createdAt}
+            )
+        `;
+
+        for (const [index, line] of quote.lineItems.entries()) {
+            await tx`
+                INSERT INTO commercial_quote_line_items (
+                    quote_id,
+                    position,
+                    description,
+                    amount_inr
+                ) VALUES (
+                    ${quote.id},
+                    ${index + 1},
+                    ${line.description},
+                    ${line.amountInr}
+                )
+            `;
+        }
+
+        for (const moduleItem of quote.modules) {
+            await tx`
+                INSERT INTO commercial_quote_module_snapshots (
+                    quote_id,
+                    module_id,
+                    module_revision_id,
+                    module_key,
+                    module_display_name
+                ) VALUES (
+                    ${quote.id},
+                    ${moduleItem.moduleId},
+                    ${moduleItem.moduleRevisionId},
+                    ${moduleItem.key},
+                    ${moduleItem.displayName}
+                )
+            `;
+            for (const feature of moduleItem.features) {
+                await tx`
+                    INSERT INTO commercial_quote_feature_snapshots (
+                        quote_id,
+                        module_id,
+                        feature_id,
+                        feature_revision_id,
+                        feature_key,
+                        feature_display_name
+                    ) VALUES (
+                        ${quote.id},
+                        ${moduleItem.moduleId},
+                        ${feature.featureId},
+                        ${feature.featureRevisionId},
+                        ${feature.key},
+                        ${feature.displayName}
+                    )
+                `;
+            }
+        }
+
+        const created = (await loadQuotesForStore(tx, quote.storeId)).find((row) => row.id === quote.id);
+        if (!created) {
+            throw new Error("Failed to load created Commercial Quote");
+        }
+        return created;
+    });
+
+export const insertPaymentEvent = async (
+    event: CommercialPaymentEventRecord,
+): Promise<{ event: CommercialPaymentEventRecord; created: boolean }> => {
+    try {
+        const [row] = await pg`
+            INSERT INTO commercial_payment_events (
+                id,
+                razorpay_event_id,
+                event_type,
+                razorpay_order_id,
+                razorpay_payment_id,
+                amount_paise,
+                currency,
+                quote_id,
+                fulfillment_status,
+                fulfillment_error,
+                payload,
+                created_at,
+                processed_at
+            ) VALUES (
+                ${event.id},
+                ${event.razorpayEventId},
+                ${event.eventType},
+                ${event.razorpayOrderId},
+                ${event.razorpayPaymentId},
+                ${event.amountPaise},
+                ${event.currency},
+                ${event.quoteId},
+                ${event.fulfillmentStatus},
+                ${event.fulfillmentError},
+                ${JSON.stringify(event.payload)}::jsonb,
+                ${event.createdAt},
+                ${event.processedAt}
+            )
+            RETURNING
+                id,
+                razorpay_event_id,
+                event_type,
+                razorpay_order_id,
+                razorpay_payment_id,
+                amount_paise,
+                currency,
+                quote_id,
+                fulfillment_status,
+                fulfillment_error,
+                payload,
+                created_at,
+                processed_at
+        ` as PaymentEventRow[];
+        if (!row) {
+            throw new Error("Failed to persist Commercial Payment Event");
+        }
+        return { event: toPaymentEvent(row), created: true };
+    } catch (error) {
+        if (!isUniqueViolation(error)) {
+            throw error;
+        }
+        const [existing] = await pg`
+            SELECT
+                id,
+                razorpay_event_id,
+                event_type,
+                razorpay_order_id,
+                razorpay_payment_id,
+                amount_paise,
+                currency,
+                quote_id,
+                fulfillment_status,
+                fulfillment_error,
+                payload,
+                created_at,
+                processed_at
+            FROM commercial_payment_events
+            WHERE razorpay_event_id = ${event.razorpayEventId}
+            LIMIT 1
+        ` as PaymentEventRow[];
+        if (!existing) {
+            throw new Error("Failed to load Commercial Payment Event");
+        }
+        return { event: toPaymentEvent(existing), created: false };
+    }
+};
+
+export const updatePaymentEventFulfillment = async (
+    eventId: string,
+    fulfillmentStatus: CommercialPaymentEventRecord["fulfillmentStatus"],
+    fulfillmentError: string | null,
+    processedAt: Date,
+    quoteId: string | null,
+): Promise<CommercialPaymentEventRecord> => {
+    const [row] = await pg`
+        UPDATE commercial_payment_events
+        SET
+            fulfillment_status = ${fulfillmentStatus},
+            fulfillment_error = ${fulfillmentError},
+            processed_at = ${processedAt},
+            quote_id = COALESCE(${quoteId}, quote_id)
+        WHERE id = ${eventId}
+        RETURNING
+            id,
+            razorpay_event_id,
+            event_type,
+            razorpay_order_id,
+            razorpay_payment_id,
+            amount_paise,
+            currency,
+            quote_id,
+            fulfillment_status,
+            fulfillment_error,
+            payload,
+            created_at,
+            processed_at
+    ` as PaymentEventRow[];
+    if (!row) {
+        throw new Error("Failed to update Commercial Payment Event");
+    }
+    return toPaymentEvent(row);
+};
+
+export const listPaymentEventsForStore = async (storeId: string): Promise<CommercialPaymentEventRecord[]> => {
+    const rows = await pg`
+        SELECT
+            events.id,
+            events.razorpay_event_id,
+            events.event_type,
+            events.razorpay_order_id,
+            events.razorpay_payment_id,
+            events.amount_paise,
+            events.currency,
+            events.quote_id,
+            events.fulfillment_status,
+            events.fulfillment_error,
+            events.payload,
+            events.created_at,
+            events.processed_at
+        FROM commercial_payment_events events
+        INNER JOIN commercial_quotes quotes ON quotes.id = events.quote_id
+        WHERE quotes.store_id = ${storeId}
+        ORDER BY events.created_at DESC, events.id DESC
+    ` as PaymentEventRow[];
+    return rows.map(toPaymentEvent);
+};
+
+export const fulfillPaidPlanQuote = async (input: {
+    licenseId: string;
+    quote: CommercialQuoteRecord;
+    now: Date;
+}): Promise<StoreLicenseRecord | "already-fulfilled" | "overlapping-license"> => {
+    try {
+        return await pg.begin(async (tx) => {
+            const lockedQuotes = await tx`
+                SELECT
+                    id,
+                    organization_id,
+                    store_id,
+                    kind,
+                    plan_id,
+                    plan_revision_id,
+                    plan_key,
+                    plan_display_name,
+                    plan_type,
+                    price_inr,
+                    amount_inr,
+                    amount_paise,
+                    currency,
+                    term_count,
+                    term_unit,
+                    license_timing,
+                    intended_starts_at,
+                    intended_ends_at,
+                    razorpay_order_id,
+                    razorpay_receipt,
+                    expires_at,
+                    fulfilled_at,
+                    fulfilled_license_id,
+                    created_by_user_id,
+                    created_at
+                FROM commercial_quotes
+                WHERE id = ${input.quote.id}
+                FOR UPDATE
+            ` as QuoteRow[];
+            const [locked] = await loadQuotes(tx, lockedQuotes);
+            if (!locked) {
+                throw new Error("Commercial Quote not found");
+            }
+            if (locked.fulfilledAt && locked.fulfilledLicenseId) {
+                const existing = (await loadLicensesForStore(tx, locked.storeId)).find(
+                    (license) => license.id === locked.fulfilledLicenseId,
+                );
+                return existing ?? "already-fulfilled";
+            }
+
+            const licenses = await tx`
+                SELECT
+                    id,
+                    organization_id,
+                    store_id,
+                    source_kind,
+                    plan_id,
+                    plan_revision_id,
+                    plan_key,
+                    plan_display_name,
+                    plan_type,
+                    price_inr,
+                    term_count,
+                    term_unit,
+                    starts_at,
+                    ends_at,
+                    revoked_at,
+                    commercial_quote_id,
+                    created_by_user_id,
+                    created_at
+                FROM store_licenses
+                WHERE store_id = ${locked.storeId}
+                FOR UPDATE
+            ` as LicenseRow[];
+            const current = attachModules(licenses, [], []);
+            if (current.some((license) => licensesOverlap(license, locked.intendedStartsAt, locked.intendedEndsAt))) {
+                return "overlapping-license";
+            }
+
+            await tx`
+                INSERT INTO store_licenses (
+                    id,
+                    organization_id,
+                    store_id,
+                    source_kind,
+                    plan_id,
+                    plan_revision_id,
+                    plan_key,
+                    plan_display_name,
+                    plan_type,
+                    price_inr,
+                    term_count,
+                    term_unit,
+                    starts_at,
+                    ends_at,
+                    commercial_quote_id,
+                    created_by_user_id,
+                    created_at
+                ) VALUES (
+                    ${input.licenseId},
+                    ${locked.organizationId},
+                    ${locked.storeId},
+                    'paid',
+                    ${locked.planId},
+                    ${locked.planRevisionId},
+                    ${locked.planKey},
+                    ${locked.planDisplayName},
+                    ${locked.planType},
+                    ${locked.priceInr},
+                    ${locked.term.count},
+                    ${locked.term.unit},
+                    ${locked.intendedStartsAt},
+                    ${locked.intendedEndsAt},
+                    ${locked.id},
+                    ${locked.createdByUserId},
+                    ${input.now}
+                )
+            `;
+            await writeLicenseSnapshots(tx, input.licenseId, locked.modules);
+            await tx`
+                UPDATE commercial_quotes
+                SET fulfilled_at = ${input.now}, fulfilled_license_id = ${input.licenseId}
+                WHERE id = ${locked.id}
+                  AND fulfilled_at IS NULL
+            `;
+
+            const created = (await loadLicensesForStore(tx, locked.storeId)).find(
+                (license) => license.id === input.licenseId,
+            );
+            if (!created) {
+                throw new Error("Failed to load fulfilled Store License");
+            }
+            return created;
+        });
+    } catch (error) {
+        if (isUniqueViolation(error)) {
+            const existing = (await listStoreLicenses(input.quote.storeId)).find(
+                (license) => license.commercialQuoteId === input.quote.id,
+            );
+            return existing ?? "already-fulfilled";
         }
         throw error;
     }

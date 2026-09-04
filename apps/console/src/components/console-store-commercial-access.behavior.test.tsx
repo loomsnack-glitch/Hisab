@@ -29,6 +29,9 @@ const emptyInspection: ConsoleStoreCommercialInspectionResponse = {
         scheduledSuccessor: null,
         accessGrants: [],
         activeAddOns: [],
+        availablePaidPlans: [],
+        pendingCheckout: null,
+        commercialHistory: [],
         trial: {
             eligible: true,
             message: "This Store can start the standard Trial Plan once.",

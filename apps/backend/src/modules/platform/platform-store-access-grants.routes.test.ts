@@ -137,7 +137,7 @@ describe("Console Store Access Grant routes", () => {
         const createdBody = await readJson(created);
 
         expect(inspection.status).toBe(200);
-        expect(body.data?.grantableAccess?.plans.map((plan) => plan.key).sort()).toEqual(["core", "trial"]);
+        expect(body.data?.grantableAccess?.plans.map((plan) => plan.key).sort()).toEqual(["core", "pro", "trial"]);
         expect(created.status).toBe(201);
         expect(createdBody.message).toBe("Store Access Grant created successfully");
         expect(createdBody.data?.commercialStatus?.accessGrants).toEqual([

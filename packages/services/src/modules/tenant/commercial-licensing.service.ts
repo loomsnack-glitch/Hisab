@@ -1,6 +1,8 @@
 import type {
     ConsoleStoreCommercialInspectionResponse,
+    CreatePaidPlanCheckoutJSON,
     CreateStoreAccessGrantJSON,
+    PaidPlanCheckoutResponse,
     ServiceResponse,
     StartStoreTrialResponse,
     StoreCommercialStatusResponse,
@@ -28,6 +30,22 @@ export const startStoreTrial = async (
     try {
         const response = await api.post(
             `/organizations/${organizationId}/stores/${storeId}/commercial/trial`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const createPaidPlanCheckout = async (
+    organizationId: string,
+    storeId: string,
+    data: CreatePaidPlanCheckoutJSON,
+): Promise<ServiceResponse<PaidPlanCheckoutResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/stores/${storeId}/commercial/checkout`,
+            data,
         );
         return response.data;
     } catch (error) {

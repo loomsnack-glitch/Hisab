@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    CreatePaidPlanCheckoutSchema,
     CreateStoreAccessGrantSchema,
+    CommercialQuoteDTOSchema,
+    COMMERCIAL_QUOTE_TTL_MS,
+    inrToPaise,
     StoreAccessGrantDTOSchema,
     StoreCommercialStatusDTOSchema,
     storeAccessGrantLabel,
@@ -17,6 +21,9 @@ describe("Store commercial status contract", () => {
             scheduledSuccessor: null,
             accessGrants: [],
             activeAddOns: [],
+            availablePaidPlans: [],
+            pendingCheckout: null,
+            commercialHistory: [],
             trial: {
                 eligible: true,
                 message: "This Store can start the standard Trial Plan once.",
@@ -30,6 +37,9 @@ describe("Store commercial status contract", () => {
         expect(parsed.trial.eligible).toBe(true);
         expect(parsed.baseAccess).toBeNull();
         expect(parsed.activeAddOns).toEqual([]);
+        expect(parsed.availablePaidPlans).toEqual([]);
+        expect(parsed.pendingCheckout).toBeNull();
+        expect(parsed.commercialHistory).toEqual([]);
         expect(parsed.accessGrants).toEqual([]);
     });
 
@@ -113,5 +123,37 @@ describe("Create Store Access Grant contract", () => {
             selection: { kind: "all_current_modules" },
             term: { count: 30, unit: "day" },
         }).success).toBe(false);
+    });
+});
+
+describe("Paid Plan checkout contract", () => {
+    test("quotes a GST-inclusive paise amount and a 30-minute expiry", () => {
+        expect(inrToPaise(2999)).toBe(299900);
+        expect(COMMERCIAL_QUOTE_TTL_MS).toBe(30 * 60 * 1000);
+        expect(CreatePaidPlanCheckoutSchema.parse({ planKey: "core" }).planKey).toBe("core");
+        expect(CreatePaidPlanCheckoutSchema.safeParse({ planKey: "core", amountInr: 1 }).success).toBe(false);
+
+        const parsed = CommercialQuoteDTOSchema.parse({
+            id: "00000000-0000-4000-8000-000000000201",
+            kind: "paid_plan",
+            status: "open",
+            planKey: "core",
+            planDisplayName: "Core",
+            planType: "paid",
+            priceInr: 2999,
+            amountInr: 2999,
+            amountPaise: 299900,
+            currency: "INR",
+            term: { count: 1, unit: "year" },
+            licenseTiming: "immediate",
+            intendedStartsAt: "2026-09-04T15:00:00.000Z",
+            intendedEndsAt: "2027-09-04T15:00:00.000Z",
+            expiresAt: "2026-09-04T15:30:00.000Z",
+            razorpayOrderId: "order_test_core",
+            lineItems: [{ description: "Core Plan", amountInr: 2999 }],
+            fulfilledAt: null,
+        });
+        expect(parsed.amountPaise).toBe(299900);
+        expect(parsed.licenseTiming).toBe("immediate");
     });
 });

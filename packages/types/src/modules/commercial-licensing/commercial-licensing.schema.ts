@@ -117,6 +117,80 @@ export const GrantableCommercialAccessDTOSchema = z.object({
     modules: z.array(GrantableModuleDTOSchema),
 });
 
+export const COMMERCIAL_QUOTE_TTL_MS = 30 * 60 * 1000;
+export const COMMERCIAL_QUOTE_CURRENCY = "INR" as const;
+
+export const inrToPaise = (amountInr: number): number => Math.round(amountInr * 100);
+
+export const CommercialQuoteKindSchema = z.literal("paid_plan");
+export const CommercialQuoteStatusSchema = z.enum(["open", "expired", "fulfilled"]);
+export const CommercialQuoteLicenseTimingSchema = z.enum(["immediate", "scheduled"]);
+export const CommercialHistoryEntryKindSchema = z.enum(["quote", "payment", "license"]);
+export const CommercialPaymentEventFulfillmentStatusSchema = z.enum([
+    "received",
+    "fulfilled",
+    "ignored",
+    "mismatched",
+    "failed",
+]);
+
+export const CommercialQuoteLineItemDTOSchema = z.object({
+    description: z.string().min(1),
+    amountInr: z.number(),
+});
+
+export const CommercialQuoteDTOSchema = z.object({
+    id: z.uuid("Invalid Commercial Quote id"),
+    kind: CommercialQuoteKindSchema,
+    status: CommercialQuoteStatusSchema,
+    planKey: CommercialCatalogKeySchema,
+    planDisplayName: CommercialCatalogDisplayNameSchema,
+    planType: z.literal("paid"),
+    priceInr: z.number(),
+    amountInr: z.number(),
+    amountPaise: z.number().int().nonnegative(),
+    currency: z.literal(COMMERCIAL_QUOTE_CURRENCY),
+    term: CommercialCatalogTermSchema,
+    licenseTiming: CommercialQuoteLicenseTimingSchema,
+    intendedStartsAt: dtoDateSchema,
+    intendedEndsAt: dtoDateSchema,
+    expiresAt: dtoDateSchema,
+    razorpayOrderId: z.string().min(1),
+    lineItems: z.array(CommercialQuoteLineItemDTOSchema).min(1),
+    fulfilledAt: dtoDateSchema.nullable(),
+});
+
+export const PurchasablePaidPlanDTOSchema = z.object({
+    key: CommercialCatalogKeySchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    priceInr: z.number(),
+    term: CommercialCatalogTermSchema,
+    licenseTiming: CommercialQuoteLicenseTimingSchema,
+    intendedStartsAt: dtoDateSchema,
+    intendedEndsAt: dtoDateSchema,
+});
+
+export const CommercialHistoryEntryDTOSchema = z.object({
+    kind: CommercialHistoryEntryKindSchema,
+    id: z.string().min(1),
+    occurredAt: dtoDateSchema,
+    title: z.string().min(1),
+    detail: z.string().min(1),
+    amountInr: z.number().nullable(),
+    status: z.string().min(1),
+});
+
+export const CreatePaidPlanCheckoutSchema = z.object({
+    planKey: CommercialCatalogKeySchema,
+}).strict();
+
+export const RazorpayCheckoutBootstrapDTOSchema = z.object({
+    keyId: z.string().min(1),
+    orderId: z.string().min(1),
+    amountPaise: z.number().int().positive(),
+    currency: z.literal(COMMERCIAL_QUOTE_CURRENCY),
+});
+
 export const StoreCommercialStatusDTOSchema = z.object({
     storeId: z.uuid("Invalid store id"),
     organizationId: z.uuid("Invalid organization id"),
@@ -125,6 +199,9 @@ export const StoreCommercialStatusDTOSchema = z.object({
     scheduledSuccessor: StoreLicenseBaseAccessDTOSchema.nullable(),
     accessGrants: z.array(StoreAccessGrantDTOSchema),
     activeAddOns: z.array(z.never()),
+    availablePaidPlans: z.array(PurchasablePaidPlanDTOSchema),
+    pendingCheckout: CommercialQuoteDTOSchema.nullable(),
+    commercialHistory: z.array(CommercialHistoryEntryDTOSchema),
     trial: StoreTrialAvailabilityDTOSchema,
     entitlements: StoreFeatureEntitlementDTOSchema,
 });
@@ -134,6 +211,12 @@ export const StoreCommercialStatusResponseSchema = z.object({
 });
 
 export const StartStoreTrialResponseSchema = StoreCommercialStatusResponseSchema;
+
+export const PaidPlanCheckoutResponseSchema = z.object({
+    quote: CommercialQuoteDTOSchema,
+    checkout: RazorpayCheckoutBootstrapDTOSchema,
+    commercialStatus: StoreCommercialStatusDTOSchema,
+});
 
 export const ConsoleStoreCommercialInspectionResponseSchema = z.object({
     commercialStatus: StoreCommercialStatusDTOSchema,

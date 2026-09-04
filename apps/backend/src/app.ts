@@ -21,6 +21,7 @@ import moneyAccountsRoutes from './modules/tenant/money-accounts/money-accounts.
 import purchasesRoutes from './modules/tenant/purchases/purchases.routes';
 import expensesRoutes from './modules/tenant/expenses/expenses.routes';
 import commercialLicensingRoutes from './modules/tenant/commercial-licensing/commercial-licensing.routes';
+import { createRazorpayWebhookRoutes } from './modules/tenant/commercial-licensing/razorpay-webhook.routes';
 import googleContactsInternalRoutes from './modules/tenant/google-contacts/google-contacts.internal-routes';
 import publicInvoiceRoutes from './modules/tenant/whatsapp/public-invoice.routes';
 
@@ -90,5 +91,6 @@ app.route('/organizations', commercialLicensingRoutes);
 app.route('/internal/google-contacts', googleContactsInternalRoutes);
 app.route('/public/whatsapp', publicInvoiceRoutes);
 app.route('/webhooks/whatsapp', whatsappCloudWebhookRoutes);
+app.route('/webhooks/razorpay', createRazorpayWebhookRoutes());
 
 export default app

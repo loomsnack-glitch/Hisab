@@ -3,13 +3,24 @@ import type { CommercialCatalogTerm, CommercialPlanType } from "../platform/comm
 import type {
     CommercialAccessSourceKindSchema,
     CommercialFeatureEntitlementEvidenceDTOSchema,
+    CommercialHistoryEntryDTOSchema,
+    CommercialPaymentEventFulfillmentStatusSchema,
+    CommercialQuoteDTOSchema,
+    CommercialQuoteKindSchema,
+    CommercialQuoteLicenseTimingSchema,
+    CommercialQuoteLineItemDTOSchema,
+    CommercialQuoteStatusSchema,
     ConsoleStoreCommercialInspectionResponseSchema,
+    CreatePaidPlanCheckoutSchema,
     CreateStoreAccessGrantSchema,
     EntitledFeatureDTOSchema,
     FeatureEntitlementDecisionDTOSchema,
     GrantableCommercialAccessDTOSchema,
     GrantableModuleDTOSchema,
     GrantablePlanDTOSchema,
+    PaidPlanCheckoutResponseSchema,
+    PurchasablePaidPlanDTOSchema,
+    RazorpayCheckoutBootstrapDTOSchema,
     StartStoreTrialResponseSchema,
     StoreAccessGrantDTOSchema,
     StoreAccessGrantModuleDTOSchema,
@@ -38,6 +49,20 @@ export type StoreTrialAvailabilityDTO = z.infer<typeof StoreTrialAvailabilityDTO
 export type StoreCommercialStatusDTO = z.infer<typeof StoreCommercialStatusDTOSchema>;
 export type StoreCommercialStatusResponse = z.infer<typeof StoreCommercialStatusResponseSchema>;
 export type StartStoreTrialResponse = z.infer<typeof StartStoreTrialResponseSchema>;
+export type CommercialQuoteKind = z.infer<typeof CommercialQuoteKindSchema>;
+export type CommercialQuoteStatus = z.infer<typeof CommercialQuoteStatusSchema>;
+export type CommercialQuoteLicenseTiming = z.infer<typeof CommercialQuoteLicenseTimingSchema>;
+export type CommercialQuoteLineItemDTO = z.infer<typeof CommercialQuoteLineItemDTOSchema>;
+export type CommercialQuoteDTO = z.infer<typeof CommercialQuoteDTOSchema>;
+export type PurchasablePaidPlanDTO = z.infer<typeof PurchasablePaidPlanDTOSchema>;
+export type CommercialHistoryEntryDTO = z.infer<typeof CommercialHistoryEntryDTOSchema>;
+export type CommercialPaymentEventFulfillmentStatus = z.infer<
+    typeof CommercialPaymentEventFulfillmentStatusSchema
+>;
+export type CreatePaidPlanCheckoutJSON = z.input<typeof CreatePaidPlanCheckoutSchema>;
+export type CreatePaidPlanCheckoutSVC = z.output<typeof CreatePaidPlanCheckoutSchema>;
+export type RazorpayCheckoutBootstrapDTO = z.infer<typeof RazorpayCheckoutBootstrapDTOSchema>;
+export type PaidPlanCheckoutResponse = z.infer<typeof PaidPlanCheckoutResponseSchema>;
 export type StoreAccessGrantOrigin = z.infer<typeof StoreAccessGrantOriginSchema>;
 export type StoreAccessGrantTermKind = z.infer<typeof StoreAccessGrantTermKindSchema>;
 export type StoreAccessGrantSelectionKind = z.infer<typeof StoreAccessGrantSelectionKindSchema>;
@@ -144,7 +169,58 @@ export type StoreLicenseRecord = {
     startsAt: Date;
     endsAt: Date;
     revokedAt: Date | null;
+    commercialQuoteId: string | null;
     createdByUserId: string;
     createdAt: Date;
     modules: CommercialAccessSourceModuleSnapshot[];
+};
+
+export type CommercialQuoteLineItemRecord = {
+    description: string;
+    amountInr: number;
+};
+
+export type CommercialQuoteRecord = {
+    id: string;
+    organizationId: string;
+    storeId: string;
+    kind: CommercialQuoteKind;
+    planId: string;
+    planRevisionId: string;
+    planKey: string;
+    planDisplayName: string;
+    planType: "paid";
+    priceInr: number;
+    amountInr: number;
+    amountPaise: number;
+    currency: "INR";
+    term: CommercialCatalogTerm;
+    licenseTiming: CommercialQuoteLicenseTiming;
+    intendedStartsAt: Date;
+    intendedEndsAt: Date;
+    razorpayOrderId: string;
+    razorpayReceipt: string;
+    expiresAt: Date;
+    fulfilledAt: Date | null;
+    fulfilledLicenseId: string | null;
+    createdByUserId: string;
+    createdAt: Date;
+    lineItems: CommercialQuoteLineItemRecord[];
+    modules: CommercialAccessSourceModuleSnapshot[];
+};
+
+export type CommercialPaymentEventRecord = {
+    id: string;
+    razorpayEventId: string;
+    eventType: string;
+    razorpayOrderId: string | null;
+    razorpayPaymentId: string | null;
+    amountPaise: number | null;
+    currency: string | null;
+    quoteId: string | null;
+    fulfillmentStatus: CommercialPaymentEventFulfillmentStatus;
+    fulfillmentError: string | null;
+    payload: unknown;
+    createdAt: Date;
+    processedAt: Date | null;
 };

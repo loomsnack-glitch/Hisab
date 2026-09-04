@@ -3,7 +3,7 @@ import { getDeviceId, setDeviceId } from "@/helpers/deviceId.helper";
 
 export const deviceMiddleware = async (c: Context, next: () => Promise<void>) => {
     const pathname = new URL(c.req.url).pathname.replace(/\/+$/, "");
-    if (pathname.endsWith("/webhooks/whatsapp")) {
+    if (pathname.endsWith("/webhooks/whatsapp") || pathname.endsWith("/webhooks/razorpay")) {
         await next();
         return;
     }

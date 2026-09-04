@@ -1,6 +1,9 @@
 import {
     addCommercialTerm,
+    COMMERCIAL_QUOTE_CURRENCY,
+    COMMERCIAL_QUOTE_TTL_MS,
     COMMERCIAL_TERM_TIMEZONE,
+    inrToPaise,
     isCommercialAccessSourceActiveAt,
     LEGACY_MIGRATION_GRANT_TERM,
     SEVEN_DAY_GRANT_TERM,
@@ -12,9 +15,16 @@ import {
     type CommercialAccessSourceModuleSnapshot,
     type CommercialAccessSourceRecord,
     type CommercialCatalogTerm,
+    type CommercialHistoryEntryDTO,
+    type CommercialQuoteDTO,
+    type CommercialQuoteRecord,
+    type CommercialQuoteStatus,
     type ConsoleStoreCommercialInspectionResponse,
+    type CreatePaidPlanCheckoutSVC,
     type CreateStoreAccessGrantSVC,
     type GrantableCommercialAccessDTO,
+    type PaidPlanCheckoutResponse,
+    type PurchasablePaidPlanDTO,
     type ServiceResponse,
     type StoreAccessGrantDTO,
     type StoreAccessGrantRecord,
@@ -30,6 +40,11 @@ import {
     createFeatureEntitlementService,
     type FeatureEntitlementService,
 } from "./feature-entitlement.service";
+import {
+    createRazorpayPaymentProvider,
+    RazorpayAdapterError,
+    type RazorpayPaymentProvider,
+} from "./razorpay.adapter";
 
 type OrganizationLookup = {
     getOrganizationByIdForUser: (
@@ -57,12 +72,20 @@ type CommercialLicensingRepository = Pick<
     | "getOrCreateEnforcementLaunch"
     | "insertTrialLicense"
     | "insertStoreAccessGrant"
+    | "listCommercialQuotesForStore"
+    | "getCommercialQuoteByRazorpayOrderId"
+    | "insertCommercialQuote"
+    | "insertPaymentEvent"
+    | "updatePaymentEventFulfillment"
+    | "listPaymentEventsForStore"
+    | "fulfillPaidPlanQuote"
 >;
 
 export type CommercialLicensingDependencies = {
     organization: OrganizationLookup;
     repository: CommercialLicensingRepository;
     featureEntitlement: FeatureEntitlementService;
+    razorpay: RazorpayPaymentProvider;
     createId: () => string;
     now: () => Date;
 };
@@ -72,6 +95,17 @@ export type CommercialLicensingService = ReturnType<typeof createCommercialLicen
 export type LegacyStoreMigrationGrantResult = {
     grantedStoreCount: number;
     launchedAt: Date;
+};
+
+export type IngestRazorpayWebhookInput = {
+    razorpayEventId: string;
+    eventType: string;
+    payload: unknown;
+    orderId: string | null;
+    paymentId: string | null;
+    amountPaise: number | null;
+    currency: string | null;
+    paidAt: Date | null;
 };
 
 const organizationNotFound = (): ServiceResponse<null> => ({
@@ -114,6 +148,27 @@ const catalogUnavailableToGrant = (): ServiceResponse<null> => ({
     message: "That Plan or Module is not currently available to grant.",
     data: null,
     code: STATUS_CODES.CONFLICT,
+});
+
+const paidPlanUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "That paid Plan is not currently available.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
+const paidCheckoutUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Store cannot start a new paid Plan checkout right now.",
+    data: null,
+    code: STATUS_CODES.CONFLICT,
+});
+
+const checkoutUnavailable = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "Payment checkout is temporarily unavailable.",
+    data: null,
+    code: STATUS_CODES.SERVICE_UNAVAILABLE,
 });
 
 const invalidCustomRange = (): ServiceResponse<null> => ({
@@ -198,6 +253,126 @@ const snapshotPlan = (plan: ActiveTrialPlanSnapshot): ActiveTrialPlanSnapshot =>
     term: { ...plan.term },
     modules: snapshotModules(plan.modules),
 });
+
+const snapshotPaidPlan = (plan: ActivePlanSnapshot): ActivePlanSnapshot => ({
+    ...plan,
+    term: { ...plan.term },
+    modules: snapshotModules(plan.modules),
+});
+
+const quoteStatusAt = (quote: CommercialQuoteRecord, at: Date): CommercialQuoteStatus => {
+    if (quote.fulfilledAt) {
+        return "fulfilled";
+    }
+    if (at.getTime() >= quote.expiresAt.getTime()) {
+        return "expired";
+    }
+    return "open";
+};
+
+const toQuoteDto = (quote: CommercialQuoteRecord, at: Date): CommercialQuoteDTO => ({
+    id: quote.id,
+    kind: quote.kind,
+    status: quoteStatusAt(quote, at),
+    planKey: quote.planKey,
+    planDisplayName: quote.planDisplayName,
+    planType: "paid",
+    priceInr: quote.priceInr,
+    amountInr: quote.amountInr,
+    amountPaise: quote.amountPaise,
+    currency: quote.currency,
+    term: { ...quote.term },
+    licenseTiming: quote.licenseTiming,
+    intendedStartsAt: quote.intendedStartsAt,
+    intendedEndsAt: quote.intendedEndsAt,
+    expiresAt: quote.expiresAt,
+    razorpayOrderId: quote.razorpayOrderId,
+    lineItems: quote.lineItems.map((line) => ({ ...line })),
+    fulfilledAt: quote.fulfilledAt,
+});
+
+const canStartPaidPlanCheckout = (licenses: StoreLicenseRecord[], at: Date) => {
+    const hasActivePaid = licenses.some((license) =>
+        license.sourceKind === "paid"
+        && isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
+    );
+    const hasScheduled = licenses.some((license) => licenseStatusAt(license, at) === "scheduled");
+    return !hasActivePaid && !hasScheduled;
+};
+
+const paidPlanTiming = (licenses: StoreLicenseRecord[], at: Date, term: CommercialCatalogTerm) => {
+    const activeBase = licenses.find((license) =>
+        isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
+    ) ?? null;
+    if (activeBase) {
+        return {
+            licenseTiming: "scheduled" as const,
+            intendedStartsAt: activeBase.endsAt,
+            intendedEndsAt: addCommercialTerm(activeBase.endsAt, term),
+        };
+    }
+    return {
+        licenseTiming: "immediate" as const,
+        intendedStartsAt: at,
+        intendedEndsAt: addCommercialTerm(at, term),
+    };
+};
+
+const toPurchasablePlan = (
+    plan: ActivePlanSnapshot,
+    licenses: StoreLicenseRecord[],
+    at: Date,
+): PurchasablePaidPlanDTO => {
+    const timing = paidPlanTiming(licenses, at, plan.term);
+    return {
+        key: plan.key,
+        displayName: plan.displayName,
+        priceInr: plan.priceInr,
+        term: { ...plan.term },
+        ...timing,
+    };
+};
+
+const formatInr = (amount: number) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
+
+const buildCommercialHistory = (
+    licenses: StoreLicenseRecord[],
+    quotes: CommercialQuoteRecord[],
+    events: Awaited<ReturnType<CommercialLicensingRepository["listPaymentEventsForStore"]>>,
+    at: Date,
+): CommercialHistoryEntryDTO[] => {
+    const entries: CommercialHistoryEntryDTO[] = [
+        ...quotes.map((quote) => ({
+            kind: "quote" as const,
+            id: quote.id,
+            occurredAt: quote.createdAt,
+            title: `Commercial Quote for ${quote.planDisplayName}`,
+            detail: `${formatInr(quote.amountInr)} GST-inclusive · ${quote.licenseTiming === "scheduled" ? "Scheduled Store License" : "Term Purchase"}`,
+            amountInr: quote.amountInr,
+            status: quoteStatusAt(quote, at),
+        })),
+        ...events.map((event) => ({
+            kind: "payment" as const,
+            id: event.id,
+            occurredAt: event.createdAt,
+            title: "Verified Subscription Payment",
+            detail: `${event.eventType}${event.razorpayOrderId ? ` · ${event.razorpayOrderId}` : ""}`,
+            amountInr: event.amountPaise === null ? null : event.amountPaise / 100,
+            status: event.fulfillmentStatus,
+        })),
+        ...licenses.filter((license) => license.sourceKind === "paid").map((license) => ({
+            kind: "license" as const,
+            id: license.id,
+            occurredAt: license.createdAt,
+            title: `${licenseStatusAt(license, at) === "scheduled" ? "Scheduled Store License" : "Store License"} · ${license.planDisplayName}`,
+            detail: `${formatInr(license.priceInr)} · ${license.planKey}`,
+            amountInr: license.priceInr,
+            status: licenseStatusAt(license, at),
+        })),
+    ];
+    return entries.sort((left, right) => toDate(right.occurredAt).getTime() - toDate(left.occurredAt).getTime());
+};
 
 const toGrantDto = (grant: StoreAccessGrantRecord, at: Date): StoreAccessGrantDTO => ({
     id: grant.id,
@@ -284,10 +459,13 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         storeId: string,
         at: Date,
     ): Promise<StoreCommercialStatusDTO> => {
-        const [licenses, grants, trialPlan] = await Promise.all([
+        const [licenses, grants, trialPlan, paidPlans, quotes, paymentEvents] = await Promise.all([
             dependencies.repository.listStoreLicenses(storeId),
             dependencies.repository.listAccessGrantsForStore(storeId),
             dependencies.repository.getActiveTrialPlanSnapshot(),
+            dependencies.repository.listActivePlanSnapshots(),
+            dependencies.repository.listCommercialQuotesForStore(storeId),
+            dependencies.repository.listPaymentEventsForStore(storeId),
         ]);
         const entitlements = await dependencies.featureEntitlement.resolveStoreFeatureEntitlement(
             storeId,
@@ -297,6 +475,8 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             isCommercialAccessSourceActiveAt(toLicenseAccessSource(license), at),
         ) ?? null;
         const scheduledSuccessor = licenses.find((license) => licenseStatusAt(license, at) === "scheduled") ?? null;
+        const checkoutEligible = canStartPaidPlanCheckout(licenses, at);
+        const pendingCheckout = quotes.find((quote) => quoteStatusAt(quote, at) === "open") ?? null;
 
         return {
             storeId,
@@ -306,6 +486,14 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             scheduledSuccessor: scheduledSuccessor ? toBaseAccess(scheduledSuccessor, at) : null,
             accessGrants: grants.map((grant) => toGrantDto(grant, at)),
             activeAddOns: [],
+            availablePaidPlans: checkoutEligible
+                ? paidPlans
+                    .filter((plan) => plan.planType === "paid")
+                    .map((plan) => toPurchasablePlan(plan, licenses, at))
+                : [],
+            pendingCheckout:
+                checkoutEligible && pendingCheckout ? toQuoteDto(pendingCheckout, at) : null,
+            commercialHistory: buildCommercialHistory(licenses, quotes, paymentEvents, at),
             trial: trialAvailability(licenses, trialPlan !== null),
             entitlements,
         };
@@ -564,12 +752,222 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         };
     };
 
+    const createPaidPlanCheckout = async (
+        userId: string,
+        organizationId: string,
+        storeId: string,
+        input: CreatePaidPlanCheckoutSVC,
+    ): Promise<ServiceResponse<PaidPlanCheckoutResponse | null>> => {
+        const authorized = await authorizeStore(userId, organizationId, storeId);
+        if (!authorized.ok) {
+            return authorized.response;
+        }
+
+        const now = dependencies.now();
+        const [licenses, plan] = await Promise.all([
+            dependencies.repository.listStoreLicenses(storeId),
+            dependencies.repository.getActivePlanSnapshotByKey(input.planKey),
+        ]);
+        if (!plan || plan.planType !== "paid") {
+            return paidPlanUnavailable();
+        }
+        if (!canStartPaidPlanCheckout(licenses, now)) {
+            return paidCheckoutUnavailable();
+        }
+
+        const snapshot = snapshotPaidPlan(plan);
+        const timing = paidPlanTiming(licenses, now, snapshot.term);
+        const amountPaise = inrToPaise(snapshot.priceInr);
+        const quoteId = dependencies.createId();
+        let order;
+        try {
+            order = await dependencies.razorpay.createOrder({
+                amountPaise,
+                currency: COMMERCIAL_QUOTE_CURRENCY,
+                receipt: quoteId,
+                notes: {
+                    quote_id: quoteId,
+                    store_id: storeId,
+                    plan_key: snapshot.key,
+                },
+            });
+        } catch (error) {
+            if (error instanceof RazorpayAdapterError && error.code === "missing_configuration") {
+                return checkoutUnavailable();
+            }
+            return checkoutUnavailable();
+        }
+
+        const quote: CommercialQuoteRecord = {
+            id: quoteId,
+            organizationId,
+            storeId,
+            kind: "paid_plan",
+            planId: snapshot.planId,
+            planRevisionId: snapshot.planRevisionId,
+            planKey: snapshot.key,
+            planDisplayName: snapshot.displayName,
+            planType: "paid",
+            priceInr: snapshot.priceInr,
+            amountInr: snapshot.priceInr,
+            amountPaise,
+            currency: COMMERCIAL_QUOTE_CURRENCY,
+            term: { ...snapshot.term },
+            licenseTiming: timing.licenseTiming,
+            intendedStartsAt: timing.intendedStartsAt,
+            intendedEndsAt: timing.intendedEndsAt,
+            razorpayOrderId: order.id,
+            razorpayReceipt: order.receipt,
+            expiresAt: new Date(now.getTime() + COMMERCIAL_QUOTE_TTL_MS),
+            fulfilledAt: null,
+            fulfilledLicenseId: null,
+            createdByUserId: userId,
+            createdAt: now,
+            lineItems: [{ description: `${snapshot.displayName} Plan`, amountInr: snapshot.priceInr }],
+            modules: snapshot.modules,
+        };
+        const stored = await dependencies.repository.insertCommercialQuote(quote);
+        const commercialStatus = await buildStatus(organizationId, storeId, now);
+
+        return {
+            status: "success",
+            message: "Commercial Quote created successfully",
+            data: {
+                quote: toQuoteDto(stored, now),
+                checkout: {
+                    keyId: dependencies.razorpay.getPublicKeyId(),
+                    orderId: stored.razorpayOrderId,
+                    amountPaise: stored.amountPaise,
+                    currency: stored.currency,
+                },
+                commercialStatus,
+            },
+            code: STATUS_CODES.CREATED,
+        };
+    };
+
+    const ingestRazorpayWebhook = async (input: IngestRazorpayWebhookInput): Promise<ServiceResponse<{
+        accepted: true;
+        fulfillmentStatus: string;
+    }>> => {
+        const now = dependencies.now();
+        const quote = input.orderId
+            ? await dependencies.repository.getCommercialQuoteByRazorpayOrderId(input.orderId)
+            : null;
+        const inserted = await dependencies.repository.insertPaymentEvent({
+            id: dependencies.createId(),
+            razorpayEventId: input.razorpayEventId,
+            eventType: input.eventType,
+            razorpayOrderId: input.orderId,
+            razorpayPaymentId: input.paymentId,
+            amountPaise: input.amountPaise,
+            currency: input.currency,
+            quoteId: quote?.id ?? null,
+            fulfillmentStatus: "received",
+            fulfillmentError: null,
+            payload: input.payload,
+            createdAt: now,
+            processedAt: null,
+        });
+
+        const finish = async (
+            fulfillmentStatus: "fulfilled" | "ignored" | "mismatched" | "failed",
+            fulfillmentError: string | null,
+        ) => {
+            const event = inserted.created || inserted.event.fulfillmentStatus === "received"
+                || inserted.event.fulfillmentStatus === "failed"
+                ? await dependencies.repository.updatePaymentEventFulfillment(
+                    inserted.event.id,
+                    fulfillmentStatus,
+                    fulfillmentError,
+                    now,
+                    quote?.id ?? null,
+                )
+                : inserted.event;
+            return {
+                status: "success" as const,
+                message: "Commercial Payment Event accepted",
+                data: {
+                    accepted: true as const,
+                    fulfillmentStatus: event.fulfillmentStatus,
+                },
+                code: STATUS_CODES.SUCCESS,
+            };
+        };
+
+        if (!inserted.created && (inserted.event.fulfillmentStatus === "fulfilled"
+            || inserted.event.fulfillmentStatus === "ignored"
+            || inserted.event.fulfillmentStatus === "mismatched")) {
+            return {
+                status: "success",
+                message: "Commercial Payment Event accepted",
+                data: {
+                    accepted: true,
+                    fulfillmentStatus: inserted.event.fulfillmentStatus,
+                },
+                code: STATUS_CODES.SUCCESS,
+            };
+        }
+
+        if (input.eventType !== "order.paid") {
+            return finish("ignored", "Only order.paid events fulfil a Commercial Quote");
+        }
+        if (!quote) {
+            return finish("mismatched", "Unknown Razorpay Order");
+        }
+        if (
+            input.orderId !== quote.razorpayOrderId
+            || input.amountPaise !== quote.amountPaise
+            || (input.currency ?? "").toUpperCase() !== quote.currency
+        ) {
+            return finish("mismatched", "Paid Order does not match the Commercial Quote");
+        }
+        const paidAt = input.paidAt ?? now;
+        if (paidAt.getTime() >= quote.expiresAt.getTime()) {
+            return finish("mismatched", "Expired Commercial Quote");
+        }
+
+        try {
+            const fulfilled = await dependencies.repository.fulfillPaidPlanQuote({
+                licenseId: dependencies.createId(),
+                quote,
+                now,
+            });
+            if (fulfilled === "overlapping-license") {
+                return finish("mismatched", "This Store already has overlapping commercial access");
+            }
+            if (fulfilled === "already-fulfilled") {
+                return finish("fulfilled", null);
+            }
+            return finish("fulfilled", null);
+        } catch {
+            await dependencies.repository.updatePaymentEventFulfillment(
+                inserted.event.id,
+                "failed",
+                "Fulfilment failed and is safe to retry",
+                now,
+                quote.id,
+            );
+            return {
+                status: "error",
+                message: "Commercial Payment Event fulfilment failed",
+                data: {
+                    accepted: true,
+                    fulfillmentStatus: "failed",
+                },
+                code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+            };
+        }
+    };
+
     return {
         getStoreCommercialStatus,
         inspectStoreCommercialStatusForPlatform,
         startStandardTrial,
         applyLegacyStoreMigrationGrants,
         createStoreAccessGrant,
+        createPaidPlanCheckout,
+        ingestRazorpayWebhook,
         resolveStoreFeatureEntitlement: dependencies.featureEntitlement.resolveStoreFeatureEntitlement,
         resolveFeatureEntitlement: dependencies.featureEntitlement.resolveFeatureEntitlement,
     };
@@ -583,6 +981,7 @@ const defaultDependencies = (): CommercialLicensingDependencies => {
         featureEntitlement: createFeatureEntitlementService({
             listAccessSources: repository.listAccessSourcesForStore,
         }),
+        razorpay: createRazorpayPaymentProvider(),
         createId: () => crypto.randomUUID(),
         now: () => new Date(),
     };

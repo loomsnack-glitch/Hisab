@@ -4,12 +4,15 @@ import type {
     CommercialAccessSourceModuleSnapshot,
     CommercialAccessSourceRecord,
     CommercialEnforcementLaunch,
+    CommercialPaymentEventRecord,
+    CommercialQuoteRecord,
     ExistingStoreRecord,
     StoreAccessGrantRecord,
     StoreLicenseRecord,
 } from "@repo/types";
 import { createFeatureEntitlementService } from "./feature-entitlement.service";
 import { createCommercialLicensingService } from "./commercial-licensing.service";
+import type { RazorpayOrder, RazorpayPaymentProvider } from "./razorpay.adapter";
 
 export const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 export const outsiderId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -22,6 +25,9 @@ export const ownerUserId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 export const trialStart = new Date("2026-09-04T15:00:00.000Z");
 export const trialEnd = new Date("2026-09-11T15:00:00.000Z");
 export const migrationEnd = new Date("2026-10-04T15:00:00.000Z");
+export const coreEnd = new Date("2027-09-04T15:00:00.000Z");
+export const scheduledCoreEnd = new Date("2027-09-11T15:00:00.000Z");
+export const quoteExpiresAt = new Date("2026-09-04T15:30:00.000Z");
 export const storeCreatedAt = new Date("2026-08-01T10:00:00.000Z");
 
 export const billingFeature = {
@@ -111,6 +117,27 @@ export const createPaidPlanSnapshot = (
     };
 };
 
+export const createProPlanSnapshot = (
+    overrides: Partial<ActivePlanSnapshot> = {},
+): ActivePlanSnapshot => {
+    const base: ActivePlanSnapshot = {
+        planId: "ffff3333-1111-4111-8111-111111111111",
+        planRevisionId: "ffff3333-2222-4222-8222-222222222222",
+        key: "pro",
+        displayName: "Pro",
+        planType: "paid",
+        priceInr: 4999,
+        term: { count: 1, unit: "year" },
+        modules: cloneModules([coreOperationsModule, integrationsModule]),
+    };
+    return {
+        ...base,
+        ...overrides,
+        term: overrides.term ?? { ...base.term },
+        modules: cloneModules(overrides.modules ?? base.modules),
+    };
+};
+
 type MemoryStore = ExistingStoreRecord;
 
 type MemoryState = {
@@ -123,6 +150,8 @@ type MemoryState = {
     grants: StoreAccessGrantRecord[];
     extraAccessSources: CommercialAccessSourceRecord[];
     enforcementLaunch: CommercialEnforcementLaunch | null;
+    quotes: CommercialQuoteRecord[];
+    paymentEvents: CommercialPaymentEventRecord[];
 };
 
 const toLicenseAccessSource = (license: StoreLicenseRecord): CommercialAccessSourceRecord => ({
@@ -175,21 +204,39 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
             { id: outsiderStoreId, organizationId: otherOrganizationId, createdAt: storeCreatedAt },
         ],
         trialPlan,
-        activePlans: [trialPlan, corePlan],
+        activePlans: [trialPlan, corePlan, createProPlanSnapshot()],
         activeModules: cloneModules([coreOperationsModule, integrationsModule]),
         licenses: [],
         grants: [],
         extraAccessSources: [],
         enforcementLaunch: null,
+        quotes: [],
+        paymentEvents: [],
     };
 
     let currentTime = now;
     let nextId = 1;
+    let nextOrder = 1;
+    const razorpay: RazorpayPaymentProvider = {
+        getPublicKeyId: () => "rzp_test_harness",
+        createOrder: async (input) => {
+            const order: RazorpayOrder = {
+                id: `order_test_${String(nextOrder++).padStart(3, "0")}`,
+                amount: input.amountPaise,
+                currency: input.currency,
+                receipt: input.receipt,
+                status: "created",
+            };
+            return order;
+        },
+    };
 
     const repository = {
         getActiveTrialPlanSnapshot: async () => {
             const plan = state.activePlans.find((item) => item.planType === "trial") ?? state.trialPlan;
-            return plan && plan.planType === "trial" ? createTrialPlanSnapshot(plan) : null;
+            return plan && plan.planType === "trial"
+                ? createTrialPlanSnapshot({ ...plan, planType: "trial" })
+                : null;
         },
         getActivePlanSnapshotByKey: async (planKey: string) => {
             const plan = state.activePlans.find((item) => item.key === planKey) ?? null;
@@ -273,6 +320,7 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
                 startsAt: input.startsAt,
                 endsAt: input.endsAt,
                 revokedAt: null,
+                commercialQuoteId: null,
                 createdByUserId: input.createdByUserId,
                 createdAt: input.now,
                 modules: cloneModules(input.plan.modules),
@@ -296,6 +344,123 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
             }
             state.grants.push(cloneGrant(grant));
             return cloneGrant(grant);
+        },
+        listCommercialQuotesForStore: async (targetStoreId: string) =>
+            state.quotes.filter((quote) => quote.storeId === targetStoreId).map((quote) => ({
+                ...quote,
+                term: { ...quote.term },
+                lineItems: quote.lineItems.map((line) => ({ ...line })),
+                modules: cloneModules(quote.modules),
+            })),
+        getCommercialQuoteByRazorpayOrderId: async (razorpayOrderId: string) => {
+            const quote = state.quotes.find((item) => item.razorpayOrderId === razorpayOrderId) ?? null;
+            return quote
+                ? {
+                    ...quote,
+                    term: { ...quote.term },
+                    lineItems: quote.lineItems.map((line) => ({ ...line })),
+                    modules: cloneModules(quote.modules),
+                }
+                : null;
+        },
+        insertCommercialQuote: async (quote: CommercialQuoteRecord) => {
+            const stored = {
+                ...quote,
+                term: { ...quote.term },
+                lineItems: quote.lineItems.map((line) => ({ ...line })),
+                modules: cloneModules(quote.modules),
+            };
+            state.quotes.unshift(stored);
+            return {
+                ...stored,
+                term: { ...stored.term },
+                lineItems: stored.lineItems.map((line) => ({ ...line })),
+                modules: cloneModules(stored.modules),
+            };
+        },
+        insertPaymentEvent: async (event: CommercialPaymentEventRecord) => {
+            const existing = state.paymentEvents.find((item) => item.razorpayEventId === event.razorpayEventId);
+            if (existing) {
+                return { event: { ...existing }, created: false };
+            }
+            const stored = { ...event };
+            state.paymentEvents.unshift(stored);
+            return { event: { ...stored }, created: true };
+        },
+        updatePaymentEventFulfillment: async (
+            eventId: string,
+            fulfillmentStatus: CommercialPaymentEventRecord["fulfillmentStatus"],
+            fulfillmentError: string | null,
+            processedAt: Date,
+            quoteId: string | null,
+        ) => {
+            const event = state.paymentEvents.find((item) => item.id === eventId);
+            if (!event) {
+                throw new Error("Failed to update Commercial Payment Event");
+            }
+            event.fulfillmentStatus = fulfillmentStatus;
+            event.fulfillmentError = fulfillmentError;
+            event.processedAt = processedAt;
+            event.quoteId = quoteId ?? event.quoteId;
+            return { ...event };
+        },
+        listPaymentEventsForStore: async (targetStoreId: string) =>
+            state.paymentEvents
+                .filter((event) => state.quotes.some(
+                    (quote) => quote.id === event.quoteId && quote.storeId === targetStoreId,
+                ))
+                .map((event) => ({ ...event })),
+        fulfillPaidPlanQuote: async (input: {
+            licenseId: string;
+            quote: CommercialQuoteRecord;
+            now: Date;
+        }) => {
+            const quote = state.quotes.find((item) => item.id === input.quote.id);
+            if (!quote) {
+                throw new Error("Commercial Quote not found");
+            }
+            if (quote.fulfilledAt && quote.fulfilledLicenseId) {
+                const existing = state.licenses.find((license) => license.id === quote.fulfilledLicenseId);
+                return existing
+                    ? { ...existing, term: { ...existing.term }, modules: cloneModules(existing.modules) }
+                    : "already-fulfilled" as const;
+            }
+            if (state.licenses.some((license) =>
+                license.storeId === quote.storeId
+                && license.revokedAt === null
+                && license.startsAt.getTime() < quote.intendedEndsAt.getTime()
+                && quote.intendedStartsAt.getTime() < license.endsAt.getTime(),
+            )) {
+                return "overlapping-license" as const;
+            }
+            const created: StoreLicenseRecord = {
+                id: input.licenseId,
+                organizationId: quote.organizationId,
+                storeId: quote.storeId,
+                sourceKind: "paid",
+                planId: quote.planId,
+                planRevisionId: quote.planRevisionId,
+                planKey: quote.planKey,
+                planDisplayName: quote.planDisplayName,
+                planType: quote.planType,
+                priceInr: quote.priceInr,
+                term: { ...quote.term },
+                startsAt: quote.intendedStartsAt,
+                endsAt: quote.intendedEndsAt,
+                revokedAt: null,
+                commercialQuoteId: quote.id,
+                createdByUserId: quote.createdByUserId,
+                createdAt: input.now,
+                modules: cloneModules(quote.modules),
+            };
+            state.licenses.push(created);
+            quote.fulfilledAt = input.now;
+            quote.fulfilledLicenseId = created.id;
+            return {
+                ...created,
+                term: { ...created.term },
+                modules: cloneModules(created.modules),
+            };
         },
     };
 
@@ -327,6 +492,7 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         },
         repository,
         featureEntitlement,
+        razorpay,
         createId: () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
         now: () => currentTime,
     });
@@ -335,6 +501,7 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         state,
         repository,
         featureEntitlement,
+        razorpay,
         service,
         setNow: (value: Date) => {
             currentTime = value;

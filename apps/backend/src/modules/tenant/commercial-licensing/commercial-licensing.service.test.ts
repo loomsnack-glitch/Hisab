@@ -14,6 +14,9 @@ import {
     trialEnd,
     trialStart,
     migrationEnd,
+    coreEnd,
+    scheduledCoreEnd,
+    quoteExpiresAt,
     userId,
 } from "./commercial-licensing.test-harness";
 
@@ -238,7 +241,7 @@ describe("Console Store Access Grants", () => {
         );
 
         expect(inspection.status).toBe("success");
-        expect(inspection.data?.grantableAccess.plans.map((plan) => plan.key).sort()).toEqual(["core", "trial"]);
+        expect(inspection.data?.grantableAccess.plans.map((plan) => plan.key).sort()).toEqual(["core", "pro", "trial"]);
         expect(inspection.data?.grantableAccess.modules.map((moduleItem) => moduleItem.key).sort())
             .toEqual(["core_operations", "integrations"]);
         expect(granted.status).toBe("success");
@@ -374,5 +377,234 @@ describe("Console Store Access Grants", () => {
         expect(missing.message).toBe("That Plan or Module is not currently available to grant.");
         expect(invalidRange.code).toBe(STATUS_CODES.BAD_REQUEST);
         expect(invalidRange.message).toBe("A custom-range Store Access Grant must end after it starts.");
+    });
+});
+
+describe("Paid Plan checkout and verified fulfilment", () => {
+    test("creates an immutable GST-inclusive Quote and server Razorpay Order without granting access", async () => {
+        const memory = createMemoryCommercialLicensing();
+
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const billing = await memory.service.resolveFeatureEntitlement(storeId, "billing", trialStart);
+
+        expect(checkout.status).toBe("success");
+        expect(checkout.code).toBe(STATUS_CODES.CREATED);
+        expect(checkout.data?.quote).toEqual(expect.objectContaining({
+            kind: "paid_plan",
+            status: "open",
+            planKey: "core",
+            amountInr: 2999,
+            amountPaise: 299900,
+            currency: "INR",
+            licenseTiming: "immediate",
+            intendedStartsAt: trialStart,
+            intendedEndsAt: coreEnd,
+            expiresAt: quoteExpiresAt,
+            razorpayOrderId: "order_test_001",
+            fulfilledAt: null,
+        }));
+        expect(checkout.data?.checkout).toEqual({
+            keyId: "rzp_test_harness",
+            orderId: "order_test_001",
+            amountPaise: 299900,
+            currency: "INR",
+        });
+        expect(status.data?.commercialStatus.baseAccess).toBeNull();
+        expect(status.data?.commercialStatus.pendingCheckout?.id).toBe(checkout.data?.quote.id);
+        expect(status.data?.commercialStatus.availablePaidPlans.map((plan) => plan.key).sort())
+            .toEqual(["core", "pro"]);
+        expect(billing.entitled).toBe(false);
+    });
+
+    test("schedules a paid Plan purchased during an active Trial to start at trial end", async () => {
+        const memory = createMemoryCommercialLicensing();
+        await memory.service.startStandardTrial(userId, organizationId, storeId);
+
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_order_paid_1",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: checkout.data?.checkout.orderId ?? null,
+            paymentId: "pay_test_1",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const duringTrial = await memory.service.resolveFeatureEntitlement(storeId, "billing", trialStart);
+        memory.setNow(trialEnd);
+        const afterTrial = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(checkout.data?.quote.licenseTiming).toBe("scheduled");
+        expect(checkout.data?.quote.intendedStartsAt).toEqual(trialEnd);
+        expect(checkout.data?.quote.intendedEndsAt).toEqual(scheduledCoreEnd);
+        expect(paid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(status.data?.commercialStatus.baseAccess?.planKey).toBe("trial");
+        expect(status.data?.commercialStatus.scheduledSuccessor).toEqual(expect.objectContaining({
+            planKey: "core",
+            status: "scheduled",
+            startsAt: trialEnd,
+            endsAt: scheduledCoreEnd,
+        }));
+        expect(duringTrial.entitled).toBe(true);
+        expect(status.data?.commercialStatus.entitlements.features.map((feature) => feature.key).sort())
+            .toEqual(["billing", "reports", "whatsapp"]);
+        expect(afterTrial.data?.commercialStatus.baseAccess).toEqual(expect.objectContaining({
+            planKey: "core",
+            status: "active",
+        }));
+        expect(afterTrial.data?.commercialStatus.scheduledSuccessor).toBeNull();
+    });
+
+    test("fulfils only a matching unexpired order.paid webhook and ignores payment.captured", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const checkout = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const orderId = checkout.data?.checkout.orderId ?? "";
+
+        const captured = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_captured_1",
+            eventType: "payment.captured",
+            payload: { event: "payment.captured" },
+            orderId,
+            paymentId: "pay_test_1",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const beforePaid = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+        const paid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_order_paid_1",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId,
+            paymentId: "pay_test_1",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const replay = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_order_paid_1",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId,
+            paymentId: "pay_test_1",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(captured.data?.fulfillmentStatus).toBe("ignored");
+        expect(beforePaid.data?.commercialStatus.baseAccess).toBeNull();
+        expect(paid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(replay.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(status.data?.commercialStatus.baseAccess).toEqual(expect.objectContaining({
+            planKey: "core",
+            planType: "paid",
+            status: "active",
+            startsAt: trialStart,
+            endsAt: coreEnd,
+        }));
+        expect(status.data?.commercialStatus.pendingCheckout).toBeNull();
+        expect(status.data?.commercialStatus.commercialHistory.some((entry) => entry.kind === "payment")).toBe(true);
+        expect(memory.state.licenses.filter((license) => license.sourceKind === "paid")).toHaveLength(1);
+    });
+
+    test("does not grant access for expired, mismatched, or overlapping Quote payments", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const first = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+        const second = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "pro",
+        });
+        const expiredQuote = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "core",
+        });
+
+        const wrongAmount = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_wrong_amount",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: first.data?.checkout.orderId ?? null,
+            paymentId: "pay_wrong",
+            amountPaise: 1,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const firstPaid = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_first_paid",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: first.data?.checkout.orderId ?? null,
+            paymentId: "pay_first",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const overlapping = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_pro_paid",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: second.data?.checkout.orderId ?? null,
+            paymentId: "pay_pro",
+            amountPaise: 499900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const late = await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_expired",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: expiredQuote.data?.checkout.orderId ?? null,
+            paymentId: "pay_late",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: quoteExpiresAt,
+        });
+        memory.setNow(quoteExpiresAt);
+        const expiredStatus = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(wrongAmount.data?.fulfillmentStatus).toBe("mismatched");
+        expect(firstPaid.data?.fulfillmentStatus).toBe("fulfilled");
+        expect(overlapping.data?.fulfillmentStatus).toBe("mismatched");
+        expect(late.data?.fulfillmentStatus).toBe("mismatched");
+        expect(expiredStatus.data?.commercialStatus.baseAccess?.planKey).toBe("core");
+        expect(expiredStatus.data?.commercialStatus.pendingCheckout).toBeNull();
+        expect(memory.state.licenses.filter((license) => license.sourceKind === "paid")).toHaveLength(1);
+    });
+
+    test("rejects a paid Plan checkout that is not currently eligible", async () => {
+        const memory = createMemoryCommercialLicensing();
+        const trialPlan = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "trial",
+        });
+        await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, { planKey: "core" });
+        await memory.service.ingestRazorpayWebhook({
+            razorpayEventId: "evt_core",
+            eventType: "order.paid",
+            payload: { event: "order.paid" },
+            orderId: "order_test_001",
+            paymentId: "pay_core",
+            amountPaise: 299900,
+            currency: "INR",
+            paidAt: trialStart,
+        });
+        const afterPaid = await memory.service.createPaidPlanCheckout(userId, organizationId, storeId, {
+            planKey: "pro",
+        });
+
+        expect(trialPlan.code).toBe(STATUS_CODES.CONFLICT);
+        expect(trialPlan.message).toBe("That paid Plan is not currently available.");
+        expect(afterPaid.code).toBe(STATUS_CODES.CONFLICT);
+        expect(afterPaid.message).toBe("This Store cannot start a new paid Plan checkout right now.");
     });
 });

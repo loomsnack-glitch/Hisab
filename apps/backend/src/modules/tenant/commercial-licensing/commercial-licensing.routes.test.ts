@@ -47,7 +47,7 @@ const createApp = (user = userId) => {
 };
 
 describe("Store commercial licensing routes", () => {
-    test("rejects unauthenticated commercial status and trial start", async () => {
+    test("rejects unauthenticated commercial status, trial start, and paid checkout", async () => {
         const { unauthenticated } = createApp();
 
         const status = await unauthenticated.request(
@@ -57,9 +57,18 @@ describe("Store commercial licensing routes", () => {
             `http://localhost/${organizationId}/stores/${storeId}/commercial/trial`,
             { method: "POST" },
         );
+        const checkout = await unauthenticated.request(
+            `http://localhost/${organizationId}/stores/${storeId}/commercial/checkout`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ planKey: "core" }),
+            },
+        );
 
         expect(status.status).toBe(401);
         expect(trial.status).toBe(401);
+        expect(checkout.status).toBe(401);
         expect((await readJson(status)).message).toBe("Authentication is required");
     });
 
@@ -137,5 +146,38 @@ describe("Store commercial licensing routes", () => {
 
         expect(response.status).toBe(STATUS_CODES.BAD_REQUEST);
         expect((await readJson(response)).message).toBe("Invalid store id");
+    });
+
+    test("creates a paid Plan Quote through the Organization administrator route without granting access", async () => {
+        const { routes, memory } = createApp();
+
+        const response = await routes.request(
+            `http://localhost/${organizationId}/stores/${storeId}/commercial/checkout`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ planKey: "core" }),
+            },
+        );
+        const body = await response.json() as {
+            message?: string;
+            data?: {
+                quote?: { planKey: string; amountPaise: number; status: string };
+                checkout?: { orderId: string; keyId: string };
+                commercialStatus?: { baseAccess: unknown; pendingCheckout: { planKey: string } | null };
+            };
+        };
+
+        expect(response.status).toBe(201);
+        expect(body.message).toBe("Commercial Quote created successfully");
+        expect(body.data?.quote?.planKey).toBe("core");
+        expect(body.data?.quote?.amountPaise).toBe(299900);
+        expect(body.data?.quote?.status).toBe("open");
+        expect(body.data?.checkout?.orderId).toBe("order_test_001");
+        expect(body.data?.commercialStatus?.baseAccess).toBeNull();
+        expect(body.data?.commercialStatus?.pendingCheckout?.planKey).toBe("core");
+        expect(JSON.stringify(body)).not.toContain("rzp_test_secret");
+        expect(JSON.stringify(body)).not.toContain("webhook");
+        expect(memory.state.licenses).toHaveLength(0);
     });
 });
