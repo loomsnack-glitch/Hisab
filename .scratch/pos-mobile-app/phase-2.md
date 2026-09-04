@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 2 Execution Plan and Review Log
 
-Status: Phase 2 in progress; subphase 2.4 completed with native follow-up
+Status: Phase 2 in progress; subphase 2.5 in progress
 Phase: 2 — Catalog and Product selection
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -46,7 +46,7 @@ Not included in this phase:
 | 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
 | 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | `2ed696e` |
 | 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | `640010b` |
-| 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | pending |
+| 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | in progress |
 
 ## Shared Phase 2 decisions
 
@@ -589,3 +589,106 @@ Verification:
   MMKV persistence and physical-device behavior remain user validation items.
 
 2.4 status: Completed with native follow-up. Focused commit: `640010b`.
+
+## 2.5 — Combos and Add-ons
+
+### Plan
+
+User-facing outcome: a cashier can configure supported Products before adding
+them to Cart. Ordinary Products remain one-tap additions, while combo choices
+and Product Add-ons are collected only when the active Catalog requires them.
+
+Implementation scope:
+
+- Add mobile query boundaries for the existing device-scoped
+  `getPosComboProducts()` and `getPosProductAddOnAttachments()` services.
+- Scope configuration query keys by Organization, Store, and Device and keep
+  configuration server data in TanStack Query rather than MMKV.
+- Display only relevant active Add-ons for the selected Product and only the
+  choice groups/options belonging to the selected Combo.
+- Enforce each Add-on selection cap and each Combo group's minimum, maximum,
+  and option maximum quantities before enabling Add to Cart.
+- Preserve configuration as Product/choice/Add-on IDs and quantities in the
+  mobile Cart item. Store no copied names or prices in local configuration.
+- Merge repeated additions only when Product ID and configuration are equal;
+  different configurations remain separate Cart lines.
+- Allow the same configuration flow from manual Product cards and barcode
+  resolution, while keeping Recent recording after a successful Cart add.
+- Keep bundle Products visibly unavailable for configuration because the
+  current POS API exposes no bundle-detail read contract; record that gap for
+  a later API decision instead of guessing component behavior.
+
+Acceptance criteria:
+
+1. Configuration data loads through existing device-scoped POS services with
+   loading, empty, error, and retry states.
+2. Ordinary `single` Products without Add-ons remain one-tap additions.
+3. A `single` Product with active Add-ons opens only its relevant Add-ons and
+   respects each selection cap.
+4. A Combo opens only its active choice groups/options and enforces all group
+   selection limits and option maximum quantities.
+5. Confirm is disabled until required Combo selections are valid.
+6. A confirmed configuration is preserved in Cart data as IDs and quantities;
+   same configuration increments quantity and different configurations create
+   separate lines.
+7. Cancel, configuration errors, and missing configuration data do not add a
+   partial or unconfigured Product.
+8. English, Gujarati, and Hindi labels cover configuration actions and states.
+9. Pure tests cover configuration validity, selection caps, stable signatures,
+   and configured-line merge behavior.
+
+Non-goals:
+
+- New backend endpoints, bundle-detail API design, or Catalog administration.
+- Persisting configuration in MMKV, Draft Sale persistence, Cart editing, or
+  checkout totals.
+- Client-side price calculation as billing authority; server prices remain
+  authoritative for later Draft Sale and Sale requests.
+- Configuring unsupported bundle Products until a POS bundle read contract is
+  approved and implemented.
+
+Public seams and effects:
+
+- A mobile-owned configuration hook consumes existing POS combo and Add-on
+  service contracts.
+- A pure configuration boundary owns limits, normalization, signatures, and
+  Cart-line equality; the screen only presents and collects choices.
+- The Cart handoff carries IDs and quantities needed by the later Phase 3/4
+  Draft Sale mapping without persisting server snapshots.
+
+Test and verification plan:
+
+- Pure tests for active relevant options, selection-limit validation, Add-on
+  caps, configuration signatures, and same/different configured-line merges.
+- Mobile focused test suite.
+- Mobile TypeScript check, separating the known WhatsApp asset baseline.
+- `git diff --check` and staged-scope review.
+- No Android build, emulator, or device command in this environment.
+
+Risks and rollback:
+
+- If the Cart merges configured lines by Product ID only, different choices
+  can be lost; configuration signatures must be part of line equality.
+- If inactive attachments/options are shown, unavailable choices can be sold;
+  filter them before rendering.
+- A partial configuration must never enter Cart.
+- Bundle support remains explicitly blocked by the missing POS read contract;
+  this subphase can be rolled back without changing backend behavior.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, the completed 2.1–2.4 boundaries,
+the existing POS service/routes/types, and the web POS configuration behavior.
+
+- Existing `/pos/combos` and `/pos/product-add-on-attachments` contracts are
+  sufficient for supported combo and Product Add-on configuration.
+- The mobile Cart must retain IDs/quantities, not display snapshots, so Phase 3
+  can map the data into the shared Sale/Draft Sale input contract.
+- Stable configuration equality is required before extending the current
+  Product-ID-only Cart merge behavior.
+- Bundle details are not available under the current POS API; leaving them
+  disabled is safer and keeps the missing API as a named follow-up.
+- No new product, security, or release decision is required; bundle API design
+  remains a later human decision if bundle billing is required on mobile.
+
+Plan review result: approved for implementation within the supported API scope.
