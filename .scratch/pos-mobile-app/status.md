@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 1 completed with follow-ups
+Status: Phase 2 in progress
 
 Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), and the Phase 1 execution record is in [phase-1.md](./phase-1.md). Phase 1 implementation is in progress.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), and the Phase 2 execution record is in [phase-2.md](./phase-2.md). Phase 2 implementation is in progress.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Completed with follow-ups | Phase 1.1–1.8 POS foundation is implemented; native/device validation and later feature screens remain. |
+| Mobile POS implementation | Phase 2 in progress | Phase 1.1–1.8 POS foundation is implemented; Phase 2 Catalog and Product selection is now active. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -112,7 +112,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 2.1 Catalog query and cache | Not started | Store-scoped Product and Category data loads with retry states. |
+| 2.1 Catalog query and cache | Completed with follow-up | Product/Category queries, Store/Device-scoped cache keys, and recoverable New Sale states are implemented; native/API validation remains pending. |
 | 2.2 Product search and Categories | Not started | Products can be browsed and added directly to Cart. |
 | 2.3 Camera barcode scanning | Not started | Android camera scan, permission, unknown-barcode, and fallback states work. |
 | 2.4 Recent and Pinned Products | Not started | Local convenience actions do not replace server Catalog authority. |
