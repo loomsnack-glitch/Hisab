@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 2 completed with follow-up
+Status: Phase 3 in progress
 
 Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), and the Phase 2 execution record is in [phase-2.md](./phase-2.md). Phase 2 implementation is complete with native/API follow-up.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), and the Phase 3 execution record is in [phase-3.md](./phase-3.md). Phase 3.1 Local Cart state is in progress.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 2 completed with follow-up | Phase 1.1–1.8 foundation and Phase 2.1–2.5 Catalog/Product selection are implemented; native/device/API validation remains pending. |
+| Mobile POS implementation | Phase 3 in progress | Phase 1.1–1.8 foundation and Phase 2.1–2.5 Catalog/Product selection are implemented; Phase 3.1 Local Cart state is active. Native/device/API validation remains pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -116,13 +116,13 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | 2.2 Product search and Categories | Completed with follow-up | Product search, Category filtering, ordinary Product add-to-Cart, and immediate Cart handoff are implemented; native/API validation remains pending. |
 | 2.3 Camera barcode scanning | Completed with follow-up | Camera flow, exact server-list resolution, cooldown, translated outcomes, and manual fallback are implemented in `2ed696e`; native/device validation remains pending. |
 | 2.4 Recent and Pinned Products | Completed with follow-up | ID-only MMKV convenience state, Recent/Pinned filters, current-Catalog resolution, and scoped persistence are implemented in `640010b`; native/storage validation remains pending. |
-| 2.5 Combos and Add-ons | In progress | Plan reviewed; supported Combo/Add-on configuration and Cart preservation are next; bundle detail remains an API follow-up. |
+| 2.5 Combos and Add-ons | Completed with follow-up | Supported Combo/Add-on configuration, Cart preservation, and review fixes are committed; bundle detail and native/API validation remain follow-ups. |
 
 ### Phase 3 — Cart and Draft Sale
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 3.1 Local Cart state | Not started | Add, remove, quantity, and immediate display totals work locally. |
+| 3.1 Local Cart state | In progress | Plan approved; add, remove, quantity, and immediate display totals are being implemented. |
 | 3.2 Cart Review screen | Not started | Product lines, totals, and Continue to Payment work. |
 | 3.3 Customer picker and Walk-in | Not started | Walk-in default and optional name/phone selection work. |
 | 3.4 Quick Customer creation | Not started | Name/phone creation returns to the active Cart safely. |
