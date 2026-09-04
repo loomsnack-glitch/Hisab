@@ -1,5 +1,6 @@
 import * as Keychain from "react-native-keychain";
 import { createMMKV, type MMKV } from "react-native-mmkv";
+import * as Crypto from "expo-crypto";
 import type { DeviceSessionDTO } from "@repo/types";
 import { configureAuthTokenStorage, configureDeviceIdProvider } from "@repo/services";
 import {
@@ -27,11 +28,7 @@ export const POS_PREFERENCE_KEYS = {
 } as const;
 
 export const createEncryptionKey = () => {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return `${crypto.randomUUID()}-${crypto.randomUUID()}-${crypto.randomUUID()}`;
-    }
-
-    throw new Error("A secure random source is required to create the MMKV encryption key");
+    return Crypto.randomUUID().replaceAll("-", "");
 };
 
 const getOrCreateEncryptionKey = async () => {
@@ -74,11 +71,7 @@ const preferencesStorage = createMMKV({ id: PREFERENCES_STORAGE_ID });
 const convenienceStorage = createMMKV({ id: CONVENIENCE_STORAGE_ID });
 
 const createDeviceId = () => {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-    }
-
-    throw new Error("A secure random source is required to create the device id");
+    return Crypto.randomUUID();
 };
 
 const getSessionValueStore = async (): Promise<KeyValueStore> => getSessionStorage();

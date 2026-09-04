@@ -48,9 +48,10 @@ const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
             dispatch({ type: "LOGOUT_COMPLETED" });
             Alert.alert(tCommon("loggedOutTitle"), tCommon("loggedOutMessage"));
         },
-        onError: (error: { message?: string }) => {
-            dispatch({ type: "LOGOUT_FAILED", message: error.message ?? tCommon("genericError") });
-            Alert.alert(tCommon("logoutFailedTitle"), error.message ?? tCommon("genericError"));
+        onError: () => {
+            const message = tCommon("genericError");
+            dispatch({ type: "LOGOUT_FAILED", message });
+            Alert.alert(tCommon("logoutFailedTitle"), message);
         },
     });
 

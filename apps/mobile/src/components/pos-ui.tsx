@@ -92,14 +92,21 @@ export const PosCard = ({ children }: { children: ReactNode }) => (
 );
 
 const statusToneClasses: Record<PosStatusTone, string> = {
-    neutral: "border-pos-border bg-pos-surface-muted text-pos-muted dark:border-pos-border-dark dark:bg-pos-surface-muted-dark dark:text-pos-muted-dark",
-    success: "border-pos-success/20 bg-pos-success/10 text-pos-success dark:border-pos-success-dark/20 dark:bg-pos-success-dark/10 dark:text-pos-success-dark",
-    warning: "border-pos-warning/20 bg-pos-warning/10 text-pos-warning dark:border-pos-warning-dark/20 dark:bg-pos-warning-dark/10 dark:text-pos-warning-dark",
-    danger: "border-pos-danger/20 bg-pos-danger/10 text-pos-danger dark:border-pos-danger-dark/20 dark:bg-pos-danger-dark/10 dark:text-pos-danger-dark",
+    neutral: "border-pos-border bg-pos-surface-muted dark:border-pos-border-dark dark:bg-pos-surface-muted-dark",
+    success: "border-pos-success/20 bg-pos-success/10 dark:border-pos-success-dark/20 dark:bg-pos-success-dark/10",
+    warning: "border-pos-warning/20 bg-pos-warning/10 dark:border-pos-warning-dark/20 dark:bg-pos-warning-dark/10",
+    danger: "border-pos-danger/20 bg-pos-danger/10 dark:border-pos-danger-dark/20 dark:bg-pos-danger-dark/10",
+};
+
+const statusToneTextClasses: Record<PosStatusTone, string> = {
+    neutral: "text-pos-muted dark:text-pos-muted-dark",
+    success: "text-pos-success dark:text-pos-success-dark",
+    warning: "text-pos-warning dark:text-pos-warning-dark",
+    danger: "text-pos-danger dark:text-pos-danger-dark",
 };
 
 export const PosStatusBadge = ({ label, tone = "neutral" }: { label: string; tone?: PosStatusTone }) => (
     <View className={`self-start rounded-full border px-3 py-1 ${statusToneClasses[tone]}`}>
-        <Text className="text-xs font-semibold">{label}</Text>
+        <Text className={`text-xs font-semibold ${statusToneTextClasses[tone]}`}>{label}</Text>
     </View>
 );
