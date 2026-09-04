@@ -6,6 +6,7 @@ export const commercialCatalogPlansPath = "/catalog/plans";
 
 export const commercialFeaturePath = (featureId: string) => `/catalog/features/${featureId}`;
 export const commercialModulePath = (moduleId: string) => `/catalog/modules/${moduleId}`;
+export const commercialPlanPath = (planId: string) => `/catalog/plans/${planId}`;
 
 export const isCommercialCatalogPath = (pathname: string) =>
     pathname === commercialCatalogPath || pathname.startsWith(`${commercialCatalogPath}/`);
@@ -15,7 +16,8 @@ export type CommercialCatalogLocation =
     | { kind: "feature"; featureId: string }
     | { kind: "modules" }
     | { kind: "module"; moduleId: string }
-    | { kind: "plans" };
+    | { kind: "plans" }
+    | { kind: "plan"; planId: string };
 
 export const parseCommercialCatalogPath = (pathname: string): CommercialCatalogLocation => {
     const featureMatch = pathname.match(/^\/catalog\/features\/([^/]+)$/);
@@ -25,6 +27,10 @@ export const parseCommercialCatalogPath = (pathname: string): CommercialCatalogL
     const moduleMatch = pathname.match(/^\/catalog\/modules\/([^/]+)$/);
     if (moduleMatch?.[1]) {
         return { kind: "module", moduleId: moduleMatch[1] };
+    }
+    const planMatch = pathname.match(/^\/catalog\/plans\/([^/]+)$/);
+    if (planMatch?.[1]) {
+        return { kind: "plan", planId: planMatch[1] };
     }
     if (pathname === commercialCatalogModulesPath || pathname.startsWith(`${commercialCatalogModulesPath}/`)) {
         return { kind: "modules" };
@@ -65,3 +71,6 @@ export const commercialCatalogListPath = (filters: CommercialCatalogListFilters 
 
 export const commercialCatalogModulesListPath = (filters: CommercialCatalogListFilters = {}): string =>
     listPath(commercialCatalogModulesPath, filters);
+
+export const commercialCatalogPlansListPath = (filters: CommercialCatalogListFilters = {}): string =>
+    listPath(commercialCatalogPlansPath, filters);

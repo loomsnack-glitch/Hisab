@@ -20,8 +20,18 @@ import type {
     CommercialModuleRevisionDTOSchema,
     CreateCommercialFeatureSchema,
     CreateCommercialModuleSchema,
+    CreateCommercialPlanSchema,
+    CommercialPlanDetailDTOSchema,
+    CommercialPlanDetailResponseSchema,
+    CommercialPlanListDTOSchema,
+    CommercialPlanListItemDTOSchema,
+    CommercialPlanListQuerySchema,
+    CommercialPlanModuleMembershipDTOSchema,
+    CommercialPlanRevisionDTOSchema,
+    CommercialPlanTypeSchema,
     UpdateCommercialFeatureDraftSchema,
     UpdateCommercialModuleDraftSchema,
+    UpdateCommercialPlanDraftSchema,
 } from "./commercial-catalog.schema";
 
 export type CommercialCatalogRevisionStatus = z.infer<typeof CommercialCatalogRevisionStatusSchema>;
@@ -61,3 +71,21 @@ export type CreateCommercialModuleJSON = z.input<typeof CreateCommercialModuleSc
 export type CreateCommercialModuleSVC = z.output<typeof CreateCommercialModuleSchema>;
 export type UpdateCommercialModuleDraftJSON = z.input<typeof UpdateCommercialModuleDraftSchema>;
 export type UpdateCommercialModuleDraftSVC = z.output<typeof UpdateCommercialModuleDraftSchema>;
+
+export type CommercialPlanType = z.infer<typeof CommercialPlanTypeSchema>;
+export type CommercialPlanModuleMembershipDTO = z.infer<typeof CommercialPlanModuleMembershipDTOSchema>;
+export type CommercialPlanRevisionDTO = z.infer<typeof CommercialPlanRevisionDTOSchema>;
+export type CommercialPlanListItemDTO = z.infer<typeof CommercialPlanListItemDTOSchema>;
+export type CommercialPlanListDTO = z.infer<typeof CommercialPlanListDTOSchema>;
+export type CommercialPlanListResponse = CommercialPlanListDTO;
+export type CommercialPlanDetailDTO = z.infer<typeof CommercialPlanDetailDTOSchema>;
+export type CommercialPlanDetailResponse = z.infer<typeof CommercialPlanDetailResponseSchema>;
+
+export type CommercialPlanListQueryJSON = z.input<typeof CommercialPlanListQuerySchema>;
+export type CommercialPlanListQuerySVC = z.output<typeof CommercialPlanListQuerySchema>;
+export type CommercialPlanListStatusFilter = CommercialPlanListQuerySVC["status"];
+
+export type CreateCommercialPlanJSON = z.input<typeof CreateCommercialPlanSchema>;
+export type CreateCommercialPlanSVC = z.output<typeof CreateCommercialPlanSchema>;
+export type UpdateCommercialPlanDraftJSON = z.input<typeof UpdateCommercialPlanDraftSchema>;
+export type UpdateCommercialPlanDraftSVC = z.output<typeof UpdateCommercialPlanDraftSchema>;

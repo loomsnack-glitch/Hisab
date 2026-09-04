@@ -177,6 +177,12 @@ describe("Commercial Catalog Modules console destination", () => {
                         commercialCatalogPageProps={{
                             listCommercialFeatures: async () => successFeatureList([billingFeature]),
                             listCommercialModules: async () => successModuleList([coreListItem()]),
+                            listCommercialPlans: async () => ({
+                                status: "success",
+                                data: { plans: [] },
+                                message: "Plans retrieved successfully",
+                                code: 200,
+                            }),
                         }}
                     />
                 </ThemeProvider>
@@ -191,7 +197,7 @@ describe("Commercial Catalog Modules console destination", () => {
         expect(view.queryByText(/does not check Feature dependencies/)).toBeNull();
         fireEvent.click(view.getByRole("button", { name: "Plans" }));
         expect(await view.findByRole("heading", { name: "Plans" })).toBeTruthy();
-        expect(view.getByText(/not available yet/)).toBeTruthy();
+        expect(view.queryByText(/not available yet/)).toBeNull();
         expect(view.queryByText("Create Organization")).toBeNull();
     });
 

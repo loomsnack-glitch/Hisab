@@ -4,9 +4,11 @@ import { z } from "zod";
 import {
     CreateCommercialFeatureSchema,
     CreateCommercialModuleSchema,
+    CreateCommercialPlanSchema,
     CreateOwnerUserSchema,
     CommercialFeatureListQuerySchema,
     CommercialModuleListQuerySchema,
+    CommercialPlanListQuerySchema,
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
     PlatformDashboardQuerySchema,
@@ -22,6 +24,7 @@ import {
     STATUS_CODES,
     UpdateCommercialFeatureDraftSchema,
     UpdateCommercialModuleDraftSchema,
+    UpdateCommercialPlanDraftSchema,
     type PlatformEntryResponse,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
@@ -56,6 +59,8 @@ export const createPlatformRoutes = (
     const revisionIdSchema = z.uuid("Invalid Feature revision id");
     const moduleIdSchema = z.uuid("Invalid Module id");
     const moduleRevisionIdSchema = z.uuid("Invalid Module revision id");
+    const planIdSchema = z.uuid("Invalid Plan id");
+    const planRevisionIdSchema = z.uuid("Invalid Plan revision id");
 
     const parseFeatureIds = (c: { req: { param: (name: string) => string } }) => {
         const featureId = featureIdSchema.safeParse(c.req.param("featureId"));
@@ -67,6 +72,12 @@ export const createPlatformRoutes = (
         const moduleId = moduleIdSchema.safeParse(c.req.param("moduleId"));
         const revisionId = moduleRevisionIdSchema.safeParse(c.req.param("revisionId"));
         return { moduleId, revisionId };
+    };
+
+    const parsePlanIds = (c: { req: { param: (name: string) => string } }) => {
+        const planId = planIdSchema.safeParse(c.req.param("planId"));
+        const revisionId = planRevisionIdSchema.safeParse(c.req.param("revisionId"));
+        return { planId, revisionId };
     };
 
     router.post("/auth/login", validateSchema("json", OwnerLoginSchema), async (c) => {
@@ -907,6 +918,154 @@ export const createPlatformRoutes = (
             );
         } catch (error) {
             return handleError("platform.routes", "createCommercialModuleSuccessor", c, error);
+        }
+    });
+
+    router.get("/catalog/plans", validateSchema("query", CommercialPlanListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await commercialCatalogService.listPlans(c.req.valid("query")));
+        } catch (error) {
+            return handleError("platform.routes", "listCommercialPlans", c, error);
+        }
+    });
+
+    router.post("/catalog/plans", validateSchema("json", CreateCommercialPlanSchema), async (c) => {
+        try {
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createPlan(c.get("authOwner"), c.req.valid("json")),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialPlan", c, error);
+        }
+    });
+
+    router.get("/catalog/plans/:planId", async (c) => {
+        try {
+            const planId = planIdSchema.safeParse(c.req.param("planId"));
+            if (!planId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid Plan id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(c, await commercialCatalogService.getPlan(planId.data));
+        } catch (error) {
+            return handleError("platform.routes", "getCommercialPlan", c, error);
+        }
+    });
+
+    router.patch(
+        "/catalog/plans/:planId/revisions/:revisionId",
+        validateSchema("json", UpdateCommercialPlanDraftSchema),
+        async (c) => {
+            try {
+                const { planId, revisionId } = parsePlanIds(c);
+                if (!planId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Plan id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!revisionId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Plan revision id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                return handleServiceResponse(
+                    c,
+                    await commercialCatalogService.updatePlanDraft(planId.data, revisionId.data, c.req.valid("json")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "updateCommercialPlanDraft", c, error);
+            }
+        },
+    );
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/publish", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.publishPlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "publishCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/retire", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.retirePlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "retireCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/discard", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.discardPlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "discardCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/successor", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createPlanSuccessor(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialPlanSuccessor", c, error);
         }
     });
 

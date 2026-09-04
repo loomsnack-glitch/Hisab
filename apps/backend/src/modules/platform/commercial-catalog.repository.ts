@@ -15,6 +15,12 @@ import {
     type CommercialModuleListItemDTO,
     type CommercialModuleListQuerySVC,
     type CommercialModuleRevisionDTO,
+    type CommercialPlanDetailDTO,
+    type CommercialPlanListItemDTO,
+    type CommercialPlanListQuerySVC,
+    type CommercialPlanModuleMembershipDTO,
+    type CommercialPlanRevisionDTO,
+    type CommercialPlanType,
 } from "@repo/types";
 import { pg } from "@/config/db";
 
@@ -202,6 +208,58 @@ const loadReferencingModules = async (tx: SqlClient, featureId: string): Promise
             AND current_revisions.status <> 'discarded'
             AND feature_revisions.feature_id = ${featureId}
         ORDER BY current_revisions.display_name ASC, current_revisions.key ASC, current_revisions.module_id ASC
+    ` as Array<{
+        id: string;
+        key: string;
+        revision_id: string;
+        revision_number: number;
+        status: CommercialCatalogRevisionStatus;
+        display_name: string;
+    }>;
+
+    return rows.map(toCatalogReference);
+};
+
+const loadReferencingPlans = async (tx: SqlClient, moduleId: string): Promise<CommercialCatalogReferenceDTO[]> => {
+    const rows = await tx`
+        WITH current_revisions AS (
+            SELECT
+                r.id,
+                r.plan_id,
+                p.key,
+                r.revision_number,
+                r.status,
+                r.display_name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.plan_id
+                    ORDER BY
+                        CASE r.status
+                            WHEN 'draft' THEN 0
+                            WHEN 'active' THEN 1
+                            WHEN 'retired' THEN 2
+                            WHEN 'discarded' THEN 3
+                        END ASC,
+                        r.revision_number DESC
+                ) AS revision_rank
+            FROM commercial_plan_revisions r
+            INNER JOIN commercial_plans p ON p.id = r.plan_id
+        )
+        SELECT
+            current_revisions.plan_id AS id,
+            current_revisions.key,
+            current_revisions.id AS revision_id,
+            current_revisions.revision_number,
+            current_revisions.status,
+            current_revisions.display_name
+        FROM current_revisions
+        INNER JOIN commercial_plan_revision_modules memberships
+            ON memberships.plan_revision_id = current_revisions.id
+        INNER JOIN commercial_module_revisions module_revisions
+            ON module_revisions.id = memberships.module_revision_id
+        WHERE current_revisions.revision_rank = 1
+            AND current_revisions.status <> 'discarded'
+            AND module_revisions.module_id = ${moduleId}
+        ORDER BY current_revisions.display_name ASC, current_revisions.key ASC, current_revisions.plan_id ASC
     ` as Array<{
         id: string;
         key: string;
@@ -839,7 +897,7 @@ const loadModuleDetail = async (tx: SqlClient, moduleId: string): Promise<Commer
         key: moduleRow.key,
         currentRevision: currentModuleRevisionOf(revisions),
         revisions,
-        referencingPlans: [],
+        referencingPlans: await loadReferencingPlans(tx, moduleId),
     };
 };
 
@@ -1340,4 +1398,742 @@ export const createSuccessorModuleRevision = async (
             return { status: "not-found" as const };
         }
         return { status: "created" as const, module: moduleDetail };
+    });
+
+type PlanRevisionRow = {
+    id: string;
+    plan_id: string;
+    key: string;
+    revision_number: number;
+    status: CommercialCatalogRevisionStatus;
+    display_name: string;
+    description: string;
+    plan_type: CommercialPlanType;
+    price_inr: string | number;
+    term_count: number;
+    term_unit: CommercialCatalogTermUnit;
+    created_at: string | Date;
+    published_at: string | Date | null;
+    retired_at: string | Date | null;
+    discarded_at: string | Date | null;
+    created_by_id: string;
+    created_first_name: string;
+    created_last_name: string;
+    published_by_id: string | null;
+    published_first_name: string | null;
+    published_last_name: string | null;
+    retired_by_id: string | null;
+    retired_first_name: string | null;
+    retired_last_name: string | null;
+    discarded_by_id: string | null;
+    discarded_first_name: string | null;
+    discarded_last_name: string | null;
+};
+
+type ModuleRevisionRef = {
+    id: string;
+    module_id: string;
+    key: string;
+    display_name: string;
+    revision_number: number;
+    status: CommercialCatalogRevisionStatus;
+};
+
+type PlanMembershipValidation =
+    | { status: "ok"; refs: ModuleRevisionRef[] }
+    | { status: "empty" }
+    | { status: "not-found" }
+    | { status: "discarded" }
+    | { status: "duplicate-module" };
+
+export type InvalidPlanMembershipReason = Exclude<PlanMembershipValidation["status"], "ok">;
+
+const currentPlanRevisionOf = (revisions: CommercialPlanRevisionDTO[]): CommercialPlanRevisionDTO =>
+    [...revisions].sort((left, right) => {
+        const rank = commercialCatalogCurrentRevisionRank(left.status) - commercialCatalogCurrentRevisionRank(right.status);
+        return rank !== 0 ? rank : right.revisionNumber - left.revisionNumber;
+    })[0]!;
+
+const resolveFeatures = (modules: CommercialPlanModuleMembershipDTO[]): CommercialModuleFeatureMembershipDTO[] => {
+    const seen = new Set<string>();
+    const resolved: CommercialModuleFeatureMembershipDTO[] = [];
+    for (const moduleItem of modules) {
+        for (const feature of moduleItem.features) {
+            if (seen.has(feature.featureId)) continue;
+            seen.add(feature.featureId);
+            resolved.push(feature);
+        }
+    }
+    return [...resolved].sort((left, right) =>
+        left.displayName.localeCompare(right.displayName) || left.key.localeCompare(right.key)
+    );
+};
+
+const toPlanRevision = (
+    row: PlanRevisionRow,
+    modules: CommercialPlanModuleMembershipDTO[],
+): CommercialPlanRevisionDTO => ({
+    id: row.id,
+    planId: row.plan_id,
+    key: row.key,
+    revisionNumber: Number(row.revision_number),
+    status: row.status,
+    displayName: row.display_name,
+    description: row.description,
+    planType: row.plan_type,
+    priceInr: Number(row.price_inr),
+    term: toTerm(row.term_count, row.term_unit) as CommercialCatalogTerm,
+    modules,
+    resolvedFeatures: resolveFeatures(modules),
+    createdBy: actorFrom(row.created_by_id, row.created_first_name, row.created_last_name) as CommercialCatalogAuditActorDTO,
+    createdAt: row.created_at,
+    publishedBy: actorFrom(row.published_by_id, row.published_first_name, row.published_last_name),
+    publishedAt: row.published_at,
+    retiredBy: actorFrom(row.retired_by_id, row.retired_first_name, row.retired_last_name),
+    retiredAt: row.retired_at,
+    discardedBy: actorFrom(row.discarded_by_id, row.discarded_first_name, row.discarded_last_name),
+    discardedAt: row.discarded_at,
+});
+
+const planRevisionSelect = sql`
+    SELECT
+        r.id,
+        r.plan_id,
+        p.key,
+        r.revision_number,
+        r.status,
+        r.display_name,
+        r.description,
+        r.plan_type,
+        r.price_inr,
+        r.term_count,
+        r.term_unit,
+        r.created_at,
+        r.published_at,
+        r.retired_at,
+        r.discarded_at,
+        created.id AS created_by_id,
+        created.first_name AS created_first_name,
+        created.last_name AS created_last_name,
+        published.id AS published_by_id,
+        published.first_name AS published_first_name,
+        published.last_name AS published_last_name,
+        retired.id AS retired_by_id,
+        retired.first_name AS retired_first_name,
+        retired.last_name AS retired_last_name,
+        discarded.id AS discarded_by_id,
+        discarded.first_name AS discarded_first_name,
+        discarded.last_name AS discarded_last_name
+    FROM commercial_plan_revisions r
+    INNER JOIN commercial_plans p ON p.id = r.plan_id
+    INNER JOIN console_users created ON created.id = r.created_by_owner_user_id
+    LEFT JOIN console_users published ON published.id = r.published_by_owner_user_id
+    LEFT JOIN console_users retired ON retired.id = r.retired_by_owner_user_id
+    LEFT JOIN console_users discarded ON discarded.id = r.discarded_by_owner_user_id
+`;
+
+const loadModuleRevisionRefs = async (tx: SqlClient, ids: string[]): Promise<ModuleRevisionRef[]> => {
+    if (ids.length === 0) {
+        return [];
+    }
+    return await tx`
+        SELECT
+            r.id,
+            r.module_id,
+            m.key,
+            r.display_name,
+            r.revision_number,
+            r.status
+        FROM commercial_module_revisions r
+        INNER JOIN commercial_modules m ON m.id = r.module_id
+        WHERE r.id IN ${sql(ids)}
+    ` as ModuleRevisionRef[];
+};
+
+const validatePlanMemberships = (ids: string[], refs: ModuleRevisionRef[]): PlanMembershipValidation => {
+    if (ids.length === 0) {
+        return { status: "empty" };
+    }
+    const byId = new Map(refs.map((ref) => [ref.id, ref]));
+    if (ids.some((id) => !byId.has(id))) {
+        return { status: "not-found" };
+    }
+    const ordered = ids.map((id) => byId.get(id)!);
+    if (ordered.some((ref) => ref.status === "discarded")) {
+        return { status: "discarded" };
+    }
+    const moduleIds = ordered.map((ref) => ref.module_id);
+    if (new Set(moduleIds).size !== moduleIds.length) {
+        return { status: "duplicate-module" };
+    }
+    return { status: "ok", refs: ordered };
+};
+
+const replacePlanMemberships = async (tx: SqlClient, planRevisionId: string, refs: ModuleRevisionRef[]) => {
+    await tx`DELETE FROM commercial_plan_revision_modules WHERE plan_revision_id = ${planRevisionId}`;
+    for (const ref of refs) {
+        await tx`
+            INSERT INTO commercial_plan_revision_modules (plan_revision_id, module_revision_id, module_id)
+            VALUES (${planRevisionId}, ${ref.id}, ${ref.module_id})
+        `;
+    }
+};
+
+const loadPlanMemberships = async (
+    tx: SqlClient,
+    revisionIds: string[],
+): Promise<Map<string, CommercialPlanModuleMembershipDTO[]>> => {
+    const memberships = new Map<string, CommercialPlanModuleMembershipDTO[]>();
+    for (const revisionId of revisionIds) {
+        memberships.set(revisionId, []);
+    }
+    if (revisionIds.length === 0) {
+        return memberships;
+    }
+    const rows = await tx`
+        SELECT
+            memberships.plan_revision_id,
+            module_revisions.id,
+            module_revisions.module_id,
+            modules.key,
+            module_revisions.display_name,
+            module_revisions.revision_number,
+            module_revisions.status
+        FROM commercial_plan_revision_modules memberships
+        INNER JOIN commercial_module_revisions module_revisions
+            ON module_revisions.id = memberships.module_revision_id
+        INNER JOIN commercial_modules modules ON modules.id = module_revisions.module_id
+        WHERE memberships.plan_revision_id IN ${sql(revisionIds)}
+        ORDER BY module_revisions.display_name ASC, modules.key ASC, module_revisions.id ASC
+    ` as Array<ModuleRevisionRef & { plan_revision_id: string }>;
+
+    const moduleRevisionIds = rows.map((row) => row.id);
+    const featureMemberships = await loadModuleMemberships(tx, moduleRevisionIds);
+    for (const row of rows) {
+        memberships.get(row.plan_revision_id)?.push({
+            moduleId: row.module_id,
+            moduleRevisionId: row.id,
+            key: row.key,
+            displayName: row.display_name,
+            revisionNumber: Number(row.revision_number),
+            status: row.status,
+            features: featureMemberships.get(row.id) ?? [],
+        });
+    }
+    return memberships;
+};
+
+const loadPlanDetail = async (tx: SqlClient, planId: string): Promise<CommercialPlanDetailDTO | null> => {
+    const [planRow] = await tx`
+        SELECT id, key
+        FROM commercial_plans
+        WHERE id = ${planId}
+    ` as Array<{ id: string; key: string }>;
+    if (!planRow) {
+        return null;
+    }
+
+    const rows = await tx`
+        ${planRevisionSelect}
+        WHERE r.plan_id = ${planId}
+        ORDER BY r.revision_number DESC
+    ` as PlanRevisionRow[];
+    if (rows.length === 0) {
+        return null;
+    }
+
+    const memberships = await loadPlanMemberships(tx, rows.map((row) => row.id));
+    const revisions = rows.map((row) => toPlanRevision(row, memberships.get(row.id) ?? []));
+    return {
+        id: planRow.id,
+        key: planRow.key,
+        currentRevision: currentPlanRevisionOf(revisions),
+        revisions,
+    };
+};
+
+export const listPlans = async (
+    query: CommercialPlanListQuerySVC,
+): Promise<CommercialPlanListItemDTO[]> => {
+    const search = query.search?.trim() ?? "";
+    const searchPattern = search ? `%${search}%` : "";
+    const searchClause = search
+        ? sql`AND (
+            current_revisions.key ILIKE ${searchPattern}
+            OR current_revisions.display_name ILIKE ${searchPattern}
+        )`
+        : sql``;
+    const statusClause = query.status === "all"
+        ? sql`AND current_revisions.status <> 'discarded'`
+        : sql`AND current_revisions.status = ${query.status}`;
+
+    const rows = await pg`
+        WITH current_revisions AS (
+            SELECT
+                r.id,
+                r.plan_id,
+                p.key,
+                r.revision_number,
+                r.status,
+                r.display_name,
+                r.description,
+                r.plan_type,
+                r.price_inr,
+                r.term_count,
+                r.term_unit,
+                ROW_NUMBER() OVER (
+                    PARTITION BY r.plan_id
+                    ORDER BY
+                        CASE r.status
+                            WHEN 'draft' THEN 0
+                            WHEN 'active' THEN 1
+                            WHEN 'retired' THEN 2
+                            WHEN 'discarded' THEN 3
+                        END ASC,
+                        r.revision_number DESC
+                ) AS revision_rank
+            FROM commercial_plan_revisions r
+            INNER JOIN commercial_plans p ON p.id = r.plan_id
+        )
+        SELECT
+            current_revisions.plan_id AS id,
+            current_revisions.key,
+            current_revisions.id AS current_revision_id,
+            current_revisions.revision_number,
+            current_revisions.status,
+            current_revisions.display_name,
+            current_revisions.description,
+            current_revisions.plan_type,
+            current_revisions.price_inr,
+            current_revisions.term_count,
+            current_revisions.term_unit
+        FROM current_revisions
+        WHERE current_revisions.revision_rank = 1
+            ${statusClause}
+            ${searchClause}
+        ORDER BY current_revisions.display_name ASC, current_revisions.key ASC, current_revisions.plan_id ASC
+    ` as Array<{
+        id: string;
+        key: string;
+        current_revision_id: string;
+        revision_number: number;
+        status: CommercialCatalogRevisionStatus;
+        display_name: string;
+        description: string;
+        plan_type: CommercialPlanType;
+        price_inr: string | number;
+        term_count: number;
+        term_unit: CommercialCatalogTermUnit;
+    }>;
+
+    return rows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        currentRevisionId: row.current_revision_id,
+        revisionNumber: Number(row.revision_number),
+        status: row.status,
+        displayName: row.display_name,
+        description: row.description,
+        planType: row.plan_type,
+        priceInr: Number(row.price_inr),
+        term: toTerm(row.term_count, row.term_unit) as CommercialCatalogTerm,
+    }));
+};
+
+export const getPlanDetail = async (planId: string): Promise<CommercialPlanDetailDTO | null> =>
+    loadPlanDetail(pg, planId);
+
+export type CreateDraftPlanInput = {
+    planId: string;
+    revisionId: string;
+    key: string;
+    displayName: string;
+    description: string;
+    planType: CommercialPlanType;
+    priceInr: number;
+    term: CommercialCatalogTerm;
+    moduleRevisionIds: string[];
+    actorId: string;
+    now: Date;
+};
+
+export type CreateDraftPlanResult =
+    | { status: "created"; plan: CommercialPlanDetailDTO }
+    | { status: "duplicate-key" }
+    | { status: "invalid-membership"; reason: InvalidPlanMembershipReason };
+
+export const createDraftPlan = async (input: CreateDraftPlanInput): Promise<CreateDraftPlanResult> => {
+    try {
+        return await pg.begin(async (tx) => {
+            const memberships = validatePlanMemberships(
+                input.moduleRevisionIds,
+                await loadModuleRevisionRefs(tx, input.moduleRevisionIds),
+            );
+            if (memberships.status !== "ok") {
+                return { status: "invalid-membership" as const, reason: memberships.status };
+            }
+
+            const [existing] = await tx`
+                SELECT id
+                FROM commercial_plans
+                WHERE key = ${input.key}
+            `;
+            if (existing) {
+                return { status: "duplicate-key" as const };
+            }
+
+            await tx`
+                INSERT INTO commercial_plans (id, key, created_at)
+                VALUES (${input.planId}, ${input.key}, ${input.now})
+            `;
+            await tx`
+                INSERT INTO commercial_plan_revisions (
+                    id,
+                    plan_id,
+                    revision_number,
+                    status,
+                    display_name,
+                    description,
+                    plan_type,
+                    price_inr,
+                    term_count,
+                    term_unit,
+                    created_by_owner_user_id,
+                    created_at
+                )
+                VALUES (
+                    ${input.revisionId},
+                    ${input.planId},
+                    1,
+                    'draft',
+                    ${input.displayName},
+                    ${input.description},
+                    ${input.planType},
+                    ${input.priceInr},
+                    ${input.term.count},
+                    ${input.term.unit},
+                    ${input.actorId},
+                    ${input.now}
+                )
+            `;
+            await replacePlanMemberships(tx, input.revisionId, memberships.refs);
+
+            const planDetail = await loadPlanDetail(tx, input.planId);
+            if (!planDetail) {
+                throw new Error("Draft Plan was not persisted");
+            }
+            return { status: "created" as const, plan: planDetail };
+        });
+    } catch (error) {
+        if (isUniqueViolation(error)) {
+            return { status: "duplicate-key" };
+        }
+        throw error;
+    }
+};
+
+export type UpdateDraftPlanInput = {
+    planId: string;
+    revisionId: string;
+    displayName: string;
+    description: string;
+    planType: CommercialPlanType;
+    priceInr: number;
+    term: CommercialCatalogTerm;
+    moduleRevisionIds: string[];
+};
+
+export type UpdateDraftPlanResult =
+    | { status: "updated"; plan: CommercialPlanDetailDTO }
+    | { status: "not-found" }
+    | { status: "not-draft"; currentStatus: CommercialCatalogRevisionStatus }
+    | { status: "invalid-membership"; reason: InvalidPlanMembershipReason };
+
+export const updateDraftPlanRevision = async (input: UpdateDraftPlanInput): Promise<UpdateDraftPlanResult> =>
+    pg.begin(async (tx) => {
+        const [revision] = await tx`
+            SELECT id, status
+            FROM commercial_plan_revisions
+            WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
+            FOR UPDATE
+        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus }>;
+        if (!revision) {
+            return { status: "not-found" as const };
+        }
+        if (revision.status !== "draft") {
+            return { status: "not-draft" as const, currentStatus: revision.status };
+        }
+
+        const memberships = validatePlanMemberships(
+            input.moduleRevisionIds,
+            await loadModuleRevisionRefs(tx, input.moduleRevisionIds),
+        );
+        if (memberships.status !== "ok") {
+            return { status: "invalid-membership" as const, reason: memberships.status };
+        }
+
+        await tx`
+            UPDATE commercial_plan_revisions
+            SET
+                display_name = ${input.displayName},
+                description = ${input.description},
+                plan_type = ${input.planType},
+                price_inr = ${input.priceInr},
+                term_count = ${input.term.count},
+                term_unit = ${input.term.unit}
+            WHERE id = ${input.revisionId}
+        `;
+        await replacePlanMemberships(tx, input.revisionId, memberships.refs);
+
+        const planDetail = await loadPlanDetail(tx, input.planId);
+        if (!planDetail) {
+            return { status: "not-found" as const };
+        }
+        return { status: "updated" as const, plan: planDetail };
+    });
+
+export type PublishPlanInput = {
+    planId: string;
+    revisionId: string;
+    actorId: string;
+    now: Date;
+};
+
+export type PublishPlanResult =
+    | { status: "published"; plan: CommercialPlanDetailDTO }
+    | { status: "not-found" }
+    | { status: "not-draft"; currentStatus: CommercialCatalogRevisionStatus }
+    | { status: "invalid-membership"; reason: InvalidPlanMembershipReason };
+
+const planMembershipsOfRevision = async (tx: SqlClient, revisionId: string): Promise<PlanMembershipValidation> => {
+    const rows = await tx`
+        SELECT module_revision_id
+        FROM commercial_plan_revision_modules
+        WHERE plan_revision_id = ${revisionId}
+    ` as Array<{ module_revision_id: string }>;
+    const ids = rows.map((row) => row.module_revision_id);
+    return validatePlanMemberships(ids, await loadModuleRevisionRefs(tx, ids));
+};
+
+export const publishPlanRevision = async (input: PublishPlanInput): Promise<PublishPlanResult> =>
+    pg.begin(async (tx) => {
+        const [revision] = await tx`
+            SELECT id, status
+            FROM commercial_plan_revisions
+            WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
+            FOR UPDATE
+        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus }>;
+        if (!revision) {
+            return { status: "not-found" as const };
+        }
+        if (revision.status !== "draft") {
+            return { status: "not-draft" as const, currentStatus: revision.status };
+        }
+
+        const memberships = await planMembershipsOfRevision(tx, input.revisionId);
+        if (memberships.status !== "ok") {
+            return { status: "invalid-membership" as const, reason: memberships.status };
+        }
+
+        await tx`
+            UPDATE commercial_plan_revisions
+            SET
+                status = 'retired',
+                retired_by_owner_user_id = ${input.actorId},
+                retired_at = ${input.now}
+            WHERE plan_id = ${input.planId}
+                AND status = 'active'
+        `;
+        await tx`
+            UPDATE commercial_plan_revisions
+            SET
+                status = 'active',
+                published_by_owner_user_id = ${input.actorId},
+                published_at = ${input.now}
+            WHERE id = ${input.revisionId}
+        `;
+
+        const planDetail = await loadPlanDetail(tx, input.planId);
+        if (!planDetail) {
+            return { status: "not-found" as const };
+        }
+        return { status: "published" as const, plan: planDetail };
+    });
+
+export type RetirePlanResult =
+    | { status: "retired"; plan: CommercialPlanDetailDTO }
+    | { status: "not-found" }
+    | { status: "not-active"; currentStatus: CommercialCatalogRevisionStatus };
+
+export const retirePlanRevision = async (input: PublishPlanInput): Promise<RetirePlanResult> =>
+    pg.begin(async (tx) => {
+        const [revision] = await tx`
+            SELECT id, status
+            FROM commercial_plan_revisions
+            WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
+            FOR UPDATE
+        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus }>;
+        if (!revision) {
+            return { status: "not-found" as const };
+        }
+        if (revision.status !== "active") {
+            return { status: "not-active" as const, currentStatus: revision.status };
+        }
+
+        await tx`
+            UPDATE commercial_plan_revisions
+            SET
+                status = 'retired',
+                retired_by_owner_user_id = ${input.actorId},
+                retired_at = ${input.now}
+            WHERE id = ${input.revisionId}
+        `;
+
+        const planDetail = await loadPlanDetail(tx, input.planId);
+        if (!planDetail) {
+            return { status: "not-found" as const };
+        }
+        return { status: "retired" as const, plan: planDetail };
+    });
+
+export type DiscardPlanResult =
+    | { status: "discarded"; plan: CommercialPlanDetailDTO }
+    | { status: "not-found" }
+    | { status: "not-draft"; currentStatus: CommercialCatalogRevisionStatus };
+
+export const discardPlanRevision = async (input: PublishPlanInput): Promise<DiscardPlanResult> =>
+    pg.begin(async (tx) => {
+        const [revision] = await tx`
+            SELECT id, status
+            FROM commercial_plan_revisions
+            WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
+            FOR UPDATE
+        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus }>;
+        if (!revision) {
+            return { status: "not-found" as const };
+        }
+        if (revision.status !== "draft") {
+            return { status: "not-draft" as const, currentStatus: revision.status };
+        }
+
+        await tx`
+            UPDATE commercial_plan_revisions
+            SET
+                status = 'discarded',
+                discarded_by_owner_user_id = ${input.actorId},
+                discarded_at = ${input.now}
+            WHERE id = ${input.revisionId}
+        `;
+
+        const planDetail = await loadPlanDetail(tx, input.planId);
+        if (!planDetail) {
+            return { status: "not-found" as const };
+        }
+        return { status: "discarded" as const, plan: planDetail };
+    });
+
+export type CreateSuccessorPlanInput = PublishPlanInput & {
+    successorRevisionId: string;
+};
+
+export type CreateSuccessorPlanResult =
+    | { status: "created"; plan: CommercialPlanDetailDTO }
+    | { status: "not-found" }
+    | { status: "draft-exists" }
+    | { status: "invalid-source"; currentStatus: CommercialCatalogRevisionStatus };
+
+export const createSuccessorPlanRevision = async (
+    input: CreateSuccessorPlanInput,
+): Promise<CreateSuccessorPlanResult> =>
+    pg.begin(async (tx) => {
+        const [source] = await tx`
+            SELECT
+                id,
+                status,
+                display_name,
+                description,
+                plan_type,
+                price_inr,
+                term_count,
+                term_unit,
+                revision_number
+            FROM commercial_plan_revisions
+            WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
+            FOR UPDATE
+        ` as Array<{
+            id: string;
+            status: CommercialCatalogRevisionStatus;
+            display_name: string;
+            description: string;
+            plan_type: CommercialPlanType;
+            price_inr: string | number;
+            term_count: number;
+            term_unit: CommercialCatalogTermUnit;
+            revision_number: number;
+        }>;
+        if (!source) {
+            return { status: "not-found" as const };
+        }
+        if (source.status !== "active" && source.status !== "retired") {
+            return { status: "invalid-source" as const, currentStatus: source.status };
+        }
+
+        const [existingDraft] = await tx`
+            SELECT id
+            FROM commercial_plan_revisions
+            WHERE plan_id = ${input.planId} AND status = 'draft'
+            FOR UPDATE
+        `;
+        if (existingDraft) {
+            return { status: "draft-exists" as const };
+        }
+
+        const [latest] = await tx`
+            SELECT MAX(revision_number)::int AS latest_revision
+            FROM commercial_plan_revisions
+            WHERE plan_id = ${input.planId}
+        ` as Array<{ latest_revision: number }>;
+
+        await tx`
+            INSERT INTO commercial_plan_revisions (
+                id,
+                plan_id,
+                revision_number,
+                status,
+                display_name,
+                description,
+                plan_type,
+                price_inr,
+                term_count,
+                term_unit,
+                created_by_owner_user_id,
+                created_at
+            )
+            VALUES (
+                ${input.successorRevisionId},
+                ${input.planId},
+                ${(latest?.latest_revision ?? source.revision_number) + 1},
+                'draft',
+                ${source.display_name},
+                ${source.description},
+                ${source.plan_type},
+                ${source.price_inr},
+                ${source.term_count},
+                ${source.term_unit},
+                ${input.actorId},
+                ${input.now}
+            )
+        `;
+        await tx`
+            INSERT INTO commercial_plan_revision_modules (plan_revision_id, module_revision_id, module_id)
+            SELECT ${input.successorRevisionId}, module_revision_id, module_id
+            FROM commercial_plan_revision_modules
+            WHERE plan_revision_id = ${input.revisionId}
+        `;
+
+        const planDetail = await loadPlanDetail(tx, input.planId);
+        if (!planDetail) {
+            return { status: "not-found" as const };
+        }
+        return { status: "created" as const, plan: planDetail };
     });

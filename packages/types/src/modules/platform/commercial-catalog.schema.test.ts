@@ -6,10 +6,13 @@ import {
     CommercialFeatureDetailDTOSchema,
     CommercialFeatureListQuerySchema,
     CommercialModuleDetailDTOSchema,
+    CommercialPlanDetailDTOSchema,
     CreateCommercialFeatureSchema,
     CreateCommercialModuleSchema,
+    CreateCommercialPlanSchema,
     UpdateCommercialFeatureDraftSchema,
     UpdateCommercialModuleDraftSchema,
+    UpdateCommercialPlanDraftSchema,
 } from "./commercial-catalog.schema";
 
 describe("Commercial Catalog Feature contracts", () => {
@@ -262,6 +265,165 @@ describe("Commercial Catalog Module contracts", () => {
 
         expect(parsed.currentRevision.features).toHaveLength(1);
         expect(parsed.referencingPlans).toEqual([]);
+        expect(parsed.currentRevision.publishedBy?.firstName).toBe("Asha");
+    });
+});
+
+describe("Commercial Catalog Plan contracts", () => {
+    const moduleRevisionId = "bbbb2222-2222-4222-8222-222222222222";
+
+    test("accepts a Trial Plan at ₹0 for seven days with Module revisions only", () => {
+        expect(
+            CreateCommercialPlanSchema.parse({
+                key: " trial ",
+                displayName: "  Trial ",
+                description: "  Explore the starting product range ",
+                planType: "trial",
+                priceInr: 0,
+                term: { count: 7, unit: "day" },
+                moduleRevisionIds: [moduleRevisionId],
+            }),
+        ).toEqual({
+            key: "trial",
+            displayName: "Trial",
+            description: "Explore the starting product range",
+            planType: "trial",
+            priceInr: 0,
+            term: { count: 7, unit: "day" },
+            moduleRevisionIds: [moduleRevisionId],
+        });
+    });
+
+    test("accepts a paid Plan with a positive INR price and calendar term", () => {
+        expect(
+            CreateCommercialPlanSchema.parse({
+                key: "core",
+                displayName: "Core",
+                planType: "paid",
+                priceInr: 2999,
+                term: { count: 1, unit: "year" },
+                moduleRevisionIds: [moduleRevisionId],
+            }),
+        ).toMatchObject({
+            planType: "paid",
+            priceInr: 2999,
+            term: { count: 1, unit: "year" },
+            description: "",
+        });
+    });
+
+    test("rejects direct Feature membership, empty Modules, and invalid Trial or paid prices", () => {
+        const trial = {
+            key: "trial",
+            displayName: "Trial",
+            planType: "trial" as const,
+            priceInr: 0,
+            term: { count: 7, unit: "day" as const },
+            moduleRevisionIds: [moduleRevisionId],
+        };
+
+        expect(
+            CreateCommercialPlanSchema.safeParse({
+                ...trial,
+                featureRevisionIds: ["22222222-2222-4222-8222-222222222222"],
+            }).success,
+        ).toBe(false);
+        expect(CreateCommercialPlanSchema.safeParse({ ...trial, moduleRevisionIds: [] }).success).toBe(false);
+        expect(CreateCommercialPlanSchema.safeParse({ ...trial, priceInr: 100 }).success).toBe(false);
+        expect(
+            CreateCommercialPlanSchema.safeParse({
+                key: "core",
+                displayName: "Core",
+                planType: "paid",
+                priceInr: 0,
+                term: { count: 1, unit: "year" },
+                moduleRevisionIds: [moduleRevisionId],
+            }).success,
+        ).toBe(false);
+        expect(
+            CreateCommercialPlanSchema.safeParse({
+                key: "core",
+                displayName: "Core",
+                planType: "paid",
+                priceInr: 2999.999,
+                term: { count: 1, unit: "year" },
+                moduleRevisionIds: [moduleRevisionId],
+            }).success,
+        ).toBe(false);
+        expect(
+            CreateCommercialPlanSchema.safeParse({
+                key: "core",
+                displayName: "Core",
+                planType: "paid",
+                priceInr: 2999,
+                term: { count: 0, unit: "year" },
+                moduleRevisionIds: [moduleRevisionId],
+            }).success,
+        ).toBe(false);
+    });
+
+    test("does not allow a Draft update to change the Commercial Catalog Key", () => {
+        expect(
+            UpdateCommercialPlanDraftSchema.safeParse({
+                key: "renamed",
+                displayName: "Core",
+                description: "Updated",
+                planType: "paid",
+                priceInr: 2999,
+                term: { count: 1, unit: "year" },
+                moduleRevisionIds: [moduleRevisionId],
+            }).success,
+        ).toBe(false);
+    });
+
+    test("Plan detail includes selected Modules, resolved Features, and audit actors", () => {
+        const createdBy = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", firstName: "Asha", lastName: "Shah" };
+        const feature = {
+            featureId: "11111111-1111-4111-8111-111111111111",
+            featureRevisionId: "22222222-2222-4222-8222-222222222222",
+            key: "billing",
+            displayName: "Billing",
+            revisionNumber: 1,
+            status: "active" as const,
+        };
+        const parsed = CommercialPlanDetailDTOSchema.parse({
+            id: "cccc3333-3333-4333-8333-333333333333",
+            key: "trial",
+            currentRevision: {
+                id: "dddd4444-4444-4444-8444-444444444444",
+                planId: "cccc3333-3333-4333-8333-333333333333",
+                key: "trial",
+                revisionNumber: 1,
+                status: "active",
+                displayName: "Trial",
+                description: "Seven-day exploration",
+                planType: "trial",
+                priceInr: 0,
+                term: { count: 7, unit: "day" },
+                modules: [{
+                    moduleId: "aaaa1111-1111-4111-8111-111111111111",
+                    moduleRevisionId,
+                    key: "core_operations",
+                    displayName: "Core Operations",
+                    revisionNumber: 1,
+                    status: "active",
+                    features: [feature],
+                }],
+                resolvedFeatures: [feature],
+                createdBy,
+                createdAt: "2026-09-04T00:00:00.000Z",
+                publishedBy: createdBy,
+                publishedAt: "2026-09-04T01:00:00.000Z",
+                retiredBy: null,
+                retiredAt: null,
+                discardedBy: null,
+                discardedAt: null,
+            },
+            revisions: [],
+        });
+
+        expect(parsed.currentRevision.modules).toHaveLength(1);
+        expect(parsed.currentRevision.resolvedFeatures.map((item) => item.key)).toEqual(["billing"]);
         expect(parsed.currentRevision.publishedBy?.firstName).toBe("Asha");
     });
 });

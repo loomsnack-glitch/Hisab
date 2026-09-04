@@ -300,3 +300,126 @@ export const UpdateCommercialModuleDraftSchema = z
     .strict()
     .superRefine(refineModuleCommercialFields)
     .transform(normalizeModuleCommercialFields);
+
+export const CommercialPlanTypeSchema = z.enum(["trial", "paid"]);
+
+const uniqueModuleRevisionIds = (ids: string[]) => new Set(ids).size === ids.length;
+
+export const CommercialPlanModuleMembershipDTOSchema = z.object({
+    moduleId: z.uuid("Invalid Module id"),
+    moduleRevisionId: z.uuid("Invalid Module revision id"),
+    key: CommercialCatalogKeySchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    features: z.array(CommercialModuleFeatureMembershipDTOSchema).min(1),
+});
+
+export const CommercialPlanRevisionDTOSchema = z.object({
+    id: z.uuid("Invalid Plan revision id"),
+    planId: z.uuid("Invalid Plan id"),
+    key: CommercialCatalogKeySchema,
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: z.string(),
+    planType: CommercialPlanTypeSchema,
+    priceInr: CommercialCatalogPriceInrSchema,
+    term: CommercialCatalogTermSchema,
+    modules: z.array(CommercialPlanModuleMembershipDTOSchema).min(1),
+    resolvedFeatures: z.array(CommercialModuleFeatureMembershipDTOSchema).min(1),
+    createdBy: CommercialCatalogAuditActorDTOSchema,
+    createdAt: dtoDateSchema,
+    publishedBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    publishedAt: dtoDateSchema.nullable(),
+    retiredBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    retiredAt: dtoDateSchema.nullable(),
+    discardedBy: CommercialCatalogAuditActorDTOSchema.nullable(),
+    discardedAt: dtoDateSchema.nullable(),
+});
+
+export const CommercialPlanListItemDTOSchema = z.object({
+    id: z.uuid("Invalid Plan id"),
+    key: CommercialCatalogKeySchema,
+    currentRevisionId: z.uuid("Invalid Plan revision id"),
+    revisionNumber: z.number().int().min(1),
+    status: CommercialCatalogRevisionStatusSchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: z.string(),
+    planType: CommercialPlanTypeSchema,
+    priceInr: CommercialCatalogPriceInrSchema,
+    term: CommercialCatalogTermSchema,
+});
+
+export const CommercialPlanListDTOSchema = z.object({
+    plans: z.array(CommercialPlanListItemDTOSchema),
+});
+
+export const CommercialPlanDetailDTOSchema = z.object({
+    id: z.uuid("Invalid Plan id"),
+    key: CommercialCatalogKeySchema,
+    currentRevision: CommercialPlanRevisionDTOSchema,
+    revisions: z.array(CommercialPlanRevisionDTOSchema),
+});
+
+export const CommercialPlanDetailResponseSchema = z.object({
+    plan: CommercialPlanDetailDTOSchema,
+});
+
+export const CommercialPlanListQuerySchema = z.object({
+    search: z.string().trim().max(255, "Search must be at most 255 characters").optional(),
+    status: CommercialCatalogListStatusFilterSchema.default("all"),
+});
+
+const commercialPlanModuleRevisionIdsSchema = z
+    .array(z.uuid("Invalid Module revision id"))
+    .min(1, "A Plan must include at least one Module revision")
+    .refine(uniqueModuleRevisionIds, {
+        message: "A Plan can include a Module revision only once",
+    });
+
+const commercialPlanWritableFields = {
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: CommercialCatalogDescriptionSchema,
+    planType: CommercialPlanTypeSchema,
+    priceInr: CommercialCatalogPriceInrSchema,
+    term: CommercialCatalogTermSchema,
+    moduleRevisionIds: commercialPlanModuleRevisionIdsSchema,
+};
+
+const refinePlanCommercialFields = (
+    value: {
+        planType: "trial" | "paid";
+        priceInr: number;
+    },
+    ctx: z.RefinementCtx,
+) => {
+    if (value.planType === "trial" && value.priceInr !== 0) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["priceInr"],
+            message: "A Trial Plan must be priced at ₹0",
+        });
+    }
+    if (value.planType === "paid" && !(value.priceInr > 0)) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["priceInr"],
+            message: "A paid Plan requires a price greater than ₹0",
+        });
+    }
+};
+
+export const CreateCommercialPlanSchema = z
+    .object({
+        key: CommercialCatalogKeySchema,
+        ...commercialPlanWritableFields,
+        description: CommercialCatalogDescriptionSchema.default(""),
+    })
+    .strict()
+    .superRefine(refinePlanCommercialFields);
+
+export const UpdateCommercialPlanDraftSchema = z
+    .object(commercialPlanWritableFields)
+    .strict()
+    .superRefine(refinePlanCommercialFields);

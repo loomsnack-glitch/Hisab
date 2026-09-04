@@ -6,7 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import {
     commercialCatalogListPath,
     commercialCatalogModulesListPath,
-    commercialCatalogPlansPath,
+    commercialCatalogPlansListPath,
 } from "@/lib/commercial-catalog-url";
 
 export const commercialCatalogStatusLabels: Record<CommercialCatalogRevisionStatus, string> = {
@@ -59,6 +59,11 @@ export const formatCommercialCatalogTerm = (term: CommercialCatalogTerm | null) 
     return `${term.count} ${term.count === 1 ? singular : plural}`;
 };
 
+export const commercialCatalogPlanTypeLabels: Record<"trial" | "paid", string> = {
+    trial: "Trial",
+    paid: "Paid",
+};
+
 export const commercialCatalogUnauthorizedCode = (error: unknown, response?: { status?: string; code?: number }) =>
     (error as { code?: number } | null)?.code
     ?? (response?.status === "error" ? response.code : undefined);
@@ -92,7 +97,7 @@ export const CommercialCatalogSectionNav = ({ current }: CommercialCatalogSectio
         <nav aria-label="Commercial Catalog sections" className="flex flex-wrap gap-2">
             {tab("features", "Features", commercialCatalogListPath())}
             {tab("modules", "Modules", commercialCatalogModulesListPath())}
-            {tab("plans", "Plans", commercialCatalogPlansPath)}
+            {tab("plans", "Plans", commercialCatalogPlansListPath())}
         </nav>
     );
 };

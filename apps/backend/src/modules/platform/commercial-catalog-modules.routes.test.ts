@@ -498,6 +498,14 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             );
             return { status: "created" as const, module: moduleDetailOf(input.moduleId)! };
         },
+        listPlans: async () => [],
+        getPlanDetail: async () => null,
+        createDraftPlan: async () => ({ status: "duplicate-key" as const }),
+        updateDraftPlanRevision: async () => ({ status: "not-found" as const }),
+        publishPlanRevision: async () => ({ status: "not-found" as const }),
+        retirePlanRevision: async () => ({ status: "not-found" as const }),
+        discardPlanRevision: async () => ({ status: "not-found" as const }),
+        createSuccessorPlanRevision: async () => ({ status: "not-found" as const }),
     };
 };
 
