@@ -90,4 +90,18 @@ describe("POS session state", () => {
         expect(loggingOut.state).toBe("logging-out");
         expect(locked.state).toBe("locked");
     });
+
+    it("returns to locked with a recoverable unlock error", () => {
+        const unlocking = transitionPosSession(initialPosSession, { type: "UNLOCK_STARTED" });
+        const failed = transitionPosSession(unlocking, {
+            type: "UNLOCK_FAILED",
+            message: "Invalid device credentials",
+        });
+
+        expect(failed).toMatchObject({
+            state: "locked",
+            session: null,
+            message: "Invalid device credentials",
+        });
+    });
 });
