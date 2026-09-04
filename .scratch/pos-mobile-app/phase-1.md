@@ -53,8 +53,8 @@ Not included in this phase:
 | 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `50a5be9` |
 | 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | `011ec05` |
 | 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | `6cc51e5` |
-| 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | `Pending commit` |
-| 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | Pending |
+| 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | `d4be6e3` |
+| 1.8 | New Sale shell | 1.7, 1.4 | Unlock opens New Sale with Cart entry | `Pending commit` |
 
 ## Cross-phase verification baseline
 
@@ -642,6 +642,107 @@ POS session owner, and simple-UX direction on 2026-09-05.
   changes are needed.
 - Logout behavior is moved to Device Auth, matching the POS session boundary.
 - Later feature work remains outside this slice.
+
+## 1.8 — New Sale shell
+
+### Plan
+
+User-facing outcome: after unlock, the operator can open New Sale, see where
+Product search will happen, and enter Cart even before Catalog and billing
+behavior are implemented.
+
+Implementation scope:
+
+- Replace the New Sale placeholder destination with a dedicated New Sale
+  screen.
+- Add a clear Product search input area and a short foundation message that
+  results arrive in Phase 2.
+- Add a primary Cart entry action and a dedicated empty Cart screen so Cart is
+  a real reachable route in the shell.
+- Keep the active Device Session/store context untouched while navigating.
+- Use the Phase 1 POS primitives, semantic tokens, and translations.
+
+Acceptance criteria:
+
+1. Active POS can open New Sale from the home hub.
+2. New Sale contains a Product search area and a visible Cart action.
+3. Cart action opens a Cart route with an empty-state placeholder.
+4. Returning from Cart preserves the New Sale shell.
+5. No Product query, Catalog mutation, Cart calculation, or Payment action is
+   introduced ahead of its approved phase.
+6. Focused tests cover the shell route vocabulary and Cart access contract.
+
+Non-goals:
+
+- Catalog loading, Product results, Categories, scanning, Combos, or Add-ons.
+- Local Cart state, totals, Draft Sales, Customer, discount, Payment, or
+  checkout behavior.
+- Printer or receipt behavior.
+
+Public seams and effects:
+
+- `NewSaleScreen` owns the future Catalog handoff and navigates to `Cart`.
+- `Cart` is a typed POS stack route and remains an empty shell until Phase 3.
+- Search input is local presentation state only; it does not call the API.
+
+Test and verification plan:
+
+- Pure test for New Sale/Cart shell route vocabulary.
+- Mobile TypeScript check and the complete focused Bun suite; no Android build
+  command.
+- `git diff --check`, route review, and Phase 1 final standards/spec review.
+
+Risks and rollback:
+
+- A placeholder must not imply that search or Cart persistence works; copy and
+  actions must state what is available now.
+- Keep Cart navigation independent of future query/cache choices.
+- This is the final Phase 1 slice and can be reverted without touching backend
+  or hardware work.
+
+### Internal plan review
+
+Reviewed against the Phase 1 exit condition, 1.7 route shell, approved simple
+UX, and Phase 2/3 boundaries on 2026-09-05.
+
+- The screen provides the required access points while leaving all future
+  authority and calculations to their planned phases.
+- Search text is local only and cannot create a false Catalog implementation.
+- The new Cart route makes the Phase 1 exit condition observable.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Replaced the New Sale destination placeholder with a dedicated New Sale
+  screen using the POS search primitive.
+- Added a local Product search entry field and explicit Catalog-phase copy;
+  the field does not call the API or pretend to return Products.
+- Added a typed Cart route with a clear empty-state shell and return action.
+- Added shell route vocabulary tests for New Sale and Cart.
+- Kept active Device Session context and navigation ownership unchanged.
+
+Standards/spec review findings and fixes:
+
+- The destination placeholder route was replaced only for New Sale; other
+  later-phase workspaces remain explicit placeholders.
+- Cart access is real navigation, but Cart data/totals/persistence are not
+  implemented ahead of Phase 3.
+- Search state is local presentation state only and has no Catalog query.
+- All new copy uses the approved English/Gujarati/Hindi translation resources.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- Complete focused mobile suite — 18 passed across storage, localization, UI,
+  session, navigation, and shell-route suites.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- `git diff --check` — passed.
+
+1.8 status: Completed. Phase 1 exit behavior is statically wired; Android
+development-build, real Device Auth, and physical-device language/layout
+validation remain follow-ups for the user’s device check.
 
 ### Implementation and review result
 

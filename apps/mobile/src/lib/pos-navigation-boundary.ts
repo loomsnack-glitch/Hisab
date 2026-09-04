@@ -2,6 +2,7 @@ import type { DeviceSessionDTO } from "@repo/types";
 
 export const POS_SHARED_DESTINATIONS = ["NewSale", "Bills", "Customers", "Reports", "Settings"] as const;
 export const POS_RESTAURANT_DESTINATIONS = ["Tables"] as const;
+export const POS_SALE_SHELL_DESTINATIONS = ["NewSale", "Cart"] as const;
 
 export type PosSharedDestination = (typeof POS_SHARED_DESTINATIONS)[number];
 export type PosRestaurantDestination = (typeof POS_RESTAURANT_DESTINATIONS)[number];

@@ -10,6 +10,7 @@ type PosDestinationScreenProps = NativeStackScreenProps<PosStackParamList, Desti
 
 const destinationLabels: Record<DestinationName, PosTranslationKey> = {
     NewSale: "newSale",
+    Cart: "cart",
     Bills: "bills",
     Customers: "customers",
     Reports: "reports",

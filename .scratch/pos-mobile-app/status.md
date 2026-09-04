@@ -1,6 +1,6 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 0 completed with follow-ups
+Status: Phase 1 completed with follow-ups
 
 Last updated: 2026-09-05
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | In progress | Phase 1.1 POS application boundary is implemented; session, storage, localization, and feature screens remain. |
+| Mobile POS implementation | Completed with follow-ups | Phase 1.1–1.8 POS foundation is implemented; native/device validation and later feature screens remain. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -50,7 +50,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
 | 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and integration/release verification remain follow-ups. |
-| 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | In progress | Store Device unlock reaches New Sale with Cart access. |
+| 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Completed with follow-ups | Store Device unlock reaches New Sale with Cart access in the implemented shell; native/device validation remains pending. |
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Not started | Product selection reliably adds the intended Product to Cart. |
 | 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Not started | Cart can be reviewed, saved, resumed, and discarded safely. |
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Not started | Confirmed Sale reaches Sale Complete without duplicate submission. |
@@ -77,23 +77,23 @@ The detailed evidence is recorded in [phase-0.md](./phase-0.md). The key outcome
 - Existing shared POS services and types cover Device authentication, Catalog, Customers, Draft Sales, Sales, Payments, Bills, Reports, restaurant operations, and focused WhatsApp invoice actions.
 - Direct new-Sale checkout already supports server replay by `requestId`.
 - Draft Sale commit now requires a completion request key, persists it on the completed Sale, replays the same Sale on retry, and rejects reuse for another Sale. Focused billing tests cover these behaviors.
-- The current mobile app still uses generic user authentication and `expo-secure-store`; Phase 1 must replace that with the approved POS Device Session boundary and encrypted MMKV storage.
-- `i18next`/`react-i18next`, mobile tests, and camera scanning are planned dependencies/workstreams that are not installed or validated yet.
+- Phase 1 replaced the selected mobile flow's generic user authentication and `expo-secure-store` persistence with the approved POS Device Session, MMKV, and i18next boundaries; legacy generic auth files remain unused and can be cleaned up separately.
+- `i18next`/`react-i18next` and focused mobile boundary tests are installed and implemented; camera scanning remains a Phase 2 dependency/workstream.
 - The exact physical Android Store Device and Bluetooth printer remain pending selection. Printer hardware remains deferred to Phase 6.
 
 ### Required fixes before later phases
 
 | Fix / decision | Target | Status |
 | --- | --- | --- |
-| POS-specific Device Session boot, unlock, expiry, and logout boundary | Phase 1 | Planned |
-| MMKV-only encrypted storage with Android Keystore-backed key strategy | Phase 1 | Planned |
-| `i18next` + `react-i18next` resources, fallback, and persistence | Phase 1 | Planned |
-| Focused mobile test harness and service-contract tests | Phase 1 | Planned |
+| POS-specific Device Session boot, unlock, expiry, and logout boundary | Phase 1 | Completed with follow-up |
+| MMKV-only encrypted storage with Android Keystore-backed key strategy | Phase 1 | Completed with native-device follow-up |
+| `i18next` + `react-i18next` resources, fallback, and persistence | Phase 1 | Completed with device-layout follow-up |
+| Focused mobile test harness and service-contract tests | Phase 1 | Focused boundary tests completed; broader suites remain in Phase 8 |
 | Draft commit retry/idempotency behavior | Before Phase 4 | Implemented and focused-tested |
 | Camera dependency, permissions, and physical-device scan validation | Phase 2 | Planned |
 | Exact emulator, modern phone, and Store Device selection | Phase 0/8 | Pending input |
 
-Mobile POS implementation has started with the Phase 1.1 application boundary. The Draft commit idempotency follow-up remains complete, while the POS session, storage, localization, visual foundation, and feature screens are still pending.
+Mobile POS implementation has completed the Phase 1 foundation. The Draft commit idempotency follow-up remains complete; Catalog, Cart behavior, Payment, printing, and later workspaces remain in their planned phases.
 
 ### Phase 1 — POS foundation
 
@@ -106,7 +106,7 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 | 1.5 POS session state | Completed | POS-specific lifecycle transitions and verified-session root gating are implemented and focused-tested; native/API validation remains a follow-up. |
 | 1.6 POS Unlock screen | Completed with follow-up | POS Device unlock form, token/session persistence, language selection, and recovery states are implemented; real Android/API validation remains pending. |
 | 1.7 POS navigation shell | Completed with follow-up | Shared destinations, capability-gated Tables, and Device logout are implemented; real Android/API validation remains pending. |
-| 1.8 New Sale shell | Not started | Successful Unlock opens New Sale with Cart entry. |
+| 1.8 New Sale shell | Completed | New Sale and Cart shell routes are reachable after unlock; Catalog and Cart behavior remain in later phases. |
 
 ### Phase 2 — Catalog and Product selection
 
@@ -199,4 +199,4 @@ Mobile POS implementation has started with the Phase 1.1 application boundary. T
 
 ## Current next step
 
-Execute Phase 1 subphase 1.8 using the lifecycle recorded in [phase-1.md](./phase-1.md). Backend integration and real-database concurrency verification remain release checks. Native Android and physical-device validation must be reported separately from static checks.
+Phase 1 implementation is complete. Run the user-owned Android development-build/device checks recorded in [phase-1.md](./phase-1.md), then continue to Phase 2 Catalog planning/implementation. Backend integration and real-database concurrency verification remain release checks. Keep Bluetooth printer validation deferred to Phase 6.
