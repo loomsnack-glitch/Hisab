@@ -51,7 +51,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | --- | --- | --- | --- | --- |
 | 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and integration/release verification remain follow-ups. |
 | 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Completed with follow-ups | Store Device unlock reaches New Sale with Cart access in the implemented shell; native/device validation remains pending. |
-| 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Not started | Product selection reliably adds the intended Product to Cart. |
+| 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | In progress | Product selection reliably adds the intended Product to Cart. |
 | 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Not started | Cart can be reviewed, saved, resumed, and discarded safely. |
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Not started | Confirmed Sale reaches Sale Complete without duplicate submission. |
 | 5. Bills and supporting workspaces | Add post-Sale operations and simple management screens. | 5.1–5.5 | Not started | Bills, Customers, Reports, and Settings work for the active Store. |
@@ -114,7 +114,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | --- | --- | --- |
 | 2.1 Catalog query and cache | Completed with follow-up | Product/Category queries, Store/Device-scoped cache keys, and recoverable New Sale states are implemented; native/API validation remains pending. |
 | 2.2 Product search and Categories | Completed with follow-up | Product search, Category filtering, ordinary Product add-to-Cart, and immediate Cart handoff are implemented; native/API validation remains pending. |
-| 2.3 Camera barcode scanning | Not started | Android camera scan, permission, unknown-barcode, and fallback states work. |
+| 2.3 Camera barcode scanning | In progress | Plan reviewed; Android camera scan, permission, unknown-barcode, and fallback states are next. |
 | 2.4 Recent and Pinned Products | Not started | Local convenience actions do not replace server Catalog authority. |
 | 2.5 Combos and Add-ons | Not started | Required Product configuration is preserved in Cart and Draft Sale data. |
 

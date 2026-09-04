@@ -42,8 +42,8 @@ Not included in this phase:
 
 | Subphase | Outcome | Depends on | Exit evidence | Commit |
 | --- | --- | --- | --- | --- |
-| 2.1 | Catalog query and cache | Phase 1 | Product/Category queries have scoped cache and recoverable states | pending |
-| 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | pending |
+| 2.1 | Catalog query and cache | Phase 1 | Product/Category queries have scoped cache and recoverable states | `08e5d5b` |
+| 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
 | 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | pending |
 | 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | pending |
 | 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | pending |
@@ -175,7 +175,7 @@ Verification:
 - Android build/device/API validation — intentionally not run; native and live
   environment validation remains a follow-up.
 
-2.1 status: Completed with native/API follow-up. Focused commit: pending.
+2.1 status: Completed with native/API follow-up. Focused commit: `08e5d5b`.
 
 ## 2.2 — Product search and Categories
 
@@ -294,4 +294,107 @@ Verification:
 - Android build/device/API validation — intentionally not run; native and live
   environment validation remains a follow-up.
 
-2.2 status: Completed with native/API follow-up. Focused commit: pending.
+2.2 status: Completed with native/API follow-up. Focused commits: `ea26878`, `c4d4607`.
+
+## 2.3 — Camera barcode scanning
+
+### Plan
+
+User-facing outcome: a POS user can open the Android phone camera beside the
+Product search, scan a Product Code from the active server Catalog, and add an
+ordinary Product to Cart without losing the always-available manual search
+fallback.
+
+Implementation scope:
+
+- Add the Expo SDK 56-compatible `expo-camera` dependency and its Android
+  camera configuration plugin without enabling audio recording.
+- Use `CameraView` with an explicit set of common retail barcode formats and
+  keep the scanner embedded in New Sale so the search field remains available.
+- Request camera permission only when the user opens the scanner. A denied
+  permission, camera mount error, or user cancellation closes/keeps the
+  scanner usable without blocking manual Product search.
+- Resolve scanned data against the already-loaded active POS Product list by
+  exact Product Code. The server Catalog remains the authority; the camera
+  never supplies Product identity, price, discount, status, or configuration.
+- Add an exact ordinary `single` Product to the existing session-scoped Cart
+  handoff. Repeated scans merge quantity through the same Cart boundary as
+  manual Product taps.
+- Throttle the camera callback briefly after each accepted scan so one barcode
+  held in front of the camera does not create accidental duplicate lines.
+- For unknown or ambiguous codes, place the scanned value into the manual
+  search field and show a translated outcome. For configuration-required
+  Products, show the existing configuration-pending outcome and defer actual
+  configuration to 2.5.
+
+Acceptance criteria:
+
+1. New Sale exposes a scan action beside the search flow on Android.
+2. Camera permission is requested only after the user opens the scanner.
+3. Permission denial, camera mount failure, and cancellation preserve manual
+   Product search and leave the screen recoverable.
+4. An exact active Product Code resolves from the loaded server Product list;
+   an ordinary Product is added to Cart immediately.
+5. Repeated intentional scans merge quantity, while callbacks during the
+   short scan lock are ignored.
+6. Unknown and duplicate/ambiguous codes do not enter Cart and populate the
+   manual search fallback with a translated message.
+7. Configuration-required Products do not bypass the 2.5 configuration flow.
+8. Pure boundary tests cover exact resolution, duplicate-code ambiguity,
+   whitespace normalization, and scan throttling without Android hardware.
+
+Non-goals:
+
+- External Bluetooth or USB barcode scanners.
+- A new server barcode-lookup endpoint or Catalog persistence in MMKV.
+- Offline barcode resolution or billing.
+- Combo/Add-on selection, Cart editing, totals, or Draft Sale persistence.
+
+Public seams and effects:
+
+- New Sale consumes the existing `usePosCatalog` and `usePosCart` mobile
+  boundaries.
+- A small pure barcode boundary owns normalization, exact Product resolution,
+  and scan-throttle decisions so the screen does not contain business rules.
+- `expo-camera` is the only native capability added in this subphase; no
+  shared service or backend route changes are expected.
+- Product names and other Product fields remain server data and are not sent
+  through localization.
+
+Test and verification plan:
+
+- Pure mobile tests for normalization, exact resolution, ambiguous codes,
+  unknown-code fallback data, and cooldown acceptance.
+- Mobile focused test suite.
+- Mobile TypeScript check, separating the known WhatsApp asset baseline.
+- `git diff --check` and staged-scope review.
+- No Android build, Gradle, emulator, or device command in this environment.
+
+Risks and rollback:
+
+- Camera callbacks can fire repeatedly for one physical barcode; the pure
+  cooldown rule and callback lock must protect Cart quantity.
+- Permission and mount failures must never make manual search unavailable.
+- Duplicate Product Codes must not silently choose a billable Product.
+- The subphase can be rolled back as one focused commit plus its dependency
+  and app configuration without changing the POS API contract.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, the completed 2.1/2.2 boundaries,
+the existing web POS barcode-resolution semantics, ADRs 0002, 0004, and 0006,
+and the Expo SDK 56 camera documentation.
+
+- `expo-camera` is the maintained Expo-native camera boundary compatible with
+  this SDK family and exposes `CameraView` barcode callbacks without requiring
+  a new scanner service.
+- Exact resolution against the loaded POS Product list preserves server
+  Catalog authority and avoids inventing a mobile barcode contract.
+- The screen-level permission/cancel/error states preserve the approved
+  simple-UX manual fallback.
+- The pure boundary will reuse the existing POS meanings for exact,
+  ambiguous, and unknown codes while excluding inactive-code administration
+  data that the mobile POS does not load.
+- No new product, API, security, or release decision is required.
+
+Plan review result: approved for implementation.
