@@ -649,6 +649,7 @@ CREATE TABLE public.sales (
     created_by_device_id uuid,
     updated_by_device_id uuid,
     completion_request_id uuid,
+    draft_request_id uuid,
     replacement_of_sale_id uuid,
     sale_sequence_number bigint,
     sale_period_key character varying(32),
@@ -1648,6 +1649,10 @@ CREATE INDEX idx_stores_organization_id ON public.stores USING btree (organizati
 --
 
 CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING btree (store_id, completion_request_id) WHERE (completion_request_id IS NOT NULL);
+
+-- Name: sales_store_draft_request_id_key; Type: INDEX; Schema: public; Owner: -
+
+CREATE UNIQUE INDEX sales_store_draft_request_id_key ON public.sales USING btree (organization_id, store_id, draft_request_id) WHERE (draft_request_id IS NOT NULL);
 
 
 --

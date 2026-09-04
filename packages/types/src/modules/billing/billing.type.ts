@@ -180,6 +180,7 @@ export type CreateSaleREPO = Pick<
   | "discountTotal"
   | "grandTotal"
 > & {
+  draftRequestId?: string | null;
   replacementOfSaleId?: string | null;
   completionRequestId?: string | null;
   userId?: string | null;

@@ -2134,6 +2134,17 @@ const createDraftSaleInStore = async (
   storeId: string,
   saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  if (saleData.draftRequestId) {
+    const existingSaleId = await billingRepository.getSaleIdByDraftRequestId(
+      organizationId,
+      storeId,
+      saleData.draftRequestId,
+    );
+    if (existingSaleId) {
+      return getSaleDetailsInStore(organizationId, storeId, existingSaleId);
+    }
+  }
+
   const customerId = normalizeOptionalUuid(saleData.customerId);
   const customerResult = await validateCustomerAssignment(
     organizationId,
@@ -2192,6 +2203,7 @@ const createDraftSaleInStore = async (
         id: saleId,
         organizationId,
         storeId,
+        draftRequestId: saleData.draftRequestId ?? null,
         customerId,
         customerNameSnapshot: customerResult.customer?.name ?? null,
         customerPhoneSnapshot: customerResult.customer?.phone ?? null,
@@ -2260,6 +2272,16 @@ const createDraftSaleInStore = async (
       await kotWrite.persist?.(tx);
   });
   } catch (error) {
+    if (saleData.draftRequestId) {
+      const existingSaleId = await billingRepository.getSaleIdByDraftRequestId(
+        organizationId,
+        storeId,
+        saleData.draftRequestId,
+      );
+      if (existingSaleId) {
+        return getSaleDetailsInStore(organizationId, storeId, existingSaleId);
+      }
+    }
     const recovered = await recoverStandaloneKotGenerationRace(
       error,
       organizationId,

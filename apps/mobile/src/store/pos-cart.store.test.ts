@@ -66,4 +66,23 @@ describe("POS Cart store", () => {
         expect(usePosCartStore.getState().scopeKey).toBeNull();
         expect(usePosCartStore.getState().items).toEqual([]);
     });
+
+    it("keeps a stable Draft identity through updates and clears it on discard", () => {
+        usePosCartStore.getState().clear();
+        const scope = "org-1:store-1:device-1";
+        usePosCartStore.getState().addProduct(scope, product);
+        usePosCartStore.getState().setDraftRequestId(scope, "request-1");
+        usePosCartStore.getState().setDraftSaleId(scope, "sale-1");
+        usePosCartStore.getState().changeQuantity(scope, "product-1", 1);
+
+        expect(usePosCartStore.getState()).toMatchObject({
+            draftRequestId: "request-1",
+            draftSaleId: "sale-1",
+        });
+
+        usePosCartStore.getState().clearDraftSale(scope);
+        expect(usePosCartStore.getState().draftRequestId).toBeNull();
+        expect(usePosCartStore.getState().draftSaleId).toBeNull();
+        expect(usePosCartStore.getState().items).toHaveLength(1);
+    });
 });

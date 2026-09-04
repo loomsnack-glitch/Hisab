@@ -133,6 +133,7 @@ const mapSaleSummaryRow = (row: SaleSummaryRow): SaleSummaryDTO => {
     delete summary.createdByDeviceName;
     delete summary.updatedByDeviceName;
     delete summary.completionRequestId;
+    delete summary.draftRequestId;
 
     return {
         ...(summary as Omit<SaleSummaryDTO, "customer">),
@@ -896,6 +897,25 @@ export const getSaleIdByCompletionRequestId = async (
         WHERE organization_id = ${organizationId}
           AND store_id = ${storeId}
           AND completion_request_id = ${completionRequestId}
+        LIMIT 1
+    `;
+
+    return result ? String(result.id) : null;
+};
+
+export const getSaleIdByDraftRequestId = async (
+    organizationId: string,
+    storeId: string,
+    draftRequestId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<string | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT id
+        FROM sales
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND draft_request_id = ${draftRequestId}
         LIMIT 1
     `;
 

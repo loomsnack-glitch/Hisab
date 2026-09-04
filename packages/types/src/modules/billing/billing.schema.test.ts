@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
     AddOnSalesRollupsResponseSchema,
     CommitSaleSchema,
+    CreateDraftSaleSchema,
     CustomerListQuerySchema,
     CompleteSaleSchema,
     PaymentMethodSchema,
@@ -15,6 +16,15 @@ import {
 } from "./billing.schema";
 
 describe("Configured sale billing contracts", () => {
+    test("accepts a stable Draft create request id", () => {
+        const result = CreateDraftSaleSchema.safeParse({
+            draftRequestId: "28282828-2828-4282-8282-282828282828",
+            items: [],
+        });
+
+        expect(result.success).toBe(true);
+    });
+
     test("commit may carry the final draft items for atomic checkout", () => {
         const result = CommitSaleSchema.safeParse({
             requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

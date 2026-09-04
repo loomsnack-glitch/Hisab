@@ -4,7 +4,7 @@ Status: Phase 3 in progress
 
 Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), and the Phase 3 execution record is in [phase-3.md](./phase-3.md). Phase 3.5 Discounts is completed with follow-up; Phase 3.6 Draft Sale persistence is next.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), and the Phase 3 execution record is in [phase-3.md](./phase-3.md). Phase 3.6 Server Draft Sale persistence is in progress.
 
 ## Current scope
 
@@ -52,7 +52,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and integration/release verification remain follow-ups. |
 | 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Completed with follow-ups | Store Device unlock reaches New Sale with Cart access in the implemented shell; native/device validation remains pending. |
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Completed with follow-up | Product selection, scanning, shortcuts, and supported configuration are implemented; native/API validation and bundle-detail API remain follow-ups. |
-| 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Not started | Cart can be reviewed, saved, resumed, and discarded safely. |
+| 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Completed with follow-up | Cart review, local Draft actions, server persistence, and duplicate-create protection are implemented; migration/native/API validation remains pending. |
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Not started | Confirmed Sale reaches Sale Complete without duplicate submission. |
 | 5. Bills and supporting workspaces | Add post-Sale operations and simple management screens. | 5.1–5.5 | Not started | Bills, Customers, Reports, and Settings work for the active Store. |
 | 6. Bluetooth printing | Validate hardware and print English-only receipts reliably. | 6.1–6.3 | Deferred until implementation | Supported Android device can print and retry without Sale rollback. |
@@ -126,8 +126,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | 3.2 Cart Review screen | Completed with follow-up | `0a16c2b`; Cart Review and guarded Payment action are implemented; native/device validation remains pending. |
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; Customer search/selection is implemented; native/device/API validation remains pending. |
 | 3.4 Quick Customer creation | Completed with follow-up | `d1acce6`; Customer creation is implemented; native/device/API validation remains pending. |
-| 3.5 Discounts | Completed with follow-up | Amount/percentage discount validation and display updates are implemented; native/device validation remains pending. |
-| 3.6 Server Draft Sale persistence | Not started | Hybrid local/server Draft behavior, resume, delete, and retry are verified. |
+| 3.5 Discounts | Completed with follow-up | `465a9c9`; amount/percentage discount validation and display updates are implemented; native/device validation remains pending. |
+| 3.6 Server Draft Sale persistence | Completed with follow-up | Draft mapping, stable create retry keys, server persistence, update/delete boundaries, and Cart actions are implemented; migration/native/API validation remains pending. |
 
 ### Phase 4 — Payment and Sale completion
 

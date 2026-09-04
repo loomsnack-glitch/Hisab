@@ -400,6 +400,7 @@ const saleKotGenerationSchema = {
 };
 
 export const CreateDraftSaleSchema = z.object({
+  draftRequestId: z.uuid("Invalid draft request id").optional(),
   customerId: z
     .union([z.literal(""), z.uuid("Invalid customer id")])
     .nullable()

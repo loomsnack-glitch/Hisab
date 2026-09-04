@@ -1,5 +1,6 @@
 import { useDeferredValue, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
+import * as Crypto from "expo-crypto";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
@@ -12,6 +13,8 @@ import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 import { usePosCustomers } from "../hooks/use-pos-customers";
 import { useCreatePosCustomer } from "../hooks/use-create-pos-customer";
 import { normalizePosCustomerCreatePayload } from "../lib/pos-customer-boundary";
+import { buildPosDraftPayload, buildPosDraftUpdatePayload } from "../lib/pos-draft-boundary";
+import { usePosDraftActions } from "../hooks/use-pos-draft-actions";
 
 type CartShellScreenProps = NativeStackScreenProps<PosStackParamList, "Cart">;
 
@@ -34,6 +37,8 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const deferredCustomerSearch = useDeferredValue(customerSearch);
     const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
     const customerCreate = useCreatePosCustomer();
+    const draftActions = usePosDraftActions();
+    const [draftNotice, setDraftNotice] = useState<"saved" | "discarded" | "error" | null>(null);
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
     const configurationLookup = {
         addOnNames: new Map(configuration.attachments.map((attachment) => [attachment.addOnId, attachment.addOn.name])),
@@ -71,6 +76,47 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
         cart.setDiscount(value === 0 ? null : nextDiscount);
         setDiscountError(false);
         setDiscountEditorOpen(false);
+    };
+    const saveDraft = async () => {
+        if (cart.items.length === 0 || draftActions.savePending) {
+            return;
+        }
+
+        const draftRequestId = cart.draftRequestId ?? Crypto.randomUUID();
+        cart.setDraftRequestId(draftRequestId);
+        try {
+            const sale = await draftActions.save({
+                draftSaleId: cart.draftSaleId,
+                createPayload: buildPosDraftPayload({
+                    items: cart.items,
+                    customer: cart.customer,
+                    discount: cart.discount,
+                    draftRequestId,
+                }),
+                updatePayload: buildPosDraftUpdatePayload({
+                    items: cart.items,
+                    customer: cart.customer,
+                    discount: cart.discount,
+                }),
+            });
+            cart.setDraftSaleId(sale.id);
+            setDraftNotice("saved");
+        } catch {
+            setDraftNotice("error");
+        }
+    };
+    const discardDraft = async () => {
+        if (!cart.draftSaleId || draftActions.discardPending) {
+            return;
+        }
+
+        try {
+            await draftActions.discard(cart.draftSaleId);
+            cart.clearDraftSale();
+            setDraftNotice("discarded");
+        } catch {
+            setDraftNotice("error");
+        }
     };
     const submitCustomerCreate = async () => {
         const result = normalizePosCustomerCreatePayload(newCustomerName, newCustomerPhone);
@@ -320,6 +366,25 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                             </View>
                         </View>
                         <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("cartDisplayTotalNote")}</Text>
+                        <View className="flex-row flex-wrap gap-2">
+                            <PosButton
+                                label={cart.draftSaleId ? t("updateDraft") : t("saveDraft")}
+                                loading={draftActions.savePending}
+                                onPress={saveDraft}
+                            />
+                            {cart.draftSaleId ? (
+                                <PosButton label={t("discardDraft")} variant="destructive" loading={draftActions.discardPending} onPress={discardDraft} />
+                            ) : null}
+                        </View>
+                        {draftNotice === "saved" ? (
+                            <Text className="text-sm text-pos-success dark:text-pos-success-dark">{t("draftSaved")}</Text>
+                        ) : null}
+                        {draftNotice === "discarded" ? (
+                            <Text className="text-sm text-pos-success dark:text-pos-success-dark">{t("draftDiscarded")}</Text>
+                        ) : null}
+                        {draftNotice === "error" ? (
+                            <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("draftActionFailed")}</Text>
+                        ) : null}
                         {showPaymentNotice ? (
                             <Text className="text-sm leading-6 text-pos-warning dark:text-pos-warning-dark">{t("paymentComingSoon")}</Text>
                         ) : null}

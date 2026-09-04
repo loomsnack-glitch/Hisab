@@ -48,8 +48,8 @@ Not included in this phase:
 | 3.2 | Cart Review screen | 3.1 | Product lines, configurations, totals, and Continue to Payment are clear | `0a16c2b` |
 | 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | `7356c4d` |
 | 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | `d1acce6` |
-| 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | `Pending` |
-| 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | Pending |
+| 3.5 | Discounts | 3.2 | Valid amount/percentage discounts update the displayed total | `465a9c9` |
+| 3.6 | Server Draft Sale persistence | 3.1–3.5 | Draft save, update, resume, delete, retry, and duplicate protection work | `Pending` |
 
 ## Shared Phase 3 decisions
 
@@ -149,7 +149,7 @@ Plan review result: approved for implementation.
 | 3.3 Customer picker and Walk-in | Completed with follow-up | `7356c4d`; native/device/API validation remains pending |
 | 3.4 Quick Customer creation | Completed with follow-up | `d1acce6`; native/device/API validation remains pending |
 | 3.5 Discounts | Completed with follow-up | `Pending`; amount/percentage discount validation and display updates are implemented; native/device validation remains pending |
-| 3.6 Server Draft Sale persistence | Not started | Depends on 3.1–3.5 |
+| 3.6 Server Draft Sale persistence | Completed with follow-up | Implementation complete; migration application and native/API validation remain pending |
 
 ## 3.5 Implementation and review result
 
@@ -187,7 +187,161 @@ Verification:
 - Android build, emulator, device, and live API checks — intentionally not run;
   these remain user-owned validation steps.
 
-3.5 status: Completed with follow-up. Implementation commit: pending.
+3.5 status: Completed with follow-up. Implementation commit: `465a9c9`.
+
+## 3.6 — Server Draft Sale persistence
+
+### Plan
+
+User-facing outcome: a cashier can save the current Cart as a server Draft,
+update the same Draft after Cart changes, retry a failed save without creating a
+second Draft, and intentionally discard the active Draft. A later Bills slice
+can use the same get-by-ID/delete boundaries to list and resume Drafts.
+
+Implementation scope:
+
+- Add a pure Draft Sale boundary that maps local Cart lines, configured
+  Add-ons/Combo selections, optional Customer, and the effective order discount
+  into the existing shared `CreateDraftSaleJSON`/`UpdateDraftSaleJSON` shapes.
+- Preserve IDs and quantities only; do not send local Product prices or treat
+  mobile display totals as billing authority.
+- Add a server Draft identifier and stable create request key to the scoped
+  Cart store. A successful first save switches future saves to update; retrying
+  the same create request reuses the key.
+- Add mobile service wrappers and React Query mutations for create/update,
+  get-by-ID, and delete, with one active save/delete operation at a time.
+- Add Cart Review actions for Save Draft and Discard Draft. Keep Payment and
+  Sale completion outside this slice.
+- Add the minimal backend/schema/repository support required for a persisted
+  draft request key, including a store-scoped unique index and race recovery.
+  This is necessary because the current create contract has no general
+  idempotency field.
+- Keep resume-by-ID and delete-by-ID boundaries tested now; the full Bills list
+  and Draft list UI remain Phase 5, while the current Cart can resume an
+  explicitly loaded Draft through the boundary.
+- Add focused tests for payload mapping, configured items, discount mapping,
+  create/update selection, stable retry keys, delete behavior, and concurrent
+  duplicate-create recovery.
+
+Acceptance criteria:
+
+1. A non-empty Cart can be saved as a Draft using existing POS services.
+2. A saved Draft retains Customer, order discount, Product IDs, quantities,
+   Add-ons, and Combo selections through the shared server contract.
+3. Changes after the first save update the same Draft ID instead of creating a
+   new Draft.
+4. A retry of the same create request returns the same Draft, including when
+   two requests race; no duplicate Draft row is created.
+5. Save failures leave the local Cart and retry key intact for a safe retry.
+6. Discard deletes the server Draft first and clears the local Draft context
+   only after a successful delete; a failed delete remains recoverable.
+7. Resume and delete boundaries reject missing/not-found/non-Draft records with
+   recoverable errors and do not mutate the local Cart on failure.
+8. English, Gujarati, and Hindi labels cover save, retry, discard, and status
+   feedback.
+
+Non-goals:
+
+- Payment entry, commit/complete Sale, receipts, and printing (Phases 4 and 6).
+- Bills list/filter/detail UI and general Draft browsing (Phase 5).
+- Offline creation, local MMKV Draft caching, or treating a local Cart as a
+  server Sale.
+- Client-side price/tax/discount allocation or any replacement of server
+  validation.
+
+Dependencies and public seams:
+
+- Completed 3.1–3.5 Cart boundary, store, hook, and Cart Review screen.
+- Existing shared POS Draft service methods and billing types.
+- Existing server sales table, billing repository, POS routes, and migration
+  conventions.
+- React Query provider and existing scoped POS session.
+
+Test strategy and expected checks:
+
+- Add pure mobile Draft mapping tests and Cart-store Draft lifecycle tests.
+- Add focused backend service/repository tests for idempotent create and the
+  unique-key race path, plus schema/type checks where the repository normally
+  runs them.
+- Run `bun run --cwd apps/mobile test` and the focused backend test command if
+  available without starting a long-running process.
+- Run the mobile TypeScript check and separate the known WhatsApp asset error.
+- Run `git diff --check`; do not run Android builds or device commands.
+
+Risks and rollback:
+
+- The request key must be generated once per local create attempt and retained
+  until the server returns a Draft ID; generating a new key on every retry
+  would reintroduce duplicate creation.
+- The unique key is scoped to Organization and Store so two Stores can use the
+  same UUID only in the extremely unlikely event of an externally supplied
+  collision without cross-Store interference.
+- Existing completion idempotency must remain separate from Draft creation
+  idempotency.
+- If the backend migration is not applied to the target environment, mobile
+  Draft save cannot claim duplicate protection; deployment migration remains a
+  release gate.
+- Rollback can revert the mobile Draft boundary/actions and the additive
+  request-key migration/contract without changing completed Cart behavior.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, `CONTEXT.md`, completed 3.1–3.5,
+the shared billing schemas/services, POS routes, billing repository, and the
+existing completion/KOT idempotency implementations. The review found that
+create Draft currently lacks a general retry key, so the additive backend field
+and unique lookup are required to satisfy the approved no-duplicate criterion.
+The plan keeps the hybrid local Cart/server Draft boundary, does not add
+Payment, and leaves Bills browsing to Phase 5.
+
+Plan review result: approved for implementation.
+
+## 3.6 Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added a selection-only Cart-to-Draft mapping for Product IDs, quantities,
+  direct Add-ons, Combo selections, Customer ID, and the effective order
+  discount. Local Product prices and display totals are not sent as authority.
+- Added scoped local Draft Sale and create-request identities. A successful
+  save switches the Cart to update mode; failed saves retain the Cart and the
+  stable retry key.
+- Added React Query save/update/get/delete boundaries and Cart Review Save
+  Draft, Update Draft, and Discard Draft actions with translated feedback.
+- Added `draft_request_id` to the shared create contract, sales table, and
+  repository lookup. The store-scoped unique index plus lookup-after-write
+  recovery prevents duplicate Draft creation when a request is retried or
+  races after the first write.
+- Kept resume-by-ID and delete-by-ID service boundaries ready for the Phase 5
+  Bills surface; no Bills browsing, Payment, Sale completion, or printing was
+  added here.
+
+Standards/spec review:
+
+- The mobile payload follows the existing selection-only billing contract and
+  leaves pricing, validation, and final totals to the server.
+- Create and update are separated by the server Draft ID, while the create
+  request UUID remains stable across unknown-response retries.
+- Discard clears local Draft metadata only after a successful server delete;
+  failed deletes leave the Draft recoverable.
+- The additive migration is isolated from completion idempotency and KOT
+  generation idempotency, with Organization/Store scoping on the new key.
+- Cart, Customer, discount, and configured-line state remain scoped to the
+  active POS Device context.
+
+Verification:
+
+- `bun run --cwd apps/mobile test` — 55 passed, 127 expectations.
+- `bun test packages/types/src/modules/billing/billing.schema.test.ts apps/backend/src/modules/tenant/billing/billing.service.configured.test.ts` — 64 passed, 330 expectations.
+- Mobile TypeScript check — only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` declaration remains.
+- Backend-wide TypeScript check — existing unrelated repository/test errors
+  remain; the focused billing tests pass.
+- `git diff --check` — passed.
+- Android build, emulator, device, live API, and migration-application checks —
+  intentionally not run; these remain user-owned/release validation gates.
+
+3.6 status: Completed with follow-up. Implementation commit: pending.
 
 ## 3.1 Implementation and review result
 

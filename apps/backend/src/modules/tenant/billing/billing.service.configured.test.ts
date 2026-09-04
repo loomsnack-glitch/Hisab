@@ -285,6 +285,11 @@ const getSaleIdByCompletionRequestId = mock(
     (createdSales.find((sale) => sale.completionRequestId === requestId)?.id as
       string | undefined) ?? null,
 );
+const getSaleIdByDraftRequestId = mock(
+  async (_organizationId: string, _storeId: string, requestId: string) =>
+    (createdSales.find((sale) => sale.draftRequestId === requestId)?.id as
+      string | undefined) ?? null,
+);
 
 const deleteSaleItemsBySaleId = mock(
   async (_organizationId: string, _storeId: string, saleId: string) => {
@@ -489,6 +494,7 @@ mock.module("./billing.repository", () => ({
     getSaleItemsBySaleId,
     getPaymentsBySaleId,
     getSaleIdByCompletionRequestId,
+    getSaleIdByDraftRequestId,
     deleteSaleItemsBySaleId,
     deleteDraftSale,
     updateSale,
@@ -576,6 +582,7 @@ describe("Configured product billing with trusted snapshots", () => {
         createSaleItemBundleComponentAddOn.mockClear();
         getSaleById.mockClear();
         getSaleIdByCompletionRequestId.mockClear();
+        getSaleIdByDraftRequestId.mockClear();
         getSaleItemsBySaleId.mockClear();
         deleteSaleItemsBySaleId.mockClear();
         deleteDraftSale.mockClear();
@@ -704,6 +711,29 @@ describe("Configured product billing with trusted snapshots", () => {
     expect(persistPreparedStandaloneKotBatch.mock.calls[0]?.[2]).toBe(
       createSale.mock.calls[0]?.[1],
     );
+  });
+
+  test("replays a direct Draft Sale when its create request is retried", async () => {
+    const payload = {
+      draftRequestId: "28282828-2828-4282-8282-282828282828",
+      items: [{ productId, quantity: 1, addOns: [] }],
+      serviceMode: "dine_in" as const,
+    };
+
+    const first = await billingService.createDraftSaleForDevice(
+      deviceSession,
+      payload,
+    );
+    const second = await billingService.createDraftSaleForDevice(
+      deviceSession,
+      payload,
+    );
+
+    expect(first.status).toBe("success");
+    expect(second.status).toBe("success");
+    expect(second.data?.sale.id).toBe(first.data?.sale.id);
+    expect(createdSales).toHaveLength(1);
+    expect(getSaleIdByDraftRequestId).toHaveBeenCalledTimes(2);
   });
 
   test("returns one Sale when the same Draft KOT request arrives concurrently", async () => {

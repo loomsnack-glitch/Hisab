@@ -11,11 +11,15 @@ export const usePosCart = () => {
     const items = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.items : []));
     const customer = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.customer : null));
     const discount = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.discount : null));
+    const draftSaleId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.draftSaleId : null));
+    const draftRequestId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.draftRequestId : null));
 
     return {
         items,
         customer,
         discount,
+        draftSaleId,
+        draftRequestId,
         itemCount: getCartItemCount(items),
         displayTotals: getCartDisplayTotals(items, discount),
         addProduct: (product: ProductResponseDTO) => {
@@ -54,6 +58,21 @@ export const usePosCart = () => {
         setDiscount: (nextDiscount: PosCartDiscount | null) => {
             if (scopeKey) {
                 usePosCartStore.getState().setDiscount(scopeKey, nextDiscount);
+            }
+        },
+        setDraftSaleId: (nextDraftSaleId: string | null) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setDraftSaleId(scopeKey, nextDraftSaleId);
+            }
+        },
+        setDraftRequestId: (nextDraftRequestId: string) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setDraftRequestId(scopeKey, nextDraftRequestId);
+            }
+        },
+        clearDraftSale: () => {
+            if (scopeKey) {
+                usePosCartStore.getState().clearDraftSale(scopeKey);
             }
         },
         clear: () => usePosCartStore.getState().clear(),
