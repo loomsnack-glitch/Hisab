@@ -49,8 +49,8 @@ Not included in this phase:
 | --- | --- | --- | --- | --- |
 | 1.1 | POS app boundary | Phase 0 | Authenticated flow enters POS-owned navigator | `81a754c` |
 | 1.2 | MMKV storage boundary | 1.1 | Separate storage areas and encrypted session adapter tested | `7a040cd` |
-| 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `Pending commit` |
-| 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | Pending |
+| 1.3 | Localization foundation | 1.2 | Three bundled languages, English fallback, persisted selection | `2cb9d87` |
+| 1.4 | Uniwind design foundation | 1.3 | Semantic tokens and reusable POS primitives | `Pending commit` |
 | 1.5 | POS session state | 1.2, 1.3 | Device Session lifecycle states and recovery covered | Pending |
 | 1.6 | POS Unlock screen | 1.5, 1.4 | Valid Device credentials unlock; validation/recovery are clear | Pending |
 | 1.7 | POS navigation shell | 1.5, 1.6 | Shared and capability-gated destinations are reachable | Pending |
@@ -299,6 +299,118 @@ the MMKV preference API from 1.2, and the current Provider entrypoint on
 - It keeps sensitive data out of the preferences instance and keeps business
   values out of translation resources.
 - It has a testable pure seam and does not require an Android build.
+
+## 1.4 — Uniwind design foundation
+
+### Plan
+
+User-facing outcome: POS screens use a consistent, touch-friendly visual
+language with semantic light/dark tokens. Repeated controls have one internal
+implementation so future billing screens remain simple and predictable.
+
+Implementation scope:
+
+- Extend `apps/mobile/global.css` with semantic POS surface, text, border,
+  action, success, warning, and destructive tokens for light and dark themes.
+- Keep component class names semantic; screen code must not introduce new raw
+  color literals for POS-owned UI.
+- Add small internal primitives: `PosButton`, `PosTextField`, `PosCard`, and
+  `PosStatusBadge`.
+- Support primary, secondary, and destructive button variants, disabled/loading
+  behavior, error field state, and status tone variants.
+- Apply minimum 48dp control height, readable text hierarchy, visible error
+  state, and rounded surfaces to the existing POS shell controls.
+- Keep component props technology-light enough for later screen composition and
+  do not expose a large design-system dependency.
+
+Acceptance criteria:
+
+1. Light and dark semantic token sets exist for all foundation control states.
+2. Reusable primitives cover button, text input, card, and status badge needs.
+3. Buttons have a minimum 48dp target and expose loading/disabled behavior.
+4. Text fields expose label, placeholder, required, and error states.
+5. Existing POS shell controls consume the new primitives/tokens.
+6. A pure token/variant test verifies the approved variant vocabulary.
+
+Non-goals:
+
+- Rebuilding every legacy auth component in this slice.
+- Introducing icons, animations, charts, or a third-party component library.
+- Adding theme settings persistence; that belongs to the later Settings slice.
+- Implementing feature-specific Product, Cart, Payment, or printer components.
+
+Public seams and effects:
+
+- `apps/mobile/src/components/pos-ui.tsx` is the internal POS component seam.
+- POS screens depend on semantic class names and variant props, not raw palette
+  values.
+- Existing `PrimaryButton` and `TextField` remain compatibility wrappers while
+  their styles move to the POS vocabulary.
+
+Test and verification plan:
+
+- Pure test for semantic token names and supported component variants.
+- Mobile TypeScript check and focused Bun tests only; no Android build command.
+- Static review of raw color usage in the changed POS components.
+- `git diff --check`.
+
+Risks and rollback:
+
+- Token changes can affect contrast; use strong foreground/background pairs and
+  leave final device contrast/layout verification to the Android check.
+- Uniwind class generation is native/runtime configuration, so this slice
+  records static token validation and leaves visual device validation pending.
+- The slice can be reverted before session screens adopt the primitives.
+
+### Internal plan review
+
+Reviewed against the approved Uniwind/internal-components decision, current
+mobile CSS, existing component APIs, and the simple-UX rule on 2026-09-05.
+
+- The component set is intentionally minimal and supports the current and
+  immediately following Phase 1 screens.
+- It does not change server behavior or pull later feature scope forward.
+- Semantic light/dark classes preserve the approved design-token direction.
+- Existing wrapper names are kept to reduce unrelated migration risk.
+
+### Implementation and review result
+
+Completed on 2026-09-05.
+
+- Added semantic POS light/dark tokens for surfaces, text, borders, primary
+  actions, success, warning, and destructive states.
+- Added the small internal `PosButton`, `PosTextField`, `PosCard`, and
+  `PosStatusBadge` primitives with typed variant vocabularies.
+- Enforced a minimum 48dp button target and shared loading/disabled behavior.
+- Migrated the existing mobile `PrimaryButton` and `TextField` compatibility
+  wrappers to the POS primitives.
+- Migrated the POS shell surface and text styles to semantic tokens.
+- Added focused tests for the intentionally small button and status variant
+  sets.
+
+Standards/spec review findings and fixes:
+
+- Initial status badge classes used raw palette names; they were replaced with
+  semantic POS tokens and theme variants.
+- Initial POS shell classes still used legacy stone/amber literals; they were
+  migrated to semantic tokens.
+- Initial test comparison passed a readonly tuple to Bun's mutable array type;
+  the assertion now compares a copied array.
+- No feature-specific Catalog, Cart, Payment, or printer UI was added.
+- No Android build command was run, as requested by the user.
+
+Verification:
+
+- Focused mobile tests — 9 passed across storage, localization, and UI-boundary
+  suites.
+- Mobile TypeScript check — only the known WhatsApp asset import baseline
+  remains.
+- Raw palette scan of changed POS primitives/shell — no screen-level palette
+  literals remain.
+- `git diff --check` — passed.
+
+1.4 status: Completed. Native theme and text-layout validation remains a
+physical-device follow-up.
 
 ### Implementation and review result
 

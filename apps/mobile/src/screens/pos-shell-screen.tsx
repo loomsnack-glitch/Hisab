@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { clearAuthToken, userLogout } from "@repo/services";
 
 import PrimaryButton from "../components/primary-button";
+import { PosCard } from "../components/pos-ui";
 import { AUTH_QUERY_KEY } from "../hooks/use-auth-bootstrap";
 import { useAuthActions } from "../store/auth.store";
 
@@ -29,14 +30,14 @@ const PosShellScreen = () => {
 
     return (
         <ScrollView
-            className="flex-1 bg-stone-100"
+            className="flex-1 bg-pos-background dark:bg-pos-background-dark"
             contentContainerClassName="gap-5 px-5 py-6"
             contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
         >
-            <View className="gap-3 rounded-[28px] border border-amber-100 bg-white p-5">
-                <Text className="text-xs font-bold uppercase tracking-[2px] text-amber-800">{t("appName")}</Text>
-                <Text className="text-2xl font-semibold text-stone-950">{t("workspaceTitle", { ns: "pos" })}</Text>
-                <Text className="text-sm leading-6 text-stone-600">
+            <PosCard>
+                <Text className="text-xs font-bold uppercase tracking-[2px] text-pos-primary dark:text-pos-primary-dark">{t("appName")}</Text>
+                <Text className="text-2xl font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("workspaceTitle", { ns: "pos" })}</Text>
+                <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">
                     {t("foundationMessage", { ns: "pos" })}
                 </Text>
                 <PrimaryButton
@@ -44,7 +45,7 @@ const PosShellScreen = () => {
                     loading={logoutMutation.isPending}
                     onPress={() => logoutMutation.mutate()}
                 />
-            </View>
+            </PosCard>
         </ScrollView>
     );
 };

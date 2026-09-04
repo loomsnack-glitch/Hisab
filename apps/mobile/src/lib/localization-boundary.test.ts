@@ -10,7 +10,7 @@ import {
 describe("localization boundary", () => {
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);
-        expect(Object.keys(appResources)).toEqual(APP_LANGUAGES);
+        expect(Object.keys(appResources)).toEqual([...APP_LANGUAGES]);
         expect(isAppLanguage("en")).toBe(true);
         expect(isAppLanguage("gu")).toBe(true);
         expect(isAppLanguage("hi")).toBe(true);
