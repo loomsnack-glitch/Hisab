@@ -6,7 +6,7 @@ import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
-import { ArrowLeft, MonitorSmartphone, Pencil, Settings2, Store } from "lucide-react";
+import { ArrowLeft, BadgeCheck, MonitorSmartphone, Pencil, Settings2, Store } from "lucide-react";
 
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
@@ -15,6 +15,7 @@ import StoreFeatureSettingsForm from "@/components/organizations/store-feature-s
 import InvoiceAppearanceSettingsForm from "@/components/organizations/invoice-appearance-settings-form";
 import StorePaymentRoutingForm from "@/components/organizations/store-payment-routing-form";
 import StoreDevicesSection from "@/components/organizations/store-devices-section";
+import StoreCommercialStatus from "@/components/organizations/store-commercial-status";
 import { formatDateTime } from "@/lib/format";
 import { organizationKeys } from "@/lib/query-keys";
 import {
@@ -27,6 +28,7 @@ import {
 const tabs = [
     { label: "Devices", path: "devices" as const, icon: MonitorSmartphone },
     { label: "Settings", path: "settings" as const, icon: Settings2 },
+    { label: "License", path: "license" as const, icon: BadgeCheck },
 ] as const;
 
 const useStoreDetailContext = () => {
@@ -161,7 +163,7 @@ const StoreDetailShell = () => {
             </Card>
 
             <div className="border-b border-border/60">
-                <nav className="grid grid-cols-2 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Store detail tabs">
+                <nav className="grid grid-cols-3 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Store detail tabs">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.path;
@@ -228,6 +230,16 @@ const StoreSettingsPage = () => {
     );
 };
 
+const StoreLicensePage = () => {
+    const { organizationId, store } = useStoreDetailContext();
+
+    if (!store) {
+        return null;
+    }
+
+    return <StoreCommercialStatus organizationId={organizationId} storeId={store.id} />;
+};
+
 const StoreDetailIndexRedirect = () => {
     const { organizationId, storeId } = useParams();
     if (!organizationId || !storeId) {
@@ -236,5 +248,5 @@ const StoreDetailIndexRedirect = () => {
     return <Navigate to={getStoreDetailPath(organizationId, storeId, "devices" satisfies StoreDetailTab)} replace />;
 };
 
-export { StoreDetailShell, StoreDevicesPage, StoreSettingsPage, StoreDetailIndexRedirect };
+export { StoreDetailShell, StoreDevicesPage, StoreSettingsPage, StoreLicensePage, StoreDetailIndexRedirect };
 export default StoreDetailShell;

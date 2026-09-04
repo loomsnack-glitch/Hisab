@@ -171,6 +171,12 @@ export const purchaseKeys = {
     [...purchaseKeys.all, organizationId, purchaseId] as const,
 };
 
+export const commercialLicenseKeys = {
+  all: ["commercial-licensing"] as const,
+  status: (organizationId: string, storeId: string) =>
+    [...commercialLicenseKeys.all, organizationId, storeId] as const,
+};
+
 export const moneyAccountKeys = {
   all: ["money-accounts"] as const,
   list: (organizationId: string) => [...moneyAccountKeys.all, organizationId] as const,

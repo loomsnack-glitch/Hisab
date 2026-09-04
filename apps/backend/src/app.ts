@@ -20,6 +20,7 @@ import vendorsRoutes from './modules/tenant/vendors/vendors.routes';
 import moneyAccountsRoutes from './modules/tenant/money-accounts/money-accounts.routes';
 import purchasesRoutes from './modules/tenant/purchases/purchases.routes';
 import expensesRoutes from './modules/tenant/expenses/expenses.routes';
+import commercialLicensingRoutes from './modules/tenant/commercial-licensing/commercial-licensing.routes';
 import googleContactsInternalRoutes from './modules/tenant/google-contacts/google-contacts.internal-routes';
 import publicInvoiceRoutes from './modules/tenant/whatsapp/public-invoice.routes';
 
@@ -85,6 +86,7 @@ app.route('/organizations', vendorsRoutes);
 app.route('/organizations', moneyAccountsRoutes);
 app.route('/organizations', purchasesRoutes);
 app.route('/organizations', expensesRoutes);
+app.route('/organizations', commercialLicensingRoutes);
 app.route('/internal/google-contacts', googleContactsInternalRoutes);
 app.route('/public/whatsapp', publicInvoiceRoutes);
 app.route('/webhooks/whatsapp', whatsappCloudWebhookRoutes);

@@ -14,6 +14,7 @@ import {
     StoreDetailIndexRedirect,
     StoreDetailShell,
     StoreDevicesPage,
+    StoreLicensePage,
     StoreSettingsPage,
 } from "@/pages/store-detail-page";
 import ProductsPage from "@/pages/products-page";
@@ -134,6 +135,7 @@ const App = () => {
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />
                                     <Route path="settings" element={<StoreSettingsPage />} />
+                                    <Route path="license" element={<StoreLicensePage />} />
                                 </Route>
                                 <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
                                     <Route index element={<Navigate to="list" replace />} />

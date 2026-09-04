@@ -8,6 +8,7 @@ import StoresSection from "@/components/organizations/stores-section";
 import {
     StoreDetailShell,
     StoreDevicesPage,
+    StoreLicensePage,
     StoreSettingsPage,
 } from "@/pages/store-detail-page";
 import { billingKeys, moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
@@ -193,6 +194,7 @@ const renderStoreDetail = (
                 children: [
                     { path: "devices", element: <StoreDevicesPage /> },
                     { path: "settings", element: <StoreSettingsPage /> },
+                    { path: "license", element: <StoreLicensePage /> },
                 ],
             },
         ],
@@ -229,6 +231,7 @@ describe("Store detail page", () => {
         expect(markup).toContain("Edit store");
         expect(markup).toContain("Devices");
         expect(markup).toContain("Settings");
+        expect(markup).toContain("License");
         expect(markup).toContain("Add device");
         expect(markup).toContain("Counter 1");
         expect(markup).toContain("Open POS");

@@ -16,11 +16,15 @@ describe("store routes", () => {
         expect(getStoreDetailPath("org-1", "store-1", "settings")).toBe(
             "/organizations/org-1/stores/store-1/settings",
         );
+        expect(getStoreDetailPath("org-1", "store-1", "license")).toBe(
+            "/organizations/org-1/stores/store-1/license",
+        );
     });
 
     test("reads the active store detail tab from the path", () => {
         expect(getStoreDetailTab("/organizations/org-1/stores/store-1/devices")).toBe("devices");
         expect(getStoreDetailTab("/organizations/org-1/stores/store-1/settings")).toBe("settings");
+        expect(getStoreDetailTab("/organizations/org-1/stores/store-1/license")).toBe("license");
         expect(getStoreDetailTab("/organizations/org-1/stores/store-1")).toBe("devices");
     });
 
@@ -29,6 +33,7 @@ describe("store routes", () => {
         expect(isStoresNavActive("/organizations/org-1/stores/store-1")).toBe(true);
         expect(isStoresNavActive("/organizations/org-1/stores/store-1/devices")).toBe(true);
         expect(isStoresNavActive("/organizations/org-1/stores/store-1/settings")).toBe(true);
+        expect(isStoresNavActive("/organizations/org-1/stores/store-1/license")).toBe(true);
         expect(isStoresNavActive("/organizations/org-1/stores/store-1/whatsapp")).toBe(false);
         expect(isStoresNavActive("/organizations/org-1/products")).toBe(false);
         expect(isStoresNavActive("/organizations")).toBe(false);
