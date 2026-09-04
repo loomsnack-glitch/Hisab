@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 2 Execution Plan and Review Log
 
-Status: Phase 2 in progress; subphase 2.3 completed with native follow-up
+Status: Phase 2 in progress; subphase 2.4 in progress
 Phase: 2 — Catalog and Product selection
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-05
@@ -45,7 +45,7 @@ Not included in this phase:
 | 2.1 | Catalog query and cache | Phase 1 | Product/Category queries have scoped cache and recoverable states | `08e5d5b` |
 | 2.2 | Product search and Categories | 2.1 | Products can be searched, browsed, and added to Cart | `ea26878`, `c4d4607` |
 | 2.3 | Camera barcode scanning | 2.1, 2.2 | Android scan states work and manual search remains available | `2ed696e` |
-| 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | pending |
+| 2.4 | Recent and Pinned Products | 2.1, 2.2 | Local convenience actions remain separate from server Catalog | in progress |
 | 2.5 | Combos and Add-ons | 2.1, 2.2 | Required configuration is preserved for later Cart/Draft Sale use | pending |
 
 ## Shared Phase 2 decisions
@@ -447,3 +447,99 @@ Verification:
   device behavior.
 
 2.3 status: Completed with native follow-up. Focused commit: `2ed696e`.
+
+## 2.4 — Recent and Pinned Products
+
+### Plan
+
+User-facing outcome: a cashier can quickly repeat recently sold Products and
+optionally keep high-volume Products pinned, without adding another Catalog
+source or extra steps to the normal Product → Cart flow.
+
+Implementation scope:
+
+- Add a small pure convenience-data boundary that stores only Product IDs,
+  with bounded Recent ordering and toggleable Pinned IDs.
+- Persist the convenience state in the existing MMKV convenience storage, not
+  the encrypted session storage and not the server Catalog cache.
+- Scope the MMKV key by Organization, Store, and Device so a Device never
+  presents another Store's convenience choices.
+- Recover safely from missing or malformed local data by starting with empty
+  Recent/Pinned collections.
+- Record a Product as Recent after a successful ordinary Product add from a
+  card or barcode scan. Repeated use moves it to the front rather than
+  creating duplicate IDs.
+- Show Recent Products when search is empty and expose compact Recent and
+  Pinned filters without hiding the existing All, Category, or manual search
+  paths.
+- Resolve stored IDs back to the current server Product list before rendering;
+  missing, inactive, or no-longer-loaded Products are silently omitted.
+- Add a small pin/unpin action to Product cards. Pinning changes only local
+  convenience state and does not modify Catalog data.
+
+Acceptance criteria:
+
+1. A successful ordinary Product add records that Product ID as Recent.
+2. Recent IDs are bounded, deduplicated, ordered newest first, and survive
+   app restarts through MMKV convenience storage.
+3. Search-empty New Sale exposes the Recent Products shortcut/content.
+4. A cashier can pin/unpin a Product and use a Pinned filter.
+5. Recent and Pinned rendering uses only Products in the current server Catalog.
+6. Convenience data is isolated by Organization/Store/Device scope and does
+   not contain Product names, prices, or other Catalog snapshots.
+7. Missing, malformed, or unavailable local convenience data leaves New Sale
+   usable with the normal Catalog list and search.
+8. Pure tests cover ordering, deduplication, pin toggling, bounded storage,
+   scope keys, and filtering against the current Product list.
+
+Non-goals:
+
+- Server synchronization, cross-device Recent/Pinned state, or analytics.
+- Persisting prices, names, images, availability, or full Product objects.
+- Replacing search, Categories, barcode scanning, or the server Catalog.
+- Cart persistence, Draft Sale recovery, Product editing, or checkout.
+
+Public seams and effects:
+
+- A mobile-owned convenience hook reads/writes the existing MMKV convenience
+  value API and exposes IDs resolved against `usePosCatalog` Products.
+- Product add actions call the convenience hook only after the existing Cart
+  handoff accepts an ordinary Product.
+- The server Catalog query remains the sole authority for Product display and
+  billing fields.
+
+Test and verification plan:
+
+- Pure tests for local-state parsing, bounded Recent ordering, pin toggling,
+  scoped keys, and current-Catalog resolution.
+- Mobile focused test suite.
+- Mobile TypeScript check, separating the known WhatsApp asset baseline.
+- `git diff --check` and staged-scope review.
+- No Android build, emulator, or device command in this environment.
+
+Risks and rollback:
+
+- Persisting full Product objects would create stale pricing/availability and
+  violate Catalog authority; only IDs are allowed in the local boundary.
+- An unscoped key could show another Store's shortcuts; scope-key tests must
+  include Organization, Store, and Device.
+- A malformed local value must not prevent New Sale from rendering.
+- The subphase can be rolled back without changing shared services or the
+  server Catalog contract.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, the completed 2.1–2.3 boundaries,
+the approved MMKV-only storage decision, and the New Sale UX rules.
+
+- The plan implements the approved local convenience behavior while keeping
+  Search and Barcode Scan as the primary tools.
+- Storing IDs only and resolving them through the active Catalog avoids stale
+  local Product values and keeps Catalog authority on the server.
+- Organization/Store/Device scoping matches the existing query and Cart
+  boundaries and prevents convenience leakage after a session change.
+- The bounded state and graceful parse fallback keep the normal billing path
+  simple and recoverable.
+- No new product, API, security, or release decision is required.
+
+Plan review result: approved for implementation.
