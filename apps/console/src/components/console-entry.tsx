@@ -3,6 +3,7 @@ import { ShieldCheck } from "lucide-react";
 import type { OwnerUserDTO, PlatformDashboardQueryJSON } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 
+import CommercialCatalogFeaturesPage, { type CommercialCatalogFeaturesPageProps } from "@/components/commercial-catalog-features-page";
 import ConsoleLayout from "@/components/console-layout";
 import {
     consoleDestinationPaths,
@@ -18,6 +19,17 @@ type ConsoleEntryProps = {
     onLogout: () => Promise<void>;
     onUnauthorized?: () => Promise<void>;
     ownerUsersPageProps?: Pick<OwnerUsersPageProps, "listOwnerUsers" | "createOwnerUser" | "setOwnerUserActiveState">;
+    commercialCatalogPageProps?: Pick<
+        CommercialCatalogFeaturesPageProps,
+        | "listCommercialFeatures"
+        | "getCommercialFeature"
+        | "createCommercialFeature"
+        | "updateCommercialFeatureDraft"
+        | "publishCommercialFeatureRevision"
+        | "retireCommercialFeatureRevision"
+        | "discardCommercialFeatureRevision"
+        | "createCommercialFeatureSuccessor"
+    >;
     dashboardPageProps?: Pick<PlatformDashboardPageProps, "getPlatformDashboard" | "initialQuery" | "initialCustomValues">;
     organizationsPageProps?: Pick<
         PlatformOrganizationsPageProps,
@@ -43,6 +55,7 @@ const ConsoleEntry = ({
     onLogout,
     onUnauthorized,
     ownerUsersPageProps,
+    commercialCatalogPageProps,
     dashboardPageProps,
     organizationsPageProps,
 }: ConsoleEntryProps) => {
@@ -78,6 +91,15 @@ const ConsoleEntry = ({
                     currentOwnerUser={ownerUser}
                     onUnauthorized={onUnauthorized}
                     {...ownerUsersPageProps}
+                />
+            );
+        }
+
+        if (destination === "commercial-catalog") {
+            return (
+                <CommercialCatalogFeaturesPage
+                    onUnauthorized={onUnauthorized}
+                    {...commercialCatalogPageProps}
                 />
             );
         }
@@ -118,7 +140,7 @@ const ConsoleEntry = ({
                     </h1>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
                         Your isolated owner session is active. Use the sidebar to open Dashboard, Organizations,
-                        or Console Users.
+                        Commercial Catalog, or Console Users.
                     </p>
                 </div>
             </section>
