@@ -10,6 +10,7 @@ import { PosCard } from "../components/pos-ui";
 import { getPosDestinations, type PosDestination } from "../lib/pos-navigation-boundary";
 import type { PosTranslationKey } from "../lib/localization-boundary";
 import { posStorage } from "../lib/storage";
+import { clearPosCart } from "../store/pos-cart.store";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
 
@@ -45,6 +46,7 @@ const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
 
             await clearAuthToken();
             await posStorage.clearSession();
+            clearPosCart();
             dispatch({ type: "LOGOUT_COMPLETED" });
             Alert.alert(tCommon("loggedOutTitle"), tCommon("loggedOutMessage"));
         },

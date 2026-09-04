@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { clearAuthToken, deviceAuthenticate, hydrateAuthToken } from "@repo/services";
 import { posStorage } from "../lib/storage";
+import { clearPosCart } from "../store/pos-cart.store";
 import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
 
 const getErrorCode = (error: unknown): number | undefined => {
@@ -44,6 +45,7 @@ export const usePosSession = () => {
                 setHasStoredSession(Boolean(session));
                 setHydrated(true);
                 if (!token || !session) {
+                    clearPosCart();
                     dispatch({ type: "NO_SESSION" });
                 }
             })
@@ -55,6 +57,7 @@ export const usePosSession = () => {
                 setHasToken(false);
                 setHasStoredSession(false);
                 setHydrated(true);
+                clearPosCart();
                 dispatch({
                     type: "BOOT_RETRYABLE_FAILURE",
                     message: t("storageUnavailable"),
@@ -103,6 +106,7 @@ export const usePosSession = () => {
 
         if (isExpiredSessionError(sessionQuery.error)) {
             void Promise.allSettled([clearAuthToken(), posStorage.clearSession()]).then(() => {
+                clearPosCart();
                 dispatch({ type: "SESSION_EXPIRED", message: t("sessionVerificationFailed") });
             });
             return;
