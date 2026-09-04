@@ -192,7 +192,7 @@ const ok = <T,>(data: T, message: string): ServiceResponse<T> => ({
 
 describe("Initial Commercial Catalog hierarchy review", () => {
     test("reviews the seeded Features, Modules, Plans, and KOT/Table relationship", async () => {
-        window.history.replaceState(null, "", "/catalog");
+        window.history.replaceState(null, "", "/plans/features");
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
                 <CommercialCatalogPage
@@ -212,7 +212,7 @@ describe("Initial Commercial Catalog hierarchy review", () => {
         fireEvent.click(view.getByText("Table Management"));
         expect(await view.findByRole("heading", { name: "Table Management" })).toBeTruthy();
         expect(view.getByText("Affected Plans")).toBeTruthy();
-        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
+        expect(view.queryByText(/KOT System can be offered on its own/)).toBeNull();
         expect(view.getAllByText(/Restaurant Operations/).length).toBeGreaterThan(0);
         expect(view.getByText("trial")).toBeTruthy();
         expect(view.getByText("pro")).toBeTruthy();
@@ -222,7 +222,6 @@ describe("Initial Commercial Catalog hierarchy review", () => {
         expect(await view.findByText("Core Operations")).toBeTruthy();
         expect(view.getByText("Integrations")).toBeTruthy();
         expect(view.getByText(/₹2,999/)).toBeTruthy();
-        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
         fireEvent.click(view.getByText("Integrations"));
         expect(await view.findByRole("heading", { name: "Integrations" })).toBeTruthy();
         expect(view.getByText("whatsapp")).toBeTruthy();

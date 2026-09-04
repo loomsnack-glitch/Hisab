@@ -13,7 +13,7 @@ export type CommercialCatalogPageProps =
 
 const CommercialCatalogPage = (props: CommercialCatalogPageProps) => {
     const [location, setLocation] = useState<CommercialCatalogLocation>(() =>
-        typeof window === "undefined" ? { kind: "features" } : parseCommercialCatalogPath(window.location.pathname),
+        typeof window === "undefined" ? { kind: "plans" } : parseCommercialCatalogPath(window.location.pathname),
     );
 
     useEffect(() => {

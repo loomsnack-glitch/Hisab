@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import type {
+    CommercialFeatureListItemDTO,
     CommercialModuleListItemDTO,
     CommercialModuleListResponse,
     CommercialPlanDetailDTO,
@@ -159,12 +160,45 @@ const successModuleList = (modules: CommercialModuleListItemDTO[]): ServiceRespo
     code: 200,
 });
 
+const filterFeaturesByQuery = (
+    items: CommercialFeatureListItemDTO[],
+    query: { status?: string; search?: string },
+) => {
+    let filtered = items;
+    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
+    if (query.search?.trim()) {
+        const term = query.search.trim().toLowerCase();
+        filtered = filtered.filter((item) =>
+            item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
+    }
+    return filtered;
+};
+
+const filterPlansByQuery = (
+    items: CommercialPlanListItemDTO[],
+    query: { status?: string; search?: string },
+) => {
+    let filtered = items;
+    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
+    if (query.search?.trim()) {
+        const term = query.search.trim().toLowerCase();
+        filtered = filtered.filter((item) =>
+            item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
+    }
+    return filtered;
+};
+
 const renderPage = (props: Partial<Parameters<typeof CommercialCatalogPlansPage>[0]> = {}) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const defaultPlans = [trialListItem(), coreListItem];
     return render(
         <QueryClientProvider client={client}>
             <CommercialCatalogPlansPage
-                listCommercialPlans={props.listCommercialPlans ?? (async () => successPlanList([trialListItem(), coreListItem]))}
+                listCommercialPlans={props.listCommercialPlans ?? (async (query) => successPlanList(filterPlansByQuery(defaultPlans, query)))}
                 getCommercialPlan={props.getCommercialPlan ?? (async () => successPlanDetail(trialPlan()))}
                 createCommercialPlan={props.createCommercialPlan ?? (async () => successPlanDetail(trialPlan(), 201))}
                 updateCommercialPlanDraft={props.updateCommercialPlanDraft ?? (async () => successPlanDetail(trialPlan()))}
@@ -175,6 +209,7 @@ const renderPage = (props: Partial<Parameters<typeof CommercialCatalogPlansPage>
                 listCommercialModules={props.listCommercialModules ?? (async () => successModuleList([coreModuleListItem, financeModuleListItem]))}
                 initialSearch={props.initialSearch}
                 initialStatus={props.initialStatus}
+                initialStatuses={props.initialStatuses}
                 initialCreateValues={props.initialCreateValues}
                 onUnauthorized={props.onUnauthorized}
             />
@@ -198,27 +233,28 @@ describe("Commercial Catalog Plans console destination", () => {
                                 code: 200,
                             }),
                             listCommercialModules: async () => successModuleList([coreModuleListItem]),
-                            listCommercialPlans: async () => successPlanList([trialListItem()]),
+                            listCommercialPlans: async (query) => successPlanList(
+                                filterPlansByQuery([coreListItem], query),
+                            ),
                         }}
                     />
                 </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getAllByRole("button", { name: "Commercial Catalog" })[0]!);
-        fireEvent.click(view.getByRole("button", { name: "Plans" }));
-        expect(await view.findByRole("heading", { name: "Plans" })).toBeTruthy();
-        expect((await view.findAllByText("Trial")).length).toBeGreaterThan(0);
+        fireEvent.click(view.getAllByRole("button", { name: "Plans" })[0]!);
+        expect(await view.findByRole("button", { name: "Add Plan" })).toBeTruthy();
+        expect(await view.findByText("Core")).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
     });
 
     test("lists Plans with display name, key, status, revision, type, and INR pricing", async () => {
-        const view = renderPage();
+        const view = renderPage({ initialStatuses: ["draft", "active"] });
 
         expect(await view.findByText("Core")).toBeTruthy();
         expect(view.getByText("trial")).toBeTruthy();
-        expect(view.getByText("Draft")).toBeTruthy();
-        expect(view.getByText("Active")).toBeTruthy();
+        expect(view.getAllByText("Draft").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("Trial").length).toBeGreaterThan(0);
         expect(view.getByText(/₹0/)).toBeTruthy();
         expect(view.getByText(/7 days/)).toBeTruthy();
@@ -230,6 +266,7 @@ describe("Commercial Catalog Plans console destination", () => {
         const requested: Array<{ search?: string }> = [];
         const view = renderPage({
             initialSearch: "trial",
+            initialStatuses: ["draft", "active"],
             listCommercialPlans: async (query) => {
                 requested.push(query);
                 if (query.search === "trial") return successPlanList([trialListItem()]);
@@ -261,11 +298,10 @@ describe("Commercial Catalog Plans console destination", () => {
             },
         });
 
-        await view.findByRole("heading", { name: "Plans" });
+        await view.findByRole("button", { name: "Add Plan" });
         fireEvent.click(view.getByRole("button", { name: "Add Plan" }));
         expect(await view.findByLabelText("Include Module Core Operations")).toBeTruthy();
         expect(view.queryByLabelText(/Include Feature/)).toBeNull();
-        expect(view.getByText(/cannot include Features directly/)).toBeTruthy();
         fireEvent.click(view.getByLabelText("Include Module Finance"));
         fireEvent.click(view.getByRole("button", { name: "Create Draft Plan" }));
 
@@ -333,7 +369,7 @@ describe("Commercial Catalog Plans console destination", () => {
     });
 
     test("publishes, retires, discards, and creates a successor revision from Plan detail", async () => {
-        window.history.replaceState(null, "", "/catalog/plans/ffff6666-6666-4666-8666-666666666666");
+        window.history.replaceState(null, "", "/plans/list/ffff6666-6666-4666-8666-666666666666");
         let published = false;
         const draft = trialRevision();
         let planDetail = trialPlan(draft);
@@ -372,7 +408,7 @@ describe("Commercial Catalog Plans console destination", () => {
     });
 
     test("shows revision history, included Modules, and resolved Features", async () => {
-        window.history.replaceState(null, "", "/catalog/plans/ffff6666-6666-4666-8666-666666666666");
+        window.history.replaceState(null, "", "/plans/list/ffff6666-6666-4666-8666-666666666666");
         const first = trialRevision({
             status: "retired",
             publishedBy: ashaActor,
@@ -397,7 +433,9 @@ describe("Commercial Catalog Plans console destination", () => {
             }),
         });
 
-        expect(await view.findByText("Revision history")).toBeTruthy();
+        expect(await view.findByRole("button", { name: /revision history/i })).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: /revision history/i }));
+        expect(await view.findByRole("heading", { name: "Revision history" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 2" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 1" })).toBeTruthy();
         expect(view.getAllByText(/Created by Asha Shah/).length).toBeGreaterThan(0);
@@ -409,7 +447,7 @@ describe("Commercial Catalog Plans console destination", () => {
     });
 
     test("discards an unused Draft after confirmation", async () => {
-        window.history.replaceState(null, "", "/catalog/plans/ffff6666-6666-4666-8666-666666666666");
+        window.history.replaceState(null, "", "/plans/list/ffff6666-6666-4666-8666-666666666666");
         let discardedFor: string | null = null;
         const view = renderPage({
             discardCommercialPlanRevision: async (_planId, revisionId) => {
@@ -445,13 +483,14 @@ describe("Commercial Catalog Plans console destination", () => {
     });
 
     test("Commercial Catalog page keeps Features, Modules, and Plans as separate views", async () => {
-        window.history.replaceState(null, "", "/catalog");
+        window.history.replaceState(null, "", "/plans/list");
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
                 <CommercialCatalogPage
-                    listCommercialFeatures={async () => ({
+                    initialStatuses={["draft", "active"]}
+                    listCommercialFeatures={async (query) => ({
                         status: "success",
-                        data: { features: [{
+                        data: { features: filterFeaturesByQuery([{
                             id: billingFeature.featureId,
                             key: billingFeature.key,
                             currentRevisionId: billingFeature.featureRevisionId,
@@ -459,20 +498,20 @@ describe("Commercial Catalog Plans console destination", () => {
                             status: billingFeature.status,
                             displayName: billingFeature.displayName,
                             description: "POS billing",
-                        }] },
+                        }], query) },
                         message: "Features retrieved successfully",
                         code: 200,
                     })}
-                    listCommercialModules={async () => successModuleList([coreModuleListItem])}
-                    listCommercialPlans={async () => successPlanList([trialListItem(), coreListItem])}
+                    listCommercialModules={async (query) => successModuleList(filterModulesByQuery([coreModuleListItem], query))}
+                    listCommercialPlans={async (query) => successPlanList(filterPlansByQuery([trialListItem(), coreListItem], query))}
                 />
             </QueryClientProvider>,
         );
 
-        expect(await view.findByRole("heading", { name: "Features" })).toBeTruthy();
-        fireEvent.click(view.getByRole("button", { name: "Plans" }));
-        expect(await view.findByRole("heading", { name: "Plans" })).toBeTruthy();
+        expect(await view.findByRole("button", { name: "Add Plan" })).toBeTruthy();
         expect((await view.findAllByText("Trial")).length).toBeGreaterThan(0);
+        fireEvent.click(view.getByRole("button", { name: "Features" }));
+        expect(await view.findByText("Billing")).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
     });
 });

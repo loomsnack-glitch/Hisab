@@ -1,6 +1,6 @@
 import "../test-setup";
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import type {
@@ -143,12 +143,40 @@ const successFeatureList = (features: CommercialFeatureListItemDTO[]): ServiceRe
     code: 200,
 });
 
+const filterFeaturesByQuery = (
+    items: CommercialFeatureListItemDTO[],
+    query: { status?: string; search?: string },
+) => {
+    let filtered = items;
+    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
+    return filtered;
+};
+
+const filterModulesByQuery = (
+    items: CommercialModuleListItemDTO[],
+    query: { status?: string; search?: string },
+) => {
+    let filtered = items;
+    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
+    if (query.search?.trim()) {
+        const term = query.search.trim().toLowerCase();
+        filtered = filtered.filter((item) =>
+            item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
+    }
+    return filtered;
+};
+
 const renderPage = (props: Partial<Parameters<typeof CommercialCatalogModulesPage>[0]> = {}) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const defaultModules = [coreListItem(), integrationsListItem];
     return render(
         <QueryClientProvider client={client}>
             <CommercialCatalogModulesPage
-                listCommercialModules={props.listCommercialModules ?? (async () => successModuleList([coreListItem(), integrationsListItem]))}
+                listCommercialModules={props.listCommercialModules ?? (async (query) => successModuleList(filterModulesByQuery(defaultModules, query)))}
                 getCommercialModule={props.getCommercialModule ?? (async () => successModuleDetail(coreModule()))}
                 createCommercialModule={props.createCommercialModule ?? (async () => successModuleDetail(coreModule(), 201))}
                 updateCommercialModuleDraft={props.updateCommercialModuleDraft ?? (async () => successModuleDetail(coreModule()))}
@@ -159,6 +187,7 @@ const renderPage = (props: Partial<Parameters<typeof CommercialCatalogModulesPag
                 listCommercialFeatures={props.listCommercialFeatures ?? (async () => successFeatureList([billingFeature, kotFeature]))}
                 initialSearch={props.initialSearch}
                 initialStatus={props.initialStatus}
+                initialStatuses={props.initialStatuses}
                 initialCreateValues={props.initialCreateValues}
                 onUnauthorized={props.onUnauthorized}
             />
@@ -176,7 +205,9 @@ describe("Commercial Catalog Modules console destination", () => {
                         onLogout={async () => {}}
                         commercialCatalogPageProps={{
                             listCommercialFeatures: async () => successFeatureList([billingFeature]),
-                            listCommercialModules: async () => successModuleList([coreListItem()]),
+                            listCommercialModules: async (query) => successModuleList(
+                                filterModulesByQuery([integrationsListItem], query),
+                            ),
                             listCommercialPlans: async () => ({
                                 status: "success",
                                 data: { plans: [] },
@@ -189,37 +220,36 @@ describe("Commercial Catalog Modules console destination", () => {
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getAllByRole("button", { name: "Commercial Catalog" })[0]!);
-        expect(await view.findByRole("heading", { name: "Features" })).toBeTruthy();
-        fireEvent.click(view.getByRole("button", { name: "Modules" }));
-        expect(await view.findByRole("heading", { name: "Modules" })).toBeTruthy();
-        expect(await view.findByText("Core Operations")).toBeTruthy();
+        fireEvent.click(view.getAllByRole("button", { name: "Plans" })[0]!);
+        fireEvent.click(await view.findByRole("button", { name: "Modules" }));
+        expect(await view.findByRole("button", { name: "Add Module" })).toBeTruthy();
+        expect(await view.findByText("Integrations")).toBeTruthy();
         expect(view.queryByText(/does not check Feature dependencies/)).toBeNull();
-        fireEvent.click(view.getByRole("button", { name: "Plans" }));
-        expect(await view.findByRole("heading", { name: "Plans" })).toBeTruthy();
+        fireEvent.click(within(view.getByRole("navigation", { name: "Plans sections" })).getByRole("button", { name: "Plans" }));
+        expect(await view.findByRole("button", { name: "Add Plan" })).toBeTruthy();
         expect(view.queryByText(/not available yet/)).toBeNull();
         expect(view.queryByText("Create Organization")).toBeNull();
     });
 
     test("lists Modules with display name, key, status, revision, and INR add-on pricing", async () => {
-        const view = renderPage();
+        const view = renderPage({ initialStatuses: ["draft", "active"] });
 
         expect(await view.findByText("Core Operations")).toBeTruthy();
         expect(view.getByText("Integrations")).toBeTruthy();
         expect(view.getByText("core_operations")).toBeTruthy();
-        expect(view.getByText("Draft")).toBeTruthy();
-        expect(view.getByText("Active")).toBeTruthy();
+        expect(view.getAllByText("Draft").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getByText("Not separately purchasable")).toBeTruthy();
         expect(view.getByText(/₹2,999/)).toBeTruthy();
         expect(view.getByText(/1 year/)).toBeTruthy();
-        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
-        expect(view.getByText(/Table Management is initially offered only through Restaurant Operations/)).toBeTruthy();
+        expect(view.queryByText(/KOT System can be offered on its own/)).toBeNull();
     });
 
     test("searches Modules by name or key", async () => {
         const requested: Array<{ search?: string }> = [];
         const view = renderPage({
             initialSearch: "core",
+            initialStatuses: ["draft", "active"],
             listCommercialModules: async (query) => {
                 requested.push(query);
                 if (query.search === "core") return successModuleList([coreListItem()]);
@@ -251,7 +281,7 @@ describe("Commercial Catalog Modules console destination", () => {
             },
         });
 
-        await view.findByText("Core Operations");
+        await view.findByRole("button", { name: "Add Module" });
         fireEvent.click(view.getByRole("button", { name: "Add Module" }));
         expect(await view.findByLabelText("Include Feature Billing")).toBeTruthy();
         fireEvent.click(view.getByLabelText("Include Feature KOT System"));
@@ -294,7 +324,7 @@ describe("Commercial Catalog Modules console destination", () => {
     });
 
     test("publishes, retires, discards, and creates a successor revision from Module detail", async () => {
-        window.history.replaceState(null, "", "/catalog/modules/aaaa1111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/modules/aaaa1111-1111-4111-8111-111111111111");
         let published = false;
         const draft = coreRevision();
         let moduleDetail = coreModule(draft);
@@ -333,7 +363,7 @@ describe("Commercial Catalog Modules console destination", () => {
     });
 
     test("shows revision history, included Features, and empty referencing Plans", async () => {
-        window.history.replaceState(null, "", "/catalog/modules/aaaa1111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/modules/aaaa1111-1111-4111-8111-111111111111");
         const first = coreRevision({
             status: "retired",
             publishedBy: ashaActor,
@@ -359,7 +389,9 @@ describe("Commercial Catalog Modules console destination", () => {
             }),
         });
 
-        expect(await view.findByText("Revision history")).toBeTruthy();
+        expect(await view.findByRole("button", { name: /revision history/i })).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: /revision history/i }));
+        expect(await view.findByRole("heading", { name: "Revision history" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 2" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 1" })).toBeTruthy();
         expect(view.getAllByText(/Created by Asha Shah/).length).toBeGreaterThan(0);
@@ -369,7 +401,7 @@ describe("Commercial Catalog Modules console destination", () => {
     });
 
     test("discards an unused Draft after confirmation", async () => {
-        window.history.replaceState(null, "", "/catalog/modules/aaaa1111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/modules/aaaa1111-1111-4111-8111-111111111111");
         let discardedFor: string | null = null;
         const view = renderPage({
             discardCommercialModuleRevision: async (_moduleId, revisionId) => {
@@ -405,20 +437,22 @@ describe("Commercial Catalog Modules console destination", () => {
     });
 
     test("Commercial Catalog page keeps Features and Modules as separate views", async () => {
-        window.history.replaceState(null, "", "/catalog");
+        window.history.replaceState(null, "", "/plans/list");
         const view = render(
             <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
                 <CommercialCatalogPage
-                    listCommercialFeatures={async () => successFeatureList([billingFeature])}
-                    listCommercialModules={async () => successModuleList([coreListItem(), integrationsListItem])}
+                    initialStatuses={["draft", "active"]}
+                    listCommercialFeatures={async (query) => successFeatureList(filterFeaturesByQuery([billingFeature], query))}
+                    listCommercialModules={async (query) => successModuleList(filterModulesByQuery([coreListItem(), integrationsListItem], query))}
                 />
             </QueryClientProvider>,
         );
 
-        expect(await view.findByRole("heading", { name: "Features" })).toBeTruthy();
+        expect(await view.findByRole("button", { name: "Add Plan" })).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: "Features" }));
         expect(await view.findByText("Billing")).toBeTruthy();
         fireEvent.click(view.getByRole("button", { name: "Modules" }));
-        expect(await view.findByRole("heading", { name: "Modules" })).toBeTruthy();
+        expect(await view.findByRole("button", { name: "Add Module" })).toBeTruthy();
         expect(await view.findByText("Core Operations")).toBeTruthy();
         expect(view.queryByText("Create Sale")).toBeNull();
     });

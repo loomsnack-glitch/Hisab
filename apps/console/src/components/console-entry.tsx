@@ -130,7 +130,7 @@ const ConsoleEntry = ({
                     </h1>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
                         Your isolated owner session is active. Use the sidebar to open Dashboard, Organizations,
-                        Commercial Catalog, or Console Users.
+                        Plans, or Console Users.
                     </p>
                 </div>
             </section>
@@ -143,7 +143,7 @@ const ConsoleEntry = ({
             activeDestination={destination}
             onNavigate={navigate}
             onLogout={onLogout}
-            fullWidth={destination === "organizations"}
+            fullWidth={destination === "organizations" || destination === "commercial-catalog"}
         >
             {pageContent}
         </ConsoleLayout>

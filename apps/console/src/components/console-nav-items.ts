@@ -10,7 +10,7 @@ export const consoleDestinationPaths: Record<ConsoleDestination, string> = {
     home: "/",
     dashboard: "/dashboard",
     organizations: "/organizations",
-    "commercial-catalog": "/catalog",
+    "commercial-catalog": "/plans/list",
     "owner-users": "/console-users",
 };
 
@@ -37,6 +37,6 @@ export const consoleNavItems: ConsoleNavItem[] = [
     { id: "home", label: "Overview", icon: LayoutDashboard, path: consoleDestinationPaths.home },
     { id: "dashboard", label: "Dashboard", icon: BarChart3, path: consoleDestinationPaths.dashboard },
     { id: "organizations", label: "Organizations", icon: Building2, path: consoleDestinationPaths.organizations },
-    { id: "commercial-catalog", label: "Commercial Catalog", icon: Package, path: consoleDestinationPaths["commercial-catalog"] },
+    { id: "commercial-catalog", label: "Plans", icon: Package, path: consoleDestinationPaths["commercial-catalog"] },
     { id: "owner-users", label: "Console Users", icon: Users, path: consoleDestinationPaths["owner-users"] },
 ];

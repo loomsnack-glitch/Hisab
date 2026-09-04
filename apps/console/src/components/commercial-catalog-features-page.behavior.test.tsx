@@ -97,12 +97,29 @@ const successDetail = (feature: CommercialFeatureDetailDTO, code = 200): Service
     code,
 });
 
+const filterFeaturesByQuery = (
+    items: CommercialFeatureListItemDTO[],
+    query: { status?: string; search?: string },
+) => {
+    let filtered = items;
+    if (query.status === "discarded") filtered = filtered.filter((item) => item.status === "discarded");
+    else if (query.status === "all") filtered = filtered.filter((item) => item.status !== "discarded");
+    else if (query.status) filtered = filtered.filter((item) => item.status === query.status);
+    if (query.search?.trim()) {
+        const term = query.search.trim().toLowerCase();
+        filtered = filtered.filter((item) =>
+            item.displayName.toLowerCase().includes(term) || item.key.toLowerCase().includes(term));
+    }
+    return filtered;
+};
+
 const renderPage = (props: Partial<Parameters<typeof CommercialCatalogFeaturesPage>[0]> = {}) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const defaultFeatures = [billingListItem(), unitsListItem];
     return render(
         <QueryClientProvider client={client}>
             <CommercialCatalogFeaturesPage
-                listCommercialFeatures={props.listCommercialFeatures ?? (async () => successList([billingListItem(), unitsListItem]))}
+                listCommercialFeatures={props.listCommercialFeatures ?? (async (query) => successList(filterFeaturesByQuery(defaultFeatures, query)))}
                 getCommercialFeature={props.getCommercialFeature ?? (async () => successDetail(billingFeature()))}
                 createCommercialFeature={props.createCommercialFeature ?? (async () => successDetail(billingFeature(), 201))}
                 updateCommercialFeatureDraft={props.updateCommercialFeatureDraft ?? (async () => successDetail(billingFeature()))}
@@ -112,6 +129,7 @@ const renderPage = (props: Partial<Parameters<typeof CommercialCatalogFeaturesPa
                 createCommercialFeatureSuccessor={props.createCommercialFeatureSuccessor ?? (async () => successDetail(billingFeature(billingRevision({ id: "55555555-5555-4555-8555-555555555555", revisionNumber: 2, status: "draft" }))))}
                 initialSearch={props.initialSearch}
                 initialStatus={props.initialStatus}
+                initialStatuses={props.initialStatuses}
                 initialCreateValues={props.initialCreateValues}
                 onUnauthorized={props.onUnauthorized}
             />
@@ -128,30 +146,33 @@ describe("Commercial Catalog Features console destination", () => {
                         ownerUser={asha}
                         onLogout={async () => {}}
                         commercialCatalogPageProps={{
-                            listCommercialFeatures: async () => successList([billingListItem()]),
+                            listCommercialFeatures: async (query) => successList(
+                                filterFeaturesByQuery([billingListItem({ status: "active" })], query),
+                            ),
                         }}
                     />
                 </ThemeProvider>
             </QueryClientProvider>,
         );
 
-        fireEvent.click(view.getAllByRole("button", { name: "Commercial Catalog" })[0]!);
-        expect(await view.findByRole("heading", { name: "Features" })).toBeTruthy();
+        fireEvent.click(view.getAllByRole("button", { name: "Plans" })[0]!);
+        fireEvent.click(await view.findByRole("button", { name: "Features" }));
+        expect(await view.findByRole("button", { name: "Add Feature" })).toBeTruthy();
         expect(await view.findByText("Billing")).toBeTruthy();
         expect(view.queryByText("Create Organization")).toBeNull();
         expect(view.queryByText("Create Sale")).toBeNull();
-        expect(view.getByText(/never sold directly/)).toBeTruthy();
+        expect(view.queryByText(/never sold directly/)).toBeNull();
     });
 
     test("lists Features with display name, immutable key, status, and revision", async () => {
-        const view = renderPage();
+        const view = renderPage({ initialStatuses: ["draft", "active"] });
 
         expect(await view.findByText("Billing")).toBeTruthy();
         expect(view.getByText("Units")).toBeTruthy();
         expect(view.getByText("billing")).toBeTruthy();
         expect(view.getByText("units")).toBeTruthy();
-        expect(view.getByText("Draft")).toBeTruthy();
-        expect(view.getByText("Active")).toBeTruthy();
+        expect(view.getAllByText("Draft").length).toBeGreaterThan(0);
+        expect(view.getAllByText("Active").length).toBeGreaterThan(0);
         expect(view.getAllByText("1").length).toBeGreaterThan(0);
     });
 
@@ -159,6 +180,7 @@ describe("Commercial Catalog Features console destination", () => {
         const requested: Array<{ search?: string }> = [];
         const view = renderPage({
             initialSearch: "bill",
+            initialStatuses: ["draft", "active"],
             listCommercialFeatures: async (query) => {
                 requested.push(query);
                 if (query.search === "bill") return successList([billingListItem()]);
@@ -187,7 +209,7 @@ describe("Commercial Catalog Features console destination", () => {
             },
         });
 
-        await view.findByText("Billing");
+        await view.findByText("Units");
         fireEvent.click(view.getByRole("button", { name: "Add Feature" }));
         fireEvent.click(view.getByRole("button", { name: "Create Draft Feature" }));
 
@@ -197,12 +219,12 @@ describe("Commercial Catalog Features console destination", () => {
             description: "POS billing workflow",
         }));
         expect(await view.findByRole("heading", { name: "Billing" })).toBeTruthy();
-        expect(view.getByDisplayValue("billing")).toBeTruthy();
+        expect(view.getByText("billing")).toBeTruthy();
         expect(view.getByRole("button", { name: "Publish" })).toBeTruthy();
     });
 
     test("publishes, retires, discards, and creates a successor revision from Feature detail", async () => {
-        window.history.replaceState(null, "", "/catalog/features/11111111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/features/11111111-1111-4111-8111-111111111111");
         let published = false;
         const draft = billingRevision();
         let feature = billingFeature(draft);
@@ -241,7 +263,7 @@ describe("Commercial Catalog Features console destination", () => {
     });
 
     test("shows revision history and audit metadata", async () => {
-        window.history.replaceState(null, "", "/catalog/features/11111111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/features/11111111-1111-4111-8111-111111111111");
         const first = billingRevision({
             status: "retired",
             publishedBy: ashaActor,
@@ -268,7 +290,9 @@ describe("Commercial Catalog Features console destination", () => {
             }),
         });
 
-        expect(await view.findByText("Revision history")).toBeTruthy();
+        expect(await view.findByRole("button", { name: /revision history/i })).toBeTruthy();
+        fireEvent.click(view.getByRole("button", { name: /revision history/i }));
+        expect(await view.findByRole("heading", { name: "Revision history" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 2" })).toBeTruthy();
         expect(view.getByRole("heading", { name: "Revision 1" })).toBeTruthy();
         expect(view.getAllByText(/Created by Asha Shah/).length).toBeGreaterThan(0);
@@ -277,7 +301,7 @@ describe("Commercial Catalog Features console destination", () => {
     });
 
     test("discards an unused Draft after confirmation", async () => {
-        window.history.replaceState(null, "", "/catalog/features/11111111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/features/11111111-1111-4111-8111-111111111111");
         let discardedFor: string | null = null;
         const view = renderPage({
             discardCommercialFeatureRevision: async (_featureId, revisionId) => {
@@ -313,7 +337,7 @@ describe("Commercial Catalog Features console destination", () => {
     });
 
     test("reviews referencing Modules and indirectly affected Plans", async () => {
-        window.history.replaceState(null, "", "/catalog/features/11111111-1111-4111-8111-111111111111");
+        window.history.replaceState(null, "", "/plans/features/11111111-1111-4111-8111-111111111111");
         const view = renderPage({
             getCommercialFeature: async () => successDetail({
                 ...billingFeature(billingRevision({ status: "active", publishedBy: ashaActor, publishedAt: "2026-09-04T01:00:00.000Z" })),
@@ -344,7 +368,7 @@ describe("Commercial Catalog Features console destination", () => {
     });
 
     test("explains that Table Management is offered with KOT System in the initial catalog", async () => {
-        window.history.replaceState(null, "", "/catalog/features/33333333-3333-4333-8333-333333333333");
+        window.history.replaceState(null, "", "/plans/features/33333333-3333-4333-8333-333333333333");
         const tableRevision = billingRevision({
             id: "44444444-4444-4444-8444-444444444444",
             featureId: "33333333-3333-4333-8333-333333333333",
@@ -380,7 +404,7 @@ describe("Commercial Catalog Features console destination", () => {
         });
 
         expect(await view.findByRole("heading", { name: "Table Management" })).toBeTruthy();
-        expect(view.getByText(/KOT System can be offered on its own/)).toBeTruthy();
+        expect(view.queryByText(/KOT System can be offered on its own/)).toBeNull();
         expect(view.getAllByText(/Restaurant Operations/).length).toBeGreaterThan(0);
         expect(view.getByText("Affected Plans")).toBeTruthy();
         expect(view.getByText(/Pro/)).toBeTruthy();

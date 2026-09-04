@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, PackagePlus, Search } from "lucide-react";
+import { Layers3, Pencil, PlusCircle } from "lucide-react";
 import {
     createCommercialFeature as createCommercialFeatureRequest,
     createCommercialFeatureSuccessor as createCommercialFeatureSuccessorRequest,
@@ -13,28 +13,45 @@ import {
 } from "@repo/services";
 import {
     CreateCommercialFeatureSchema,
-    PLATFORM_REPORTING_TIMEZONE,
     UpdateCommercialFeatureDraftSchema,
     type CommercialCatalogRevisionStatus,
+    type CommercialFeatureListItemDTO,
     type CommercialFeatureListQueryJSON,
     type CommercialFeatureListStatusFilter,
     type CommercialFeatureRevisionDTO,
     type CreateCommercialFeatureJSON,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
-import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 import { Textarea } from "@repo/ui/components/textarea";
 
 import {
-    commercialCatalogKotTableNote,
+    CommercialCatalogActionConfirmDialog,
+    CommercialCatalogDetailHeader,
+    CommercialCatalogDetailRelations,
+    CommercialCatalogDialogFooter,
+    CommercialCatalogEditorDialog,
+    CommercialCatalogListToolbar,
+    CommercialCatalogRevisionHistorySheet,
+    commercialCatalogAddButtonClass,
+    commercialCatalogEditButtonClass,
+    commercialCatalogNormalizeStatusSelection,
+    commercialCatalogResolveInitialStatusSelection,
+    commercialCatalogStatusBadge,
+    commercialCatalogUnauthorizedCode,
+    type CommercialCatalogActionKind,
 } from "@/components/commercial-catalog-ui";
 import {
-    commercialCatalogListPath,
+    commercialCatalogNeedsDiscardedListFetch,
+    commercialCatalogPrimaryListStatus,
+    commercialCatalogStatusesFromSelection,
+    filterCommercialCatalogListItems,
+} from "@/lib/commercial-catalog-list-filters";
+import {
+    commercialCatalogFeaturesListPath,
     commercialFeaturePath,
     parseCommercialCatalogPath,
     parseCommercialCatalogSearch,
@@ -44,22 +61,13 @@ import {
 const featuresQueryKey = ["platform-owner", "commercial-catalog", "features"] as const;
 const featureQueryKey = (featureId: string) => ["platform-owner", "commercial-catalog", "feature", featureId] as const;
 
-const statusLabels: Record<CommercialCatalogRevisionStatus, string> = {
-    draft: "Draft",
-    active: "Active",
-    retired: "Retired",
-    discarded: "Discarded",
+const resolveFeaturesLocation = (pathname: string): CommercialCatalogLocation => {
+    const parsed = parseCommercialCatalogPath(pathname);
+    return parsed.kind === "feature" ? parsed : { kind: "features" };
 };
 
-const statusFilterOptions = [
-    { value: "draft", label: "Draft" },
-    { value: "active", label: "Active" },
-    { value: "retired", label: "Retired" },
-    { value: "discarded", label: "Discarded" },
-] as const;
-
 type PendingAction = {
-    kind: "publish" | "retire" | "discard" | "successor";
+    kind: CommercialCatalogActionKind;
     revision: CommercialFeatureRevisionDTO;
 };
 
@@ -74,39 +82,10 @@ type CommercialCatalogFeaturesPageProps = {
     createCommercialFeatureSuccessor?: typeof createCommercialFeatureSuccessorRequest;
     initialSearch?: string;
     initialStatus?: CommercialFeatureListStatusFilter;
+    initialStatuses?: CommercialCatalogRevisionStatus[];
     initialCreateValues?: CreateCommercialFeatureJSON;
     onUnauthorized?: () => Promise<void>;
 };
-
-const statusFromSelection = (selection: Set<string>): CommercialFeatureListStatusFilter => {
-    if (selection.size === 1) {
-        const [value] = [...selection];
-        if (value === "draft" || value === "active" || value === "retired" || value === "discarded") {
-            return value;
-        }
-    }
-    return "all";
-};
-
-const formatAuditTime = (value: string | Date | null) => {
-    if (!value) return null;
-    return new Intl.DateTimeFormat("en-IN", {
-        timeZone: PLATFORM_REPORTING_TIMEZONE,
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date(value));
-};
-
-const actorName = (actor: { firstName: string; lastName: string } | null) =>
-    actor ? `${actor.firstName} ${actor.lastName}` : null;
-
-const statusBadge = (status: CommercialCatalogRevisionStatus) => (
-    <Badge variant={status === "active" ? "secondary" : "outline"}>{statusLabels[status]}</Badge>
-);
-
-const unauthorizedCode = (error: unknown, response?: { status?: string; code?: number }) =>
-    (error as { code?: number } | null)?.code
-    ?? (response?.status === "error" ? response.code : undefined);
 
 const CommercialCatalogFeaturesPage = ({
     listCommercialFeatures = listCommercialFeaturesRequest,
@@ -119,40 +98,62 @@ const CommercialCatalogFeaturesPage = ({
     createCommercialFeatureSuccessor = createCommercialFeatureSuccessorRequest,
     initialSearch,
     initialStatus,
+    initialStatuses,
     initialCreateValues,
     onUnauthorized,
 }: CommercialCatalogFeaturesPageProps) => {
     const queryClient = useQueryClient();
     const [location, setLocation] = useState<CommercialCatalogLocation>(() =>
-        typeof window === "undefined" ? { kind: "features" } : parseCommercialCatalogPath(window.location.pathname),
+        typeof window === "undefined" ? { kind: "features" } : resolveFeaturesLocation(window.location.pathname),
     );
     const initialFilters = typeof window === "undefined"
-        ? { search: initialSearch, status: initialStatus }
+        ? { search: initialSearch, statuses: initialStatuses }
         : parseCommercialCatalogSearch(window.location.search);
     const [search, setSearch] = useState(initialSearch ?? initialFilters.search ?? "");
-    const [statusSelection, setStatusSelection] = useState<Set<string>>(() => {
-        const status = initialStatus ?? initialFilters.status ?? "all";
-        return status === "all" ? new Set() : new Set([status]);
-    });
+    const [statusSelection, setStatusSelection] = useState<Set<string>>(() =>
+        commercialCatalogResolveInitialStatusSelection({
+            initialStatus,
+            initialStatuses,
+            urlStatuses: initialFilters.statuses,
+        }),
+    );
     const [showCreateForm, setShowCreateForm] = useState(false);
-    const [key, setKey] = useState(initialCreateValues?.key ?? "");
-    const [displayName, setDisplayName] = useState(initialCreateValues?.displayName ?? "");
-    const [description, setDescription] = useState(initialCreateValues?.description ?? "");
+    const [editingFeature, setEditingFeature] = useState<CommercialFeatureListItemDTO | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
-    const status = statusFromSelection(statusSelection);
+    const selectedStatuses = commercialCatalogStatusesFromSelection(statusSelection);
+    const selectedStatusKey = selectedStatuses.join(",");
     const listQuery: CommercialFeatureListQueryJSON = {
         ...(search.trim() ? { search: search.trim() } : {}),
-        status,
+        status: commercialCatalogPrimaryListStatus(statusSelection),
     };
 
     useEffect(() => {
-        const syncLocation = () => setLocation(parseCommercialCatalogPath(window.location.pathname));
+        const syncLocation = () => {
+            setLocation(resolveFeaturesLocation(window.location.pathname));
+            if (resolveFeaturesLocation(window.location.pathname).kind !== "features") return;
+            const filters = parseCommercialCatalogSearch(window.location.search);
+            setSearch(filters.search ?? "");
+            setStatusSelection(commercialCatalogResolveInitialStatusSelection({ urlStatuses: filters.statuses }));
+        };
         window.addEventListener("popstate", syncLocation);
         return () => window.removeEventListener("popstate", syncLocation);
     }, []);
 
+    useEffect(() => {
+        if (location.kind !== "features") return;
+        const path = commercialCatalogFeaturesListPath({
+            search: search.trim() || undefined,
+            statuses: selectedStatuses,
+        });
+        const current = `${window.location.pathname}${window.location.search}`;
+        if (current !== path) window.history.replaceState(null, "", path);
+    }, [location.kind, search, selectedStatusKey]);
+
     const openList = () => {
-        const path = commercialCatalogListPath({ search: search.trim() || undefined, status });
+        const path = commercialCatalogFeaturesListPath({
+            search: search.trim() || undefined,
+            statuses: selectedStatuses,
+        });
         if (`${window.location.pathname}${window.location.search}` !== path) {
             window.history.pushState(null, "", path);
             window.dispatchEvent(new Event("popstate"));
@@ -170,22 +171,44 @@ const CommercialCatalogFeaturesPage = ({
     };
 
     const featuresQuery = useQuery({
-        queryKey: [...featuresQueryKey, listQuery],
-        queryFn: () => listCommercialFeatures(listQuery),
+        queryKey: [...featuresQueryKey, listQuery, selectedStatusKey],
+        queryFn: async () => {
+            const response = await listCommercialFeatures(listQuery);
+            if (response.status !== "success") return response;
+            let features = response.data?.features ?? [];
+            if (commercialCatalogNeedsDiscardedListFetch(statusSelection)) {
+                const discardedResponse = await listCommercialFeatures({
+                    ...(search.trim() ? { search: search.trim() } : {}),
+                    status: "discarded",
+                });
+                if (discardedResponse.status === "success") {
+                    const seen = new Set(features.map((feature) => feature.id));
+                    for (const feature of discardedResponse.data?.features ?? []) {
+                        if (!seen.has(feature.id)) features.push(feature);
+                    }
+                }
+            }
+            return {
+                ...response,
+                data: {
+                    ...response.data,
+                    features: filterCommercialCatalogListItems(features, statusSelection),
+                },
+            };
+        },
         retry: false,
         enabled: location.kind === "features",
     });
     const features = featuresQuery.data?.status === "success" ? featuresQuery.data.data?.features ?? [] : [];
-    const listErrorCode = unauthorizedCode(featuresQuery.error, featuresQuery.data);
+    const listErrorCode = commercialCatalogUnauthorizedCode(featuresQuery.error, featuresQuery.data);
 
     useEffect(() => {
         if (listErrorCode === 401) void onUnauthorized?.();
     }, [listErrorCode, onUnauthorized]);
 
-    const resetCreateForm = () => {
-        setKey(initialCreateValues?.key ?? "");
-        setDisplayName(initialCreateValues?.displayName ?? "");
-        setDescription(initialCreateValues?.description ?? "");
+    const closeEditor = () => {
+        setShowCreateForm(false);
+        setEditingFeature(null);
         setFormError(null);
     };
 
@@ -199,14 +222,35 @@ const CommercialCatalogFeaturesPage = ({
                 return;
             }
             const featureId = response.data?.feature.id;
-            resetCreateForm();
-            setShowCreateForm(false);
+            closeEditor();
             await queryClient.invalidateQueries({ queryKey: featuresQueryKey });
             if (featureId) openFeature(featureId);
         },
         onError: (error: { message?: string; code?: number }) => {
             if (error.code === 401) void onUnauthorized?.();
             setFormError(error.message ?? "Draft Feature was not created");
+        },
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: (input: CreateCommercialFeatureJSON) =>
+            updateCommercialFeatureDraft(editingFeature!.id, editingFeature!.currentRevisionId, {
+                displayName: input.displayName,
+                description: input.description ?? "",
+            }),
+        onMutate: () => setFormError(null),
+        onSuccess: async (response) => {
+            if (response.status === "error") {
+                if (response.code === 401) await onUnauthorized?.();
+                setFormError(response.message);
+                return;
+            }
+            closeEditor();
+            await queryClient.invalidateQueries({ queryKey: featuresQueryKey });
+        },
+        onError: (error: { message?: string; code?: number }) => {
+            if (error.code === 401) void onUnauthorized?.();
+            setFormError(error.message ?? "Draft Feature was not updated");
         },
     });
 
@@ -226,90 +270,48 @@ const CommercialCatalogFeaturesPage = ({
         );
     }
 
-    const submitCreate = (event: FormEvent) => {
-        event.preventDefault();
-        const parsed = CreateCommercialFeatureSchema.safeParse({ key, displayName, description });
-        if (!parsed.success) {
-            setFormError(parsed.error.issues[0]?.message ?? "Check the Feature details");
-            return;
-        }
-        createMutation.mutate({ key, displayName, description });
-    };
-
     return (
-        <section className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Commercial Catalog</p>
-                    <h1 className="text-3xl font-semibold tracking-tight">Features</h1>
-                    <p className="text-muted-foreground">
-                        Manage platform capabilities. A Feature is packaged through Modules later and is never sold directly.
-                    </p>
-                </div>
-                <Button type="button" onClick={() => { setShowCreateForm(true); setFormError(null); }}>
-                    <PackagePlus className="size-4" /> Add Feature
-                </Button>
-            </div>
+        <section className="space-y-5">
+            <CommercialCatalogListToolbar
+                search={search}
+                onSearchChange={setSearch}
+                searchPlaceholder="Search features..."
+                searchAriaLabel="Search Features by name or key"
+                statusSelection={statusSelection}
+                onStatusSelectionChange={(values) => setStatusSelection(commercialCatalogNormalizeStatusSelection(values))}
+                countLabel={featuresQuery.isSuccess ? `${features.length} feature${features.length === 1 ? "" : "s"}` : undefined}
+                addButton={
+                    <Button
+                        type="button"
+                        className={commercialCatalogAddButtonClass}
+                        onClick={() => { setShowCreateForm(true); setFormError(null); }}
+                    >
+                        <PlusCircle className="size-3.5 sm:size-4" /> Add Feature
+                    </Button>
+                }
+            />
 
-            {showCreateForm ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Create Draft Feature</CardTitle>
-                        <CardDescription>
-                            The Commercial Catalog Key is lowercase and immutable. Display name and description can change in later Draft revisions.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form className="grid gap-4" onSubmit={submitCreate}>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Key
-                                <Input value={key} onChange={(event) => setKey(event.target.value)} autoComplete="off" />
-                            </label>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Display name
-                                <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-                            </label>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Description
-                                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
-                            </label>
-                            {formError ? (
-                                <Alert variant="destructive" role="alert">
-                                    <AlertTitle>Draft Feature was not created</AlertTitle>
-                                    <AlertDescription>{formError}</AlertDescription>
-                                </Alert>
-                            ) : null}
-                            <div className="flex gap-2">
-                                <Button type="submit" disabled={createMutation.isPending}>
-                                    {createMutation.isPending ? "Creating..." : "Create Draft Feature"}
-                                </Button>
-                                <Button type="button" variant="outline" onClick={() => { setShowCreateForm(false); resetCreateForm(); }}>
-                                    Cancel
-                                </Button>
-                            </div>
-                        </form>
-                    </CardContent>
-                </Card>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[16rem] flex-1">
-                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search Features by name or key"
-                        aria-label="Search Features by name or key"
-                        className="pl-9"
-                    />
-                </div>
-                <DataTableFacetedFilter
-                    title="Status"
-                    options={statusFilterOptions}
-                    selectedValues={statusSelection}
-                    onSelectedValuesChange={setStatusSelection}
+            <CommercialCatalogEditorDialog
+                open={showCreateForm || Boolean(editingFeature)}
+                onOpenChange={(open) => { if (!open) closeEditor(); }}
+                title={editingFeature ? "Edit Feature" : "Add Feature"}
+                icon={<Layers3 className="size-5" />}
+            >
+                <FeatureEditor
+                    key={editingFeature?.id ?? "create"}
+                    lockedKey={editingFeature?.key}
+                    initialValues={editingFeature
+                        ? { key: editingFeature.key, displayName: editingFeature.displayName, description: editingFeature.description }
+                        : initialCreateValues}
+                    submitLabel={editingFeature ? "Save draft" : "Create Draft Feature"}
+                    pendingLabel={editingFeature ? "Saving..." : "Creating..."}
+                    errorTitle={editingFeature ? "Draft Feature was not updated" : "Draft Feature was not created"}
+                    formError={formError}
+                    isPending={editingFeature ? updateMutation.isPending : createMutation.isPending}
+                    onCancel={closeEditor}
+                    onSubmit={(values) => editingFeature ? updateMutation.mutate(values) : createMutation.mutate(values)}
                 />
-            </div>
+            </CommercialCatalogEditorDialog>
 
             {featuresQuery.isPending ? (
                 <p aria-busy="true">Loading Features…</p>
@@ -324,13 +326,9 @@ const CommercialCatalogFeaturesPage = ({
                 </Alert>
             ) : (
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Feature catalog</CardTitle>
-                        <CardDescription>Each Feature shows its current revision, status, and immutable key.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-0">
                         {features.length === 0 ? (
-                            <p>No Features match this view.</p>
+                            <p className="p-6 text-sm text-muted-foreground">No Features match this view.</p>
                         ) : (
                             <Table>
                                 <TableHeader>
@@ -339,6 +337,7 @@ const CommercialCatalogFeaturesPage = ({
                                         <TableHead>Key</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Revision</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -354,8 +353,26 @@ const CommercialCatalogFeaturesPage = ({
                                                 </button>
                                             </TableCell>
                                             <TableCell><code>{feature.key}</code></TableCell>
-                                            <TableCell>{statusBadge(feature.status)}</TableCell>
+                                            <TableCell>{commercialCatalogStatusBadge(feature.status)}</TableCell>
                                             <TableCell>{feature.revisionNumber}</TableCell>
+                                            <TableCell className="text-right">
+                                                {feature.status === "draft" ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className={commercialCatalogEditButtonClass}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setEditingFeature(feature);
+                                                            setFormError(null);
+                                                        }}
+                                                    >
+                                                        <Pencil className="size-3" />
+                                                        Edit
+                                                    </Button>
+                                                ) : null}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -365,6 +382,96 @@ const CommercialCatalogFeaturesPage = ({
                 </Card>
             )}
         </section>
+    );
+};
+
+type FeatureEditorProps = {
+    lockedKey?: string;
+    initialValues?: CreateCommercialFeatureJSON;
+    submitLabel: string;
+    pendingLabel: string;
+    errorTitle: string;
+    formError: string | null;
+    isPending: boolean;
+    onCancel: () => void;
+    onSubmit: (values: CreateCommercialFeatureJSON) => void;
+};
+
+const FeatureEditor = ({
+    lockedKey,
+    initialValues,
+    submitLabel,
+    pendingLabel,
+    errorTitle,
+    formError,
+    isPending,
+    onCancel,
+    onSubmit,
+}: FeatureEditorProps) => {
+    const [key, setKey] = useState(initialValues?.key ?? "");
+    const [displayName, setDisplayName] = useState(initialValues?.displayName ?? "");
+    const [description, setDescription] = useState(initialValues?.description ?? "");
+    const [localError, setLocalError] = useState<string | null>(null);
+
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        const payload = { key: lockedKey ?? key, displayName, description };
+        const parsed = (lockedKey ? UpdateCommercialFeatureDraftSchema : CreateCommercialFeatureSchema).safeParse(
+            lockedKey ? { displayName, description } : payload,
+        );
+        if (!parsed.success) {
+            setLocalError(parsed.error.issues[0]?.message ?? "Check the Feature details");
+            return;
+        }
+        setLocalError(null);
+        onSubmit(payload);
+    };
+
+    return (
+        <form className="grid gap-4 pt-2" onSubmit={submit}>
+            <label className="block space-y-2 text-sm font-medium">
+                Key
+                <Input
+                    value={lockedKey ?? key}
+                    onChange={(event) => setKey(event.target.value)}
+                    readOnly={Boolean(lockedKey)}
+                    autoComplete="off"
+                    className="h-11 rounded-xl"
+                    placeholder="billing"
+                />
+            </label>
+            <label className="block space-y-2 text-sm font-medium">
+                Display name
+                <Input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    className="h-11 rounded-xl"
+                    placeholder="Billing"
+                />
+            </label>
+            <label className="block space-y-2 text-sm font-medium">
+                Description
+                <Textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    className="min-h-24 rounded-xl"
+                />
+            </label>
+            {localError || formError ? (
+                <Alert variant="destructive" role="alert">
+                    <AlertTitle>{errorTitle}</AlertTitle>
+                    <AlertDescription>{localError ?? formError}</AlertDescription>
+                </Alert>
+            ) : null}
+            <CommercialCatalogDialogFooter>
+                <Button type="button" variant="outline" className="rounded-xl" onClick={onCancel}>
+                    Cancel
+                </Button>
+                <Button type="submit" className="rounded-xl" disabled={isPending}>
+                    {isPending ? pendingLabel : submitLabel}
+                </Button>
+            </CommercialCatalogDialogFooter>
+        </form>
     );
 };
 
@@ -392,12 +499,10 @@ const FeatureDetail = ({
     onUnauthorized,
 }: FeatureDetailProps) => {
     const queryClient = useQueryClient();
-    const [displayName, setDisplayName] = useState("");
-    const [description, setDescription] = useState("");
+    const [showEdit, setShowEdit] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-    const [hydratedRevisionId, setHydratedRevisionId] = useState<string | null>(null);
 
     const featureQuery = useQuery({
         queryKey: featureQueryKey(featureId),
@@ -406,20 +511,11 @@ const FeatureDetail = ({
     });
     const feature = featureQuery.data?.status === "success" ? featureQuery.data.data?.feature : undefined;
     const current = feature?.currentRevision;
-    const detailErrorCode = unauthorizedCode(featureQuery.error, featureQuery.data);
+    const detailErrorCode = commercialCatalogUnauthorizedCode(featureQuery.error, featureQuery.data);
 
     useEffect(() => {
         if (detailErrorCode === 401) void onUnauthorized?.();
     }, [detailErrorCode, onUnauthorized]);
-
-    useEffect(() => {
-        if (current && current.id !== hydratedRevisionId) {
-            setDisplayName(current.displayName);
-            setDescription(current.description);
-            setHydratedRevisionId(current.id);
-            setFormError(null);
-        }
-    }, [current, hydratedRevisionId]);
 
     const invalidate = async () => {
         await queryClient.invalidateQueries({ queryKey: featureQueryKey(featureId) });
@@ -427,8 +523,11 @@ const FeatureDetail = ({
     };
 
     const updateMutation = useMutation({
-        mutationFn: (input: { displayName: string; description: string }) =>
-            updateCommercialFeatureDraft(featureId, current!.id, input),
+        mutationFn: (input: CreateCommercialFeatureJSON) =>
+            updateCommercialFeatureDraft(featureId, current!.id, {
+                displayName: input.displayName,
+                description: input.description ?? "",
+            }),
         onMutate: () => setFormError(null),
         onSuccess: async (response) => {
             if (response.status === "error") {
@@ -436,6 +535,7 @@ const FeatureDetail = ({
                 setFormError(response.message);
                 return;
             }
+            setShowEdit(false);
             await invalidate();
         },
         onError: (error: { message?: string; code?: number }) => {
@@ -459,7 +559,7 @@ const FeatureDetail = ({
                 return;
             }
             setPendingAction(null);
-            setHydratedRevisionId(null);
+            setShowEdit(false);
             await invalidate();
         },
         onError: (error: { message?: string; code?: number }) => {
@@ -468,39 +568,6 @@ const FeatureDetail = ({
         },
     });
 
-    const submitDraft = (event: FormEvent) => {
-        event.preventDefault();
-        const parsed = UpdateCommercialFeatureDraftSchema.safeParse({ displayName, description });
-        if (!parsed.success) {
-            setFormError(parsed.error.issues[0]?.message ?? "Check the Feature details");
-            return;
-        }
-        updateMutation.mutate(parsed.data);
-    };
-
-    const confirmCopy: Record<PendingAction["kind"], { title: string; body: string; confirm: string }> = {
-        publish: {
-            title: "Publish this Feature revision?",
-            body: "Publishing makes this revision Active and immutable. If another revision is Active, it will be Retired.",
-            confirm: "Publish revision",
-        },
-        retire: {
-            title: "Retire this Feature revision?",
-            body: "The Active revision will become unavailable for future catalog composition. Its history stays retained.",
-            confirm: "Retire revision",
-        },
-        discard: {
-            title: "Discard this Draft Feature?",
-            body: "The unused Draft will leave the working catalog. Its Commercial Catalog Key cannot be reused.",
-            confirm: "Confirm discard",
-        },
-        successor: {
-            title: "Create a successor Draft revision?",
-            body: "The current revision stays unchanged until the successor Draft is published.",
-            confirm: "Confirm successor revision",
-        },
-    };
-
     if (featureQuery.isPending) {
         return <p aria-busy="true">Loading Feature…</p>;
     }
@@ -508,7 +575,7 @@ const FeatureDetail = ({
         return (
             <section className="space-y-4">
                 <Button type="button" variant="ghost" onClick={onBack}>
-                    <ChevronLeft className="size-4" /> Back to Features
+                    Back to Features
                 </Button>
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>Feature could not be loaded</AlertTitle>
@@ -527,188 +594,115 @@ const FeatureDetail = ({
 
     return (
         <section className="space-y-6">
-            <div className="space-y-3">
-                <Button type="button" variant="ghost" onClick={onBack}>
-                    <ChevronLeft className="size-4" /> Back to Features
-                </Button>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Commercial Catalog · Features</p>
-                        <h1 className="text-3xl font-semibold tracking-tight">{current.displayName}</h1>
-                        <p className="text-muted-foreground">
-                            Key <code>{feature.key}</code> · Revision {current.revisionNumber}
-                        </p>
-                    </div>
-                    {statusBadge(current.status)}
-                </div>
-            </div>
+            <CommercialCatalogDetailHeader
+                backLabel="Back to Features"
+                onBack={onBack}
+                title={current.displayName}
+                catalogKey={feature.key}
+                revisionNumber={current.revisionNumber}
+                status={current.status}
+                description={current.description}
+                actions={
+                    <>
+                        <CommercialCatalogRevisionHistorySheet revisions={feature.revisions} />
+                        {isDraft ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className={commercialCatalogEditButtonClass}
+                                onClick={() => { setShowEdit(true); setFormError(null); }}
+                            >
+                                <Pencil className="size-3.5" />
+                                Edit
+                            </Button>
+                        ) : null}
+                        {isDraft ? (
+                            <Button type="button" className="rounded-full" onClick={() => setPendingAction({ kind: "publish", revision: current })}>
+                                Publish
+                            </Button>
+                        ) : null}
+                        {current.status === "active" ? (
+                            <Button type="button" variant="outline" className="rounded-full" onClick={() => setPendingAction({ kind: "retire", revision: current })}>
+                                Retire
+                            </Button>
+                        ) : null}
+                        {canSuccessor ? (
+                            <Button type="button" className="rounded-full" onClick={() => setPendingAction({ kind: "successor", revision: current })}>
+                                Create successor revision
+                            </Button>
+                        ) : null}
+                        {isDraft ? (
+                            <Button type="button" variant="outline" className="rounded-full text-destructive hover:text-destructive" onClick={() => setPendingAction({ kind: "discard", revision: current })}>
+                                Discard draft
+                            </Button>
+                        ) : null}
+                    </>
+                }
+            />
 
-            {feature.key === "kot_system" || feature.key === "table_management" ? (
-                <Alert>
-                    <AlertTitle>Initial catalog relationship</AlertTitle>
-                    <AlertDescription>{commercialCatalogKotTableNote}</AlertDescription>
-                </Alert>
-            ) : null}
+            <CommercialCatalogActionConfirmDialog
+                open={Boolean(pendingAction)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingAction(null);
+                        setActionError(null);
+                    }
+                }}
+                action={pendingAction?.kind ?? null}
+                error={actionError}
+                isPending={actionMutation.isPending}
+                errorTitle="The Feature revision was not updated"
+                onConfirm={() => {
+                    if (pendingAction) actionMutation.mutate(pendingAction);
+                }}
+            />
 
-            {pendingAction ? (
-                <div role="alertdialog" aria-labelledby="feature-action-title" className="rounded-xl border bg-card p-4 shadow-sm">
-                    <h2 id="feature-action-title" className="text-lg font-semibold">{confirmCopy[pendingAction.kind].title}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{confirmCopy[pendingAction.kind].body}</p>
-                    {actionError ? (
-                        <Alert variant="destructive" className="mt-3" role="alert">
-                            <AlertTitle>The Feature revision was not updated</AlertTitle>
-                            <AlertDescription>{actionError}</AlertDescription>
-                        </Alert>
-                    ) : null}
-                    <div className="mt-4 flex gap-2">
-                        <Button
-                            type="button"
-                            variant={pendingAction.kind === "discard" || pendingAction.kind === "retire" ? "destructive" : "default"}
-                            disabled={actionMutation.isPending}
-                            onClick={() => actionMutation.mutate(pendingAction)}
-                        >
-                            {actionMutation.isPending ? "Updating..." : confirmCopy[pendingAction.kind].confirm}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => { setPendingAction(null); setActionError(null); }}>
-                            Cancel
-                        </Button>
-                    </div>
-                </div>
-            ) : null}
+            <CommercialCatalogEditorDialog
+                open={showEdit}
+                onOpenChange={(open) => { if (!open) { setShowEdit(false); setFormError(null); } }}
+                title="Edit Feature"
+                icon={<Layers3 className="size-5" />}
+            >
+                <FeatureEditor
+                    key={current.id}
+                    lockedKey={feature.key}
+                    initialValues={{
+                        key: feature.key,
+                        displayName: current.displayName,
+                        description: current.description,
+                    }}
+                    submitLabel="Save draft"
+                    pendingLabel="Saving..."
+                    errorTitle="Draft Feature was not updated"
+                    formError={formError}
+                    isPending={updateMutation.isPending}
+                    onCancel={() => { setShowEdit(false); setFormError(null); }}
+                    onSubmit={(values) => updateMutation.mutate(values)}
+                />
+            </CommercialCatalogEditorDialog>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Current revision</CardTitle>
-                    <CardDescription>
-                        {isDraft
-                            ? "Draft revisions can be edited, published, or discarded. The key cannot change."
-                            : "Active and historical revisions are retained. Create a successor Draft to make a change."}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isDraft ? (
-                        <form className="grid gap-4" onSubmit={submitDraft}>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Key
-                                <Input value={feature.key} readOnly />
-                            </label>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Display name
-                                <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-                            </label>
-                            <label className="block space-y-2 text-sm font-medium">
-                                Description
-                                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
-                            </label>
-                            {formError ? (
-                                <Alert variant="destructive" role="alert">
-                                    <AlertTitle>Draft Feature was not updated</AlertTitle>
-                                    <AlertDescription>{formError}</AlertDescription>
-                                </Alert>
-                            ) : null}
-                            <div className="flex flex-wrap gap-2">
-                                <Button type="submit" disabled={updateMutation.isPending}>
-                                    {updateMutation.isPending ? "Saving..." : "Save draft"}
-                                </Button>
-                                <Button type="button" onClick={() => setPendingAction({ kind: "publish", revision: current })}>
-                                    Publish
-                                </Button>
-                                <Button type="button" variant="outline" onClick={() => setPendingAction({ kind: "discard", revision: current })}>
-                                    Discard draft
-                                </Button>
-                            </div>
-                        </form>
-                    ) : (
-                        <div className="grid gap-4">
-                            <p><span className="font-medium">Key:</span> <code>{feature.key}</code></p>
-                            <p><span className="font-medium">Display name:</span> {current.displayName}</p>
-                            <p><span className="font-medium">Description:</span> {current.description || "—"}</p>
-                            <div className="flex flex-wrap gap-2">
-                                {current.status === "active" ? (
-                                    <Button type="button" variant="outline" onClick={() => setPendingAction({ kind: "retire", revision: current })}>
-                                        Retire
-                                    </Button>
-                                ) : null}
-                                {canSuccessor ? (
-                                    <Button type="button" onClick={() => setPendingAction({ kind: "successor", revision: current })}>
-                                        Create successor revision
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Referencing Modules</CardTitle>
-                    <CardDescription>Modules whose current revision includes this Feature.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {feature.referencingModules.length === 0 ? (
-                        <p>No Modules currently include this Feature.</p>
-                    ) : (
-                        <ul className="space-y-2">
-                            {feature.referencingModules.map((moduleItem) => (
-                                <li key={moduleItem.revisionId}>
-                                    {moduleItem.displayName} · <code>{moduleItem.key}</code> · revision {moduleItem.revisionNumber}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Affected Plans</CardTitle>
-                    <CardDescription>Plans that currently include this Feature through a Module. This is review only.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {feature.affectedPlans.length === 0 ? (
-                        <p>No Plans currently include this Feature.</p>
-                    ) : (
-                        <ul className="space-y-2">
-                            {feature.affectedPlans.map((planItem) => (
-                                <li key={planItem.revisionId}>
-                                    {planItem.displayName} · <code>{planItem.key}</code> · revision {planItem.revisionNumber}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Revision history</CardTitle>
-                    <CardDescription>Who created, published, retired, or discarded each revision.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {feature.revisions.map((revision) => (
-                        <article key={revision.id} className="rounded-xl border p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="font-medium">Revision {revision.revisionNumber}</h3>
-                                {statusBadge(revision.status)}
-                            </div>
-                            <p className="mt-1 text-sm text-muted-foreground">{revision.displayName}</p>
-                            <ul className="mt-3 space-y-1 text-sm">
-                                <li>Created by {actorName(revision.createdBy)} on {formatAuditTime(revision.createdAt)}</li>
-                                {revision.publishedBy && revision.publishedAt ? (
-                                    <li>Published by {actorName(revision.publishedBy)} on {formatAuditTime(revision.publishedAt)}</li>
-                                ) : null}
-                                {revision.retiredBy && revision.retiredAt ? (
-                                    <li>Retired by {actorName(revision.retiredBy)} on {formatAuditTime(revision.retiredAt)}</li>
-                                ) : null}
-                                {revision.discardedBy && revision.discardedAt ? (
-                                    <li>Discarded by {actorName(revision.discardedBy)} on {formatAuditTime(revision.discardedAt)}</li>
-                                ) : null}
-                            </ul>
-                        </article>
-                    ))}
-                </CardContent>
-            </Card>
+            <CommercialCatalogDetailRelations
+                sections={[
+                    {
+                        title: "Referencing Modules",
+                        items: feature.referencingModules.map((moduleItem) => ({
+                            id: moduleItem.revisionId,
+                            label: moduleItem.displayName,
+                            hint: moduleItem.key,
+                        })),
+                        empty: "No Modules currently include this Feature.",
+                    },
+                    {
+                        title: "Affected Plans",
+                        items: feature.affectedPlans.map((planItem) => ({
+                            id: planItem.revisionId,
+                            label: planItem.displayName,
+                            hint: planItem.key,
+                        })),
+                        empty: "No Plans currently include this Feature.",
+                    },
+                ]}
+            />
         </section>
     );
 };

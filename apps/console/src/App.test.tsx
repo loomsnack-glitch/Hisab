@@ -67,7 +67,7 @@ describe("Ganatri Console entry", () => {
         expect(markup).toContain("Welcome, Asha");
         expect(markup).toContain("Dashboard");
         expect(markup).toContain("Organizations");
-        expect(markup).toContain("Commercial Catalog");
+        expect(markup).toContain("Plans");
         expect(markup).toContain("Console Users");
         expect(markup).toContain("Ganatri Console");
         expect(markup).not.toContain("Later ticket");
