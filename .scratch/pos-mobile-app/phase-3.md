@@ -44,7 +44,7 @@ Not included in this phase:
 
 | Subphase | Outcome | Depends on | Exit evidence | Commit |
 | --- | --- | --- | --- | --- |
-| 3.1 | Local Cart state | Phase 2 | Lines can be added, removed, adjusted, and displayed with immediate totals | Pending |
+| 3.1 | Local Cart state | Phase 2 | Lines can be added, removed, adjusted, and displayed with immediate totals | `66479e3` |
 | 3.2 | Cart Review screen | 3.1 | Product lines, configurations, totals, and Continue to Payment are clear | Pending |
 | 3.3 | Customer picker and Walk-in | 3.2 | Walk-in default and optional name/phone Customer selection work | Pending |
 | 3.4 | Quick Customer creation | 3.3 | Minimal Customer creation returns safely to the active Cart | Pending |
@@ -144,8 +144,8 @@ Plan review result: approved for implementation.
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
-| 3.1 Local Cart state | Ready to commit | Implementation and review complete; focused checks pass |
-| 3.2 Cart Review screen | Not started | Depends on 3.1 |
+| 3.1 Local Cart state | Completed with follow-up | `66479e3`; native/device validation remains pending |
+| 3.2 Cart Review screen | In progress | Plan approved; implementation pending |
 | 3.3 Customer picker and Walk-in | Not started | Depends on 3.2 |
 | 3.4 Quick Customer creation | Not started | Depends on 3.3 |
 | 3.5 Discounts | Not started | Depends on 3.2 |
@@ -185,5 +185,85 @@ Verification:
 - Android build, emulator, device, and live API checks — intentionally not run;
   these remain user-owned validation steps.
 
-3.1 status: Ready to commit. Implementation commit reference is recorded after
-the commit gate.
+3.1 status: Completed with follow-up. Implementation commit: `66479e3`.
+
+## 3.2 — Cart Review screen
+
+### Plan
+
+User-facing outcome: a cashier can review every current Cart line before
+continuing toward Payment, including quantities, local display pricing, and
+the preserved Combo/Add-on selections.
+
+Implementation scope:
+
+- Turn the existing Cart shell into the focused Cart Review surface while
+  preserving the New Sale browsing context when navigating back.
+- Show each Cart line's Product name, quantity, unit price, display line total,
+  quantity controls, and remove action.
+- Render configured direct Add-ons and Combo selections from the IDs and
+  quantities already preserved in the local Cart, resolving names and prices
+  from the current server Catalog/configuration data when available.
+- Keep the local display subtotal, catalog discount, and total visible, with a
+  clear server-authoritative note.
+- Add Continue to Payment as the single primary action. Since Payment is Phase
+  4, it may be a guarded placeholder route/action until that phase exists.
+- Keep Customer, discount, and Draft Sale actions secondary and ready for their
+  dedicated subphases; do not implement their mutations here.
+- Add focused tests for configured-line rendering data, empty Cart behavior,
+  and the Cart Review navigation boundary where the existing test seams allow.
+
+Acceptance criteria:
+
+1. Every Cart line is visible with Product name, quantity, unit price, and
+   immediate display line total.
+2. Quantity increase, final-unit removal, and explicit remove remain available
+   without losing configured line identity.
+3. Configured direct Add-ons and Combo selections remain associated with their
+   parent line when returning from New Sale.
+4. Subtotal, catalog discount, and display total update immediately after line
+   changes, without being treated as server billing authority.
+5. Continue to Payment is the single prominent forward action; Payment
+   implementation remains in Phase 4.
+6. The empty Cart state is clear and does not offer an invalid checkout path.
+7. English, Gujarati, and Hindi labels cover the review actions and states.
+
+Non-goals:
+
+- Customer selection or creation (3.3–3.4).
+- Discount entry (3.5).
+- Draft Sale save, resume, delete, or retry (3.6).
+- Payment, Sale completion, receipts, or server checkout requests (Phase 4).
+- In-place editing of an existing line's Combo/Add-on configuration.
+
+Dependencies and public seams:
+
+- Completed 3.1 Cart boundary, Zustand store, hook, and Cart route.
+- Phase 2 Cart configuration identity and current Catalog/configuration queries.
+- Existing POS navigation stack; no new backend endpoint is expected.
+
+Test strategy and expected checks:
+
+- Add pure tests for configuration display mapping and Cart Review data safety.
+- Run `bun run --cwd apps/mobile test`.
+- Run the mobile TypeScript check and separate the known WhatsApp asset error.
+- Run `git diff --check`; do not run Android builds or device commands.
+
+Risks and rollback:
+
+- Displaying stale or copied Product/configuration values could conflict with
+  server authority; use current query data and retain IDs in the Cart.
+- The forward Payment action must not create a Sale before Phase 4's approved
+  checkout adapter exists.
+- Rollback is limited to the Cart Review screen and its display boundary; the
+  committed 3.1 local Cart behavior remains independently recoverable.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against `spec.md`, `CONTEXT.md`, the Cart and Draft Sale
+decision, completed 3.1, and the existing navigation shell. The plan keeps
+server mutations and Payment outside this subphase, preserves configured line
+identity, and uses current server data for optional configuration display. No
+new product, API, security, or release decision is required.
+
+Plan review result: approved for implementation.
