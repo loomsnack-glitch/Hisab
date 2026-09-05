@@ -1,4 +1,5 @@
 import { mock } from "bun:test";
+import { ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
 
 export const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -236,7 +237,10 @@ export const sauceAttachment = {
     addOn: sauceAddOn,
 };
 
+export const store = { id: "11111111-1111-4111-8111-111111111111", organizationId, name: "Adajan" };
 export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
+export const getStoresByOrganizationId = mock(async () => [store]);
+export const getStoreById = mock(async () => store);
 export const getCategoryById = mock(async () => category);
 export const getCategoriesByOrganizationId = mock(async () => [category]);
 export const categoryNameExistsInOrganization = mock(async () => false);
@@ -478,6 +482,8 @@ export const seedDefaultUnits = mock(async () => [pieceUnit]);
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
+    getStoresByOrganizationId,
+    getStoreById,
 }));
 
 mock.module("@/services/storage", () => ({
@@ -571,5 +577,7 @@ mock.module("./catalog.repository", () => ({
     getProductLabelProfilesByProductIds,
     upsertProductLabelProfile: upsertProductLabelProfileRepo,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const catalogService = await import("./catalog.service");

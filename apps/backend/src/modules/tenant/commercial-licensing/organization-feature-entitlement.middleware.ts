@@ -8,6 +8,7 @@ import {
 
 const organizationIdSchema = z.uuid("Invalid organization id");
 
+/** Mount only on this module's resource paths. `/:organizationId/*` intercepts later `/organizations` routers. */
 export const createOrganizationFeatureEntitlementMiddleware = (
     featureKey: StoreFeatureEntitlementKey,
 ): MiddlewareHandler<{ Variables: AppVariables }> => {
