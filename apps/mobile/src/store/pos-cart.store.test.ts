@@ -85,4 +85,14 @@ describe("POS Cart store", () => {
         expect(usePosCartStore.getState().draftSaleId).toBeNull();
         expect(usePosCartStore.getState().items).toHaveLength(1);
     });
+
+    it("keeps a completion request id for retry but clears it when Cart input changes", () => {
+        usePosCartStore.getState().clear();
+        const scope = "org-1:store-1:device-1";
+        usePosCartStore.getState().addProduct(scope, product);
+        usePosCartStore.getState().setCompletionRequestId(scope, "request-1");
+        expect(usePosCartStore.getState().completionRequestId).toBe("request-1");
+        usePosCartStore.getState().changeQuantity(scope, "product-1", 1);
+        expect(usePosCartStore.getState().completionRequestId).toBeNull();
+    });
 });
