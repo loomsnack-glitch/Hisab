@@ -497,6 +497,38 @@ product or backend decision is required for 4.4.
 
 Plan review result: approved for implementation.
 
+### 4.4 Implementation and review result
+
+Implemented the Sale Complete handoff and confirmation screen:
+
+- Added an in-memory completed-Sale store that retains the exact server Sale
+  response for the next screen and supports replacement/explicit clearing.
+- Added the `SaleComplete` route and screen with server Sale number, server
+  grand total, and the reusable server-authoritative Payment status summary.
+- Wired Payment's primary action to the checkout hook with loading and
+  translated failure feedback. Navigation occurs only after a server Sale is
+  returned; failed checkout keeps the local recovery state intact.
+- Added a prominent New Sale action that clears the completed result and
+  replaces the route with the existing New Sale screen. New Sale also clears
+  stale result data on mount, and logout clears it with the other POS state.
+- Added English, Gujarati, and Hindi completion/recovery labels plus focused
+  store tests for result replacement and explicit clearing.
+
+Review evidence:
+
+- `bun run --cwd apps/mobile test`: 73 passed, 0 failed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: new Phase
+  4.4 code is type-clean; the repository still reports the pre-existing
+  `apps/mobile/src/screens/login-screen.tsx` missing
+  `@repo/assets/services/whatsapp.webp` module.
+- `git diff --check`: passed.
+- Android build, emulator, device, live API, migration, and receipt/printer
+  checks were not run, as defined by the phase guardrails.
+
+Implementation review result: approved with the known asset/native/device/API
+follow-ups. Receipt display and sharing can now be added independently in
+Phase 4.5.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
@@ -504,5 +536,5 @@ Plan review result: approved for implementation.
 | 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
 | 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
 | 4.3 Checkout adapter | Completed with follow-up | Direct, Draft, and collection adapters, scoped retry ID, validation, and focused checks are complete; Sale Complete wiring and native/API validation are follow-ups |
-| 4.4 Sale Complete screen | In progress | Plan approved; server Sale handoff and New Sale reset are next |
+| 4.4 Sale Complete screen | Completed with follow-up | Server Sale handoff, confirmation screen, New Sale reset, translations, and focused checks are complete; native/API validation and receipt actions are follow-ups |
 | 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |

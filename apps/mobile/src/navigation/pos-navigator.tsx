@@ -5,12 +5,14 @@ import PosDestinationScreen from "../screens/pos-destination-screen";
 import NewSaleScreen from "../screens/new-sale-screen";
 import CartShellScreen from "../screens/cart-shell-screen";
 import PaymentScreen from "../screens/payment-screen";
+import SaleCompleteScreen from "../screens/sale-complete-screen";
 
 export type PosStackParamList = {
     PosHome: undefined;
     NewSale: undefined;
     Cart: undefined;
     Payment: undefined;
+    SaleComplete: undefined;
     Bills: undefined;
     Customers: undefined;
     Reports: undefined;
@@ -27,6 +29,7 @@ const PosNavigator = () => {
             <Stack.Screen name="NewSale" component={NewSaleScreen} />
             <Stack.Screen name="Cart" component={CartShellScreen} />
             <Stack.Screen name="Payment" component={PaymentScreen} />
+            <Stack.Screen name="SaleComplete" component={SaleCompleteScreen} />
             <Stack.Screen name="Bills" component={PosDestinationScreen} />
             <Stack.Screen name="Customers" component={PosDestinationScreen} />
             <Stack.Screen name="Reports" component={PosDestinationScreen} />
