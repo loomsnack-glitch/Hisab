@@ -15,6 +15,7 @@ import {
     WhatsAppMessageEventSchema,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as storage from "@/services/storage";
 import * as repository from "./whatsapp.repository";
 import * as consentRepository from "./cloud-api/customer-consent.repository";
@@ -33,7 +34,7 @@ const success = <T>(data: T, message: string): ServiceResponse<T> => ({
     code: STATUS_CODES.SUCCESS,
 });
 
-const error = <T>(message: string, code: 400 | 404 | 409 | 429 | 500 | 503): ServiceResponse<T | null> => ({
+const error = <T>(message: string, code: 400 | 403 | 404 | 409 | 429 | 500 | 503): ServiceResponse<T | null> => ({
     status: "error",
     message,
     data: null,
@@ -49,12 +50,16 @@ const scopeForUser = async (
     if (!organization) return error("Organization not found", STATUS_CODES.NOT_FOUND);
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     if (!store) return error("Store not found", STATUS_CODES.NOT_FOUND);
+    const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+    if (entitlementError) return entitlementError;
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) return error("Link the Store WhatsApp account first", STATUS_CODES.CONFLICT);
     return success({ organizationId, storeId, account }, "WhatsApp scope resolved");
 };
 
 const scopeForDevice = async (session: DeviceSessionDTO): Promise<ServiceResponse<Scope | null>> => {
+    const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
+    if (entitlementError) return entitlementError;
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return error("Link the Store WhatsApp account first", STATUS_CODES.CONFLICT);
     return success({ organizationId: session.organization.id, storeId: session.store.id, account }, "WhatsApp scope resolved");

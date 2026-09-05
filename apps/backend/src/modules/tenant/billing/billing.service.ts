@@ -63,7 +63,11 @@ import {
   googleContactsCustomerIsEligible,
 } from "@/modules/tenant/google-contacts/google-contacts.customer-sync";
 import * as googleContactsOutbox from "@/modules/tenant/google-contacts/google-contacts.outbox";
-import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
+import {
+  featureEntitlementDeniedForOrganization,
+  listEntitledStoreIdsForOrganization,
+  requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 
 const requireBillingEntitlementForStore = async (
   storeId: string,
@@ -74,6 +78,11 @@ const requireKotSystemEntitlementForStore = async (
   storeId: string,
 ): Promise<ServiceResponse<null> | null> =>
   requireStoreFeatureEntitlement(storeId, "kot_system");
+
+const requireReportsEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "reports");
 
 const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -2017,6 +2026,37 @@ const getProductSalesSummaryInOrganization = async (
   );
   if (scopeError) {
     return scopeError;
+  }
+
+  if (query.storeId) {
+    const reportsEntitlementError = await requireReportsEntitlementForStore(
+      query.storeId,
+    );
+    if (reportsEntitlementError) {
+      return reportsEntitlementError;
+    }
+  } else {
+    const entitledStoreIds = await listEntitledStoreIdsForOrganization(
+      organizationId,
+      "reports",
+    );
+    if (entitledStoreIds.length === 0) {
+      return featureEntitlementDeniedForOrganization("reports");
+    }
+
+    const products = await billingRepository.getProductSalesSummary(
+      organizationId,
+      undefined,
+      query,
+      entitledStoreIds,
+    );
+
+    return {
+      status: "success",
+      data: { summary: { products } },
+      message: "Product sales summary fetched successfully",
+      code: STATUS_CODES.SUCCESS,
+    };
   }
 
   const products = await billingRepository.getProductSalesSummary(
@@ -4707,6 +4747,13 @@ export const getProductSalesSummaryForDevice = async (
   session: DeviceSessionDTO,
   query: ProductSalesSummaryQuery,
 ): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+  const reportsEntitlementError = await requireReportsEntitlementForStore(
+    session.store.id,
+  );
+  if (reportsEntitlementError) {
+    return reportsEntitlementError;
+  }
+
   const products = await billingRepository.getProductSalesSummary(
     session.organization.id,
     session.store.id,

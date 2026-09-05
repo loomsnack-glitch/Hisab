@@ -10,6 +10,10 @@ import {
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import {
+  requireOrganizationFeatureEntitlement,
+  requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
+import {
   getCloudAccountSnapshot,
   getCloudCredentialBinding,
 } from "./cloud-account.repository";
@@ -118,6 +122,31 @@ const accountNotFound = <T>(): ServiceResponse<T | null> => ({
   code: STATUS_CODES.NOT_FOUND,
 });
 
+const requireWhatsAppOrganization = async (
+  organizationAccess: CloudTemplateServiceDependencies["organizationAccess"],
+  organizationId: string,
+  userId: string,
+) => {
+  if (!await organizationAccess(organizationId, userId)) {
+    return { status: "error" as const, message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+  return requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
+};
+
+const requireWhatsAppStore = async (
+  organizationAccess: CloudTemplateServiceDependencies["organizationAccess"],
+  organizationId: string,
+  userId: string,
+  storeId: string,
+) => {
+  const organizationDenial = await requireWhatsAppOrganization(organizationAccess, organizationId, userId);
+  if (organizationDenial) return organizationDenial;
+  if (!await organizationRepository.getStoreById(organizationId, storeId)) {
+    return { status: "error" as const, message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
+  return requireStoreFeatureEntitlement(storeId, "whatsapp");
+};
+
 export const syncCloudTemplatesForAccount = async (
   userId: string,
   organizationId: string,
@@ -126,7 +155,8 @@ export const syncCloudTemplatesForAccount = async (
 ): Promise<ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>> => {
   const deps = { ...dependencies(), ...injected };
   try {
-    if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
     const account = await deps.getAccount(organizationId, accountId);
     if (!account || !account.wabaId) return accountNotFound();
     const credential = await deps.getCredential(organizationId, accountId);
@@ -436,10 +466,13 @@ export const submitCloudTemplateForAccount = async (
   let providerPhase = "load_provider_templates";
   try {
     validateSubmissionMetadata(data);
-    if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
     const account = await deps.getAccount(organizationId, accountId);
     if (!account?.wabaId || account.whatsappBusinessAccountId !== data.whatsappBusinessAccountId) return accountNotFound();
     if (data.storeId) {
+      const storeDenial = await requireStoreFeatureEntitlement(data.storeId, "whatsapp");
+      if (storeDenial) return storeDenial;
       if (!await organizationRepository.getStoreById(organizationId, data.storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
       if (!await deps.isAccountAssignedToStore(organizationId, data.storeId, data.whatsappBusinessAccountId)) {
         return { status: "error", message: "WhatsApp Cloud account is not assigned to this Store", data: null, code: STATUS_CODES.CONFLICT };
@@ -554,7 +587,8 @@ export const listCloudTemplatesForAccount = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
   const account = await deps.getAccount(organizationId, accountId);
   if (!account?.whatsappBusinessAccountId) return accountNotFound();
   const templates = await deps.list(organizationId, account.whatsappBusinessAccountId);
@@ -569,11 +603,16 @@ export const listCloudTemplateSubmissionsForAccount = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<{ submissions: WhatsAppCloudTemplateSubmissionDTO[] } | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
   const account = await deps.getAccount(organizationId, accountId);
   if (!account?.whatsappBusinessAccountId) return accountNotFound();
-  if (originatingStoreId && !await organizationRepository.getStoreById(organizationId, originatingStoreId)) {
-    return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (originatingStoreId) {
+    if (!await organizationRepository.getStoreById(organizationId, originatingStoreId)) {
+      return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    const storeDenial = await requireStoreFeatureEntitlement(originatingStoreId, "whatsapp");
+    if (storeDenial) return storeDenial;
   }
   const submissions = await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId);
   console.info("[DEBUG-whatsapp-template-submissions]", {
@@ -603,10 +642,13 @@ export const setCloudTemplateDefaultForSubmission = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
   const submission = await deps.getSubmission(organizationId, submissionId);
   if (!submission || submission.organizationId !== organizationId) return { status: "error", message: "Cloud template submission not found", data: null, code: STATUS_CODES.NOT_FOUND };
   if (!submission.originatingStoreId) return { status: "error", message: "Select a Store before assigning a default", data: null, code: STATUS_CODES.CONFLICT };
+  const storeDenial = await requireStoreFeatureEntitlement(submission.originatingStoreId, "whatsapp");
+  if (storeDenial) return storeDenial;
   if (submission.status !== "approved" || !submission.metaTemplateId) return { status: "error", message: "Only an approved Cloud template can become a Store default", data: null, code: STATUS_CODES.CONFLICT };
   const assets = await deps.list(organizationId, submission.whatsappBusinessAccountId);
   const asset = assets.find(item => item.metaTemplateId === submission.metaTemplateId);
@@ -648,8 +690,8 @@ export const setCloudTemplateAssetDefaultForStore = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
-  if (!await organizationRepository.getStoreById(organizationId, storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const storeDenial = await requireWhatsAppStore(deps.organizationAccess, organizationId, userId, storeId);
+  if (storeDenial) return storeDenial;
   const asset = (await deps.list(organizationId, data.whatsappBusinessAccountId)).find(item => item.id === data.cloudTemplateId);
   const expectedCategory = data.kind === "promotion" ? "marketing" : "utility";
   if (!asset || asset.status !== "approved" || asset.category !== expectedCategory) {
@@ -688,7 +730,8 @@ export const archiveCloudTemplateBindingForStore = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
   const binding = await deps.archiveBinding(organizationId, bindingId, userId);
   if (!binding) return { status: "error", message: "Cloud template binding not found or already archived", data: null, code: STATUS_CODES.NOT_FOUND };
   await deps.recordAudit({
@@ -710,7 +753,8 @@ export const rollbackCloudTemplateBindingForStore = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
   try {
     const binding = await deps.rollbackBinding(organizationId, bindingId, userId);
     if (!binding) return { status: "error", message: "Cloud template binding not found", data: null, code: STATUS_CODES.NOT_FOUND };
@@ -737,8 +781,8 @@ export const createCloudTemplateBindingForStore = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<WhatsAppCloudTemplateBindingDTO | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
-  if (!await organizationRepository.getStoreById(organizationId, storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const storeDenial = await requireWhatsAppStore(deps.organizationAccess, organizationId, userId, storeId);
+  if (storeDenial) return storeDenial;
   try {
     const binding = await deps.createBinding({ ...data, organizationId, storeId, createdBy: userId, isDefault: data.isDefault ?? false });
     return { status: "success", message: "Cloud template binding saved", data: binding, code: STATUS_CODES.CREATED };
@@ -755,7 +799,7 @@ export const listCloudTemplateBindingsForStore = async (
   injected: Partial<CloudTemplateServiceDependencies> = {},
 ): Promise<ServiceResponse<{ bindings: WhatsAppCloudTemplateBindingDTO[] } | null>> => {
   const deps = { ...dependencies(), ...injected };
-  if (!await deps.organizationAccess(organizationId, userId)) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
-  if (!await organizationRepository.getStoreById(organizationId, storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const storeDenial = await requireWhatsAppStore(deps.organizationAccess, organizationId, userId, storeId);
+  if (storeDenial) return storeDenial;
   return { status: "success", message: "Cloud template bindings fetched successfully", data: { bindings: await deps.listBindings(organizationId, storeId, whatsappBusinessAccountId) }, code: STATUS_CODES.SUCCESS };
 };

@@ -43,6 +43,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
       throw new Error("Google Contact deletion must never be issued");
     });
     const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => true,
       vault: {
         store: async () => claim.credential,
         resolve: async () => credentials,
@@ -101,6 +102,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     const outcome = await dispatchGoogleContactsOutboxJob(
       { ...claim, attemptCount: 2 },
       {
+        isOrganizationEntitled: async () => true,
         vault: {
           store: async () => claim.credential,
           resolve: async () => ({
@@ -149,6 +151,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
 
   test("retries transient credential failures and permanent People failures stay distinct", async () => {
     const retryable = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => true,
       vault: {
         store: async () => claim.credential,
         resolve: async () => {
@@ -180,6 +183,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
 
     const completed: unknown[] = [];
     const permanent = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => true,
       vault: {
         store: async () => claim.credential,
         resolve: async () => credentials,
@@ -226,6 +230,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     });
     const completed: unknown[] = [];
     const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => true,
       vault: {
         store: async () => claim.credential,
         resolve: async () => credentials,
@@ -278,6 +283,7 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     const completed: unknown[] = [];
 
     const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => true,
       vault: {
         store: async () => claim.credential,
         resolve: async () => credentials,
@@ -305,5 +311,42 @@ describe("Google Contacts Sync Outbox dispatcher", () => {
     expect(createPeople).toHaveBeenCalledTimes(1);
     expect(createContact).not.toHaveBeenCalled();
     expect(completed).toHaveLength(1);
+  });
+
+  test("skips Google writes without resolving credentials when the Organization is unentitled", async () => {
+    const completed: unknown[] = [];
+    const resolve = mock(async () => credentials);
+    const createPeople = mock(() => {
+      throw new Error("must not create a People client without entitlement");
+    });
+    const outcome = await dispatchGoogleContactsOutboxJob(claim, {
+      isOrganizationEntitled: async () => false,
+      vault: {
+        store: async () => claim.credential,
+        resolve,
+        rotate: async () => claim.credential,
+        revoke: async () => {},
+      },
+      oauth: {
+        refreshAccessToken: async () => {
+          throw new Error("must not refresh credentials without entitlement");
+        },
+      },
+      createPeople,
+      isConnectionUsable: connectionIsUsable,
+      complete: async (...args) => {
+        completed.push(args[0]);
+        return true;
+      },
+    });
+
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "not_entitled",
+    });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(createPeople).not.toHaveBeenCalled();
+    expect(JSON.stringify(completed)).not.toContain("access-token");
+    expect(JSON.stringify(completed)).not.toContain("refresh-token");
   });
 });

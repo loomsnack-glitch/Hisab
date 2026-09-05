@@ -1,5 +1,6 @@
 import { STATUS_CODES, type ServiceResponse } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import {
   cancelCloudCampaign,
   getCloudQuotaLedgerSummary,
@@ -39,14 +40,19 @@ const notFound = (): ServiceResponse<null> => ({
   code: STATUS_CODES.NOT_FOUND,
 });
 
-const access = async (userId: string, organizationId: string): Promise<boolean> =>
-  Boolean(await organizationRepository.getOrganizationByIdForUser(organizationId, userId));
+const access = async (userId: string, organizationId: string): Promise<ServiceResponse<null> | null> => {
+  if (!await organizationRepository.getOrganizationByIdForUser(organizationId, userId)) {
+    return notFound();
+  }
+  return requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
+};
 
 export const getCloudSafety = async (
   userId: string,
   organizationId: string,
 ): Promise<ServiceResponse<CloudSafetyData | null>> => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   return {
     status: "success",
     message: "WhatsApp Cloud safety status fetched successfully",
@@ -64,7 +70,8 @@ export const reconcileCloudOutboxNow = async (
   userId: string,
   organizationId: string,
 ): Promise<ServiceResponse<{ reconciledCount: number } | null>> => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   try {
     const reconciledCount = await expireStaleCloudOutboxReconciliations(100, organizationId);
     return {
@@ -92,7 +99,8 @@ export const getCloudOutboxOperations = async (
   organizationId: string,
   limit = 50,
 ): Promise<ServiceResponse<{ operations: Awaited<ReturnType<typeof listCloudOutboxOperations>> } | null>> => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   return {
     status: "success",
     message: "Cloud outbox operations fetched successfully",
@@ -123,7 +131,8 @@ const actionResponse = (
 };
 
 export const retryCloudOutbox = async (userId: string, organizationId: string, outboxId: string) => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   try {
     return actionResponse(await retryCloudOutboxNow(organizationId, userId, outboxId), "retry");
   } catch (error) {
@@ -133,7 +142,8 @@ export const retryCloudOutbox = async (userId: string, organizationId: string, o
 };
 
 export const deadLetterCloudOutbox = async (userId: string, organizationId: string, outboxId: string) => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   try {
     return actionResponse(await deadLetterCloudOutboxNow(organizationId, userId, outboxId), "dead-letter");
   } catch (error) {
@@ -147,7 +157,8 @@ export const saveCloudQuotaPolicy = async (
   organizationId: string,
   policy: CloudQuotaPolicy,
 ): Promise<ServiceResponse<CloudQuotaPolicy | null>> => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   try {
     return {
       status: "success",
@@ -170,7 +181,8 @@ export const stopCloudCampaign = async (
   organizationId: string,
   campaignKey: string,
 ): Promise<ServiceResponse<{ cancelledCount: number } | null>> => {
-  if (!await access(userId, organizationId)) return notFound();
+  const accessError = await access(userId, organizationId);
+  if (accessError) return accessError;
   try {
     const cancelledCount = await cancelCloudCampaign(organizationId, campaignKey);
     return {

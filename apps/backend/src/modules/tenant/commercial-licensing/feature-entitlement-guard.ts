@@ -53,21 +53,33 @@ export const requireStoreFeatureEntitlement = async (
     return null;
 };
 
+export const listEntitledStoreIdsForOrganization = async (
+    organizationId: string,
+    featureKey: StoreFeatureEntitlementKey,
+    at: Date = new Date(),
+): Promise<string[]> => {
+    const stores = await organizationRepository.getStoresByOrganizationId(organizationId);
+    const entitledStoreIds: string[] = [];
+    for (const store of stores) {
+        if (await isStoreFeatureEntitled(store.id, featureKey, at)) {
+            entitledStoreIds.push(store.id);
+        }
+    }
+    return entitledStoreIds;
+};
+
 export const requireOrganizationFeatureEntitlement = async (
     organizationId: string,
     featureKey: StoreFeatureEntitlementKey,
     at: Date = new Date(),
 ): Promise<ServiceResponse<null> | null> => {
-    const stores = await organizationRepository.getStoresByOrganizationId(organizationId);
-    for (const store of stores) {
-        const decision = await getFeatureEntitlementService().resolveFeatureEntitlement(
-            store.id,
-            featureKey,
-            at,
-        );
-        if (decision.entitled) {
-            return null;
-        }
+    const entitledStoreIds = await listEntitledStoreIdsForOrganization(
+        organizationId,
+        featureKey,
+        at,
+    );
+    if (entitledStoreIds.length > 0) {
+        return null;
     }
     return featureEntitlementDeniedForOrganization(featureKey);
 };
