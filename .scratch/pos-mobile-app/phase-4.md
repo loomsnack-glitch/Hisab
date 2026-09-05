@@ -47,7 +47,7 @@ Not included in this phase:
 | 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | `2eacaab` |
 | 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | `e6c9098` |
 | 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | `95a25f7` |
-| 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | Pending |
+| 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | `873f9a7` |
 | 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | Pending |
 
 ## Shared Phase 4 decisions
@@ -529,6 +529,78 @@ Implementation review result: approved with the known asset/native/device/API
 follow-ups. Receipt display and sharing can now be added independently in
 Phase 4.5.
 
+## 4.5 — Digital receipts and sharing
+
+### Plan
+
+User-facing outcome: from Sale Complete, the cashier can expand a readable
+receipt preview and open Android's standard share sheet with the same completed
+Sale details. If sharing fails or is dismissed, the completed Sale remains
+complete and the cashier can try again or continue to New Sale.
+
+Implementation scope:
+
+- Add a pure mobile receipt-text boundary that consumes only the server
+  `SaleDetailDTO`, includes Sale number/date, item names/quantities/amounts,
+  totals, collected, due, and Payment status, and never uses local Cart rows.
+- Keep the digital receipt template English-only for this V1 slice. Interface
+  labels around the preview/share action remain translated in English,
+  Gujarati, and Hindi; Product and Customer business values remain unchanged.
+- Add a small Share adapter around React Native's built-in `Share.share`, with
+  a testable injected function. Convert shared, dismissed, and rejected
+  outcomes into local UI state only.
+- Add receipt preview and Share Receipt secondary actions to Sale Complete.
+  Share is not a completion mutation and must not clear or alter the Sale
+  result. Keep New Sale as the primary action.
+- Do not add printer discovery, Bluetooth permissions, ESC/POS transport, or
+  print retries here; those belong to Phase 6 and the previously approved
+  English-only thermal receipt gate.
+- Add focused pure receipt tests for stable English output, server fields,
+  item/add-on coverage where available, and share-outcome tests proving a share
+  failure cannot affect Sale data. Re-run focused mobile tests and TypeScript.
+
+Acceptance criteria:
+
+1. Sale Complete can show a readable receipt preview from the exact server Sale
+   response.
+2. Receipt text includes Sale identity, item lines, server grand total,
+   server paid/due values, and server Payment status.
+3. The preview and share controls do not use or mutate Cart, Payment, or Sale
+   completion state.
+4. Android's native share sheet receives the receipt text and a useful title.
+5. Share success, dismissal, and failure are handled as local feedback; a
+   failure never voids, duplicates, or removes the completed Sale.
+6. Digital receipt content remains English-only while surrounding mobile UI
+   labels are available in English, Gujarati, and Hindi.
+7. Focused mobile tests pass and the known missing WhatsApp asset remains a
+   separately reported TypeScript follow-up.
+
+Non-goals:
+
+- Bluetooth printer hardware, discovery, permissions, ESC/POS, or physical
+  printing; those remain Phase 6.
+- Gujarati/Hindi receipt output, PDF generation, hosted invoice URLs,
+  WhatsApp delivery, Bills browsing, or receipt re-fetching.
+- Any mutation to a completed Sale from preview or sharing.
+
+Dependencies and public seams:
+
+- Phase 4.4 server Sale result store and Sale Complete screen.
+- Shared `SaleDetailDTO` fields and the existing English receipt conventions in
+  the web POS.
+- React Native built-in Share API; no new package or backend endpoint.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against the approved English-only printed receipt
+decision, the existing web receipt content, Sale Complete state ownership, and
+the simple-UX rule. A small mobile-owned text boundary avoids coupling the
+mobile bundle to the web app while preserving the important server Sale
+fields. Native sharing is secondary and failure-safe. No new product or
+backend decision is required for 4.5.
+
+Plan review result: approved for implementation.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
@@ -537,4 +609,4 @@ Phase 4.5.
 | 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
 | 4.3 Checkout adapter | Completed with follow-up | Direct, Draft, and collection adapters, scoped retry ID, validation, and focused checks are complete; Sale Complete wiring and native/API validation are follow-ups |
 | 4.4 Sale Complete screen | Completed with follow-up | Server Sale handoff, confirmation screen, New Sale reset, translations, and focused checks are complete; native/API validation and receipt actions are follow-ups |
-| 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |
+| 4.5 Digital receipts and sharing | In progress | Plan approved; server Sale receipt preview and failure-safe Android sharing are next |
