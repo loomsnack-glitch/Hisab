@@ -46,7 +46,7 @@ Not included in this phase:
 | --- | --- | --- | --- | --- |
 | 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | `2eacaab` |
 | 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | `e6c9098` |
-| 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | Pending |
+| 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | `95a25f7` |
 | 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | Pending |
 | 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | Pending |
 
@@ -424,6 +424,79 @@ Implementation review result: approved with the known asset/native/device/API
 follow-ups. The returned server Sale is ready for the Sale Complete screen in
 Phase 4.4.
 
+## 4.4 — Sale Complete screen
+
+### Plan
+
+User-facing outcome: after a successful direct completion or Draft commit, the
+cashier lands on a short confirmation screen that proves which Sale the server
+recorded. The screen shows the Sale number when available, server totals, and
+server Payment status, then offers one prominent New Sale action.
+
+Implementation scope:
+
+- Add a small in-memory Sale-result store for the most recently completed
+  server Sale. It is a navigation handoff only: it is not persisted in MMKV
+  and is cleared when starting a New Sale, logging out, or beginning a new
+  session.
+- Add a `SaleComplete` route and screen. Render the returned server Sale
+  number/identity, the existing server-authoritative Payment status summary,
+  and the server grand total.
+- Wire the Payment screen's primary Complete Sale action to the Phase 4.3
+  checkout hook. Show loading while the request is active, keep the Cart and
+  Payment rows on failure, and navigate only after a Sale response exists.
+- Make New Sale the prominent next action. It clears the result handoff and
+  replaces the completion route with the existing New Sale route, leaving no
+  previous Sale data in the active Cart.
+- Keep receipt preview, sharing, printing, WhatsApp, and later collection
+  actions out of this slice; Phase 4.5 will add them without changing Sale
+  completion semantics.
+- Add English, Gujarati, and Hindi labels for completion, Sale identity,
+  failure, and New Sale.
+- Add focused store/boundary tests for result replacement, explicit clear,
+  server Sale field display handoff, and the screen-independent navigation
+  contract. Re-run the complete focused mobile suite and TypeScript check.
+
+Acceptance criteria:
+
+1. Successful checkout stores and hands off the exact server Sale response.
+2. Sale Complete uses server `saleNumber`, `grandTotal`, `paidTotal`,
+   `dueTotal`, and `paymentStatus`; local Cart totals cannot replace them.
+3. Payment failure leaves Cart, Draft identity, Payment rows, and retry ID
+   available; the app does not navigate to Sale Complete.
+4. New Sale clears the completed Sale handoff and enters the existing New Sale
+   route with an empty active Cart.
+5. Sale Complete is reachable for both direct new-Sale completion and Draft
+   commit through the same returned-Sale handoff.
+6. Completion and recovery labels exist in English, Gujarati, and Hindi.
+7. Focused mobile tests pass and the known missing WhatsApp asset remains a
+   separately reported TypeScript follow-up.
+
+Non-goals:
+
+- Receipt rendering, Android sharing, Bluetooth printing, WhatsApp delivery,
+  Bills browsing, or payment collection from an existing Sale.
+- Re-fetching a Sale before display; the checkout response is the server
+  result for this handoff.
+- Persisting completed Sale data locally or adding a second Cart model.
+
+Dependencies and public seams:
+
+- Phase 4.2 `PaymentStatusSummary` and server-authoritative status boundary.
+- Phase 4.3 `usePosCheckout` result and retry behavior.
+- Existing POS navigation, Cart store, Payment store, and i18next resources.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against the approved five-step flow, Sale response
+contract, Phase 4.2 status component, Phase 4.3 success/failure behavior, and
+the simple-UX rule. An in-memory result handoff avoids putting a complex Sale
+object in navigation params, while explicit clear boundaries prevent stale
+Sale data. Receipt and printer actions remain isolated for 4.5/Phase 6. No new
+product or backend decision is required for 4.4.
+
+Plan review result: approved for implementation.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
@@ -431,5 +504,5 @@ Phase 4.4.
 | 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
 | 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
 | 4.3 Checkout adapter | Completed with follow-up | Direct, Draft, and collection adapters, scoped retry ID, validation, and focused checks are complete; Sale Complete wiring and native/API validation are follow-ups |
-| 4.4 Sale Complete screen | Not started | Depends on 4.3 |
+| 4.4 Sale Complete screen | In progress | Plan approved; server Sale handoff and New Sale reset are next |
 | 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |
