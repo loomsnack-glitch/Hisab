@@ -601,6 +601,40 @@ backend decision is required for 4.5.
 
 Plan review result: approved for implementation.
 
+### 4.5 Implementation and review result
+
+Implemented the digital receipt and Android sharing slice:
+
+- Added a pure English receipt-text boundary built from the server
+  `SaleDetailDTO`, including Sale identity/date, Customer, items/add-ons,
+  server total, collected, due, and Payment status.
+- Added a failure-safe Share adapter using React Native's built-in Android
+  share sheet. Shared, dismissed, and rejected outcomes remain local feedback
+  and do not mutate the completed Sale.
+- Added Show Receipt, Hide Receipt, and Share Receipt secondary actions to Sale
+  Complete while keeping New Sale as the primary action.
+- Added English, Gujarati, and Hindi labels for receipt/share actions and
+  outcomes. Receipt content itself remains English-only as approved.
+- Kept Bluetooth printer discovery, permissions, transport, and physical
+  validation out of the mobile Phase 4 change; those remain Phase 6.
+- Added focused tests for receipt content, server field usage, share success /
+  dismissal, and share rejection without Sale mutation.
+
+Review evidence:
+
+- `bun run --cwd apps/mobile test`: 76 passed, 0 failed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: new Phase
+  4.5 code is type-clean; the repository still reports the pre-existing
+  `apps/mobile/src/screens/login-screen.tsx` missing
+  `@repo/assets/services/whatsapp.webp` module.
+- `git diff --check`: passed.
+- Android build, emulator, device, live API, migration, share-sheet, and
+  printer checks were not run, as defined by the phase guardrails.
+
+Implementation review result: approved with the known asset/native/device/API
+follow-ups. All planned Phase 4 code slices are complete; Bluetooth printing
+remains explicitly deferred to Phase 6.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
@@ -609,4 +643,4 @@ Plan review result: approved for implementation.
 | 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
 | 4.3 Checkout adapter | Completed with follow-up | Direct, Draft, and collection adapters, scoped retry ID, validation, and focused checks are complete; Sale Complete wiring and native/API validation are follow-ups |
 | 4.4 Sale Complete screen | Completed with follow-up | Server Sale handoff, confirmation screen, New Sale reset, translations, and focused checks are complete; native/API validation and receipt actions are follow-ups |
-| 4.5 Digital receipts and sharing | In progress | Plan approved; server Sale receipt preview and failure-safe Android sharing are next |
+| 4.5 Digital receipts and sharing | Completed with follow-up | English server-Sale receipt preview, failure-safe Android sharing, translations, and focused checks are complete; native/API/share-sheet validation and Bluetooth printing are follow-ups |
