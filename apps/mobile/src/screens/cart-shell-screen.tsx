@@ -23,7 +23,6 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const { t } = useTranslation("pos");
     const cart = usePosCart();
     const configuration = usePosConfiguration();
-    const [showPaymentNotice, setShowPaymentNotice] = useState(false);
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [customerSearch, setCustomerSearch] = useState("");
     const [customerCreateOpen, setCustomerCreateOpen] = useState(false);
@@ -385,13 +384,10 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                         {draftNotice === "error" ? (
                             <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("draftActionFailed")}</Text>
                         ) : null}
-                        {showPaymentNotice ? (
-                            <Text className="text-sm leading-6 text-pos-warning dark:text-pos-warning-dark">{t("paymentComingSoon")}</Text>
-                        ) : null}
                     </View>
                 )}
                 {cart.itemCount > 0 ? (
-                    <PosButton label={t("continueToPayment")} onPress={() => setShowPaymentNotice(true)} />
+                    <PosButton label={t("continueToPayment")} onPress={() => navigation.navigate("Payment")} />
                 ) : null}
                 <PosButton label={t("back")} variant="secondary" onPress={() => navigation.goBack()} />
             </PosCard>

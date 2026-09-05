@@ -169,11 +169,43 @@ required for 4.1.
 
 Plan review result: approved for implementation.
 
+### 4.1 Implementation and review result
+
+Implemented the local Payment-entry slice with the approved simple UX:
+
+- Added Cash, UPI, and Card Payment rows with one default Cash row initialized
+  from the current Cart display total.
+- Added optional Payment rows, row removal that retains one editable row,
+  immediate collected/remaining calculations, and local malformed/negative/
+  over-total validation.
+- Added server-input mapping that omits empty/zero rows and keeps Payment
+  records out of local row editing.
+- Added an in-memory Payment store scoped to Organization/Store/Device. Rows
+  survive Cart navigation but are cleared at logout; they are not persisted in
+  MMKV.
+- Added the Payment route and screen from Cart Review with translated English,
+  Gujarati, and Hindi labels and the server-authority reminder.
+
+Review evidence:
+
+- `bun run --cwd apps/mobile test`: 61 passed, 0 failed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: new Phase
+  4.1 code is type-clean; the repository still reports the pre-existing
+  `apps/mobile/src/screens/login-screen.tsx` missing
+  `@repo/assets/services/whatsapp.webp` module.
+- `git diff --check`: passed.
+- Android build, emulator, device, live API, and printer checks were not run,
+  as defined by the phase guardrails.
+
+Implementation review result: approved with the named asset/native/device/API
+follow-ups. Phase 4.2 can add server-backed Payment status without changing
+the local Payment-row boundary.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
-| 4.1 Payment entry | In progress | Plan approved; local Payment rows and Payment screen are being implemented |
+| 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
 | 4.2 Payment status | Not started | Depends on 4.1 |
 | 4.3 Checkout adapter | Not started | Depends on 4.1–4.2 |
 | 4.4 Sale Complete screen | Not started | Depends on 4.3 |
