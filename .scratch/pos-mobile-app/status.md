@@ -4,7 +4,7 @@ Status: Phase 4 in progress
 
 Last updated: 2026-09-05
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), and the Phase 4 execution record is in [phase-4.md](./phase-4.md). Phase 4.1 and 4.2 are completed with follow-up; Phase 4.3 is next.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), and the Phase 4 execution record is in [phase-4.md](./phase-4.md). Phase 4.1 and 4.2 are completed with follow-up; Phase 4.3 is in progress.
 
 ## Current scope
 
@@ -135,7 +135,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | --- | --- | --- |
 | 4.1 Payment entry | Completed with follow-up | `2eacaab`; local Cash, UPI, Card, and optional multiple Payment rows are implemented and focused-tested; native/API validation and the known asset error remain follow-ups. |
 | 4.2 Payment status | Completed with follow-up | Server-authoritative Paid, Partial, and Due presentation is implemented and focused-tested; checkout wiring and native/API validation remain follow-ups. |
-| 4.3 Checkout adapter | Not started | Direct, Draft commit, later collection, Table checkout, and controlled retry paths are separated. |
+| 4.3 Checkout adapter | In progress | Direct, Draft commit, later collection, and controlled retry paths are being separated; Table checkout remains Phase 7. |
 | 4.4 Sale Complete screen | Not started | Confirmed Sale result and New Sale action work. |
 | 4.5 Digital receipts and sharing | Not started | Receipt display/share failures do not affect the Sale. |
 

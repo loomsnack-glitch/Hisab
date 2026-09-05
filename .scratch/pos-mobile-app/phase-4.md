@@ -45,7 +45,7 @@ Not included in this phase:
 | Subphase | Outcome | Depends on | Exit evidence | Commit |
 | --- | --- | --- | --- | --- |
 | 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | `2eacaab` |
-| 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | Pending |
+| 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | `e6c9098` |
 | 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | Pending |
 | 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | Pending |
 | 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | Pending |
@@ -305,12 +305,97 @@ Implementation review result: approved with the known asset/native/device/API
 follow-ups. The status component is ready for the server response returned by
 the checkout adapter in Phase 4.3.
 
+## 4.3 — Checkout adapter
+
+### Plan
+
+User-facing outcome: the approved Payment rows can cross one controlled
+checkout boundary. A new Cart completes directly, a saved Draft commits by its
+Sale ID, and a later payment collection uses its own single-payment adapter.
+The mobile app keeps the same request ID for a recoverable new-Sale or Draft
+commit retry and never creates a local completed Sale on a failed request.
+
+Implementation scope:
+
+- Add pure builders for `CompleteSaleJSON` and `CommitSaleJSON` from the
+  existing Cart/Draft boundary plus mapped non-zero Payment rows. Reuse the
+  existing item, Customer, discount, notes, and `dine_in` service-mode
+  mapping; do not send Product prices from the client.
+- Add an explicit checkout operation union with separate `new_sale`, `draft`,
+  and `collection` branches. New Sale calls `completePosSale`; Draft calls
+  `commitPosSale`; later collection calls `collectPosPayment` for one payment
+  against a known committed Sale. Table checkout remains Phase 7.
+- Add a scoped in-memory completion request ID to the Cart session. Generate it
+  once when checkout begins, reuse it across retry attempts, and clear it only
+  after a successful completed/committed Sale or an explicit new Sale/session
+  reset. Do not persist it in MMKV.
+- Add a checkout hook that blocks empty Cart, invalid Payment rows, and
+  over-total values before calling the service. It must expose pending/error
+  state, preserve Cart and Payment rows on failure, and return the server Sale
+  on success for the Sale Complete slice.
+- Treat a collection request differently because the existing
+  `collectPosPayment` contract has no request ID. Send one selected payment at
+  a time and do not automatically replay an unknown-result collection; the
+  later Bills flow must recover the Sale before offering another collection.
+- Add focused tests for payload mapping, operation dispatch, stable request
+  IDs, server-response unwrapping, validation short-circuiting, and preserving
+  local state after service errors.
+
+Acceptance criteria:
+
+1. A Cart without `draftSaleId` produces a valid Complete Sale payload and
+   calls only `completePosSale`.
+2. A Cart with `draftSaleId` produces a valid Commit Sale payload and calls
+   only `commitPosSale` with that ID.
+3. Empty/zero Payment rows are omitted; non-zero rows map to the shared
+   Payment input shape; invalid or over-total rows never reach a service call.
+4. The new-Sale and Draft commit request ID is generated once and reused after
+   a recoverable failure, preventing accidental duplicate intent.
+5. A successful response returns the server Sale, including its authoritative
+   totals and Payment status; local state is not treated as the result.
+6. A failed or unknown new-Sale/Draft request leaves Cart, Draft identity, and
+   Payment rows available for recovery. Collection does not silently retry.
+7. Later collection is a separate adapter and cannot be accidentally routed
+   through direct completion or Draft commit.
+8. Focused mobile tests pass and the known missing WhatsApp asset is still
+   reported separately by the mobile TypeScript check.
+
+Non-goals:
+
+- Sale Complete UI, receipt/share actions, Bluetooth printing, WhatsApp, or
+  Bills browsing.
+- Automatic retry of a collection request whose network result is unknown,
+  because the current collection API has no request-id contract.
+- Table checkout, KOT, service-mode selection, refunds, or replacing Sales.
+- Backend API changes; existing shared POS services and schemas are reused.
+
+Dependencies and public seams:
+
+- Phase 3 Cart/Draft payload builders and scoped Cart store.
+- Phase 4.1 Payment-row mapper and validation.
+- Existing `completePosSale`, `commitPosSale`, `collectPosPayment`, and Sale /
+  Payment response types.
+- Expo Crypto UUID generation already used by the mobile storage and Draft
+  boundaries.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against the shared Complete/Commit/Payment schemas,
+existing POS service methods, the web POS checkout branching, Phase 3's Draft
+request behavior, and the approved duplicate-submission rule. The plan keeps
+new Cart completion, Draft commit, and later collection as distinct operations;
+does not claim idempotency for the current collection endpoint; and preserves
+local recovery data after failures. No backend or product decision is required
+for 4.3.
+
+Plan review result: approved for implementation.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
 | 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
-| 4.3 Checkout adapter | Not started | Depends on 4.1–4.2 |
+| 4.3 Checkout adapter | In progress | Plan approved; direct, Draft, and collection adapters are next |
 | 4.4 Sale Complete screen | Not started | Depends on 4.3 |
 | 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |
