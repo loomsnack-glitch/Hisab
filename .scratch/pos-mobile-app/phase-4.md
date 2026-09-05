@@ -48,7 +48,7 @@ Not included in this phase:
 | 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | `e6c9098` |
 | 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | `95a25f7` |
 | 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | `873f9a7` |
-| 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | Pending |
+| 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | `bdb7cba` |
 
 ## Shared Phase 4 decisions
 
