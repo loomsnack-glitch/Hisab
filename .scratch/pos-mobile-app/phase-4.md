@@ -44,7 +44,7 @@ Not included in this phase:
 
 | Subphase | Outcome | Depends on | Exit evidence | Commit |
 | --- | --- | --- | --- | --- |
-| 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | Pending |
+| 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | `2eacaab` |
 | 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | Pending |
 | 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | Pending |
 | 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | Pending |
@@ -201,12 +201,84 @@ Implementation review result: approved with the named asset/native/device/API
 follow-ups. Phase 4.2 can add server-backed Payment status without changing
 the local Payment-row boundary.
 
+## 4.2 — Payment status
+
+### Plan
+
+User-facing outcome: after a Sale response is available, the cashier sees one
+clear status—Paid, Partial, or Due—with the server's collected and remaining
+amounts. Before checkout returns a Sale, the Payment screen continues to show
+the local staged summary as pending confirmation rather than claiming that a
+Sale has been paid.
+
+Implementation scope:
+
+- Add a pure status presentation boundary that accepts the shared server
+  `SaleSummaryDTO` payment fields and maps `pending` to the cashier-facing Due
+  label, while preserving `partial` and `paid`.
+- Keep `sale.paymentStatus` as the status authority. Use server `grandTotal`,
+  `paidTotal`, and `dueTotal` for displayed amounts; do not recompute a
+  replacement status from local Payment rows.
+- Add translated status labels and short explanations for Paid, Partial, and
+  Due in English, Gujarati, and Hindi. Keep the status tone semantic: success
+  for Paid, warning for Partial/Due, and neutral only for a not-yet-confirmed
+  local checkout state.
+- Add a small reusable mobile status presentation component using the existing
+  `PosStatusBadge` primitive. It must render from a server Sale summary and
+  remain independent of the future checkout mutation.
+- Add focused boundary/component tests covering all three server statuses,
+  exact server amounts, and the rule that local staged totals cannot override a
+  server status.
+- Keep this slice read-only with respect to billing records. Checkout,
+  collection, retries, and Sale Complete remain in 4.3–4.5.
+
+Acceptance criteria:
+
+1. A server Sale with `paymentStatus: "paid"` renders Paid with success tone
+   and the server paid/due values.
+2. A server Sale with `paymentStatus: "partial"` renders Partial with warning
+   tone and the server paid/due values.
+3. A server Sale with `paymentStatus: "pending"` renders Due with warning tone
+   and the server due value; the raw API status remains pending in the
+   boundary model.
+4. A conflicting local total or arithmetic assumption cannot change the
+   server-provided status or amounts.
+5. All new user-facing status strings are available in English, Gujarati, and
+   Hindi, with existing English fallback behavior intact.
+6. Focused mobile tests pass and the known missing WhatsApp asset is still
+   reported separately by the mobile TypeScript check.
+
+Non-goals:
+
+- Sending complete, commit, or collect requests.
+- Deriving a server Sale from Cart Payment rows.
+- Marking a local Cart as Paid before the server confirms a Sale.
+- Due/Partial Sale browsing, later Payment collection UI, receipts, or printer
+  actions.
+
+Dependencies and public seams:
+
+- Phase 4.1 Payment-entry boundary and the shared `SaleSummaryDTO` contract.
+- Existing `PosStatusBadge` and semantic UI tones.
+- `i18next` resources and the mobile focused test harness.
+
+### Internal plan review
+
+Reviewed on 2026-09-05 against the shared billing schema, `PaymentStatusSchema`,
+Sale response fields, existing web Sale status presentation, Phase 4.1's local
+Payment boundary, and the approved server-authority rule. The plan keeps the
+cashier wording simple while retaining the API's `pending` value internally,
+does not add a new backend contract, and keeps all mutation work for the
+checkout slice. No new product decision is required for 4.2.
+
+Plan review result: approved for implementation.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
-| 4.2 Payment status | Not started | Depends on 4.1 |
+| 4.2 Payment status | In progress | Plan approved; server-authoritative status presentation is next |
 | 4.3 Checkout adapter | Not started | Depends on 4.1–4.2 |
 | 4.4 Sale Complete screen | Not started | Depends on 4.3 |
 | 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |

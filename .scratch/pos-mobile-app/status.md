@@ -133,8 +133,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 4.1 Payment entry | Completed with follow-up | Local Cash, UPI, Card, and optional multiple Payment rows are implemented and focused-tested; native/API validation and the known asset error remain follow-ups. |
-| 4.2 Payment status | Not started | Paid, Partial, and Due display follows server authority. |
+| 4.1 Payment entry | Completed with follow-up | `2eacaab`; local Cash, UPI, Card, and optional multiple Payment rows are implemented and focused-tested; native/API validation and the known asset error remain follow-ups. |
+| 4.2 Payment status | In progress | Plan approved; server-authoritative Paid, Partial, and Due presentation is next. |
 | 4.3 Checkout adapter | Not started | Direct, Draft commit, later collection, Table checkout, and controlled retry paths are separated. |
 | 4.4 Sale Complete screen | Not started | Confirmed Sale result and New Sale action work. |
 | 4.5 Digital receipts and sharing | Not started | Receipt display/share failures do not affect the Sale. |
