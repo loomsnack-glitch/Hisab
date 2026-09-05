@@ -273,12 +273,44 @@ checkout slice. No new product decision is required for 4.2.
 
 Plan review result: approved for implementation.
 
+### 4.2 Implementation and review result
+
+Implemented the server-authoritative Payment-status presentation slice:
+
+- Added a pure boundary over the shared `SaleSummaryDTO` payment fields. It
+  preserves the API `pending`, `partial`, or `paid` status and returns the
+  server `grandTotal`, `paidTotal`, and `dueTotal` unchanged.
+- Mapped API `pending` to the cashier-facing Due label while retaining
+  `pending` in the boundary model, keeping the wording simple without
+  changing the contract.
+- Added a reusable `PaymentStatusSummary` component built on the existing
+  semantic `PosStatusBadge`; Paid is success and Partial/Due are warning.
+- Added English, Gujarati, and Hindi status labels.
+- Added focused tests for all statuses, exact amount preservation, and a
+  deliberately conflicting arithmetic example proving local assumptions do
+  not override server data.
+
+Review evidence:
+
+- `bun run --cwd apps/mobile test`: 64 passed, 0 failed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: new Phase
+  4.2 code is type-clean; the repository still reports the pre-existing
+  `apps/mobile/src/screens/login-screen.tsx` missing
+  `@repo/assets/services/whatsapp.webp` module.
+- `git diff --check`: passed.
+- Android build, emulator, device, live API, and migration checks were not
+  run, as defined by the phase guardrails.
+
+Implementation review result: approved with the known asset/native/device/API
+follow-ups. The status component is ready for the server response returned by
+the checkout adapter in Phase 4.3.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 4.1 Payment entry | Completed with follow-up | Local Payment rows, scoped store, Payment screen, translations, and focused checks are complete; commit and native/API validation are follow-ups |
-| 4.2 Payment status | In progress | Plan approved; server-authoritative status presentation is next |
+| 4.2 Payment status | Completed with follow-up | Server-authoritative status boundary, reusable summary component, translations, and focused checks are complete; checkout wiring and native/API validation are follow-ups |
 | 4.3 Checkout adapter | Not started | Depends on 4.1–4.2 |
 | 4.4 Sale Complete screen | Not started | Depends on 4.3 |
 | 4.5 Digital receipts and sharing | Not started | Depends on 4.4 |
