@@ -1,6 +1,6 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 5 in progress — 5.3 Customer Directory planning
+Status: Phase 5 in progress — 5.4 Reports planning
 
 Last updated: 2026-09-06
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 5 in progress | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, Phase 4.1–4.5 Payment/checkout/completion/receipt slices, and Phase 5.1–5.2 Bills/Sale Details/Draft recovery are implemented. Phase 5.3 Customer Directory is active. Native/device/API/share-sheet validation and restaurant service-mode modeling remain pending. |
+| Mobile POS implementation | Phase 5 in progress | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, Phase 4.1–4.5 Payment/checkout/completion/receipt slices, and Phase 5.1–5.3 Bills/Sale Details/Draft recovery/Customer Directory are implemented. Phase 5.4 Reports is active. Native/device/API/share-sheet validation and restaurant service-mode modeling remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -145,7 +145,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | --- | --- | --- |
 | 5.1 Bills list and filters | Completed with follow-up | Completed-only Today's Sales, server-backed search/filters, cards, pagination seam, translated states, and typed 5.2 navigation are implemented; native/live validation and the pre-existing asset typecheck remain follow-ups. |
 | 5.2 Sale Details and Draft recovery | Completed with follow-up | Details, Draft resume/delete, receipt actions, atomic recovery, and scoped invalidation are implemented; native/live validation remains pending. |
-| 5.3 Customer Directory | In progress — planning | Search, filters, sorting, details, add, edit, and Sales history implementation is next. |
+| 5.3 Customer Directory | Completed with follow-up | Directory, details, add/edit, current-Sale selection, and read-only Sales history are implemented; native/live validation remains pending. |
+| 5.4 Reports | In progress — planning | Read-only Today summary and Products Sold implementation is next. |
 | 5.4 Reports | Not started | Read-only Today summary and Products Sold work. |
 | 5.5 Settings and Appearance | Not started | Language, theme, display size, printer entry, and Logout work. |
 
@@ -199,8 +200,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 5.3 Customer Directory is the active subphase. Phase 5.1 and 5.2
-implementation and review records are in [phase-5.md](./phase-5.md).
+Phase 5.4 Reports is the active subphase. Phase 5.1–5.3 implementation and
+review records are in [phase-5.md](./phase-5.md).
 Phase 4.1–4.5 remains
 complete with follow-up. The Draft migration must be applied before live use,
 and backend integration/live API/real-database concurrency verification remain

@@ -7,6 +7,7 @@ export type PosBillsPaymentMethodFilter = "all" | PaymentMethod;
 
 export type PosBillsFilters = {
     status: PosBillsStatusFilter;
+    customerId?: string;
     date: PosBillsDateFilter;
     paymentStatus: PosBillsPaymentStatusFilter;
     paymentMethod: PosBillsPaymentMethodFilter;
@@ -36,6 +37,7 @@ export const buildPosBillsQuery = (
         limit: 30,
         sort: "newest",
         status: filters.status,
+        customerId: filters.customerId,
         search: filters.search.trim() || undefined,
         paymentStatus,
         paymentMethod: filters.paymentMethod === "all" ? undefined : filters.paymentMethod,

@@ -5,7 +5,7 @@ import { PosButton, PosCard } from "../components/pos-ui";
 import type { PosTranslationKey } from "../lib/localization-boundary";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 
-type DestinationName = Exclude<keyof PosStackParamList, "PosHome" | "Payment" | "SaleComplete" | "SaleDetails">;
+type DestinationName = Exclude<keyof PosStackParamList, "PosHome" | "Payment" | "SaleComplete" | "SaleDetails" | "CustomerDetails">;
 type PosDestinationScreenProps = NativeStackScreenProps<PosStackParamList, DestinationName>;
 
 const destinationLabels: Record<DestinationName, PosTranslationKey> = {

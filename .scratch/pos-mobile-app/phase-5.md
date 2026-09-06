@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 5 Execution Plan and Review Log
 
-Status: Phase 5 in progress — 5.2 Sale Details and Draft recovery completed with follow-up
+Status: Phase 5 in progress — 5.3 Customer Directory planning
 Phase: 5 — Bills and supporting workspaces
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-06
@@ -343,12 +343,117 @@ Verification evidence:
 Subphase review result: approved with the named pre-existing typecheck and
 native/live validation follow-ups. The next subphase is 5.3 Customer Directory.
 
+## 5.3 — Customer Directory
+
+### Plan
+
+User-facing outcome: a POS user can open Customers without leaving the billing
+workspace, search the server-backed Customer Directory by name or phone, apply
+one simple status filter and sort order, inspect a Customer, add or edit a
+Customer, and view that Customer's Sales history. The fast Cart Customer picker
+remains a separate flow.
+
+Implementation scope:
+
+- Replace the Customers placeholder with a dedicated Directory screen and a
+  typed Customer Details route.
+- Add a Store Device-scoped Customer list query using the existing POS Customer
+  list contract with progressive search, active/all/due status, sort, and cursor
+  pagination.
+- Add Customer Details with server-backed Customer data and read-only
+  customer-filtered Sales history using `getPosSales`.
+- Reuse the approved minimal Customer create/edit validation and POS create/
+  update services. Invalidate Customer and related Sales queries after success.
+- Keep Walk-in out of the Directory, preserve current-Sale selection as an
+  optional action, and never require a Customer before Payment.
+- Provide translated loading, empty, failure/retry, save, and validation states
+  in English, Gujarati, and Hindi.
+
+Acceptance criteria:
+
+1. Customers is separate from New Sale and supports server-backed name/phone
+   search without first-page-only filtering.
+2. Status and sort controls map to existing `CustomerListQuery` fields.
+3. Customer Details shows identity, phone, active state, balance, and read-only
+   Sales history scoped to the selected Customer.
+4. Add and edit use existing POS services, preserve validation, and refresh the
+   Directory after success.
+5. Failed reads and writes preserve entered data and provide retry feedback.
+6. All Customer queries include active Organization/Store/Device scope and no
+   backend contract changes are introduced.
+
+Non-goals:
+
+- Ledger settlement, collecting Customer dues, marketing/WhatsApp controls, or
+  bulk Customer import.
+- Replacing the fast Cart Customer picker or forcing Customer selection.
+
+Dependencies and public seams:
+
+- Existing `getPosCustomers`, `createPosCustomer`, `updatePosCustomer`,
+  `getPosSales`, Customer DTOs, and current create validation boundary.
+- Typed Customer Details route and existing POS query-key/session conventions.
+
+Test strategy:
+
+- Pure tests for Customer query normalization, status/sort mapping, scope keys,
+  and save payload normalization.
+- Focused tests for Customer/Sales response unwrapping and all translations.
+- Run mobile focused tests, `tsc --noEmit` only for lightweight type feedback,
+  and `git diff --check`; never run builds, Expo, Android, emulator, device,
+  live API, or hardware commands during incomplete phases.
+
+### Internal plan review
+
+Reviewed on 2026-09-06 against `spec.md` Customer Directory decisions, existing
+POS Customer/Sales services, Customer validation, `CONTEXT.md`, ADR 0001, and
+`AGENTS.md`. The plan keeps the Directory separate from billing, uses existing
+contracts, and adds no product or public API decision.
+
+Plan review result: approved for implementation.
+
+### 5.3 Implementation and review result
+
+Implemented on 2026-09-06:
+
+- Replaced the Customers placeholder with a separate server-backed Directory
+  and typed Customer Details route.
+- Added progressive name/phone search, active/all/due/inactive status filters,
+  name/newest sorting, cursor pagination, and translated empty/loading/error
+  states.
+- Added minimal Customer creation and editing through existing POS services,
+  including explicit phone clearing, field-level validation, and refresh of
+  Customer and related Sales queries.
+- Added Customer Details identity, phone, active state, balance, optional use
+  in the current Sale, editable fields, and read-only Customer Sales history
+  with retry feedback.
+
+Review findings and fixes:
+
+- Added active/inactive state presentation and the current-Sale Customer action.
+- Added Sales-history retry handling and field-specific edit validation.
+- Fixed empty edited phone values to send an explicit `null` clear to the API.
+- Added query normalization and preserved Organization/Store/Device scope.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 92 passed, 0 failed.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: the Phase 5
+  files typecheck; the command remains red only on the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` import in `login-screen.tsx`.
+- Build, Expo, Android, emulator, device, live API, and hardware checks were
+  intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the named pre-existing typecheck and
+native/live validation follow-ups. The next subphase is 5.4 Reports.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 5.1 Bills list and filters | Completed with follow-up | 84 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.2 Sale Details and Draft recovery | Completed with follow-up | 90 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
-| 5.3 Customer Directory | Not started | Uses existing Customer services and remains separate from billing |
+| 5.3 Customer Directory | Completed with follow-up | 92 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.4 Reports | Not started | Read-only summary and Product Sales Summary |
 | 5.5 Settings and Appearance | Not started | Uses existing localization, storage, and session boundaries |
