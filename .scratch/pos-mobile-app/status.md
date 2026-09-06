@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 5 in progress — 5.1 Bills list and filters planning
+Status: Phase 5 in progress — 5.2 Sale Details and Draft recovery next
 
 Last updated: 2026-09-06
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), and the Phase 5 execution record is in [phase-5.md](./phase-5.md). Phase 5 is now in progress at 5.1.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), and the Phase 5 execution record is in [phase-5.md](./phase-5.md). Phase 5 is now in progress at 5.2.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 5 in progress | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, and Phase 4.1–4.5 Payment/checkout/completion/receipt slices are implemented. Phase 5 planning is recorded in `phase-5.md`; 5.1 Bills implementation is active. Native/device/API/share-sheet validation and restaurant service-mode modeling remain pending. |
+| Mobile POS implementation | Phase 5 in progress | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, Phase 4.1–4.5 Payment/checkout/completion/receipt slices, and Phase 5.1 Bills are implemented. Phase 5.2 Sale Details and Draft recovery is next. Native/device/API/share-sheet validation and restaurant service-mode modeling remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -54,7 +54,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Completed with follow-up | Product selection, scanning, shortcuts, and supported configuration are implemented; native/API validation and bundle-detail API remain follow-ups. |
 | 3. Cart and Draft Sale | Make Cart review and Draft Sale recovery safe and responsive. | 3.1–3.6 | Completed with follow-up | Cart review, local Draft actions, server persistence, and duplicate-create protection are implemented; migration/native/API validation remains pending. |
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Completed with follow-up | Payment entry, server status, checkout adapters, Sale Complete, and digital receipt/share slices are implemented; device/API/share-sheet validation remains pending. |
-| 5. Bills and supporting workspaces | Add post-Sale operations and simple management screens. | 5.1–5.5 | In progress | Phase 5 plan is recorded; 5.1 Bills list and filters is in progress. Bills, Customers, Reports, and Settings are not yet complete. |
+| 5. Bills and supporting workspaces | Add post-Sale operations and simple management screens. | 5.1–5.5 | In progress | 5.1 Bills list and filters is complete with follow-up; 5.2 Sale Details and Draft recovery is next. Customers, Reports, and Settings are not yet complete. |
 | 6. Bluetooth printing | Validate hardware and print English-only receipts reliably. | 6.1–6.3 | Deferred until implementation | Supported Android device can print and retry without Sale rollback. |
 | 7. Restaurant operations | Add capability-gated service modes, Tables, and KOT. | 7.1–7.4 | Later phase | Enabled restaurant Store can use its approved operational workflow. |
 | 8. Hardening and release | Complete tests, recovery, security, device, and release checks. | 8.1–8.4 | Not started | Android release passes the complete release checklist. |
@@ -143,7 +143,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
-| 5.1 Bills list and filters | In progress — plan approved | Today's Sales, search, and simple filters work; implementation pending. |
+| 5.1 Bills list and filters | Completed with follow-up | Completed-only Today's Sales, server-backed search/filters, cards, pagination seam, translated states, and typed 5.2 navigation are implemented; native/live validation and the pre-existing asset typecheck remain follow-ups. |
 | 5.2 Sale Details and Draft recovery | Not started | Details, resume/delete, and receipt actions work. |
 | 5.3 Customer Directory | Not started | Search, filters, details, add, edit, and Sales history work. |
 | 5.4 Reports | Not started | Read-only Today summary and Products Sold work. |
@@ -199,8 +199,9 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 5.1 Bills list and filters is the active subphase. Its approved plan and
-review are recorded in [phase-5.md](./phase-5.md). Phase 4.1–4.5 remains
+Phase 5.2 Sale Details and Draft recovery is the next subphase. Phase 5.1's
+approved plan, implementation, and review are recorded in [phase-5.md](./phase-5.md).
+Phase 4.1–4.5 remains
 complete with follow-up. The Draft migration must be applied before live use,
 and backend integration/live API/real-database concurrency verification remain
 release checks. Keep Bluetooth printer validation deferred to Phase 6.

@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 5 Execution Plan and Review Log
 
-Status: Phase 5 in progress — 5.1 Bills list and filters planning
+Status: Phase 5 in progress — 5.1 Bills list and filters completed with follow-up
 Phase: 5 — Bills and supporting workspaces
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-06
@@ -164,11 +164,54 @@ decision is required for 5.1.
 
 Plan review result: approved for implementation.
 
+### 5.1 Implementation and review result
+
+Implemented on 2026-09-06 in the mobile POS workspace:
+
+- Replaced the Bills placeholder route with a Store Device-scoped, infinite
+  Sales query using the existing `getPosSales` service and `SalesListQuery`.
+- Defaulted Bills to the device-local current day, normalized search input, and
+  mapped Date, Payment status, and Payment method filters to server fields.
+- Explicitly requested completed Sales so Draft Sales remain separate for 5.2.
+- Added translated loading, failure/retry, no-Sales, no-match, and pagination
+  states in English, Gujarati, and Hindi.
+- Added server Sale cards with Sale number, date/time, Customer or Walk-in,
+  total, and authoritative Payment status. Cards now have a typed navigation
+  seam to the 5.2 Sale Details route, whose detail behavior remains deferred.
+- Added visible, removable applied-filter summaries and selected-state
+  accessibility metadata for filter controls.
+- Added pure coverage for local-day bounds, query mapping, completed-only
+  filtering, response unwrapping, scoped query keys, and all interface-language
+  copy.
+
+Review findings and fixes:
+
+- Fixed a TypeScript mismatch for API timestamps that may be `string | Date`.
+- Fixed a stale memoized “Today” query boundary across calendar-day changes.
+- Fixed Draft Sales appearing as Due Bills by sending `status: "completed"`.
+- Fixed existing Customers falling back to Walk-in when only nested Customer
+  data was present.
+- Kept the screen read-only; no Sale mutation or receipt action was added.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 84 passed, 0 failed.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: the Phase 5
+  files typecheck; the command remains red only on the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` import in `login-screen.tsx`.
+- Build, Expo, Android, emulator, device, live API, and hardware checks were
+  intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the named pre-existing typecheck and
+native/live validation follow-ups. The next subphase is 5.2 Sale Details and
+Draft recovery.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
-| 5.1 Bills list and filters | In progress — plan approved | Implementation and focused verification pending |
+| 5.1 Bills list and filters | Completed with follow-up | 84 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.2 Sale Details and Draft recovery | Not started | Depends on Bills navigation and Sale data boundary |
 | 5.3 Customer Directory | Not started | Uses existing Customer services and remains separate from billing |
 | 5.4 Reports | Not started | Read-only summary and Product Sales Summary |

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View, type TextInputProps } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View, type PressableProps, type TextInputProps } from "react-native";
 import {
     type PosButtonVariant,
     type PosStatusTone,
@@ -12,6 +12,7 @@ type PosButtonProps = {
     loading?: boolean;
     variant?: PosButtonVariant;
     icon?: ReactNode;
+    accessibilityState?: PressableProps["accessibilityState"];
 };
 
 const buttonVariantClasses: Record<PosButtonVariant, string> = {
@@ -33,6 +34,7 @@ export const PosButton = ({
     loading,
     variant = "primary",
     icon,
+    accessibilityState,
 }: PosButtonProps) => {
     const isDisabled = disabled || loading;
 
@@ -44,7 +46,7 @@ export const PosButton = ({
             disabled={isDisabled}
             onPress={onPress}
             accessibilityRole="button"
-            accessibilityState={{ disabled: isDisabled }}
+            accessibilityState={{ ...accessibilityState, disabled: isDisabled }}
         >
             {loading ? (
                 <ActivityIndicator color={variant === "secondary" ? undefined : "white"} />

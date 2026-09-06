@@ -8,6 +8,30 @@ import {
 } from "./localization-boundary";
 
 describe("localization boundary", () => {
+    const billsKeys = [
+        "billsSubtitle",
+        "billsSearch",
+        "billsSearchPlaceholder",
+        "billsFilter",
+        "billsHideFilters",
+        "billsDate",
+        "billsToday",
+        "billsAllDates",
+        "billsPaymentStatus",
+        "billsPaymentMethod",
+        "billsAll",
+        "billsClearFilters",
+        "billsLoading",
+        "billsLoadFailed",
+        "billsNoSales",
+        "billsNoMatchingSales",
+        "billsSaleNumber",
+        "billsCustomer",
+        "billsLoadMore",
+        "saleDetails",
+        "saleDetailsComingSoon",
+    ] as const;
+
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);
         expect(Object.keys(appResources)).toEqual([...APP_LANGUAGES]);
@@ -25,5 +49,13 @@ describe("localization boundary", () => {
     it("keeps supported persisted values unchanged", () => {
         expect(resolveAppLanguage("gu")).toBe("gu");
         expect(resolveAppLanguage("hi")).toBe("hi");
+    });
+
+    it("provides Bills and Sale Details copy in every interface language", () => {
+        for (const language of APP_LANGUAGES) {
+            for (const key of billsKeys) {
+                expect(appResources[language].pos[key]).toBeTruthy();
+            }
+        }
     });
 });
