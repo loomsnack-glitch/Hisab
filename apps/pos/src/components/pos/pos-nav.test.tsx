@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import PosMobileBottomNav from "@/components/pos/pos-mobile-bottom-nav";
 import PosSidebar from "@/components/pos/pos-sidebar";
+import { getVisiblePosWorkspaceDestinations } from "@/components/pos/pos-nav-items";
 
 describe("POS navigation visibility", () => {
     test("omits Tables from the sidebar and mobile nav when Table Management is disabled", () => {
@@ -72,5 +73,21 @@ describe("POS navigation visibility", () => {
         expect(sidebar).not.toContain("google-contacts");
         expect(mobileNav).not.toContain("Google Contacts");
         expect(mobileNav).not.toContain("google-contacts");
+    });
+
+    test("includes Printer in the sidebar footer and workspace destinations", () => {
+        const sidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+
+        expect(sidebar).toContain('href="/printer"');
+        expect(sidebar).toContain("Printer");
+        expect(
+            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: true, kotSystemEnabled: true }).map(
+                (destination) => destination.id,
+            ),
+        ).toContain("printer");
     });
 });

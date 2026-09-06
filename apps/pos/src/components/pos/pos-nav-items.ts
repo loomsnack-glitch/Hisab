@@ -2,6 +2,7 @@ import {
     Armchair,
     BarChart3,
     ChefHat,
+    Printer,
     ReceiptText,
     Settings2,
     Store,
@@ -27,10 +28,15 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "kots", label: "KOT", icon: ChefHat, path: getPosPanelPath("kots"), tab: "kots" },
     { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
     { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
+    { id: "printer", label: "Printer", icon: Printer, path: "/printer" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
 
 export const posPrimaryMobileNavIds = ["products", "tables", "bills"] as const;
+export const posFooterDestinationIds = ["printer", "appearance"] as const;
+
+export const isPosSettingsPath = (pathname: string) =>
+    pathname === "/appearance" || pathname === "/settings" || pathname === "/printer";
 
 export const getVisiblePosWorkspaceDestinations = ({
     tableManagementEnabled,
@@ -61,7 +67,7 @@ export const getVisiblePosPrimaryMobileDestinations = ({
     );
 
 export const isPosMoreDestinationActive = (pathname: string) => {
-    if (pathname === "/appearance" || pathname === "/settings") {
+    if (isPosSettingsPath(pathname)) {
         return true;
     }
 

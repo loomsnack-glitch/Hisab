@@ -123,6 +123,7 @@ const PosLayout = ({
     const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
     const posPrinter = useOptionalPosPrinter();
     const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
+    const [bluetoothReconnectDismissed, setBluetoothReconnectDismissed] = useState(false);
     const whatsappAccountQuery = useQuery({
         queryKey: whatsappKeys.posAccount(),
         queryFn: getPosWhatsAppAccount,
@@ -171,26 +172,25 @@ const PosLayout = ({
         }
     };
 
-    const handlePrinterToggle = async () => {
-        if (!posPrinter) return;
-
-        if (!posPrinter.supported) {
-            toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
+    const handlePrinterClick = () => {
+        if (posPrinter?.needsBluetoothReconnectTap) {
+            void (async () => {
+                try {
+                    const connected = await posPrinter.connectBluetooth();
+                    if (connected) {
+                        toast.success("Bluetooth printer connected");
+                        return;
+                    }
+                } catch (error) {
+                    toast.error(
+                        (error as { message?: string })?.message || "Could not connect to Bluetooth printer",
+                    );
+                }
+                navigate("/printer");
+            })();
             return;
         }
-
-        if (posPrinter.connected) {
-            await posPrinter.disconnect();
-            toast.success("USB printer disconnected");
-            return;
-        }
-
-        try {
-            await posPrinter.connect();
-            toast.success("USB printer connected");
-        } catch (error) {
-            toast.error((error as { message?: string })?.message || "Could not connect to USB printer");
-        }
+        navigate("/printer");
     };
 
     const handleLogout = async () => {
@@ -324,23 +324,23 @@ const PosLayout = ({
                             variant="outline"
                             size="icon"
                             className={`relative size-9 rounded-full transition-colors ${getPrinterButtonClassName(printerButtonState!)}`}
-                            aria-label={posPrinter.connected ? "Disconnect receipt printer" : "Connect receipt printer"}
+                            aria-label="Printer settings"
                             aria-busy={printerIsBusy}
                             title={
                                 !posPrinter.supported
-                                    ? "WebUSB unavailable"
+                                    ? "Printer settings"
                                     : printerButtonState === "error"
-                                    ? `Printer error: ${posPrinter.error || "Try connecting again"}`
+                                    ? `Printer error: ${posPrinter.error || "Open printer settings"}`
                                     : printerIsBusy
                                     ? posPrinter.status === "printing"
                                         ? "Printing invoice"
                                         : "Connecting printer"
                                     : posPrinter.connected
-                                    ? `Connected: ${posPrinter.printerName || "USB printer"}`
-                                    : "Connect 80mm receipt printer"
+                                    ? `Connected: ${posPrinter.printerName || "receipt printer"} · ${posPrinter.paperSize} paper`
+                                    : "Printer settings"
                             }
                             disabled={printerIsBusy}
-                            onClick={() => void handlePrinterToggle()}
+                            onClick={handlePrinterClick}
                         >
                             {printerIsBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Printer className="size-4" />}
                             <span
@@ -379,6 +379,36 @@ const PosLayout = ({
                     </Button>
                 </div>
             </header>
+
+            <AlertDialog
+                open={Boolean(posPrinter?.needsBluetoothReconnectTap && !bluetoothReconnectDismissed && !printerIsBusy)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setBluetoothReconnectDismissed(true);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reconnect receipt printer</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Chrome on this computer cannot keep a Bluetooth printer after reload.
+                            Tap Reconnect and select {posPrinter?.printerName || "the printer"} again.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Later</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setBluetoothReconnectDismissed(true);
+                                handlePrinterClick();
+                            }}
+                        >
+                            Reconnect
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <AlertDialog open={logoutConfirmationOpen} onOpenChange={setLogoutConfirmationOpen}>
                 <AlertDialogContent>

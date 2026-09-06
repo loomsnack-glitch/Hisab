@@ -2102,7 +2102,7 @@ const BillingPage = ({
                     if (!posPrinter?.supported) {
                         toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
                     } else if (!posPrinter.connected) {
-                        toast.error("Connect the 80mm USB printer before printing");
+                        toast.error("Connect the USB receipt printer before printing");
                     } else {
                         void posPrinter.printSale(sale, receiptContext)
                             .then(() => toast.success("Receipt sent to printer"))

@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { cn } from "@repo/ui/lib/utils";
 
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import { getVisiblePosWorkspaceDestinations } from "@/components/pos/pos-nav-items";
+import { getVisiblePosWorkspaceDestinations, isPosSettingsPath, posFooterDestinationIds } from "@/components/pos/pos-nav-items";
 import { getPosPanelTabFromPath } from "@/pages/pos-route-context";
 
 const SIDEBAR_STORAGE_KEY = "ganatri_pos_sidebar_collapsed";
@@ -33,11 +33,14 @@ export const persistPosSidebarCollapsed = (collapsed: boolean) => {
 const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnabled, kotSystemEnabled }: PosSidebarProps) => {
     const location = useLocation();
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
-    const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
+    const isSettingsRoute = isPosSettingsPath(location.pathname);
     const destinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled, kotSystemEnabled });
+    const footerIds = new Set<string>(posFooterDestinationIds);
 
-    const mainDestinations = destinations.filter((destination) => destination.id !== "appearance");
-    const appearanceDestination = destinations.find((destination) => destination.id === "appearance");
+    const mainDestinations = destinations.filter((destination) => !footerIds.has(destination.id));
+    const footerDestinations = posFooterDestinationIds
+        .map((id) => destinations.find((destination) => destination.id === id))
+        .filter((destination): destination is NonNullable<typeof destination> => Boolean(destination));
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
@@ -46,7 +49,7 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
     const renderNavItem = (destination: (typeof mainDestinations)[number]) => {
         const Icon = destination.icon;
         const collapsed = isCollapsed;
-        const isActive = !isAppearanceRoute && destination.tab === activePanelTab;
+        const isActive = !isSettingsRoute && destination.tab === activePanelTab;
         const badge = destination.id === "bills" && billsCount > 0 ? billsCount : undefined;
 
         const link = (
@@ -106,18 +109,16 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
         );
     };
 
-    const renderAppearanceItem = () => {
-        if (!appearanceDestination) {
-            return null;
-        }
-
-        const Icon = appearanceDestination.icon;
+    const renderFooterItem = (destination: (typeof footerDestinations)[number]) => {
+        const Icon = destination.icon;
         const collapsed = isCollapsed;
-        const isActive = isAppearanceRoute;
+        const isActive =
+            location.pathname === destination.path ||
+            (destination.id === "appearance" && location.pathname === "/settings");
 
         const link = (
             <Link
-                to={appearanceDestination.path}
+                to={destination.path}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                     "sidebar-nav-link group rounded-xl text-sm font-medium transition-all duration-200",
@@ -136,7 +137,7 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
                     )}
                     strokeWidth={isActive ? 2.25 : 2}
                 />
-                {!collapsed ? <span className="sidebar-label truncate text-left">{appearanceDestination.label}</span> : null}
+                {!collapsed ? <span className="sidebar-label truncate text-left">{destination.label}</span> : null}
             </Link>
         );
 
@@ -148,7 +149,7 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
             <Tooltip>
                 <TooltipTrigger render={link} />
                 <TooltipContent side="right" className="border border-border bg-popover text-popover-foreground">
-                    {appearanceDestination.label}
+                    {destination.label}
                 </TooltipContent>
             </Tooltip>
         );
@@ -201,7 +202,9 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
 
                     <div className="mt-auto space-y-1 pt-4">
                         <div className="my-3 h-px bg-border/60" />
-                        {renderAppearanceItem()}
+                        {footerDestinations.map((destination) => (
+                            <div key={destination.id}>{renderFooterItem(destination)}</div>
+                        ))}
                     </div>
                 </nav>
             </div>

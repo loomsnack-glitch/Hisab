@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MoonStar, SunMedium, Type } from "lucide-react";
+import { MoonStar, Printer, SunMedium, Type } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Label } from "@repo/ui/components/label";
@@ -11,6 +11,13 @@ import {
     getDisplayScaleOption,
     isDisplayScale,
 } from "@/lib/display-scale";
+import {
+    isReceiptPaperSize,
+    persistReceiptPaperSize,
+    readReceiptPaperSize,
+    RECEIPT_PAPER_SIZE_OPTIONS,
+    type ReceiptPaperSize,
+} from "@/lib/receipt-paper-size";
 import { useDisplayScale } from "@/hooks/use-display-scale";
 
 const themeOptions = [
@@ -21,9 +28,16 @@ const themeOptions = [
 const AppearanceSettingsSection = () => {
     const { resolvedTheme, setTheme } = useTheme();
     const { scale, setScale } = useDisplayScale();
+    const [paperSize, setPaperSizeState] = useState<ReceiptPaperSize>(() =>
+        readReceiptPaperSize("admin"),
+    );
     const [mounted, setMounted] = useState(false);
     const selectedScale = getDisplayScaleOption(scale);
     const activeTheme = resolvedTheme === "dark" ? "dark" : "light";
+    const setPaperSize = (nextPaperSize: ReceiptPaperSize) => {
+        persistReceiptPaperSize("admin", nextPaperSize);
+        setPaperSizeState(nextPaperSize);
+    };
 
     useEffect(() => {
         setMounted(true);
@@ -107,6 +121,46 @@ const AppearanceSettingsSection = () => {
                                 <RadioGroupItem value={option.value} id={`display-scale-${option.value}`} />
                                 <span className="text-sm font-medium text-foreground">
                                     {option.label} ({option.percentage}%)
+                                </span>
+                            </Label>
+                        ))}
+                    </RadioGroup>
+                </CardContent>
+            </Card>
+
+            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 font-display text-xl">
+                        <Printer className="size-5 text-primary" />
+                        Receipt paper
+                    </CardTitle>
+                    <CardDescription>
+                        Choose 58 mm or 80 mm so receipts fit this device&apos;s thermal printer.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <RadioGroup
+                        value={paperSize}
+                        onValueChange={(value) => {
+                            if (isReceiptPaperSize(value)) {
+                                setPaperSize(value);
+                            }
+                        }}
+                        className="grid gap-3 sm:grid-cols-2"
+                    >
+                        {RECEIPT_PAPER_SIZE_OPTIONS.map((option) => (
+                            <Label
+                                key={option.value}
+                                htmlFor={`receipt-paper-${option.value}`}
+                                className={cn(
+                                    "flex cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-background/70 p-4 transition-colors hover:bg-muted/40",
+                                    paperSize === option.value && "border-primary/40 bg-primary/5",
+                                )}
+                            >
+                                <RadioGroupItem value={option.value} id={`receipt-paper-${option.value}`} />
+                                <span className="space-y-0.5">
+                                    <span className="block text-sm font-medium text-foreground">{option.label}</span>
+                                    <span className="block text-xs text-muted-foreground">{option.description}</span>
                                 </span>
                             </Label>
                         ))}
