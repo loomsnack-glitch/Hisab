@@ -6,6 +6,8 @@ import {
     createDraftPurchase,
     getMoneyAccounts,
     getOrganizationDetails,
+    getStoreVendorAvailabilities,
+    getStoreVendorItemOfferings,
     getUnits,
     getVendorItems,
     getVendors,
@@ -18,8 +20,10 @@ import {
     calendarDateInTimeZone,
     isMoneyAccountAvailableToStore,
     isMoneyAccountEligibleForOutgoingMethod,
+    isStoreVendorAvailabilityActive,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
+    overlayStoreVendorItemOfferingPrices,
     mergeSamePricePurchaseLines,
     OUTGOING_PAYMENT_METHOD_LABELS,
     roundOutgoingPaymentMoney,
@@ -260,6 +264,16 @@ const UpsertPurchaseDialog = ({
         queryFn: () => getVendorItems(organizationId),
         enabled: open && Boolean(organizationId),
     });
+    const storeAvailabilitiesQuery = useQuery({
+        queryKey: vendorKeys.storeAvailabilities(organizationId, storeId),
+        queryFn: () => getStoreVendorAvailabilities(organizationId, storeId),
+        enabled: open && Boolean(organizationId && storeId),
+    });
+    const storeOfferingsQuery = useQuery({
+        queryKey: vendorKeys.storeItemOfferings(organizationId, storeId),
+        queryFn: () => getStoreVendorItemOfferings(organizationId, storeId),
+        enabled: open && Boolean(organizationId && storeId),
+    });
     const unitsQuery = useQuery({
         queryKey: unitKeys.list(organizationId),
         queryFn: () => getUnits(organizationId),
@@ -278,6 +292,28 @@ const UpsertPurchaseDialog = ({
     const vendors = vendorsQuery.data?.status === "success" ? vendorsQuery.data.data?.vendors ?? [] : [];
     const vendorItems =
         vendorItemsQuery.data?.status === "success" ? vendorItemsQuery.data.data?.vendorItems ?? [] : [];
+    const storeAvailabilities =
+        storeAvailabilitiesQuery.data?.status === "success"
+            ? storeAvailabilitiesQuery.data.data?.availabilities ?? []
+            : [];
+    const storeOfferings =
+        storeOfferingsQuery.data?.status === "success"
+            ? storeOfferingsQuery.data.data?.offerings ?? []
+            : [];
+    const activeStoreVendorIds = useMemo(
+        () =>
+            new Set(
+                storeAvailabilities
+                    .filter((availability) =>
+                        isStoreVendorAvailabilityActive({
+                            availabilityStatus: availability.status,
+                        }),
+                    )
+                    .map((availability) => availability.vendorId),
+            ),
+        [storeAvailabilities],
+    );
+    const storePricedItems = overlayStoreVendorItemOfferingPrices(vendorItems, storeOfferings);
     const units = unitsQuery.data?.status === "success" ? unitsQuery.data.data?.units ?? [] : [];
     const moneyAccounts =
         moneyAccountsQuery.data?.status === "success"
@@ -291,11 +327,14 @@ const UpsertPurchaseDialog = ({
         [units],
     );
 
-    const selectableVendors = vendors.filter(
-        (vendor) =>
-            isVendorSelectableForDraftPurchase(vendor) || vendor.id === sourcePurchase?.vendorId,
-    );
-    const selectableItems = vendorItems.filter((item) =>
+    const selectableVendors = vendors.filter((vendor) => {
+        const activeAtSelectedStore = Boolean(storeId) && activeStoreVendorIds.has(vendor.id);
+        return (
+            (isVendorSelectableForDraftPurchase(vendor) && activeAtSelectedStore) ||
+            vendor.id === sourcePurchase?.vendorId
+        );
+    });
+    const selectableItems = storePricedItems.filter((item) =>
         selectedVendor
             ? isVendorItemSelectableForDraftPurchase({
                 vendorStatus: selectedVendor.status,
@@ -394,6 +433,28 @@ const UpsertPurchaseDialog = ({
         form.reset(values);
         applySettlementPreferences(preferences);
     }, [copyFrom, form, open, organizationId, purchase]);
+
+    useEffect(() => {
+        if (!open || !vendorId || !storeId || !storeAvailabilitiesQuery.isSuccess) {
+            return;
+        }
+        if (activeStoreVendorIds.has(vendorId)) {
+            return;
+        }
+        if (sourcePurchase?.vendorId === vendorId && sourcePurchase.storeId === storeId) {
+            return;
+        }
+        form.setValue("vendorId", "");
+        form.setValue("lines", []);
+    }, [
+        activeStoreVendorIds,
+        form,
+        open,
+        sourcePurchase,
+        storeAvailabilitiesQuery.isSuccess,
+        storeId,
+        vendorId,
+    ]);
 
     useEffect(() => {
         if (!open || purchase || copyFrom || stores.length === 0) {

@@ -6,6 +6,14 @@ import {
     getStoreById,
     getStoresByOrganizationId,
 } from "@/modules/tenant/test-support/organization-repository.test-harness";
+import {
+    getStoreVendorAvailabilityByStoreAndVendor,
+    getStoreVendorItemOfferingByStoreAndVendorItem,
+    getUnitById,
+    getVendorById,
+    getVendorItemById,
+    vendorsRepositoryModule,
+} from "@/modules/tenant/vendors/vendors.service.test-harness";
 import type {
     CreateOutgoingPaymentREPO,
     CreatePurchaseLineREPO,
@@ -224,20 +232,13 @@ export {
     getStoresByOrganizationId,
     resolveFeatureEntitlement,
     isMoneyAccountTrackingActive,
+    getVendorById,
+    getVendorItemById,
+    getStoreVendorAvailabilityByStoreAndVendor,
+    getStoreVendorItemOfferingByStoreAndVendorItem,
+    getUnitById,
 };
 
-export const getVendorById = mock(async (_organizationId: string, id: string) => {
-    if (id === inactiveVendorId) return millersVendor;
-    if (id === vendorId) return freshFarmsVendor;
-    return null;
-});
-export const getVendorItemById = mock(async (_organizationId: string, id: string) => {
-    if (id === millersTomatoItemId) return millersTomatoItem;
-    if (id === onionItemId) return onionItem;
-    if (id === vendorItemId) return tomatoItem;
-    return null;
-});
-export const getUnitById = mock(async () => kilogramUnit);
 export const getPurchasesByOrganizationId = mock(async () => [draftPurchase]);
 export const getPurchaseById = mock(async (_organizationId: string, id: string) => {
     if (!storedPurchase || storedPurchase.id !== id) {
@@ -420,20 +421,88 @@ export const unitsRepositoryMocks = {
     seedDefaultUnits: mock(async () => []),
 };
 
-export const vendorsRepositoryMocks = {
-    getVendorById,
-    getVendorItemById,
-    getVendorsByOrganizationId: mock(async () => []),
-    getVendorItemsByOrganizationId: mock(async () => []),
-    createVendor: mock(async () => null),
-    updateVendor: mock(async () => null),
-    createVendorItem: mock(async () => null),
-    updateVendorItem: mock(async () => null),
+export const resetStoreVendorPurchaseLookups = () => {
+    getUnitById.mockImplementation(async () => kilogramUnit);
+    getVendorById.mockImplementation(async (_organizationId: string, id: string) => {
+        if (id === inactiveVendorId) return millersVendor;
+        if (id === vendorId) return freshFarmsVendor;
+        return null;
+    });
+    getVendorItemById.mockImplementation(async (_organizationId: string, id: string) => {
+        if (id === millersTomatoItemId) return millersTomatoItem;
+        if (id === onionItemId) return onionItem;
+        if (id === vendorItemId) return tomatoItem;
+        return null;
+    });
+    getStoreVendorAvailabilityByStoreAndVendor.mockImplementation(async (_organizationId: string, _storeId: string, id: string) => {
+        if (id === inactiveVendorId) return null;
+        if (id === vendorId) {
+            return {
+                id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                organizationId,
+                storeId,
+                vendorId,
+                status: "active" as const,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            };
+        }
+        return null;
+    });
+    getStoreVendorItemOfferingByStoreAndVendorItem.mockImplementation(async (_organizationId: string, _storeId: string, id: string) => {
+        if (id === vendorItemId) {
+            return {
+                id: "eeeeeeee-ffff-4aaa-8bbb-cccccccccccc",
+                organizationId,
+                storeId,
+                vendorId,
+                vendorItemId,
+                defaultPurchasePrice: tomatoItem.defaultPurchasePrice,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            };
+        }
+        if (id === millersTomatoItemId) {
+            return {
+                id: "ffffffff-aaaa-4bbb-8ccc-dddddddddddd",
+                organizationId,
+                storeId,
+                vendorId: inactiveVendorId,
+                vendorItemId: millersTomatoItemId,
+                defaultPurchasePrice: millersTomatoItem.defaultPurchasePrice,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            };
+        }
+        if (id === onionItemId) {
+            return {
+                id: "aaaaaaaa-ffff-4aaa-8bbb-cccccccccccc",
+                organizationId,
+                storeId,
+                vendorId,
+                vendorItemId: onionItemId,
+                defaultPurchasePrice: onionItem.defaultPurchasePrice,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            };
+        }
+        return null;
+    });
 };
+
+resetStoreVendorPurchaseLookups();
 
 mock.module("@/modules/tenant/units/units.repository", () => unitsRepositoryMocks);
 
-mock.module("@/modules/tenant/vendors/vendors.repository", () => vendorsRepositoryMocks);
+mock.module("@/modules/tenant/vendors/vendors.repository", () => vendorsRepositoryModule);
 
 mock.module("./purchases.repository", () => ({
     getPurchasesByOrganizationId,

@@ -9,6 +9,7 @@ import {
     derivePurchasePayableStateFromPayments,
     isOutgoingPaymentActive,
     isPurchaseEffectiveDateAllowed,
+    isStoreVendorAvailabilityActive,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
     mergeSamePricePurchaseLines,
@@ -145,8 +146,23 @@ const requirePurchasesEntitlementForStore = async (
     return { ok: true, value: null };
 };
 
+const inactiveStoreVendor = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Vendor is not active at the selected Store",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const unassignedVendorItem = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Vendor Item is not available at the selected Store",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
 const requireActiveVendor = async (
     organizationId: string,
+    storeId: string,
     vendorId: string,
 ): Promise<LookupResult<VendorDTO>> => {
     const vendor = await vendorsRepository.getVendorById(organizationId, vendorId);
@@ -156,6 +172,19 @@ const requireActiveVendor = async (
     if (!isVendorSelectableForDraftPurchase(vendor)) {
         return { ok: false, error: inactiveVendor() };
     }
+
+    const availability = await vendorsRepository.getStoreVendorAvailabilityByStoreAndVendor(
+        organizationId,
+        storeId,
+        vendorId,
+    );
+    if (
+        !availability ||
+        !isStoreVendorAvailabilityActive({ availabilityStatus: availability.status })
+    ) {
+        return { ok: false, error: inactiveStoreVendor() };
+    }
+
     return { ok: true, value: vendor };
 };
 
@@ -163,6 +192,7 @@ type ResolvedLine = CreatePurchaseLineREPO;
 
 const resolveDraftLines = async (
     organizationId: string,
+    storeId: string,
     purchaseId: string,
     vendor: VendorDTO,
     lineInputs: PurchaseLineInputJSON[],
@@ -189,6 +219,15 @@ const resolveDraftLines = async (
             return { ok: false, error: inactiveVendorItem() };
         }
 
+        const offering = await vendorsRepository.getStoreVendorItemOfferingByStoreAndVendorItem(
+            organizationId,
+            storeId,
+            vendorItem.id,
+        );
+        if (!offering) {
+            return { ok: false, error: unassignedVendorItem() };
+        }
+
         const unit = await unitsRepository.getUnitById(organizationId, vendorItem.unitId);
         if (!unit) {
             return {
@@ -202,7 +241,7 @@ const resolveDraftLines = async (
             };
         }
 
-        const agreedUnitPrice = lineInput.agreedUnitPrice ?? vendorItem.defaultPurchasePrice;
+        const agreedUnitPrice = lineInput.agreedUnitPrice ?? offering.defaultPurchasePrice;
         const { linesTotal: lineTotal } = calculatePurchaseTotals([
             { quantity: lineInput.quantity, agreedUnitPrice },
         ]);
@@ -491,7 +530,11 @@ export const createDraftPurchase = async (
         return purchasesEntitlementResult.error;
     }
 
-    const vendorResult = await requireActiveVendor(organizationId, purchaseData.vendorId);
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        purchaseData.vendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -504,6 +547,7 @@ export const createDraftPurchase = async (
     const purchaseId = crypto.randomUUID();
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         purchaseData.lines ?? [],
@@ -622,7 +666,11 @@ export const updateDraftPurchase = async (
     }
 
     const nextVendorId = purchaseData.vendorId ?? existing.vendorId;
-    const vendorResult = await requireActiveVendor(organizationId, nextVendorId);
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        nextVendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -639,6 +687,7 @@ export const updateDraftPurchase = async (
 
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         nextLineInputs,
@@ -819,7 +868,11 @@ export const recordPurchase = async (
         return storeResult.error;
     }
 
-    const vendorResult = await requireActiveVendor(organizationId, existing.vendorId);
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        existing.vendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -830,6 +883,7 @@ export const recordPurchase = async (
 
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         toLineInputs(existing),

@@ -10,6 +10,7 @@ import {
     type VendorDTO,
     type VendorStatus,
 } from "@repo/types";
+import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
@@ -33,7 +34,15 @@ type UpsertVendorDialogProps = {
     trigger?: React.ReactElement;
 };
 
-const defaultValues: CreateVendorJSON = {
+const vendorFormSchema = z.object({
+    name: z.string().trim().min(1, "Name is required"),
+    description: z.string().optional(),
+    status: VendorStatusSchema.optional(),
+});
+
+type VendorFormValues = z.input<typeof vendorFormSchema>;
+
+const defaultValues: VendorFormValues = {
     name: "",
     description: "",
     status: "active",
@@ -49,8 +58,27 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
     const queryClient = useQueryClient();
     const isEditMode = Boolean(vendor);
 
-    const form = useForm<CreateVendorJSON>({
-        resolver: zodResolver(CreateVendorSchema),
+    const form = useForm<VendorFormValues>({
+        resolver: zodResolver(
+            isEditMode
+                ? vendorFormSchema
+                : vendorFormSchema.superRefine((value, ctx) => {
+                    const parsed = CreateVendorSchema.safeParse({
+                        name: value.name,
+                        description: value.description,
+                        status: value.status,
+                    });
+                    if (!parsed.success) {
+                        for (const issue of parsed.error.issues) {
+                            ctx.addIssue({
+                                code: "custom",
+                                path: issue.path,
+                                message: issue.message,
+                            });
+                        }
+                    }
+                }),
+        ),
         defaultValues,
     });
 
@@ -76,15 +104,11 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
                     description: data.description,
                     status: data.status,
                 })
-                : createVendor(organizationId, {
-                    name: data.name,
-                    description: data.description,
-                    status: data.status,
-                }),
+                : createVendor(organizationId, data),
         onSuccess: (response) => {
             if (response.status === "success") {
                 toast.success(response.message);
-                queryClient.invalidateQueries({ queryKey: vendorKeys.list(organizationId) });
+                queryClient.invalidateQueries({ queryKey: vendorKeys.all });
                 setOpen(false);
                 form.reset(defaultValues);
                 return;
@@ -97,7 +121,16 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
         },
     });
 
-    const onSubmit: SubmitHandler<CreateVendorJSON> = (values) => {
+    const onSubmit: SubmitHandler<VendorFormValues> = (values) => {
+        if (vendor) {
+            mutation.mutate({
+                name: values.name.trim(),
+                description: values.description ?? "",
+                status: (values.status ?? "active") as VendorStatus,
+            });
+            return;
+        }
+
         mutation.mutate({
             name: values.name.trim(),
             description: values.description ?? "",

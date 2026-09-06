@@ -166,7 +166,13 @@ describe("Admin mobile navigation", () => {
         expect(products?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/products`);
         expect(products?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/products`)).toBe(true);
         expect(products?.isActive(`/organizations/${organizationId}/products`)).toBe(false);
-        expect(storeDestinationIds).toEqual(["products"]);
+        const vendors = getVisibleAdminWorkspaceDestinations(withStore).find(
+            (destination) => destination.id === "vendors",
+        );
+        expect(vendors?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/vendors`);
+        expect(vendors?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/vendors`)).toBe(true);
+        expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(false);
+        expect(storeDestinationIds).toEqual(["products", "vendors"]);
     });
 
     test("renders the primary tabs and organization avatar on the More tab", () => {

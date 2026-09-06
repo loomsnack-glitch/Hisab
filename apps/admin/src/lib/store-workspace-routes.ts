@@ -6,6 +6,9 @@ export const getStoreWorkspacePath = (organizationId: string, storeId: string) =
 export const getStoreProductsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/products`;
 
+export const getStoreVendorsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/vendors`;
+
 export const parseStoreWorkspacePath = (
     pathname: string,
 ): { organizationId: string; storeId: string } | null => {

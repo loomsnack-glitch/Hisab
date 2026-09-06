@@ -7,7 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { ProductResponseDTO, StoreDTO, StoreProductOfferingResponseDTO, StoreWithDevicesDTO } from "@repo/types";
 
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
-import { getStoreProductsPath, getStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import { getStoreProductsPath } from "@/lib/store-workspace-routes";
 import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -62,6 +62,18 @@ const product: ProductResponseDTO = {
     updatedAt: now,
     imageSignedUrl: null,
     labelProfile: null,
+};
+
+const category = {
+    id: "11111111-1111-4111-8111-111111111111",
+    organizationId,
+    name: "Mains",
+    sortOrder: 0,
+    status: "active" as const,
+    createdBy: adajan.createdBy,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
 };
 
 const inactiveProduct: ProductResponseDTO = {
@@ -129,6 +141,12 @@ const renderProducts = () => {
         message: "Store Product Offerings fetched successfully",
         code: 200,
     });
+    queryClient.setQueryData(catalogKeys.categories(organizationId), {
+        status: "success",
+        data: { categories: [category] },
+        message: "Categories fetched successfully",
+        code: 200,
+    });
 
     const router = createMemoryRouter(
         [
@@ -154,10 +172,15 @@ describe("Store Products page", () => {
         expect(markup).toContain("Products");
         expect(markup).toContain("Burger");
         expect(markup).toContain("Seasonal Wrap");
-        expect(markup).toContain("Edit");
+        expect(markup).toContain("Search products...");
+        expect(markup).toContain("Mains");
+        expect(markup).toContain("inactive");
+        expect(markup).toContain("Edit Store price for Burger");
         expect(markup).toContain("Deactivate");
         expect(markup).toContain("Activate");
-        expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, adajanId)}"`);
+        expect(markup).not.toContain("Add product");
+        expect(markup).not.toContain("Add Combo");
+        expect(markup).not.toContain("Reorder");
         expect(markup).not.toContain("Remove");
         expect(markup).not.toContain("Add catalog product");
         expect(markup).not.toContain("Create product");

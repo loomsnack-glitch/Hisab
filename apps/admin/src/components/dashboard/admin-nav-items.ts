@@ -17,7 +17,7 @@ import {
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { isStoresNavActive } from "@/lib/store-routes";
-import { getStoreProductsPath } from "@/lib/store-workspace-routes";
+import { getStoreProductsPath, getStoreVendorsPath } from "@/lib/store-workspace-routes";
 
 export type AdminNavIcon = LucideIcon | typeof WhatsAppIcon;
 
@@ -155,8 +155,15 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         icon: Truck,
         requiresOrganization: true,
         group: "finance",
-        getPath: (organizationId) => `/organizations/${organizationId}/vendors`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname),
+        getPath: (organizationId, storeId) =>
+            storeId
+                ? getStoreVendorsPath(organizationId, storeId)
+                : `/organizations/${organizationId}/vendors`,
+        isActive: (pathname, storeId) =>
+            storeId
+                ? pathname.includes(`/workspaces/${storeId}/vendors`)
+                : /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname) &&
+                  !pathname.includes("/workspaces/"),
     },
     {
         id: "purchases",
@@ -207,13 +214,15 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
 
 export const adminPrimaryMobileNavIds = ["stores", "products", "billing"] as const;
 
+const storeWorkspaceDestinationIds = new Set(["products", "vendors"]);
+
 const resolveDestinations = ({
     organizationId = "",
     storeId,
     hasOrganization,
 }: VisibleAdminNavArgs): AdminNavDestination[] =>
     adminDestinationDefs
-        .filter((destination) => !storeId || destination.id === "products")
+        .filter((destination) => !storeId || storeWorkspaceDestinationIds.has(destination.id))
         .filter((destination) => !destination.requiresOrganization || (hasOrganization && Boolean(organizationId)))
         .map((destination) => ({
             id: destination.id,

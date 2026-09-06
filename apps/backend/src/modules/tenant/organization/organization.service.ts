@@ -30,6 +30,8 @@ import {
 import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
 import * as catalogService from "@/modules/tenant/catalog/catalog.service";
+import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
+import * as vendorsService from "@/modules/tenant/vendors/vendors.service";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
 import * as organizationRepository from "./organization.repository";
@@ -475,6 +477,7 @@ export const createStore = async (
   try {
     await pg.begin(async (tx) => {
       await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      await vendorsRepository.lockStoreVendorAvailabilityTopology(organizationId, tx);
       store = await organizationRepository.createStore(
         {
           id: crypto.randomUUID(),
@@ -490,6 +493,11 @@ export const createStore = async (
       }
 
       await catalogService.seedInactiveOfferingsForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+      await vendorsService.seedInactiveAvailabilitiesForNewStore(tx, {
         organizationId,
         storeId: store.id,
         createdBy: userId,

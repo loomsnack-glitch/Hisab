@@ -113,20 +113,20 @@ The user-authenticated Ganatri application used by an Organization's administrat
 _Avoid_: Ganatri Console, POS, platform administration
 
 **Vendor**:
-An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items; only Stores with Store Vendor Availability may select it in Store-scoped Purchases. An inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
-_Avoid_: Store vendor, supplier record when referring to the vendor's offered goods
+An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items; every Store has exactly one Store Vendor Availability for it. An inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
+_Avoid_: Store vendor, assigned vendor, supplier record when referring to the vendor's offered goods
 
 **Store Vendor Availability**:
-A Store's permission to select one existing Organization Vendor and its Vendor Items in a Purchase. It is created when the Organization creates or assigns a Vendor to that Store and never creates a Store-private Vendor.
-_Avoid_: Private store vendor, vendor request workflow, copied vendor
+A Store's local purchasing switch for one existing Organization Vendor. Every Vendor has exactly one Availability per Store. The Availability owns active/inactive status; inactive Vendors remain on the Store list and cannot be selected for new Purchases. An Availability is never deleted and never creates a Store-private Vendor.
+_Avoid_: Assigned store, unassigned vendor, private store vendor, vendor request workflow, copied vendor, deleted availability, target-store assignment
 
 **Vendor Item**:
 An Organization-owned good available from exactly one Vendor, with a name, purchase unit, and active or inactive status. Its Store-specific default purchase price belongs to its Store Vendor Item Offering. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
 _Avoid_: Product, stock item, purchase line
 
 **Store Vendor Item Offering**:
-A Store's purchasable configuration of one existing Vendor Item, including that Store's default purchase price. It is usable only when its parent Vendor has Store Vendor Availability; the price is a suggested value for a new Purchase and does not replace the historical agreed price recorded on a Purchase Line.
-_Avoid_: Store-private vendor item, purchase-line price, global vendor-item price
+A Store's purchasable configuration of one existing Vendor Item, including that Store's default purchase price. Every Vendor Item has an Offering at every Store where its Vendor has an Availability. The price is retained while the Vendor is inactive at that Store; it is a suggested value for a new Purchase and does not replace the historical agreed price recorded on a Purchase Line.
+_Avoid_: Store-private vendor item, purchase-line price, global vendor-item price, deleted offering
 
 **Purchase**:
 A Store-scoped record of goods acquired from one Vendor, including its effective date, optional invoice/reference and notes, Purchase Lines, Purchase Adjustment, and settlement state. A Purchase belongs to the Store that incurred it even when an Organization-wide Money Account funds its payment.
