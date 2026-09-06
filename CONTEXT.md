@@ -177,12 +177,24 @@ An Organization-wide measure used to express a Vendor Item's default purchase pr
 _Avoid_: Vendor-only setting, product-only unit, quantity
 
 **Catalog Product**:
-An Organization-owned reusable definition of an item that every Store in the Organization has a Store Product Offering for. Each Catalog Product has exactly one Unit and a Default Selling Quantity in that Unit, but its live selling price, discount, and menu status belong to the Store Product Offering.
+An Organization-owned reusable definition of an item that every Store in the Organization has a Store Product Offering for. It owns the organization default selling price and discount, which apply wherever a Store has not set the corresponding local override, and its active/inactive status is the organization-wide sellability switch.
 _Avoid_: Vendor Item, inventory stock row, packaging variant when the underlying sellable item is unchanged
 
 **Store Product Offering**:
-A Store's sellable configuration of one existing Catalog Product. Every Catalog Product has exactly one Offering per Store. The Offering owns that Store's selling price, discount, and active/inactive menu status; inactive products remain on the Store list and are not sold. An Offering is never deleted and never creates a Store-private Catalog Product.
+A Store's sellable configuration of one existing Catalog Product. Every Catalog Product has exactly one Offering per Store. An Offering may independently override the organization default selling price and discount, and owns its active/inactive local menu status; it is sellable only when both its local status and the Catalog Product status are active. An Offering is never deleted and never creates a Store-private Catalog Product.
 _Avoid_: Store Product, copied Product, private store catalog, deleted offering, target-store assignment
+
+**Store Commercial Override**:
+An explicitly configured Store-specific price or discount that replaces the corresponding Organization default for one Store Product Offering or Store Add-On Offering. Ordinary Organization default changes never overwrite it; removing the override restores inheritance immediately.
+_Avoid_: Copied default, implicit exception, silent bulk replacement
+
+**Catalog Category**:
+An Organization-owned shared menu classification for Catalog Products. Its identity and structure are common to every Store; a Store may only control whether the Category is visible in its menu and its local display order.
+_Avoid_: Store-private category, copied category tree, per-store product classification
+
+**Bundle Product**:
+A Catalog Product sold as one fixed commercial offer whose centrally owned composition contains Catalog Products and Add-Ons. It inherits or overrides selling price, discount, and availability through its Store Product Offering exactly as a plain Catalog Product does; “Combo” is its UI label.
+_Avoid_: Store-private combo, price derived from component prices, editable local composition
 
 **Default Selling Quantity**:
 The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the selected Store Product Offering's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
@@ -584,12 +596,16 @@ In billing v1, a Device-Authenticated Billing Session uses the Organization's sh
 _Avoid_: Store-private v1 catalog, device-private customer list
 
 **Add-On**:
-An organization-scoped catalog item that may be attached to many different Products and selected under a parent Sale Item during billing. An Add-On is not sold by itself in the POS flow; it uses catalog-defined pricing and discount that are snapshotted onto the bill when selected, attached Add-Ons are optional unless the model later grows explicit requirement rules, and the Add-On itself has its own active/inactive lifecycle.
+An Organization-owned catalog item that may be attached to many different Catalog Products and selected under a parent Sale Item during billing. It is not sold by itself; its permitted product attachments and global lifecycle are shared, while each Store has a Store Add-On Offering that inherits or overrides its price and discount and controls local availability.
 _Avoid_: Suggested product, independent sale item, upsell hint
 
 **Add-On Discount**:
-A Discount defined on the Add-On itself and applied to the Add-On portion of billing separately from any Discount on the parent Product. Parent Product pricing rules do not implicitly change Add-On pricing rules.
+A Discount defined for an Add-On and applied to the Add-On portion of billing separately from any Discount on the parent Product. A Store Add-On Offering inherits the organization default unless it has its own discount override; parent Product pricing rules do not implicitly change it.
 _Avoid_: Inherited product discount, bundled hidden markdown, parent-only discount logic
+
+**Store Add-On Offering**:
+A Store's sellable configuration of one existing Add-On. It may independently override the organization default price and discount and has its own active/inactive local status; it is sellable only when both local and organization Add-On status are active.
+_Avoid_: Store-private add-on, copied add-on, local attachment rule
 
 **Retired Add-On**:
 An Add-On that is no longer offered for future billing but remains in the system for historical bill snapshots, product attachment integrity, and reporting. In the initial model, retiring an Add-On happens through its active/inactive status rather than destructive deletion once it has dependencies or billing history, and inactive Add-Ons stop appearing for new customize actions immediately while already-added Draft Sale lines keep their frozen snapshots until removed.
