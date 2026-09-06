@@ -48,12 +48,15 @@ export const getPosCartOrderDiscountAmount = (
 export type PosCartAddOnSelection = {
     addOnId: string;
     quantity: number;
+    unitPrice?: number;
+    unitDiscount?: number;
 };
 
 export type PosCartComboSelection = {
     groupId: string;
     optionProductId: string;
     quantity: number;
+    priceAdjustment?: number;
     addOns: PosCartAddOnSelection[];
 };
 
@@ -79,15 +82,19 @@ export const posCartConfigurationSignature = (configuration?: PosCartConfigurati
     return JSON.stringify({
         addOns: [...(configuration?.addOns ?? [])]
             .filter((addOn) => addOn.quantity > 0)
-            .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+            .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+            .map(({ addOnId, quantity }) => ({ addOnId, quantity })),
         comboSelections: [...(configuration?.comboSelections ?? [])]
             .filter((selection) => selection.quantity > 0)
             .sort((left, right) => `${left.groupId}:${left.optionProductId}`.localeCompare(`${right.groupId}:${right.optionProductId}`))
             .map((selection) => ({
-                ...selection,
+                groupId: selection.groupId,
+                optionProductId: selection.optionProductId,
+                quantity: selection.quantity,
                 addOns: [...selection.addOns]
                     .filter((addOn) => addOn.quantity > 0)
-                    .sort((left, right) => left.addOnId.localeCompare(right.addOnId)),
+                    .sort((left, right) => left.addOnId.localeCompare(right.addOnId))
+                    .map(({ addOnId, quantity }) => ({ addOnId, quantity })),
             })),
     });
 };
@@ -170,11 +177,41 @@ export const getCartLineDisplayTotals = (item: PosCartItem) => {
     const unitPrice = finiteDisplayMoney(Number(item.price));
     const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(item.discount)));
     const quantity = Math.max(0, item.quantity);
+    const directAddOnSubtotal = (item.configuration?.addOns ?? []).reduce(
+        (total, addOn) => total + finiteDisplayMoney(Number(addOn.unitPrice)) * Math.max(0, addOn.quantity) * quantity,
+        0,
+    );
+    const directAddOnDiscount = (item.configuration?.addOns ?? []).reduce(
+        (total, addOn) => total + finiteDisplayMoney(Number(addOn.unitDiscount)) * Math.max(0, addOn.quantity) * quantity,
+        0,
+    );
+    const comboAdjustmentTotal = (item.configuration?.comboSelections ?? []).reduce((total, selection) => {
+        const adjustment = Number(selection.priceAdjustment);
+        return Number.isFinite(adjustment)
+            ? total + adjustment * Math.max(0, selection.quantity) * quantity
+            : total;
+    }, 0);
+    const comboAddOnSubtotal = (item.configuration?.comboSelections ?? []).reduce(
+        (total, selection) => total + selection.addOns.reduce(
+            (selectionTotal, addOn) => selectionTotal + finiteDisplayMoney(Number(addOn.unitPrice)) * Math.max(0, addOn.quantity) * Math.max(0, selection.quantity) * quantity,
+            0,
+        ),
+        0,
+    );
+    const comboAddOnDiscount = (item.configuration?.comboSelections ?? []).reduce(
+        (total, selection) => total + selection.addOns.reduce(
+            (selectionTotal, addOn) => selectionTotal + finiteDisplayMoney(Number(addOn.unitDiscount)) * Math.max(0, addOn.quantity) * Math.max(0, selection.quantity) * quantity,
+            0,
+        ),
+        0,
+    );
+    const subtotal = unitPrice * quantity + directAddOnSubtotal + comboAdjustmentTotal + comboAddOnSubtotal;
+    const discount = unitDiscount * quantity + directAddOnDiscount + comboAddOnDiscount;
 
     return {
-        subtotal: roundDisplayMoney(unitPrice * quantity),
-        discount: roundDisplayMoney(unitDiscount * quantity),
-        total: roundDisplayMoney((unitPrice - unitDiscount) * quantity),
+        subtotal: roundDisplayMoney(subtotal),
+        discount: roundDisplayMoney(discount),
+        total: roundDisplayMoney(Math.max(subtotal - discount, 0)),
     };
 };
 

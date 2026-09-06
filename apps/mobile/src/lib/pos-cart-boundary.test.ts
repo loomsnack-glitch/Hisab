@@ -5,6 +5,7 @@ import {
     addProductToCart,
     changeCartItemQuantity,
     getCartDisplayTotals,
+    getCartLineDisplayTotals,
     getCartItemCount,
     getPosCartOrderDiscountAmount,
     isPosCartDiscountValid,
@@ -89,6 +90,28 @@ describe("POS Cart handoff", () => {
         const twice = addProductToCart(items, { ...product, price: 40, discount: 5 });
 
         expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, orderDiscount: 0, total: 70 });
+    });
+
+    it("includes configured add-ons and combo adjustments in display totals", () => {
+        const configuredItem = {
+            ...product,
+            price: 40,
+            discount: 5,
+            quantity: 2,
+            lineId: "configured-product-1",
+            configuration: {
+                addOns: [{ addOnId: "extra-sugar", quantity: 1, unitPrice: 10, unitDiscount: 1 }],
+                comboSelections: [{
+                    groupId: "group-1",
+                    optionProductId: "option-1",
+                    quantity: 1,
+                    priceAdjustment: 5,
+                    addOns: [{ addOnId: "extra-milk", quantity: 2, unitPrice: 8, unitDiscount: 2 }],
+                }],
+            },
+        } as PosCartItem;
+
+        expect(getCartLineDisplayTotals(configuredItem)).toEqual({ subtotal: 142, discount: 20, total: 122 });
     });
 
     it("validates amount and percentage order discounts against the display base", () => {

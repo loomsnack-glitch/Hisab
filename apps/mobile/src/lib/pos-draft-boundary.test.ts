@@ -12,12 +12,13 @@ const item = {
     quantity: 2,
     lineId: "product-1",
     configuration: {
-        addOns: [{ addOnId: "addon-1", quantity: 1 }],
+        addOns: [{ addOnId: "addon-1", quantity: 1, unitPrice: 10, unitDiscount: 1 }],
         comboSelections: [{
             groupId: "group-1",
             optionProductId: "option-1",
             quantity: 1,
-            addOns: [{ addOnId: "addon-2", quantity: 2 }],
+            priceAdjustment: 5,
+            addOns: [{ addOnId: "addon-2", quantity: 2, unitPrice: 8, unitDiscount: 2 }],
         }],
     },
 } as unknown as ProductResponseDTO & { quantity: number; lineId: string };
@@ -49,12 +50,12 @@ describe("POS Draft boundary", () => {
         expect(buildPosDraftPayload(input)).toMatchObject({
             draftRequestId: input.draftRequestId,
             customerId: "customer-1",
-            orderDiscountAmount: 7,
+            orderDiscountAmount: 12.2,
             serviceMode: "dine_in",
         });
         expect(buildPosDraftUpdatePayload(input)).toMatchObject({
             customerId: "customer-1",
-            orderDiscountAmount: 7,
+            orderDiscountAmount: 12.2,
             serviceMode: "dine_in",
         });
         expect(buildPosDraftUpdatePayload(input)).not.toHaveProperty("draftRequestId");

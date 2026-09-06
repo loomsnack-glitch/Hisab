@@ -662,6 +662,11 @@ Phase 4 closeout:
   the current shared contract still defaults the existing mobile payload to
   `dine_in`, so retail/device validation must not be treated as complete until
   capability-aware service-mode modeling is added.
+- The branch-wide review also corrected the first active POS destination to
+  open New Sale, kept Draft actions secondary to Continue to Payment, and made
+  local configured-product totals include add-ons and combo price adjustments.
+  Configuration pricing is retained only for local display and is stripped
+  from Draft/checkout payloads.
 
 Focused mobile tests pass after these fixes. Android/build/device, live API,
 share-sheet, migration, and printer validation remain intentionally pending.

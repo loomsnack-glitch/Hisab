@@ -31,12 +31,12 @@ export const mapPosCartItemsToSaleInputs = (items: readonly PosCartItem[]): Crea
     items.map((item) => ({
         productId: item.id,
         quantity: item.quantity,
-        addOns: item.configuration?.addOns ?? [],
+        addOns: item.configuration?.addOns.map(({ addOnId, quantity }) => ({ addOnId, quantity })) ?? [],
         comboSelections: item.configuration?.comboSelections?.map((selection) => ({
             groupId: selection.groupId,
             optionProductId: selection.optionProductId,
             quantity: selection.quantity,
-            addOns: selection.addOns,
+            addOns: selection.addOns.map(({ addOnId, quantity }) => ({ addOnId, quantity })),
         })),
     }));
 

@@ -88,9 +88,15 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                     groupId: group.id,
                     optionProductId: option.optionProductId,
                     quantity,
+                    priceAdjustment: Number(option.priceAdjustment),
                     addOns: optionAddOns.flatMap((attachment) => {
                         const addOnQuantity = comboAddOnQuantities[`${group.id}:${option.optionProductId}:${attachment.addOnId}`] ?? 0;
-                        return addOnQuantity > 0 ? [{ addOnId: attachment.addOnId, quantity: addOnQuantity }] : [];
+                        return addOnQuantity > 0 ? [{
+                            addOnId: attachment.addOnId,
+                            quantity: addOnQuantity,
+                            unitPrice: Number(attachment.addOn.price),
+                            unitDiscount: Number(attachment.addOn.discount ?? 0),
+                        }] : [];
                     }),
                 }]
                 : [];
@@ -308,7 +314,12 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
         const cartConfiguration: PosCartConfiguration = {
             addOns: configuredAddOns.flatMap((attachment) => {
                 const quantity = addOnQuantities[attachment.addOnId] ?? 0;
-                return quantity > 0 ? [{ addOnId: attachment.addOnId, quantity }] : [];
+                return quantity > 0 ? [{
+                    addOnId: attachment.addOnId,
+                    quantity,
+                    unitPrice: Number(attachment.addOn.price),
+                    unitDiscount: Number(attachment.addOn.discount ?? 0),
+                }] : [];
             }),
             comboSelections: selectedComboSelections,
         };

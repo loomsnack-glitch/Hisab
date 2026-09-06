@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -28,6 +29,7 @@ const destinationKeys: Record<PosDestination, PosTranslationKey> = {
 };
 
 const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
+    const redirectedToNewSale = useRef(false);
     const insets = useSafeAreaInsets();
     const { t: tCommon } = useTranslation("common");
     const { t: tPos } = useTranslation("pos");
@@ -62,6 +64,15 @@ const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
     });
 
     const destinations = getPosDestinations(session);
+
+    useEffect(() => {
+        if (redirectedToNewSale.current) {
+            return;
+        }
+
+        redirectedToNewSale.current = true;
+        navigation.navigate("NewSale");
+    }, [navigation]);
 
     return (
         <ScrollView

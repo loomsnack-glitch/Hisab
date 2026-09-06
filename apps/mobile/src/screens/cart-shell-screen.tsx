@@ -368,6 +368,7 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                         <View className="flex-row flex-wrap gap-2">
                             <PosButton
                                 label={cart.draftSaleId ? t("updateDraft") : t("saveDraft")}
+                                variant="secondary"
                                 loading={draftActions.savePending}
                                 onPress={saveDraft}
                             />
