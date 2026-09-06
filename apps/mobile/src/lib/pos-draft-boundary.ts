@@ -17,6 +17,7 @@ import {
     type PosCartDiscount,
     type PosCartItem,
 } from "./pos-cart-boundary";
+import type { PosServiceMode } from "./pos-service-mode-boundary";
 import { unwrapCatalogResponse } from "./pos-catalog-boundary";
 
 export type PosDraftCartInput = {
@@ -25,6 +26,7 @@ export type PosDraftCartInput = {
     discount: PosCartDiscount | null;
     draftSaleId: string | null;
     draftRequestId?: string;
+    serviceMode?: PosServiceMode;
 };
 
 export const mapPosCartItemsToSaleInputs = (items: readonly PosCartItem[]): CreateDraftSaleJSON["items"] =>
@@ -45,6 +47,7 @@ export const buildPosDraftPayload = ({
     customer,
     discount,
     draftRequestId,
+    serviceMode,
 }: Omit<PosDraftCartInput, "draftSaleId">): CreateDraftSaleJSON => {
     const saleItems = mapPosCartItemsToSaleInputs(items);
     const displayTotals = getCartDisplayTotals(items, discount);
@@ -58,7 +61,7 @@ export const buildPosDraftPayload = ({
         customerId: customer?.id ?? null,
         orderDiscountAmount,
         notes: null,
-        serviceMode: "dine_in",
+        serviceMode: serviceMode ?? "dine_in",
         generateKot: false,
         items: saleItems,
     };

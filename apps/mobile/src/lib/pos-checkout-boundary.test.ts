@@ -57,6 +57,7 @@ describe("POS checkout boundary", () => {
             payments: [{ amount: 100, method: "cash", referenceNumber: null, notes: null }],
         });
         expect(JSON.stringify(buildPosCompleteSalePayload(input))).not.toContain("price");
+        expect(buildPosCompleteSalePayload({ ...input, serviceMode: "pick_up" }).serviceMode).toBe("pick_up");
     });
 
     it("builds Draft commit and chooses the Draft adapter when an id exists", () => {

@@ -105,4 +105,27 @@ describe("POS Cart store", () => {
 
         expect(usePosCartStore.getState()).toMatchObject({ scopeKey: activeScope, items: [product], draftSaleId: null });
     });
+
+    it("keeps restaurant mode scoped and locks a Table context to Dine-In", () => {
+        usePosCartStore.getState().clear();
+        const scope = "org-1:store-1:device-1";
+        usePosCartStore.getState().addProduct(scope, product);
+        usePosCartStore.getState().setServiceMode(scope, "pick_up");
+        expect(usePosCartStore.getState().serviceMode).toBe("pick_up");
+
+        usePosCartStore.getState().setTableContext(scope, {
+            tableId: "table-1",
+            tableLabel: "T1",
+            tableOrderId: "order-1",
+            draftSaleId: null,
+        });
+        expect(usePosCartStore.getState()).toMatchObject({
+            serviceMode: "dine_in",
+            tableContext: { tableId: "table-1", tableOrderId: "order-1" },
+        });
+
+        usePosCartStore.getState().clear();
+        expect(usePosCartStore.getState().tableContext).toBeNull();
+        expect(usePosCartStore.getState().serviceMode).toBe("dine_in");
+    });
 });

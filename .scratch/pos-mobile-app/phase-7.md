@@ -50,6 +50,42 @@ Validation safety:
 - Pass service mode through Draft, direct checkout, and table checkout payloads.
 - Keep service-mode controls out of retail New Sale.
 
+Implementation plan and review:
+
+- Introduce a small mobile service-mode boundary with the existing shared
+  `SaleServiceMode` vocabulary and a future-safe Table context shape.
+- Store service mode and Table context in the session-scoped Zustand Cart;
+  Cart mutations must preserve these fields, while a full checkout clear must
+  remove them.
+- Render Dine-In/Pick-Up only when the Store advertises restaurant capability
+  (`tableManagementEnabled` or `kotSystemEnabled`). A selected Table always
+  forces Dine-In.
+- Thread the selected mode through Draft create/update and direct completion
+  payload builders, with Dine-In as the compatibility default for existing
+  callers.
+- Add boundary tests for capability visibility, mode normalization, Cart
+  context transitions, and payload propagation before moving to Tables.
+
+Internal review: this keeps service mode inside the existing Cart and checkout
+seams, does not add role assumptions or a new API contract, and leaves Table
+selection available for 7.2/7.3. Approved for implementation.
+
+Implementation and review result:
+
+- Added a session-scoped Cart service-mode boundary with `dine_in` and
+  `pick_up`, plus a future Table context that forces Dine-In.
+- Added capability-gated mode controls to New Sale and a mode summary to Cart;
+  retail Stores do not receive restaurant controls.
+- Passed the selected mode through Draft create/update and direct completion;
+  existing callers retain the Dine-In default.
+- Added boundary, store, localization, and payload coverage. Focused mobile
+  tests pass; TypeScript reports only the pre-existing missing WhatsApp asset
+  import in `login-screen.tsx`.
+
+Subphase review: approved. No scope, API, or safety defect was found. The next
+slice is Tables, where the existing Table service contract will populate the
+future Cart context.
+
 ### 7.2 — Tables plan
 
 - Replace the Tables placeholder with capability-gated table and area queries.

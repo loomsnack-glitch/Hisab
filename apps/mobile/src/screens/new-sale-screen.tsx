@@ -26,6 +26,8 @@ import {
 } from "../lib/pos-configuration-boundary";
 import type { PosCartConfiguration } from "../lib/pos-cart-boundary";
 import { clearPosCompletedSale } from "../store/pos-sale-complete.store";
+import { usePosSessionSnapshot } from "../store/pos-session.store";
+import { isPosRestaurantStore } from "../lib/pos-service-mode-boundary";
 
 type NewSaleScreenProps = NativeStackScreenProps<PosStackParamList, "NewSale">;
 type ProductQuickFilter = "all" | "recent" | "pinned";
@@ -57,6 +59,8 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const scanUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const catalog = usePosCatalog();
     const cart = usePosCart();
+    const session = usePosSessionSnapshot().session;
+    const restaurantStore = session ? isPosRestaurantStore(session.store) : false;
     const convenience = usePosConvenience(catalog.products);
     const configuration = usePosConfiguration();
     const filteredCatalogProducts = filterCatalogProducts(catalog.products, search, selectedCategoryId);
@@ -390,6 +394,23 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
                 <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("newSaleSubtitle")}</Text>
             </View>
             <PosCard>
+                {restaurantStore ? (
+                    <View className="gap-2 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
+                        <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("serviceMode")}</Text>
+                        <View className="flex-row flex-wrap gap-2">
+                            <PosButton
+                                label={t("serviceModeDineIn")}
+                                variant={cart.serviceMode === "dine_in" ? "primary" : "secondary"}
+                                onPress={() => cart.setServiceMode("dine_in")}
+                            />
+                            <PosButton
+                                label={t("serviceModePickUp")}
+                                variant={cart.serviceMode === "pick_up" ? "primary" : "secondary"}
+                                onPress={() => cart.setServiceMode("pick_up")}
+                            />
+                        </View>
+                    </View>
+                ) : null}
                 <View className="flex-row items-end gap-3">
                     <View className="min-w-0 flex-1">
                         <PosTextField

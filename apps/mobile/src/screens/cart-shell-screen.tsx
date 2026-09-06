@@ -91,11 +91,13 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                     customer: cart.customer,
                     discount: cart.discount,
                     draftRequestId,
+                    serviceMode: cart.serviceMode,
                 }),
                 updatePayload: buildPosDraftUpdatePayload({
                     items: cart.items,
                     customer: cart.customer,
                     discount: cart.discount,
+                    serviceMode: cart.serviceMode,
                 }),
             });
             cart.setDraftSaleId(sale.id);
@@ -144,6 +146,12 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                 <Text className="text-lg font-semibold text-pos-foreground dark:text-pos-foreground-dark">
                     {t("cartWithCount", { count: cart.itemCount })}
                 </Text>
+                <View className="flex-row items-center justify-between rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
+                    <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("serviceMode")}</Text>
+                    <Text className="text-sm font-semibold text-pos-foreground dark:text-pos-foreground-dark">
+                        {t(cart.serviceMode === "dine_in" ? "serviceModeDineIn" : "serviceModePickUp")}
+                    </Text>
+                </View>
                 {cart.itemCount === 0 ? (
                     <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("emptyCart")}</Text>
                 ) : (

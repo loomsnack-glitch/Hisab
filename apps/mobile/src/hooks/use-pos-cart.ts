@@ -2,6 +2,7 @@ import { usePosSessionSnapshot } from "../store/pos-session.store";
 import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration, type PosCartCustomer, type PosCartDiscount, type PosCartItem } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
+import type { PosServiceMode, PosTableContext } from "../lib/pos-service-mode-boundary";
 
 export const usePosCart = () => {
     const session = usePosSessionSnapshot().session;
@@ -14,6 +15,8 @@ export const usePosCart = () => {
     const draftSaleId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.draftSaleId : null));
     const draftRequestId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.draftRequestId : null));
     const completionRequestId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.completionRequestId : null));
+    const serviceMode = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.serviceMode : "dine_in" as const));
+    const tableContext = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.tableContext : null));
 
     return {
         items,
@@ -22,6 +25,8 @@ export const usePosCart = () => {
         draftSaleId,
         draftRequestId,
         completionRequestId,
+        serviceMode,
+        tableContext,
         itemCount: getCartItemCount(items),
         displayTotals: getCartDisplayTotals(items, discount),
         addProduct: (product: ProductResponseDTO) => {
@@ -75,6 +80,21 @@ export const usePosCart = () => {
         setCompletionRequestId: (nextCompletionRequestId: string) => {
             if (scopeKey) {
                 usePosCartStore.getState().setCompletionRequestId(scopeKey, nextCompletionRequestId);
+            }
+        },
+        setServiceMode: (nextServiceMode: PosServiceMode) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setServiceMode(scopeKey, nextServiceMode);
+            }
+        },
+        setTableContext: (nextTableContext: PosTableContext | null) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setTableContext(scopeKey, nextTableContext);
+            }
+        },
+        clearTableContext: () => {
+            if (scopeKey) {
+                usePosCartStore.getState().clearTableContext(scopeKey);
             }
         },
         restoreDraft: (items: PosCartItem[], nextCustomer: PosCartCustomer | null, nextDiscount: PosCartDiscount | null, nextDraftSaleId: string) => {

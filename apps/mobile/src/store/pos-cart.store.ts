@@ -10,6 +10,7 @@ import {
     type PosCartDiscount,
     type PosCartItem,
 } from "../lib/pos-cart-boundary";
+import { DEFAULT_POS_SERVICE_MODE, resolvePosServiceMode, type PosServiceMode, type PosTableContext } from "../lib/pos-service-mode-boundary";
 
 type PosCartStore = {
     scopeKey: string | null;
@@ -19,6 +20,8 @@ type PosCartStore = {
     draftSaleId: string | null;
     draftRequestId: string | null;
     completionRequestId: string | null;
+    serviceMode: PosServiceMode;
+    tableContext: PosTableContext | null;
     addProduct: (scopeKey: string, product: ProductResponseDTO) => void;
     addConfiguredProduct: (scopeKey: string, product: ProductResponseDTO, configuration: PosCartConfiguration) => void;
     changeQuantity: (scopeKey: string, lineId: string, delta: number) => void;
@@ -29,6 +32,9 @@ type PosCartStore = {
     setDraftSaleId: (scopeKey: string, draftSaleId: string | null) => void;
     setDraftRequestId: (scopeKey: string, draftRequestId: string) => void;
     setCompletionRequestId: (scopeKey: string, completionRequestId: string) => void;
+    setServiceMode: (scopeKey: string, serviceMode: PosServiceMode) => void;
+    setTableContext: (scopeKey: string, tableContext: PosTableContext | null) => void;
+    clearTableContext: (scopeKey: string) => void;
     restoreDraft: (scopeKey: string, items: PosCartItem[], customer: PosCartCustomer | null, discount: PosCartDiscount | null, draftSaleId: string) => void;
     clearDraftSale: (scopeKey: string) => void;
     clear: () => void;
@@ -42,6 +48,8 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
     draftSaleId: null,
     draftRequestId: null,
     completionRequestId: null,
+    serviceMode: DEFAULT_POS_SERVICE_MODE,
+    tableContext: null,
     addProduct: (scopeKey, product) =>
         set((state) => ({
             scopeKey,
@@ -51,6 +59,8 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
             draftSaleId: state.scopeKey === scopeKey ? state.draftSaleId : null,
             draftRequestId: state.scopeKey === scopeKey ? state.draftRequestId : null,
             completionRequestId: null,
+            serviceMode: state.scopeKey === scopeKey ? state.serviceMode : DEFAULT_POS_SERVICE_MODE,
+            tableContext: state.scopeKey === scopeKey ? state.tableContext : null,
         })),
     addConfiguredProduct: (scopeKey, product, configuration) =>
         set((state) => ({
@@ -61,6 +71,8 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
             draftSaleId: state.scopeKey === scopeKey ? state.draftSaleId : null,
             draftRequestId: state.scopeKey === scopeKey ? state.draftRequestId : null,
             completionRequestId: null,
+            serviceMode: state.scopeKey === scopeKey ? state.serviceMode : DEFAULT_POS_SERVICE_MODE,
+            tableContext: state.scopeKey === scopeKey ? state.tableContext : null,
         })),
     changeQuantity: (scopeKey, lineId, delta) =>
         set((state) => state.scopeKey !== scopeKey
@@ -79,6 +91,8 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
             draftSaleId: state.scopeKey === scopeKey ? state.draftSaleId : null,
             draftRequestId: state.scopeKey === scopeKey ? state.draftRequestId : null,
             completionRequestId: null,
+            serviceMode: state.scopeKey === scopeKey ? state.serviceMode : DEFAULT_POS_SERVICE_MODE,
+            tableContext: state.scopeKey === scopeKey ? state.tableContext : null,
         })),
     clearCustomer: (scopeKey) =>
         set((state) => state.scopeKey !== scopeKey
@@ -100,15 +114,33 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
         set((state) => state.scopeKey !== scopeKey ? state : { draftRequestId }),
     setCompletionRequestId: (scopeKey, completionRequestId) =>
         set((state) => state.scopeKey !== scopeKey ? state : { completionRequestId }),
+    setServiceMode: (scopeKey, serviceMode) =>
+        set((state) => state.scopeKey !== scopeKey
+            ? state
+            : { serviceMode: resolvePosServiceMode(serviceMode, state.tableContext), completionRequestId: null }),
+    setTableContext: (scopeKey, tableContext) =>
+        set((state) => state.scopeKey !== null && state.scopeKey !== scopeKey
+            ? state
+            : {
+                scopeKey,
+                tableContext,
+                serviceMode: resolvePosServiceMode(state.serviceMode, tableContext),
+                draftSaleId: tableContext?.draftSaleId ?? state.draftSaleId,
+                completionRequestId: null,
+            }),
+    clearTableContext: (scopeKey) =>
+        set((state) => state.scopeKey !== scopeKey
+            ? state
+            : { tableContext: null, serviceMode: DEFAULT_POS_SERVICE_MODE, completionRequestId: null }),
     restoreDraft: (scopeKey, items, customer, discount, draftSaleId) =>
         set((state) => state.scopeKey !== null && state.scopeKey !== scopeKey
             ? state
-            : { scopeKey, items, customer, discount, draftSaleId, draftRequestId: null, completionRequestId: null }),
+            : { scopeKey, items, customer, discount, draftSaleId, draftRequestId: null, completionRequestId: null, serviceMode: DEFAULT_POS_SERVICE_MODE, tableContext: null }),
     clearDraftSale: (scopeKey) =>
         set((state) => state.scopeKey !== scopeKey
             ? state
             : { draftSaleId: null, draftRequestId: null, completionRequestId: null }),
-    clear: () => set({ scopeKey: null, items: [], customer: null, discount: null, draftSaleId: null, draftRequestId: null, completionRequestId: null }),
+    clear: () => set({ scopeKey: null, items: [], customer: null, discount: null, draftSaleId: null, draftRequestId: null, completionRequestId: null, serviceMode: DEFAULT_POS_SERVICE_MODE, tableContext: null }),
 }));
 
 export const clearPosCart = () => usePosCartStore.getState().clear();

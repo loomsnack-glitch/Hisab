@@ -59,5 +59,9 @@ describe("POS Draft boundary", () => {
             serviceMode: "dine_in",
         });
         expect(buildPosDraftUpdatePayload(input)).not.toHaveProperty("draftRequestId");
+
+        expect(buildPosDraftPayload({ ...input, serviceMode: "pick_up" })).toMatchObject({
+            serviceMode: "pick_up",
+        });
     });
 });

@@ -53,6 +53,7 @@ const getDraftFields = (input: PosCheckoutCartInput) => {
         customer: input.customer,
         discount: input.discount,
         draftRequestId: undefined,
+        serviceMode: input.serviceMode,
     });
     return fields;
 };

@@ -45,6 +45,7 @@ export const usePosCheckout = () => {
                 discount: cart.discount,
                 payments: payments.rows,
                 requestId,
+                serviceMode: cart.serviceMode,
             }));
             cart.clear();
             clearPosPayments();

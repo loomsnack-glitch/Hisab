@@ -96,6 +96,7 @@ describe("localization boundary", () => {
         "printReceipt",
         "printerPrintFailed",
     ] as const;
+    const restaurantKeys = ["serviceMode", "serviceModeDineIn", "serviceModePickUp", "tableOrder"] as const;
 
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);
@@ -125,6 +126,9 @@ describe("localization boundary", () => {
                 expect(appResources[language].pos[key]).toBeTruthy();
             }
             for (const key of settingsKeys) {
+                expect(appResources[language].pos[key]).toBeTruthy();
+            }
+            for (const key of restaurantKeys) {
                 expect(appResources[language].pos[key]).toBeTruthy();
             }
         }
