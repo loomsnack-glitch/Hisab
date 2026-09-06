@@ -706,3 +706,42 @@ Verification evidence:
 Subphase review result: approved with the named pre-existing typecheck,
 printer, and device-visual validation follow-ups. Phase 5 is ready for its
 phase-level closeout review.
+
+## Phase 5 closeout review
+
+Reviewed on 2026-09-07 across the Phase 5 fixed point (`432020e`) through the
+Phase 5 commits, against the approved `spec.md`, `CONTEXT.md`, ADR 0001, ADR
+0003, and `AGENTS.md` validation safety.
+
+Standards review:
+
+- No new repository-boundary, scope, secret-handling, or whitespace issue was
+  found in the Phase 5 diff.
+- Reports and Settings reuse existing service, localization, MMKV, Uniwind,
+  session, and POS UI boundaries.
+- Logout behavior is shared between the POS shell and Settings; report and
+  customer queries retain Organization/Store/Device scoping.
+
+Spec review:
+
+- Bills, Sale Details/Draft recovery, Customer Directory, Reports, and
+  Settings are implemented and reachable from the authenticated POS shell.
+- English, Gujarati, and Hindi interface copy is covered for the Phase 5
+  workspaces.
+- Reports remains read-only and uses the existing summary contract. The
+  missing per-product value field is a documented API follow-up, not an
+  invented client calculation.
+- Printer discovery/transport remains correctly deferred to Phase 6, and no
+  Phase 5 code claims physical printer support.
+
+Repair result: no actionable Phase 5 code defect was found. Phase 5 remains
+complete with follow-ups: the known pre-existing WhatsApp asset typecheck,
+live/API validation, native/device visual validation, printer hardware, and
+the Product report value contract.
+
+Closeout verification:
+
+- `bun run --cwd apps/mobile test`: 98 passed, 0 failed, 423 assertions.
+- `git diff --check`: passed.
+- No build, Expo, Android, emulator, device-start, live API, share-sheet, or
+  hardware command was run.
