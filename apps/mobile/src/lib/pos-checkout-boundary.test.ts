@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import type { PaymentResponse, SaleResponse, ServiceResponse } from "@repo/types";
+import type { PaymentResponse, SaleResponse, ServiceResponse, ServiceTableSaleResponse } from "@repo/types";
 import {
     buildPosCommitSalePayload,
     buildPosCompleteSalePayload,
     createPosCheckoutOperation,
     createPosCollectionOperation,
     executePosCheckout,
+    buildPosTableOrderCheckoutPayload,
     resolvePosCheckoutRequestId,
     type PosCheckoutCartInput,
 } from "./pos-checkout-boundary";
@@ -67,6 +68,31 @@ describe("POS checkout boundary", () => {
         expect(createPosCheckoutOperation(input)).toMatchObject({ kind: "new_sale" });
     });
 
+    it("uses the Table Order checkout adapter for an active KOT-backed order", () => {
+        const tableInput = {
+            ...input,
+            tableContext: {
+                tableId: "table-1",
+                tableLabel: "T1",
+                tableOrderId: "order-1",
+                draftSaleId: null,
+            },
+        };
+
+        expect(createPosCheckoutOperation(tableInput)).toEqual({
+            kind: "table_order",
+            tableId: "table-1",
+            payload: {
+                requestId: "request-1",
+                customerId: null,
+                orderDiscountAmount: 0,
+                notes: null,
+                payments: [{ amount: 100, method: "cash", referenceNumber: null, notes: null }],
+            },
+        });
+        expect(buildPosTableOrderCheckoutPayload(tableInput).requestId).toBe("request-1");
+    });
+
     it("keeps collection as a separate one-payment operation", () => {
         expect(createPosCollectionOperation("sale-1", {
             amount: 25,
@@ -107,6 +133,10 @@ describe("POS checkout boundary", () => {
                 calls.push("collect");
                 return successPaymentResponse();
             },
+            tableCheckout: async (): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+                calls.push("table_checkout");
+                return { status: "success", data: { table: {} as never, sale: serverSale, tableOrder: null }, message: "", code: 200 };
+            },
         };
 
         await executePosCheckout(createPosCheckoutOperation(input), services);
@@ -117,8 +147,14 @@ describe("POS checkout boundary", () => {
             referenceNumber: null,
             notes: null,
         }), services);
+        await executePosCheckout(createPosCheckoutOperation({ ...input, tableContext: {
+            tableId: "table-1",
+            tableLabel: "T1",
+            tableOrderId: "order-1",
+            draftSaleId: null,
+        } }), services);
 
-        expect(calls).toEqual(["complete", "commit", "collect"]);
+        expect(calls).toEqual(["complete", "commit", "collect", "table_checkout"]);
     });
 
     it("surfaces service errors without inventing a local Sale", async () => {

@@ -138,6 +138,35 @@ unscoped table state was introduced. The next slice is Table Orders.
   one.
 - Return to Tables after a confirmed table Sale where navigation is natural.
 
+Implementation plan and review:
+
+- Carry server-derived Table ID, Table Order ID, and legacy Draft Sale ID in
+  the scoped Cart context when Tables navigates into New Sale.
+- Add a distinct `table_order` checkout operation that calls the existing
+  Table Order checkout endpoint and returns only its server-confirmed Sale;
+  ordinary direct Sales and Draft commits remain unchanged.
+- Keep the payment screen and existing request-id retry behavior shared, while
+  leaving KOT creation as the separate 7.4 action.
+- Lock the service mode to Dine-In whenever Table context exists and clear the
+  context only with the normal completed-Sale Cart reset.
+
+Internal review: operation selection is explicit and testable, table checkout
+does not submit client line prices, and a missing server Sale is treated as a
+retryable failure. Approved for implementation.
+
+Implementation and review result:
+
+- Table context now survives Tables → New Sale → Cart → Payment.
+- KOT-backed contexts use the shared Table Order checkout service with mapped
+  customer, discount, request ID, and payment inputs; legacy table drafts keep
+  the existing Draft commit path.
+- Added tests for table-order payload shape, adapter selection, dispatch, and
+  server Sale handling. Focused mobile tests pass; TypeScript retains only the
+  known missing WhatsApp asset import.
+
+Subphase review: approved. The next slice is KOT generation and Kitchen
+completion.
+
 ### 7.4 — KOT and kitchen completion plan
 
 - Add a capability-gated Kitchen destination backed by existing kitchen KOT

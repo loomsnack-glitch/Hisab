@@ -408,12 +408,19 @@ const NewSaleScreen = ({ navigation, route }: NewSaleScreenProps) => {
                                 variant={cart.serviceMode === "dine_in" ? "primary" : "secondary"}
                                 onPress={() => cart.setServiceMode("dine_in")}
                             />
-                            <PosButton
-                                label={t("serviceModePickUp")}
-                                variant={cart.serviceMode === "pick_up" ? "primary" : "secondary"}
-                                onPress={() => cart.setServiceMode("pick_up")}
-                            />
+                            {cart.tableContext ? null : (
+                                <PosButton
+                                    label={t("serviceModePickUp")}
+                                    variant={cart.serviceMode === "pick_up" ? "primary" : "secondary"}
+                                    onPress={() => cart.setServiceMode("pick_up")}
+                                />
+                            )}
                         </View>
+                        {cart.tableContext ? (
+                            <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                                {t("tableOrder")}: {cart.tableContext.tableLabel}
+                            </Text>
+                        ) : null}
                     </View>
                 ) : null}
                 <View className="flex-row items-end gap-3">
