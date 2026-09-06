@@ -113,12 +113,20 @@ The user-authenticated Ganatri application used by an Organization's administrat
 _Avoid_: Ganatri Console, POS, platform administration
 
 **Vendor**:
-An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items that may later be selected in Store-scoped Purchases; an inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
+An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items; only Stores with Store Vendor Availability may select it in Store-scoped Purchases. An inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
 _Avoid_: Store vendor, supplier record when referring to the vendor's offered goods
 
+**Store Vendor Availability**:
+A Store's permission to select one existing Organization Vendor and its Vendor Items in a Purchase. It is created when the Organization creates or assigns a Vendor to that Store and never creates a Store-private Vendor.
+_Avoid_: Private store vendor, vendor request workflow, copied vendor
+
 **Vendor Item**:
-An Organization-owned good available from exactly one Vendor, with a name, purchase unit, required non-negative two-decimal default purchase price, and active or inactive status. Identically named Vendor Items may belong to different Vendors and retain independent prices. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
+An Organization-owned good available from exactly one Vendor, with a name, purchase unit, and active or inactive status. Its Store-specific default purchase price belongs to its Store Vendor Item Offering. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
 _Avoid_: Product, stock item, purchase line
+
+**Store Vendor Item Offering**:
+A Store's purchasable configuration of one existing Vendor Item, including that Store's default purchase price. It is usable only when its parent Vendor has Store Vendor Availability; the price is a suggested value for a new Purchase and does not replace the historical agreed price recorded on a Purchase Line.
+_Avoid_: Store-private vendor item, purchase-line price, global vendor-item price
 
 **Purchase**:
 A Store-scoped record of goods acquired from one Vendor, including its effective date, optional invoice/reference and notes, Purchase Lines, Purchase Adjustment, and settlement state. A Purchase belongs to the Store that incurred it even when an Organization-wide Money Account funds its payment.
@@ -169,15 +177,19 @@ An Organization-wide measure used to express a Vendor Item's default purchase pr
 _Avoid_: Vendor-only setting, product-only unit, quantity
 
 **Catalog Product**:
-An Organization-owned item offered for sale through Ganatri POS. Each Catalog Product has exactly one Unit, a Default Selling Quantity in that Unit, and a selling price for exactly that default amount. Existing Catalog Products are treated as one piece at their existing selling price.
+An Organization-owned reusable definition of an item that one or more Stores may sell through Ganatri POS. Each Catalog Product has exactly one Unit and a Default Selling Quantity in that Unit, but its live selling price, discount, and menu status belong to the Store Product Offering.
 _Avoid_: Vendor Item, inventory stock row, packaging variant when the underlying sellable item is unchanged
 
+**Store Product Offering**:
+A Store's sellable configuration of one existing Catalog Product. It determines whether that Catalog Product is active in the Store's menu and owns that Store's selling price and discount; it never creates a Store-private Catalog Product.
+_Avoid_: Store Product, copied Product, private store catalog, menu row
+
 **Default Selling Quantity**:
-The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the Catalog Product's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
+The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the selected Store Product Offering's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
 _Avoid_: Sale Item quantity, unit conversion, per-gram price
 
 **Proportional Product Price**:
-The calculated selling price for a custom amount of a Catalog Product: its configured selling price multiplied by the chosen amount divided by its Default Selling Quantity. POS does not ask the cashier to override this price; the bill records the resulting amount and price snapshot. If that calculation exceeds two decimal places, Hisab rounds the one sold portion to the nearest paise before multiplying it by the Sale Item quantity.
+The calculated selling price for a custom amount of a Catalog Product: the selected Store Product Offering's configured selling price multiplied by the chosen amount divided by its Default Selling Quantity. POS does not ask the cashier to override this price; the bill records the resulting amount and price snapshot. If that calculation exceeds two decimal places, Hisab rounds the one sold portion to the nearest paise before multiplying it by the Sale Item quantity.
 _Avoid_: Cashier-entered custom price, independent packaging-variant price, rounded display-only calculation
 
 **Custom Selling Quantity**:
@@ -271,6 +283,14 @@ _Avoid_: Name match, fuzzy person match, Google-authoritative contact
 The part of the system that records a sale, its line items, and the payments collected against it. In this project, Billing is modeled through Sales and Payments rather than a separate invoice domain.
 _Avoid_: Invoicing, bill book
 
+**Organization Report**:
+A read-only view that aggregates an Organization's Store-attributed operational data for a chosen period and may be limited to one Store. It is not Organization-owned operational data and does not permit cross-Store changes.
+_Avoid_: Organization-wide sale, storeless report, report ownership mode
+
+**Customer**:
+An Organization-owned person or business that may buy from one or more Stores. A Customer's identity and contact details are searchable across the Organization, while each Store maintains any credit balance independently through a Store Customer Account.
+_Avoid_: Store-private customer, organization-wide customer balance
+
 **Payment Status**:
 The settlement state of a Sale based on how much money has been collected against its grand total. A Sale may be pending, partial, or paid.
 _Avoid_: Transaction status, order status
@@ -280,8 +300,12 @@ A committed Sale whose payment status is pending or partial and therefore still 
 _Avoid_: Customer-only due bill, synthetic unpaid payment
 
 **Customer Ledger**:
-The append-only history of balance-changing entries for a Customer, including sales, payments, void reversals, and manual adjustments. It exists to explain why the Customer's running balance is what it is.
-_Avoid_: Balance cache, statement total
+The append-only, Store-specific history of balance-changing entries for one Store Customer Account, including sales, payments, void reversals, and manual adjustments. It exists to explain that Store's running balance for that Customer.
+_Avoid_: Organization-wide customer ledger, balance cache, statement total
+
+**Store Customer Account**:
+One Store's independent credit balance for one shared Customer. Selecting an existing Customer at a new Store creates or uses that Store's zero-or-greater balance without changing the Customer's accounts at other Stores; a Receivable Sale, its payments, and adjustments affect only the Store Customer Account for the Sale's Store.
+_Avoid_: Organization-wide customer balance, cross-store receivable, shared credit account
 
 **Draft Sale**:
 A Sale that is being assembled but has not yet been committed as a receivable or completed sale. Draft Sales may change freely without affecting customer balances.

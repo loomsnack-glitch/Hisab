@@ -1,0 +1,3 @@
+# Store Product Offerings own store-specific sellability
+
+Catalog Products remain Organization-owned reusable product definitions, and only the Organization catalog may create them. Creating a Catalog Product requires the organization to choose its target Stores, producing the corresponding Store Product Offerings. A Store Product Offering connects an existing Catalog Product to a Store and owns that Store's selling price, discount, and active menu status; it cannot create a Store-private product definition. This supports store-specific menus without copying product identities or making module ownership a per-Organization toggle.

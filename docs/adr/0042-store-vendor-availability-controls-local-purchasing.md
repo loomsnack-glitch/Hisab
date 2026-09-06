@@ -1,0 +1,3 @@
+# Store Vendor Availability controls local purchasing
+
+Vendors and Vendor Items remain Organization-owned and are created only in the Organization vendor register. The Organization explicitly assigns each Vendor to the Stores that may use it through Store Vendor Availability; a Store cannot create a private Vendor or request an approval workflow. Each Store Vendor Item Offering owns that Store's default purchase price, while a Purchase Line retains the actual agreed price as history. This keeps local vendor lists and defaults separate while retaining reusable vendor records if another Store later uses the same supplier.
