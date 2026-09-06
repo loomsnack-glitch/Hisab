@@ -60,6 +60,14 @@ export const catalogKeys = {
     [...catalogKeys.all, "label-templates", organizationId] as const,
   storeProductOfferings: (organizationId: string, storeId: string) =>
     [...catalogKeys.all, "store-product-offerings", organizationId, storeId] as const,
+  storeCategoryPresentations: (organizationId: string, storeId: string) =>
+    [...catalogKeys.all, "store-category-presentations", organizationId, storeId] as const,
+  storeProductOfferingOverrideSummary: (organizationId: string) =>
+    [...catalogKeys.all, "store-product-offering-override-summary", organizationId] as const,
+  storeAddOnOfferings: (organizationId: string, storeId: string) =>
+    [...catalogKeys.all, "store-add-on-offerings", organizationId, storeId] as const,
+  storeAddOnOfferingOverrideSummary: (organizationId: string) =>
+    [...catalogKeys.all, "store-add-on-offering-override-summary", organizationId] as const,
 };
 
 export const billingKeys = {

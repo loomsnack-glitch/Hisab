@@ -6,6 +6,12 @@ export const getStoreWorkspacePath = (organizationId: string, storeId: string) =
 export const getStoreProductsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/products`;
 
+export const getStoreAddOnsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/add-ons`;
+
+export const getStoreCategoriesPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/categories`;
+
 export const getStoreVendorsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/vendors`;
 

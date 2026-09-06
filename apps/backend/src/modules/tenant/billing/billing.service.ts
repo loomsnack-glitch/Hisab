@@ -107,6 +107,32 @@ const roundMoney = (value: number) =>
 const moneyFrom = (value: number | string | null | undefined) =>
   roundMoney(Number(value ?? 0));
 
+const resolveStoreAddOnCommercialSnapshot = async (
+  organizationId: string,
+  storeId: string,
+  addOn: {
+    id: string;
+    price: number | string;
+    discount: number | string;
+  },
+) => {
+  const offering =
+    await catalogRepository.getStoreAddOnOfferingByAddOnAndStore(
+      organizationId,
+      storeId,
+      addOn.id,
+    );
+
+  return {
+    price: moneyFrom(
+      offering?.effectivePrice ?? addOn.price,
+    ),
+    discount: moneyFrom(
+      offering?.effectiveDiscount ?? addOn.discount,
+    ),
+  };
+};
+
 const sumMoney = (values: Array<number | string | null | undefined>) =>
   roundMoney(
     values.reduce((total: number, value) => total + Number(value ?? 0), 0),
@@ -935,9 +961,15 @@ const prepareBundleSaleLine = async (
         };
       }
 
+      const effectiveAddOnCommercial = await resolveStoreAddOnCommercialSnapshot(
+        organizationId,
+        storeId,
+        addOn,
+      );
+
       const quantityPerComponent = Number(componentAddOn.quantity);
       const attachment =
-        await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+        await catalogRepository.getActiveProductAddOnAttachmentByProductAndAddOn(
           organizationId,
           component.componentProductId,
           componentAddOn.addOnId,
@@ -975,8 +1007,8 @@ const prepareBundleSaleLine = async (
         quantityPerComponent,
         totalQuantity: quantityPerComponent * totalQuantity,
         addOnNameSnapshot: addOn.name,
-        unitPriceSnapshot: moneyFrom(addOn.price),
-        unitDiscountSnapshot: moneyFrom(addOn.discount),
+        unitPriceSnapshot: effectiveAddOnCommercial.price,
+        unitDiscountSnapshot: effectiveAddOnCommercial.discount,
       });
     }
 
@@ -1176,7 +1208,7 @@ const prepareComboSaleLine = async (
       const preparedAddOns: CreateSaleItemBundleComponentAddOnREPO[] = [];
       for (const selectedAddOn of selection.addOns) {
         const attachment =
-          await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+          await catalogRepository.getActiveProductAddOnAttachmentByProductAndAddOn(
             organizationId,
             optionProduct.id,
             selectedAddOn.addOnId,
@@ -1192,10 +1224,14 @@ const prepareComboSaleLine = async (
           };
         }
 
-        if (
-          moneyFrom(attachment.addOn.discount) >
-          moneyFrom(attachment.addOn.price)
-        ) {
+        const effectiveAddOnCommercial =
+          await resolveStoreAddOnCommercialSnapshot(
+            organizationId,
+            storeId,
+            attachment.addOn,
+          );
+
+        if (effectiveAddOnCommercial.discount > effectiveAddOnCommercial.price) {
           return {
             error: {
               status: "error",
@@ -1208,9 +1244,9 @@ const prepareComboSaleLine = async (
 
         const addOnTotalQuantity = selectedAddOn.quantity * totalQuantity;
         optionAddOnSubtotal +=
-          addOnTotalQuantity * moneyFrom(attachment.addOn.price);
+          addOnTotalQuantity * effectiveAddOnCommercial.price;
         optionAddOnDiscountTotal +=
-          addOnTotalQuantity * moneyFrom(attachment.addOn.discount);
+          addOnTotalQuantity * effectiveAddOnCommercial.discount;
         preparedAddOns.push({
           id: crypto.randomUUID(),
           organizationId,
@@ -1222,8 +1258,8 @@ const prepareComboSaleLine = async (
           quantityPerComponent: selectedAddOn.quantity,
           totalQuantity: addOnTotalQuantity,
           addOnNameSnapshot: attachment.addOn.name,
-          unitPriceSnapshot: moneyFrom(attachment.addOn.price),
-          unitDiscountSnapshot: moneyFrom(attachment.addOn.discount),
+          unitPriceSnapshot: effectiveAddOnCommercial.price,
+          unitDiscountSnapshot: effectiveAddOnCommercial.discount,
         });
       }
 
@@ -1404,6 +1440,17 @@ const prepareSaleItems = async (
       };
     }
 
+    if (catalogProduct.status !== "active") {
+      return {
+        error: {
+          status: "error",
+          message: `Product "${catalogProduct.name}" is not available at this Store`,
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
+
     const offering =
       await catalogRepository.getStoreProductOfferingByProductAndStore(
         organizationId,
@@ -1423,8 +1470,8 @@ const prepareSaleItems = async (
 
     const product = {
       ...catalogProduct,
-      price: offering.price,
-      discount: offering.discount,
+      price: offering.effectivePrice,
+      discount: offering.effectiveDiscount,
     };
 
     const defaultPortion = defaultCatalogSoldPortion(product);
@@ -1482,14 +1529,41 @@ const prepareSaleItems = async (
     const saleItemId = crypto.randomUUID();
 
     if (product.productType === "bundle") {
-      return {
-        error: {
-          status: "error",
-          message: `Legacy Bundle product "${product.name}" cannot be added to new sales. Use a Combo instead`,
-          data: null,
-          code: STATUS_CODES.BAD_REQUEST,
-        },
-      };
+      if (selectedAddOns.length > 0) {
+        return {
+          error: {
+            status: "error",
+            message: `Bundle product "${product.name}" does not accept add-on selections`,
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+          },
+        };
+      }
+
+      if (selectedComboSelections.length > 0) {
+        return {
+          error: {
+            status: "error",
+            message: `Combo selections are only valid for Combo products`,
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+          },
+        };
+      }
+
+      const preparedBundle = await prepareBundleSaleLine(
+        organizationId,
+        storeId,
+        saleId,
+        saleItemId,
+        product,
+        parentQuantity,
+      );
+      if (preparedBundle.error) {
+        return { error: preparedBundle.error };
+      }
+      preparedLines.push(preparedBundle.line);
+      continue;
     }
 
     if (product.productType === "combo") {
@@ -1535,6 +1609,7 @@ const prepareSaleItems = async (
       const attachment =
         await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
           organizationId,
+          storeId,
           item.productId,
           selectedAddOn.addOnId,
         );

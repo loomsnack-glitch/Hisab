@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCategories, getOrganizationCatalogSettings, getProducts, reorderProducts } from "@repo/services";
+import { getCategories, getOrganizationCatalogSettings, getProducts, getStoreProductOfferingOverrideSummary, reorderProducts } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
@@ -50,11 +50,21 @@ const ProductsListPage = () => {
         enabled: Boolean(organizationId),
     });
 
+    const overrideSummaryQuery = useQuery({
+        queryKey: catalogKeys.storeProductOfferingOverrideSummary(organizationId),
+        queryFn: () => getStoreProductOfferingOverrideSummary(organizationId),
+        enabled: Boolean(organizationId),
+    });
+
     const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
     const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
     const barcodeScanningEnabled =
         catalogSettingsQuery.data?.status === "success"
         && catalogSettingsQuery.data.data?.settings.barcodeScanningEnabled === true;
+    const overrideSummary =
+        overrideSummaryQuery.data?.status === "success"
+            ? overrideSummaryQuery.data.data?.summary
+            : null;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),
@@ -177,6 +187,13 @@ const ProductsListPage = () => {
 
     return (
         <div className="space-y-5">
+            {overrideSummary && overrideSummary.totalOfferings > 0 ? (
+                <Card className="border-border/60 bg-muted/20 shadow-none">
+                    <CardContent className="px-4 py-3 text-sm text-muted-foreground">
+                        Store commercial review: {overrideSummary.fullyInherited} fully inherited, {overrideSummary.priceOverridden} price overrides, {overrideSummary.discountOverridden} discount overrides, {overrideSummary.bothOverridden} with both overridden ({overrideSummary.totalOfferings} total Store offerings).
+                    </CardContent>
+                </Card>
+            ) : null}
             {/* Search & Actions bar */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1 max-w-md w-full group/search">
@@ -406,6 +423,9 @@ const ProductsListPage = () => {
 
                                         <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
                                             <div className="flex flex-col items-start">
+                                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                    Org default
+                                                </span>
                                                 <ProductPriceDisplay
                                                     price={product.price}
                                                     discount={product.discount}

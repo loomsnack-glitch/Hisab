@@ -205,7 +205,7 @@ const StoreProductOfferingsPage = () => {
                 <p className="text-sm font-medium text-primary">Store workspace</p>
                 <h1 className="font-display text-3xl font-semibold tracking-tight">Products</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Every Organization Catalog Product is listed here. {store.name} controls selling price, discount, and active/inactive status. Inactive products stay on this list.
+                    Every Organization Catalog Product is listed here. {store.name} controls effective price, discount, and local menu status. Values can inherit Organization defaults or use explicit Store overrides.
                 </p>
             </div>
 
@@ -350,13 +350,25 @@ const StoreProductOfferingsPage = () => {
 
                                         <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
                                             <div className="flex flex-col items-start">
+                                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                    Effective price
+                                                </span>
                                                 <ProductPriceDisplay
-                                                    price={offering.price}
-                                                    discount={offering.discount}
+                                                    price={offering.effectivePrice}
+                                                    discount={offering.effectiveDiscount}
                                                     size="sm"
                                                     align="left"
                                                     singleTone="foreground"
                                                 />
+                                                <span className="text-[10px] font-medium text-muted-foreground">
+                                                    {offering.isPriceInherited && offering.isDiscountInherited
+                                                        ? "Inherits Organization defaults"
+                                                        : offering.isPriceInherited
+                                                            ? "Discount overridden"
+                                                            : offering.isDiscountInherited
+                                                                ? "Price overridden"
+                                                                : "Price and discount overridden"}
+                                                </span>
                                                 <span className="text-[10px] font-medium text-muted-foreground">
                                                     {catalogSellingQuantityLabel(product)}
                                                 </span>

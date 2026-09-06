@@ -133,7 +133,7 @@ const AddOnsPage = () => {
         },
         {
             id: "price",
-            header: "Price",
+            header: "Organization default",
             accessor: (addOn) => (
                 <ProductPriceDisplay
                     price={addOn.price}
@@ -147,7 +147,7 @@ const AddOnsPage = () => {
         },
         {
             id: "status",
-            header: "Status",
+            header: "Global publication",
             accessor: (addOn) => <ProductStatusBadge status={addOn.status} />,
             sortable: true,
             getSortValue: (addOn) => addOn.status,

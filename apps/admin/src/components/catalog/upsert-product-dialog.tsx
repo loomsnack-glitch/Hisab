@@ -16,6 +16,7 @@ import {
 import {
   CreateProductObjectSchema,
   PIECE_PREDEFINED_UNIT_KEY,
+  ProductStatusSchema,
   canAssignUnitToCatalogProduct,
   defaultSellingQuantitySchema,
   formatSoldAmount,
@@ -130,6 +131,7 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
     .transform((value) => Number(value))
     .pipe(defaultSellingQuantitySchema),
   allowCustomSellingQuantity: z.boolean(),
+  status: ProductStatusSchema,
   productCode: z
     .preprocess(
       (value) =>
@@ -148,7 +150,7 @@ const defaultValues: UpsertProductFormInput = {
   price: "",
   discount: "",
   imagePath: "",
-  status: "active",
+  status: "inactive",
   productCode: "",
   unitId: "",
   defaultSellingQuantity: "1",
@@ -498,7 +500,7 @@ const UpsertProductDialog = ({
         return "manufacturer" as const;
       })();
 
-      const payload = {
+      const payloadBase = {
         categoryId: data.categoryId,
         name: data.name.trim(),
         imagePath: nextImagePath,
@@ -509,14 +511,22 @@ const UpsertProductDialog = ({
         allowCustomSellingQuantity: data.allowCustomSellingQuantity,
       };
 
-      const response = product
-        ? await updateProduct(organizationId, product.id, payload)
-        : await createProduct(organizationId, {
-            ...payload,
+      const payload = product
+        ? {
+            ...payloadBase,
             price: Number(data.price),
             discount: Number(data.discount ?? 0),
-            status: "active",
-          });
+            status: data.status,
+          }
+        : {
+            ...payloadBase,
+            price: Number(data.price),
+            discount: Number(data.discount ?? 0),
+          };
+
+      const response = product
+        ? await updateProduct(organizationId, product.id, payload)
+        : await createProduct(organizationId, payload);
 
       if (response.status !== "success" || !response.data?.product.id) {
         return response;
@@ -833,7 +843,7 @@ const UpsertProductDialog = ({
                     render={({ field, fieldState }) => (
                       <Field data-invalid={fieldState.invalid}>
                         <FieldLabel>
-                          Discount (₹){" "}
+                          Organization default discount (₹){" "}
                           <span className="font-normal text-muted-foreground">
                             (optional)
                           </span>
@@ -859,13 +869,103 @@ const UpsertProductDialog = ({
                   />
                 </div>
                 <FieldDescription>
-                  This initial selling price applies as an active Offering at every current Store. Each Store can change it later. A newly created Store inherits Catalog Products as inactive.
+                  New products begin unpublished at the Organization level. Current Stores receive a locally active Offering so publication can turn the menu on store by store.
                 </FieldDescription>
               </>
             ) : (
-              <FieldDescription>
-                Selling price, discount, and menu status are configured in each Store workspace.
-              </FieldDescription>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Controller
+                    control={form.control}
+                    name="price"
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel required>Organization default price (₹)</FieldLabel>
+                        <FieldContent>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-11 rounded-xl"
+                            value={field.value}
+                            onChange={(event) =>
+                              field.onChange(
+                                sanitizeDecimalInput(event.target.value),
+                              )
+                            }
+                            onBlur={field.onBlur}
+                          />
+                          <FieldError errors={[fieldState.error]} />
+                        </FieldContent>
+                      </Field>
+                    )}
+                  />
+                  <Controller
+                    control={form.control}
+                    name="discount"
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel>Organization default discount (₹)</FieldLabel>
+                        <FieldContent>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-11 rounded-xl"
+                            value={field.value ?? ""}
+                            onChange={(event) =>
+                              field.onChange(
+                                sanitizeDecimalInput(event.target.value),
+                              )
+                            }
+                            onBlur={field.onBlur}
+                          />
+                          <FieldError errors={[fieldState.error]} />
+                        </FieldContent>
+                      </Field>
+                    )}
+                  />
+                </div>
+                <Controller
+                  control={form.control}
+                  name="status"
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel required>Organization publication</FieldLabel>
+                      <FieldContent>
+                        <ReactSelect
+                          options={ProductStatusSchema.options.map((status) => ({
+                            label:
+                              status === "active"
+                                ? "Published"
+                                : "Unpublished",
+                            value: status,
+                          }))}
+                          value={
+                            ProductStatusSchema.options
+                              .map((status) => ({
+                                label:
+                                  status === "active"
+                                    ? "Published"
+                                    : "Unpublished",
+                                value: status,
+                              }))
+                              .find((option) => option.value === field.value) ?? null
+                          }
+                          onChange={(option) =>
+                            field.onChange(option?.value ?? "inactive")
+                          }
+                          classNames={{
+                            control: () => "!min-h-11 rounded-xl",
+                          }}
+                        />
+                        <FieldError errors={[fieldState.error]} />
+                      </FieldContent>
+                    </Field>
+                  )}
+                />
+                <FieldDescription>
+                  Organization defaults apply to every Store that has not set a local override. Store menu status stays in each Store workspace.
+                </FieldDescription>
+              </>
             )}
 
             {barcodeScanningEnabled ? (

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    getStoreCategoriesPath,
     getStoreProductsPath,
     getStoreVendorsPath,
     getStoreWorkspacePath,
@@ -25,6 +26,9 @@ describe("store workspace routes", () => {
         );
         expect(getStoreProductsPath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/products`,
+        );
+        expect(getStoreCategoriesPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/categories`,
         );
         expect(getStoreVendorsPath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/vendors`,

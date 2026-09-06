@@ -15,6 +15,9 @@ import {
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
   UpdateStoreProductOfferingSchema,
+  UpdateStoreAddOnOfferingSchema,
+  PreviewCatalogCommercialOperationSchema,
+  ApplyCatalogCommercialOperationSchema,
 } from "./catalog.schema";
 import {
   keepOutsFromContentInset,
@@ -200,10 +203,14 @@ describe("Bundle Product catalog contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  test("rejects global commercial edits because Store Offerings own them", () => {
-    expect(UpdateProductSchema.safeParse({ price: 100 }).success).toBe(false);
-    expect(UpdateBundleProductSchema.safeParse({ status: "inactive" }).success).toBe(false);
-    expect(UpdateComboProductSchema.safeParse({ discount: 10 }).success).toBe(false);
+  test("accepts Organization default commercial edits", () => {
+    expect(UpdateProductSchema.safeParse({ price: 100 }).success).toBe(true);
+    expect(UpdateBundleProductSchema.safeParse({ status: "inactive" }).success).toBe(true);
+    expect(UpdateComboProductSchema.safeParse({ discount: 10 }).success).toBe(true);
+  });
+
+  test("rejects Organization default discount greater than price", () => {
+    expect(UpdateProductSchema.safeParse({ price: 10, discount: 11 }).success).toBe(false);
   });
 });
 
@@ -862,13 +869,127 @@ describe("Store Product Offering catalog contracts", () => {
     }
   });
 
-  test("updating a Store Product Offering requires at least one of price, discount, or status", () => {
+  test("updating a Store Product Offering requires at least one commercial or status field", () => {
     expect(UpdateStoreProductOfferingSchema.safeParse({}).success).toBe(false);
     expect(
-      UpdateStoreProductOfferingSchema.safeParse({ price: 135 }).success,
+      UpdateStoreProductOfferingSchema.safeParse({ priceOverride: 135 }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ priceOverride: null }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ clearPriceOverride: true }).success,
     ).toBe(true);
     expect(
       UpdateStoreProductOfferingSchema.safeParse({ status: "inactive" }).success,
     ).toBe(true);
+  });
+
+  test("updating a Store Product Offering rejects legacy copied price and discount fields", () => {
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ price: 135 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ discount: 5 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ price: 135, discount: 5 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({ price: 20 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({ discount: 2 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        price: 135,
+        status: "active",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        discount: 2,
+        status: "active",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects contradictory Store Offering override instructions", () => {
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        priceOverride: 135,
+        clearPriceOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        discountOverride: 5,
+        clearDiscountOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        priceOverride: 20,
+        clearPriceOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        discountOverride: 2,
+        clearDiscountOverride: true,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("Store commercial operation catalog contracts", () => {
+  const productId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  test("preview requires at least one Store and catalog item", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: [],
+        itemIds: [productId],
+        value: 120,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("preview requires a value for set override operations", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: targetStoreIds,
+        itemIds: [productId],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("apply requires explicit confirmation in the request body", () => {
+    expect(
+      ApplyCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: targetStoreIds,
+        itemIds: [productId],
+        value: 120,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("clear override operations reject a value payload", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "add_on",
+        operation: "clear_discount_override",
+        storeIds: targetStoreIds,
+        itemIds: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"],
+        value: 0,
+      }).success,
+    ).toBe(false);
   });
 });

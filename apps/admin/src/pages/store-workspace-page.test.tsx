@@ -24,6 +24,7 @@ describe("Store workspace page", () => {
 
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/products"');
+        expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/categories"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/vendors"');
         expect(appSource).toContain('path="/organizations/:organizationId/stores/:storeId"');
         expect(appSource).toContain('path="/organizations/:organizationId/stores"');

@@ -561,6 +561,8 @@ const resolveSelectableAttachment = (requestedAddOnId: string) => {
 describe("Configured product billing with trusted snapshots", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getActiveAttachmentSpy: ReturnType<typeof spyOn>;
+    let getStoreAddOnOfferingSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
     let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
@@ -616,9 +618,45 @@ describe("Configured product billing with trusted snapshots", () => {
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
         ).mockImplementation(
+            async (_organizationId, _storeId, _productId, requestedAddOnId) =>
+                resolveSelectableAttachment(requestedAddOnId) as never,
+        );
+        getActiveAttachmentSpy = spyOn(
+            catalogRepository,
+            "getActiveProductAddOnAttachmentByProductAndAddOn",
+        ).mockImplementation(
             async (_organizationId, _productId, requestedAddOnId) =>
                 resolveSelectableAttachment(requestedAddOnId) as never,
         );
+        getStoreAddOnOfferingSpy = spyOn(
+            catalogRepository,
+            "getStoreAddOnOfferingByAddOnAndStore",
+        ).mockImplementation(async (_organizationId, storeIdArg, requestedAddOnId) => {
+            const attachment = resolveSelectableAttachment(requestedAddOnId);
+            if (!attachment) {
+                return null;
+            }
+
+            return {
+                id: `0ffeeeee-0000-4000-8000-${requestedAddOnId.replace(/-/g, "").slice(-12)}`,
+                organizationId,
+                storeId: storeIdArg,
+                addOnId: requestedAddOnId,
+                priceOverride: null,
+                discountOverride: null,
+                effectivePrice: attachment.addOn.price,
+                effectiveDiscount: attachment.addOn.discount,
+                isPriceInherited: true,
+                isDiscountInherited: true,
+                price: attachment.addOn.price,
+                discount: attachment.addOn.discount,
+                status: "active" as const,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            } as never;
+        });
     getComboChoiceGroupsSpy = spyOn(
       catalogRepository,
       "getComboChoiceGroupsByProductId",
@@ -633,6 +671,8 @@ describe("Configured product billing with trusted snapshots", () => {
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getActiveAttachmentSpy.mockRestore();
+        getStoreAddOnOfferingSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
         getStoreProductOfferingSpy.mockRestore();
@@ -1268,6 +1308,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(response.status).toBe("success");
     expect(getSelectableAttachmentSpy).toHaveBeenCalledWith(
       organizationId,
+      storeId,
       productId,
       addOnId,
     );
@@ -1890,8 +1931,12 @@ describe("Configured product billing with trusted snapshots", () => {
             organizationId,
             storeId,
             productId,
-            price: 175,
-            discount: 25,
+            priceOverride: 175,
+            discountOverride: 25,
+            effectivePrice: 175,
+            effectiveDiscount: 25,
+            isPriceInherited: false,
+            isDiscountInherited: false,
             status: "active",
             createdBy: userId,
             updatedBy: null,
@@ -2015,7 +2060,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
         ).mockImplementation(
-            async (_organizationId, _productId, requestedAddOnId) =>
+            async (_organizationId, _storeId, _productId, requestedAddOnId) =>
                 resolveSelectableAttachment(requestedAddOnId) as never,
         );
     getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);

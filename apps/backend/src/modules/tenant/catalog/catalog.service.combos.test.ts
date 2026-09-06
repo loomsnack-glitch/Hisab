@@ -70,6 +70,7 @@ describe("Combo Product catalog service", () => {
             name: "Lunch Combo",
             price: 150,
             discount: 0,
+            status: "active",
             choiceGroups: [{
                 name: "Choose a drink",
                 minSelections: 1,

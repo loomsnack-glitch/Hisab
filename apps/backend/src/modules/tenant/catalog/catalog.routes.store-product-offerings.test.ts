@@ -32,8 +32,14 @@ describe("Store Product Offering catalog routes", () => {
         harness.updateStoreProductOfferingRepo.mockImplementation(async (data) => ({
             ...harness.storeProductOffering,
             ...data,
+            effectivePrice: data.priceOverride ?? harness.product.price,
+            effectiveDiscount: data.discountOverride ?? harness.product.discount,
+            isPriceInherited: data.priceOverride === null,
+            isDiscountInherited: data.discountOverride === null,
         }));
         harness.getProductLabelProfileByProductId.mockResolvedValue(null);
+        harness.getStoreProductOfferingsByProductId.mockClear();
+        harness.getStoreProductOfferingsByProductId.mockResolvedValue([]);
         harness.updateProductRepo.mockClear();
     });
 
@@ -68,13 +74,17 @@ describe("Store Product Offering catalog routes", () => {
         expect(harness.createStoreProductOfferingRepo).not.toHaveBeenCalled();
     });
 
-    test("updates Offering price, discount, and status without changing shared Catalog Product details", async () => {
+    test("updates Offering price override, discount override, and status without changing shared Catalog Product details", async () => {
         const response = await catalogRoutes.request(
             `${offeringsPath}/${harness.offeringId}`,
             {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ price: 180, discount: 20, status: "inactive" }),
+                body: JSON.stringify({
+                    priceOverride: 180,
+                    discountOverride: 20,
+                    status: "inactive",
+                }),
             },
         );
 
@@ -83,23 +93,59 @@ describe("Store Product Offering catalog routes", () => {
             expect.objectContaining({
                 id: harness.offeringId,
                 storeId: harness.store.id,
-                price: 180,
-                discount: 20,
+                priceOverride: 180,
+                discountOverride: 20,
                 status: "inactive",
             }),
         );
         expect(harness.updateProductRepo).not.toHaveBeenCalled();
     });
 
-    test("rejects changing global Product commercial fields", async () => {
+    test("rejects legacy copied-price update fields on Store Product Offerings", async () => {
+        const response = await catalogRoutes.request(
+            `${offeringsPath}/${harness.offeringId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ price: 180, discount: 20 }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.updateStoreProductOfferingRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects changing global Product commercial fields when invalid", async () => {
         const response = await catalogRoutes.request(productPath, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ price: 180 }),
+            body: JSON.stringify({ price: 10, discount: 11 }),
         });
 
         expect(response.status).toBe(400);
         expect(harness.updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("updates Organization default price without touching Store overrides", async () => {
+        harness.updateProductRepo.mockImplementation(async (data) => ({
+            ...harness.product,
+            ...data,
+            unitLabel: "pc",
+        }));
+
+        const response = await catalogRoutes.request(productPath, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ price: 120 }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(harness.updateProductRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: harness.productId,
+                price: 120,
+            }),
+        );
     });
 
     test("does not delete a Store Product Offering", async () => {

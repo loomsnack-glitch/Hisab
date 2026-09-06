@@ -62,6 +62,10 @@ describe("Store Product Offerings", () => {
     updateStoreProductOfferingRepo.mockImplementation(async (data) => ({
       ...storeProductOffering,
       ...data,
+      effectivePrice: data.priceOverride ?? product.price,
+      effectiveDiscount: data.discountOverride ?? product.discount,
+      isPriceInherited: data.priceOverride === null,
+      isDiscountInherited: data.discountOverride === null,
     }));
     getActiveStoreCatalogProducts.mockClear();
     getActiveStoreCatalogProducts.mockResolvedValue([
@@ -82,6 +86,7 @@ describe("Store Product Offerings", () => {
       name: "Cake",
       price: 250,
       discount: 10,
+      status: "active",
     });
 
     expect(response.status).toBe("success");
@@ -90,6 +95,7 @@ describe("Store Product Offerings", () => {
         name: "Cake",
         price: 250,
         discount: 10,
+        status: "inactive",
       }),
       expect.anything(),
     );
@@ -101,8 +107,8 @@ describe("Store Product Offerings", () => {
     expect(createStoreProductOfferingRepo).toHaveBeenCalledWith(
       expect.objectContaining({
         storeId: store.id,
-        price: 250,
-        discount: 10,
+        priceOverride: null,
+        discountOverride: null,
         status: "active",
       }),
       expect.anything(),
@@ -110,7 +116,8 @@ describe("Store Product Offerings", () => {
     expect(createStoreProductOfferingRepo).toHaveBeenCalledWith(
       expect.objectContaining({
         storeId: vesuStore.id,
-        price: 250,
+        priceOverride: null,
+        discountOverride: null,
         status: "active",
       }),
       expect.anything(),
@@ -129,8 +136,8 @@ describe("Store Product Offerings", () => {
       expect.objectContaining({
         storeId: vesuStore.id,
         productId,
-        price: product.price,
-        discount: product.discount,
+        priceOverride: null,
+        discountOverride: null,
         status: "inactive",
       }),
       expect.anything(),
@@ -164,7 +171,7 @@ describe("Store Product Offerings", () => {
       organizationId,
       store.id,
       offeringId,
-      { price: 180, discount: 20, status: "inactive" },
+      { priceOverride: 180, discountOverride: 20, status: "inactive" },
     );
 
     expect(response.status).toBe("success");
@@ -172,13 +179,78 @@ describe("Store Product Offerings", () => {
       expect.objectContaining({
         id: offeringId,
         storeId: store.id,
-        price: 180,
-        discount: 20,
+        priceOverride: 180,
+        discountOverride: 20,
         status: "inactive",
       }),
     );
-    expect(response.data?.offering.price).toBe(180);
+    expect(response.data?.offering.effectivePrice).toBe(180);
+    expect(response.data?.offering.effectiveDiscount).toBe(20);
+    expect(response.data?.offering.isPriceInherited).toBe(false);
+    expect(response.data?.offering.isDiscountInherited).toBe(false);
     expect(response.data?.offering.status).toBe("inactive");
+  });
+
+  test("a Store can clear a price override to inherit the Organization default again", async () => {
+    getStoreProductOfferingById.mockResolvedValue({
+      ...storeProductOffering,
+      priceOverride: 180,
+      discountOverride: null,
+      effectivePrice: 180,
+      effectiveDiscount: product.discount,
+      isPriceInherited: false,
+      isDiscountInherited: true,
+    });
+
+    const response = await catalogService.updateStoreProductOffering(
+      userId,
+      organizationId,
+      store.id,
+      offeringId,
+      { clearPriceOverride: true },
+    );
+
+    expect(response.status).toBe("success");
+    expect(updateStoreProductOfferingRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priceOverride: null,
+        discountOverride: null,
+      }),
+    );
+    expect(response.data?.offering.isPriceInherited).toBe(true);
+    expect(response.data?.offering.effectivePrice).toBe(product.price);
+  });
+
+  test("a Store Products list exposes effective values and inheritance metadata", async () => {
+    getStoreProductOfferingsByStoreId.mockResolvedValue([
+      {
+        ...storeProductOffering,
+        priceOverride: 180,
+        discountOverride: null,
+        effectivePrice: 180,
+        effectiveDiscount: product.discount,
+        isPriceInherited: false,
+        isDiscountInherited: true,
+      },
+    ]);
+
+    const response = await catalogService.getStoreProductOfferings(
+      userId,
+      organizationId,
+      store.id,
+    );
+
+    expect(response.status).toBe("success");
+    expect(response.data?.offerings[0]).toEqual(
+      expect.objectContaining({
+        effectivePrice: 180,
+        effectiveDiscount: product.discount,
+        isPriceInherited: false,
+        isDiscountInherited: true,
+        priceOverride: 180,
+        discountOverride: null,
+      }),
+    );
   });
 
   test("does not expose deleting a Store Product Offering", () => {

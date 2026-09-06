@@ -24,7 +24,7 @@ import {
   getProductAddOnAttachmentById,
   getProductsByOrganizationId,
   getProductById,
-  getSelectableProductAddOnAttachmentsByOrganizationId,
+  getSelectableProductAddOnAttachmentsByStoreId,
   organization,
   organizationId,
   product,
@@ -48,7 +48,7 @@ describe("Add-On catalog service", () => {
     createProductAddOnAttachmentRepo.mockClear();
     getProductAddOnAttachmentById.mockClear();
     updateProductAddOnAttachmentRepo.mockClear();
-    getSelectableProductAddOnAttachmentsByOrganizationId.mockClear();
+    getSelectableProductAddOnAttachmentsByStoreId.mockClear();
     getActiveAddOnsByOrganizationId.mockClear();
     getActiveProductAddOnCountsByOrganizationId.mockClear();
     getActiveProductsByOrganizationId.mockClear();
@@ -69,7 +69,7 @@ describe("Add-On catalog service", () => {
     getProductById.mockResolvedValue(product);
     productAddOnAttachmentExists.mockResolvedValue(false);
     getProductAddOnAttachmentById.mockResolvedValue(attachmentResponse);
-    getSelectableProductAddOnAttachmentsByOrganizationId.mockResolvedValue([
+    getSelectableProductAddOnAttachmentsByStoreId.mockResolvedValue([
       attachmentResponse,
     ]);
     getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
@@ -102,13 +102,14 @@ describe("Add-On catalog service", () => {
       name: "Extra Cheese",
       price: 20,
       discount: 2,
+      status: "active",
     });
 
     expect(response.status).toBe("success");
     expect(response.data?.addOn.name).toBe("Extra Cheese");
     expect(response.data?.addOn.price).toBe(20);
     expect(response.data?.addOn.discount).toBe(2);
-    expect(response.data?.addOn.status).toBe("active");
+    expect(response.data?.addOn.status).toBe("inactive");
     expect(createAddOnRepo).toHaveBeenCalled();
   });
 
@@ -243,7 +244,7 @@ describe("Add-On catalog service", () => {
   });
 
   test("POS selectable attachments exclude inactive attachments even when add-on stays active", async () => {
-    getSelectableProductAddOnAttachmentsByOrganizationId.mockResolvedValue([]);
+    getSelectableProductAddOnAttachmentsByStoreId.mockResolvedValue([]);
 
     const response =
       await catalogService.getSelectableProductAddOnAttachmentsForDevice({

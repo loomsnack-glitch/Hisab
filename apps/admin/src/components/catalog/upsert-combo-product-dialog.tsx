@@ -161,7 +161,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                     ...shared,
                     price: Number(values.price),
                     discount: Number(values.discount ?? 0),
-                    status: "active" as const,
+                    status: "inactive" as const,
                 },
         );
     };

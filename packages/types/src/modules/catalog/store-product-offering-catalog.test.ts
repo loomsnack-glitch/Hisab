@@ -28,14 +28,14 @@ describe("Store Product Offering catalog overlay", () => {
     const products = overlayActiveStoreProductOfferings([burger, cake], [
       {
         productId: burger.id,
-        price: 175,
-        discount: 25,
+        effectivePrice: 175,
+        effectiveDiscount: 25,
         status: "active",
       },
       {
         productId: cake.id,
-        price: 250,
-        discount: 0,
+        effectivePrice: 250,
+        effectiveDiscount: 0,
         status: "inactive",
       },
     ]);
@@ -55,8 +55,8 @@ describe("Store Product Offering catalog overlay", () => {
       inactiveProductCodesWithoutActiveOffering([burger, cake], [
         {
           productId: burger.id,
-          price: 80,
-          discount: 5,
+          effectivePrice: 80,
+          effectiveDiscount: 5,
           status: "active",
         },
       ]),

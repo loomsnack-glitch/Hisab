@@ -43,7 +43,9 @@ import OrganizationSettingsPage from "@/pages/organization-settings-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
 import StoreWorkspacePage from "@/pages/store-workspace-page";
+import StoreAddOnOfferingsPage from "@/pages/store-add-on-offerings-page";
 import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
+import StoreCategoryPresentationsPage from "@/pages/store-category-presentations-page";
 import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -137,6 +139,8 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId" element={<StoreWorkspacePage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/products" element={<StoreProductOfferingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/add-ons" element={<StoreAddOnOfferingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/categories" element={<StoreCategoryPresentationsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/vendors" element={<StoreVendorAvailabilitiesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />

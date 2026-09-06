@@ -446,21 +446,48 @@ export const CreateProductSchema = CreateProductObjectSchema.refine(
   productCodeFieldsRefineMessage,
 );
 
-const UpdateProductObjectSchema = z.object({
-  categoryId: z.uuid("Invalid category id").optional(),
-  name: nameSchema.optional(),
-  imagePath: optionalImagePathSchema,
-  productCode: optionalProductCodeSchema,
-  productCodeKind: ProductCodeKindSchema.nullable().optional(),
-  unitId: z.uuid("Invalid unit id").optional(),
-  defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
-  allowCustomSellingQuantity: z.boolean().optional(),
-}).strict();
+const productCommercialDefaultsRefine = <
+  T extends { price?: number; discount?: number },
+>(
+  value: T,
+) => {
+  const price = value.price;
+  const discount = value.discount;
+  if (price === undefined || discount === undefined) {
+    return true;
+  }
+  return discount <= price;
+};
+
+const productCommercialDefaultsRefineMessage = {
+  message: "Discount cannot exceed price",
+  path: ["discount"] as (string | number)[],
+};
+
+const UpdateProductObjectSchema = z
+  .object({
+    categoryId: z.uuid("Invalid category id").optional(),
+    name: nameSchema.optional(),
+    price: priceSchema.optional(),
+    discount: discountSchema.optional(),
+    status: ProductStatusSchema.optional(),
+    imagePath: optionalImagePathSchema,
+    productCode: optionalProductCodeSchema,
+    productCodeKind: ProductCodeKindSchema.nullable().optional(),
+    unitId: z.uuid("Invalid unit id").optional(),
+    defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
+    allowCustomSellingQuantity: z.boolean().optional(),
+  })
+  .strict()
+  .refine(productCommercialDefaultsRefine, productCommercialDefaultsRefineMessage);
 
 export const UpdateProductSchema = UpdateProductObjectSchema.refine(
   (value) =>
     value.categoryId !== undefined ||
     value.name !== undefined ||
+    value.price !== undefined ||
+    value.discount !== undefined ||
+    value.status !== undefined ||
     value.imagePath !== undefined ||
     value.productCode !== undefined ||
     value.productCodeKind !== undefined ||
@@ -513,6 +540,9 @@ export const UpdateBundleProductSchema = z
   .object({
     categoryId: z.uuid("Invalid category id").optional(),
     name: nameSchema.optional(),
+    price: priceSchema.optional(),
+    discount: discountSchema.optional(),
+    status: ProductStatusSchema.optional(),
     imagePath: optionalImagePathSchema,
     components: z
       .array(BundleProductComponentInputSchema)
@@ -520,10 +550,14 @@ export const UpdateBundleProductSchema = z
       .optional(),
   })
   .strict()
+  .refine(productCommercialDefaultsRefine, productCommercialDefaultsRefineMessage)
   .refine(
     (value) =>
       value.categoryId !== undefined ||
       value.name !== undefined ||
+      value.price !== undefined ||
+      value.discount !== undefined ||
+      value.status !== undefined ||
       value.imagePath !== undefined ||
       value.components !== undefined,
     {
@@ -547,6 +581,9 @@ export const UpdateComboProductSchema = z
   .object({
     categoryId: z.uuid("Invalid category id").optional(),
     name: nameSchema.optional(),
+    price: priceSchema.optional(),
+    discount: discountSchema.optional(),
+    status: ProductStatusSchema.optional(),
     imagePath: optionalImagePathSchema,
     choiceGroups: z
       .array(ComboChoiceGroupInputSchema)
@@ -554,10 +591,14 @@ export const UpdateComboProductSchema = z
       .optional(),
   })
   .strict()
+  .refine(productCommercialDefaultsRefine, productCommercialDefaultsRefineMessage)
   .refine(
     (value) =>
       value.categoryId !== undefined ||
       value.name !== undefined ||
+      value.price !== undefined ||
+      value.discount !== undefined ||
+      value.status !== undefined ||
       value.imagePath !== undefined ||
       value.choiceGroups !== undefined,
     { message: "At least one field is required" },
@@ -825,13 +866,19 @@ export const UpdateProductAddOnAttachmentSchema = z
     },
   );
 
+const storeProductOfferingOverrideSchema = priceSchema.nullable();
+
 export const StoreProductOfferingDTOSchema = z.object({
   id: z.uuid("Invalid offering id"),
   organizationId: z.uuid("Invalid organization id"),
   storeId: z.uuid("Invalid store id"),
   productId: z.uuid("Invalid product id"),
-  price: priceSchema,
-  discount: discountSchema,
+  priceOverride: storeProductOfferingOverrideSchema,
+  discountOverride: storeProductOfferingOverrideSchema,
+  effectivePrice: priceSchema,
+  effectiveDiscount: discountSchema,
+  isPriceInherited: z.boolean(),
+  isDiscountInherited: z.boolean(),
   status: ProductStatusSchema,
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
@@ -844,18 +891,305 @@ export const StoreProductOfferingResponseDTOSchema =
     product: ProductResponseDTOSchema,
   });
 
+export const StoreProductOfferingOverrideConflictSchema = z.object({
+  storeId: z.uuid("Invalid store id"),
+  storeName: z.string().min(1),
+  effectivePrice: priceSchema,
+  effectiveDiscount: discountSchema,
+});
+
+export const StoreProductOfferingOverrideSummarySchema = z.object({
+  totalOfferings: z.number().int().nonnegative(),
+  fullyInherited: z.number().int().nonnegative(),
+  priceOverridden: z.number().int().nonnegative(),
+  discountOverridden: z.number().int().nonnegative(),
+  bothOverridden: z.number().int().nonnegative(),
+});
+
 export const UpdateStoreProductOfferingSchema = z
   .object({
-    price: priceSchema.optional(),
-    discount: discountSchema.optional(),
+    priceOverride: storeProductOfferingOverrideSchema.optional(),
+    discountOverride: storeProductOfferingOverrideSchema.optional(),
+    clearPriceOverride: z.boolean().optional(),
+    clearDiscountOverride: z.boolean().optional(),
     status: ProductStatusSchema.optional(),
   })
+  .strict()
   .refine(
     (value) =>
-      value.price !== undefined ||
-      value.discount !== undefined ||
+      value.priceOverride !== undefined ||
+      value.discountOverride !== undefined ||
+      value.clearPriceOverride === true ||
+      value.clearDiscountOverride === true ||
       value.status !== undefined,
     {
       message: "At least one field is required",
     },
-  );
+  )
+  .superRefine((value, context) => {
+    if (value.priceOverride !== undefined && value.clearPriceOverride) {
+      context.addIssue({
+        code: "custom",
+        path: ["clearPriceOverride"],
+        message: "Choose either a price override or clear it, not both",
+      });
+    }
+    if (value.discountOverride !== undefined && value.clearDiscountOverride) {
+      context.addIssue({
+        code: "custom",
+        path: ["clearDiscountOverride"],
+        message: "Choose either a discount override or clear it, not both",
+      });
+    }
+  });
+
+const storeAddOnOfferingOverrideSchema = priceSchema.nullable();
+
+export const StoreAddOnOfferingDTOSchema = z.object({
+  id: z.uuid("Invalid offering id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  addOnId: z.uuid("Invalid add-on id"),
+  priceOverride: storeAddOnOfferingOverrideSchema,
+  discountOverride: storeAddOnOfferingOverrideSchema,
+  effectivePrice: priceSchema,
+  effectiveDiscount: discountSchema,
+  isPriceInherited: z.boolean(),
+  isDiscountInherited: z.boolean(),
+  status: AddOnStatusSchema,
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const StoreAddOnOfferingResponseDTOSchema =
+  StoreAddOnOfferingDTOSchema.extend({
+    addOn: AddOnDTOSchema,
+  });
+
+export const StoreAddOnOfferingOverrideSummarySchema = z.object({
+  totalOfferings: z.number().int().nonnegative(),
+  fullyInherited: z.number().int().nonnegative(),
+  priceOverridden: z.number().int().nonnegative(),
+  discountOverridden: z.number().int().nonnegative(),
+  bothOverridden: z.number().int().nonnegative(),
+});
+
+export const UpdateStoreAddOnOfferingSchema = z
+  .object({
+    priceOverride: storeAddOnOfferingOverrideSchema.optional(),
+    discountOverride: storeAddOnOfferingOverrideSchema.optional(),
+    clearPriceOverride: z.boolean().optional(),
+    clearDiscountOverride: z.boolean().optional(),
+    status: AddOnStatusSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.priceOverride !== undefined ||
+      value.discountOverride !== undefined ||
+      value.clearPriceOverride === true ||
+      value.clearDiscountOverride === true ||
+      value.status !== undefined,
+    {
+      message: "At least one field is required",
+    },
+  )
+  .superRefine((value, context) => {
+    if (value.priceOverride !== undefined && value.clearPriceOverride) {
+      context.addIssue({
+        code: "custom",
+        path: ["clearPriceOverride"],
+        message: "Choose either a price override or clear it, not both",
+      });
+    }
+    if (value.discountOverride !== undefined && value.clearDiscountOverride) {
+      context.addIssue({
+        code: "custom",
+        path: ["clearDiscountOverride"],
+        message: "Choose either a discount override or clear it, not both",
+      });
+    }
+  });
+
+export const StoreCategoryPresentationDTOSchema = z.object({
+  id: z.uuid("Invalid presentation id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  categoryId: z.uuid("Invalid category id"),
+  visible: z.boolean(),
+  sortOrder: z.number().int().nonnegative(),
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const StoreCategoryPresentationResponseDTOSchema =
+  StoreCategoryPresentationDTOSchema.extend({
+    category: CategoryDTOSchema,
+  });
+
+export const UpdateStoreCategoryPresentationSchema = z
+  .object({
+    visible: z.boolean().optional(),
+    sortOrder: z.number().int().nonnegative().optional(),
+  })
+  .refine((value) => value.visible !== undefined || value.sortOrder !== undefined, {
+    message: "At least one field is required",
+  });
+
+export const ReorderStoreCategoryPresentationsSchema = z.object({
+  categoryIds: orderedIdsSchema,
+});
+
+export const CatalogCommercialItemTypeSchema = z.enum(["product", "add_on"]);
+
+export const CatalogCommercialOperationTypeSchema = z.enum([
+  "set_price_override",
+  "set_discount_override",
+  "clear_price_override",
+  "clear_discount_override",
+  "set_local_status",
+]);
+
+const catalogCommercialStoreIdsSchema = z
+  .array(z.uuid("Invalid store id"))
+  .min(1, "At least one Store is required");
+
+const catalogCommercialItemIdsSchema = z
+  .array(z.uuid("Invalid catalog item id"))
+  .min(1, "At least one catalog item is required");
+
+const catalogCommercialOfferingStateSchema = z.object({
+  priceOverride: priceSchema.nullable(),
+  discountOverride: discountSchema.nullable(),
+  effectivePrice: priceSchema,
+  effectiveDiscount: discountSchema,
+  isPriceInherited: z.boolean(),
+  isDiscountInherited: z.boolean(),
+  status: z.union([ProductStatusSchema, AddOnStatusSchema]),
+});
+
+export const CatalogCommercialOperationChangeSchema = z.object({
+  storeId: z.uuid("Invalid store id"),
+  storeName: z.string().min(1),
+  itemId: z.uuid("Invalid catalog item id"),
+  itemName: z.string().min(1),
+  offeringId: z.uuid("Invalid offering id"),
+  before: catalogCommercialOfferingStateSchema,
+  after: catalogCommercialOfferingStateSchema,
+  affectsOverride: z.boolean(),
+  hasChange: z.boolean(),
+});
+
+const catalogCommercialOperationBaseSchema = z.object({
+  itemType: CatalogCommercialItemTypeSchema,
+  operation: CatalogCommercialOperationTypeSchema,
+  storeIds: catalogCommercialStoreIdsSchema,
+  itemIds: catalogCommercialItemIdsSchema,
+  value: z.union([priceSchema, discountSchema, ProductStatusSchema, AddOnStatusSchema]).optional(),
+});
+
+const validateCatalogCommercialOperationValue = (
+  value: z.infer<typeof catalogCommercialOperationBaseSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const { operation, value: operationValue } = value;
+
+  if (
+    operation === "set_price_override" &&
+    (operationValue === undefined || typeof operationValue !== "number")
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Price is required for set price override operations",
+      path: ["value"],
+    });
+  }
+
+  if (
+    operation === "set_discount_override" &&
+    (operationValue === undefined || typeof operationValue !== "number")
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Discount is required for set discount override operations",
+      path: ["value"],
+    });
+  }
+
+  if (operation === "set_local_status") {
+    if (operationValue === undefined || typeof operationValue !== "string") {
+      ctx.addIssue({
+        code: "custom",
+        message: "Status is required for set local status operations",
+        path: ["value"],
+      });
+      return;
+    }
+
+    const statusSchema =
+      value.itemType === "product" ? ProductStatusSchema : AddOnStatusSchema;
+    const parsed = statusSchema.safeParse(operationValue);
+    if (!parsed.success) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Invalid local status for the selected catalog item type",
+        path: ["value"],
+      });
+    }
+  }
+
+  if (
+    (operation === "clear_price_override" || operation === "clear_discount_override") &&
+    operationValue !== undefined
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Clear override operations must not include a value",
+      path: ["value"],
+    });
+  }
+};
+
+export const PreviewCatalogCommercialOperationSchema =
+  catalogCommercialOperationBaseSchema.superRefine(validateCatalogCommercialOperationValue);
+
+export const ApplyCatalogCommercialOperationSchema =
+  catalogCommercialOperationBaseSchema
+    .extend({
+      confirmed: z.boolean(),
+    })
+    .superRefine(validateCatalogCommercialOperationValue);
+
+export const CatalogCommercialOperationAuditDTOSchema = z.object({
+  id: z.uuid("Invalid audit id"),
+  organizationId: z.uuid("Invalid organization id"),
+  itemType: CatalogCommercialItemTypeSchema,
+  operation: CatalogCommercialOperationTypeSchema,
+  storeIds: catalogCommercialStoreIdsSchema,
+  itemIds: catalogCommercialItemIdsSchema,
+  actorId: z.uuid("Invalid actor id"),
+  createdAt: dtoDateSchema,
+  changes: z.array(CatalogCommercialOperationChangeSchema),
+});
+
+export const CatalogCommercialOperationPreviewResponseSchema = z.object({
+  itemType: CatalogCommercialItemTypeSchema,
+  operation: CatalogCommercialOperationTypeSchema,
+  storeIds: catalogCommercialStoreIdsSchema,
+  itemIds: catalogCommercialItemIdsSchema,
+  requiresConfirmation: z.boolean(),
+  changes: z.array(CatalogCommercialOperationChangeSchema),
+});
+
+export const CatalogCommercialOperationApplyResponseSchema = z.object({
+  audit: CatalogCommercialOperationAuditDTOSchema,
+  appliedChangeCount: z.number().int().nonnegative(),
+});
+
+export const CatalogCommercialOperationAuditsListResponseSchema = z.object({
+  audits: z.array(CatalogCommercialOperationAuditDTOSchema),
+});

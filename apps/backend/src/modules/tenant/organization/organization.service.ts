@@ -477,6 +477,7 @@ export const createStore = async (
   try {
     await pg.begin(async (tx) => {
       await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      await catalogRepository.lockStoreCategoryPresentationTopology(organizationId, tx);
       await vendorsRepository.lockStoreVendorAvailabilityTopology(organizationId, tx);
       store = await organizationRepository.createStore(
         {
@@ -493,6 +494,16 @@ export const createStore = async (
       }
 
       await catalogService.seedInactiveOfferingsForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+      await catalogService.seedInactiveAddOnOfferingsForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+      await catalogService.seedPresentationsForNewStore(tx, {
         organizationId,
         storeId: store.id,
         createdBy: userId,

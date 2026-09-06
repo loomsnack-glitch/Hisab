@@ -7,7 +7,7 @@ type CatalogProductForStoreBilling = Pick<
 
 type OfferingForStoreBilling = Pick<
   StoreProductOfferingResponseDTO,
-  "productId" | "price" | "discount" | "status"
+  "productId" | "effectivePrice" | "effectiveDiscount" | "status"
 >;
 
 export const overlayActiveStoreProductOfferings = <T extends CatalogProductForStoreBilling>(
@@ -29,8 +29,8 @@ export const overlayActiveStoreProductOfferings = <T extends CatalogProductForSt
     return [
       {
         ...product,
-        price: offering.price,
-        discount: offering.discount,
+        price: offering.effectivePrice,
+        discount: offering.effectiveDiscount,
         status: "active" as const,
       },
     ];

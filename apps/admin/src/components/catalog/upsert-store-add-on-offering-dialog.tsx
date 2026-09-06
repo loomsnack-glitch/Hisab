@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateStoreProductOffering } from "@repo/services";
+import { updateStoreAddOnOffering } from "@repo/services";
 import {
-    ProductStatusSchema,
-    type StoreProductOfferingResponseDTO,
+    AddOnStatusSchema,
+    type StoreAddOnOfferingResponseDTO,
 } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
@@ -19,7 +19,7 @@ import {
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
-import { Package2, Pencil } from "lucide-react";
+import { Pencil, Puzzle } from "lucide-react";
 import { toast } from "sonner";
 
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
@@ -54,27 +54,27 @@ const offeringFormSchema = z.object({
         )
         .transform((value) => (value === "" ? 0 : Number(value)))
         .pipe(z.number().min(0, "Discount must be 0 or more")),
-    status: ProductStatusSchema,
+    status: AddOnStatusSchema,
 });
 
 type OfferingFormInput = z.input<typeof offeringFormSchema>;
 
-type UpsertStoreProductOfferingDialogProps = {
+type UpsertStoreAddOnOfferingDialogProps = {
     organizationId: string;
     storeId: string;
-    offering: StoreProductOfferingResponseDTO;
+    offering: StoreAddOnOfferingResponseDTO;
     trigger?: React.ReactElement;
 };
 
-const UpsertStoreProductOfferingDialog = ({
+const UpsertStoreAddOnOfferingDialog = ({
     organizationId,
     storeId,
     offering,
     trigger,
-}: UpsertStoreProductOfferingDialogProps) => {
+}: UpsertStoreAddOnOfferingDialogProps) => {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
-    const statusOptions = ProductStatusSchema.options.map((status) => ({
+    const statusOptions = AddOnStatusSchema.options.map((status) => ({
         label: status.charAt(0).toUpperCase() + status.slice(1),
         value: status,
     }));
@@ -101,7 +101,7 @@ const UpsertStoreProductOfferingDialog = ({
 
     const mutation = useMutation({
         mutationFn: async (data: z.output<typeof offeringFormSchema>) =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
+            updateStoreAddOnOffering(organizationId, storeId, offering.id, {
                 priceOverride: data.price,
                 discountOverride: data.discount,
                 status: data.status,
@@ -113,18 +113,18 @@ const UpsertStoreProductOfferingDialog = ({
             }
             toast.success(response.message);
             queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
+                queryKey: catalogKeys.storeAddOnOfferings(organizationId, storeId),
             });
             setOpen(false);
         },
         onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to save Store Product Offering");
+            toast.error(error.message ?? "Unable to save Store Add-On Offering");
         },
     });
 
     const clearPriceOverrideMutation = useMutation({
         mutationFn: async () =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
+            updateStoreAddOnOffering(organizationId, storeId, offering.id, {
                 clearPriceOverride: true,
             }),
         onSuccess: (response) => {
@@ -134,7 +134,7 @@ const UpsertStoreProductOfferingDialog = ({
             }
             toast.success("Price now inherits the Organization default");
             queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
+                queryKey: catalogKeys.storeAddOnOfferings(organizationId, storeId),
             });
             setOpen(false);
         },
@@ -145,7 +145,7 @@ const UpsertStoreProductOfferingDialog = ({
 
     const clearDiscountOverrideMutation = useMutation({
         mutationFn: async () =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
+            updateStoreAddOnOffering(organizationId, storeId, offering.id, {
                 clearDiscountOverride: true,
             }),
         onSuccess: (response) => {
@@ -155,7 +155,7 @@ const UpsertStoreProductOfferingDialog = ({
             }
             toast.success("Discount now inherits the Organization default");
             queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
+                queryKey: catalogKeys.storeAddOnOfferings(organizationId, storeId),
             });
             setOpen(false);
         },
@@ -168,8 +168,8 @@ const UpsertStoreProductOfferingDialog = ({
         mutation.mutate(values);
     };
 
-    const orgDefaultPrice = offering.product.price;
-    const orgDefaultDiscount = offering.product.discount;
+    const orgDefaultPrice = offering.addOn.price;
+    const orgDefaultDiscount = offering.addOn.discount;
 
     return (
         <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
@@ -185,16 +185,16 @@ const UpsertStoreProductOfferingDialog = ({
             />
             <DialogContent className="max-w-lg">
                 <DialogHeader
-                    icon={<Package2 className="size-5" />}
-                    title="Edit Store price"
+                    icon={<Puzzle className="size-5" />}
+                    title="Edit Store add-on"
                     subtitle="Set local overrides or return to Organization defaults. Menu status is Store-specific."
                 />
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field>
-                        <FieldLabel>Catalog Product</FieldLabel>
+                        <FieldLabel>Add-on</FieldLabel>
                         <FieldContent>
                             <div className="flex h-11 items-center rounded-xl border border-border/60 bg-muted/20 px-3 text-sm">
-                                {offering.product.name}
+                                {offering.addOn.name}
                             </div>
                         </FieldContent>
                     </Field>
@@ -207,6 +207,9 @@ const UpsertStoreProductOfferingDialog = ({
                             align="left"
                             singleTone="foreground"
                         />
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Global publication: {offering.addOn.status === "active" ? "Published" : "Paused"}
+                        </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Controller
@@ -327,4 +330,4 @@ const UpsertStoreProductOfferingDialog = ({
     );
 };
 
-export default UpsertStoreProductOfferingDialog;
+export default UpsertStoreAddOnOfferingDialog;
