@@ -20,7 +20,6 @@ describe("Admin mobile navigation", () => {
         const mainIds = getVisibleAdminMainDestinations(withOrg).map((destination) => destination.id);
 
         expect(mainIds).toEqual([
-            "organizations",
             "stores",
             "products",
             "units",
@@ -128,12 +127,12 @@ describe("Admin mobile navigation", () => {
         expect(primaryIds).toEqual(["stores", "products", "billing"]);
     });
 
-    test("falls back to Organizations when no organization is available", () => {
+    test("shows only global destinations when no organization is available", () => {
         const primary = getVisibleAdminPrimaryMobileDestinations(withoutOrg);
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withoutOrg).map((destination) => destination.id);
 
-        expect(primary.map((destination) => destination.id)).toEqual(["organizations"]);
-        expect(workspaceIds).toEqual(["organizations", "appearance"]);
+        expect(primary).toEqual([]);
+        expect(workspaceIds).toEqual(["appearance"]);
     });
 
     test("marks More as active on secondary pages, not on primary tabs", () => {
@@ -142,7 +141,6 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/reports`, withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/settings`, withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive("/appearance", withOrg)).toBe(true);
-        expect(isAdminMoreDestinationActive("/organizations", withOrg)).toBe(true);
     });
 
     test("renders the primary tabs and organization avatar on the More tab", () => {
@@ -174,7 +172,7 @@ describe("Admin mobile navigation", () => {
             </MemoryRouter>,
         );
 
-        expect(markup).toContain('href="/organizations"');
+        expect(markup).toContain('aria-label="Organization and more pages"');
         expect(markup).not.toContain("/stores");
         expect(markup).not.toContain("/billing");
         expect(markup).not.toContain("/products");

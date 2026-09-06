@@ -248,12 +248,7 @@ const AppSidebar = ({
                                     </p>
                                 )}
                                 <div className="space-y-0.5">
-                                    {section.items.map((item) =>
-                                        renderNavItem(
-                                            item,
-                                            item.id === "organizations" ? organizations.length : undefined,
-                                        ),
-                                    )}
+                                    {section.items.map((item) => renderNavItem(item))}
                                 </div>
                             </div>
                         );

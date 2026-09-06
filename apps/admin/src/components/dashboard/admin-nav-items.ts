@@ -3,7 +3,6 @@ import {
     Armchair,
     Banknote,
     BarChart3,
-    Building2,
     Contact,
     Package2,
     ReceiptText,
@@ -68,15 +67,6 @@ export type VisibleAdminNavArgs = {
 };
 
 const adminDestinationDefs: AdminNavDestinationDef[] = [
-    {
-        id: "organizations",
-        label: "Organizations",
-        icon: Building2,
-        requiresOrganization: false,
-        group: "organization",
-        getPath: () => "/organizations",
-        isActive: (pathname) => pathname === "/organizations",
-    },
     {
         id: "stores",
         label: "Stores",
@@ -268,7 +258,7 @@ export const getVisibleAdminPrimaryMobileDestinations = (args: VisibleAdminNavAr
         return primary;
     }
 
-    return visible.filter((destination) => destination.id === "organizations");
+    return [];
 };
 
 export const isAdminMoreDestinationActive = (pathname: string, args: VisibleAdminNavArgs) => {
