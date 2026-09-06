@@ -1,5 +1,6 @@
 import { configureMobileApi } from "./src/lib/api-config";
 import "./src/lib/storage";
+import "./src/lib/appearance";
 import "./global.css";
 
 import { StatusBar } from "expo-status-bar";

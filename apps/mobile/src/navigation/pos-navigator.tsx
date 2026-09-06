@@ -12,6 +12,7 @@ import SaleDetailsScreen from "../screens/sale-details-screen";
 import CustomersScreen from "../screens/customers-screen";
 import CustomerDetailsScreen from "../screens/customer-details-screen";
 import ReportsScreen from "../screens/reports-screen";
+import SettingsScreen from "../screens/settings-screen";
 
 export type PosStackParamList = {
     PosHome: undefined;
@@ -43,7 +44,7 @@ const PosNavigator = () => {
             <Stack.Screen name="Customers" component={CustomersScreen} />
             <Stack.Screen name="CustomerDetails" component={CustomerDetailsScreen} />
             <Stack.Screen name="Reports" component={ReportsScreen} />
-            <Stack.Screen name="Settings" component={PosDestinationScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Tables" component={PosDestinationScreen} />
         </Stack.Navigator>
     );

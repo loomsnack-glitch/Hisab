@@ -62,6 +62,24 @@ describe("localization boundary", () => {
         "productsSold",
         "noProductsSold",
     ] as const;
+    const settingsKeys = [
+        "settingsSubtitle",
+        "settingsTheme",
+        "themeLight",
+        "themeDark",
+        "themeSystem",
+        "themeActive",
+        "settingsDisplaySize",
+        "displayStandard",
+        "displayLarge",
+        "settingsPrinter",
+        "printerSettings",
+        "printerSettingsDeferred",
+        "storeInformation",
+        "organizationName",
+        "storeName",
+        "deviceName",
+    ] as const;
 
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);
@@ -82,12 +100,15 @@ describe("localization boundary", () => {
         expect(resolveAppLanguage("hi")).toBe("hi");
     });
 
-    it("provides Bills, Reports, and Sale Details copy in every interface language", () => {
+    it("provides Bills, Reports, Settings, and Sale Details copy in every interface language", () => {
         for (const language of APP_LANGUAGES) {
             for (const key of billsKeys) {
                 expect(appResources[language].pos[key]).toBeTruthy();
             }
             for (const key of reportsKeys) {
+                expect(appResources[language].pos[key]).toBeTruthy();
+            }
+            for (const key of settingsKeys) {
                 expect(appResources[language].pos[key]).toBeTruthy();
             }
         }

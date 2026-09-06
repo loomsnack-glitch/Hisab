@@ -573,3 +573,136 @@ Verification evidence:
 Subphase review result: approved with the named pre-existing typecheck,
 native/live validation, and Product value contract follow-ups. The next
 subphase is 5.5 Settings and Appearance.
+
+## 5.5 — Settings and Appearance
+
+### Plan
+
+User-facing outcome: an authorized POS user can adjust the small set of daily
+preferences needed for comfortable use, inspect non-sensitive Store and Device
+identity, see where printer setup belongs, and log out safely.
+
+Implementation scope:
+
+- Replace the Settings placeholder with a dedicated Settings screen.
+- Provide English, Gujarati, and Hindi selection through the existing
+  i18next/MMKV language boundary.
+- Provide Light, Dark, and System theme selection through the existing Uniwind
+  theme setter and persist the preference in the existing MMKV preference
+  store, including restoration during app startup.
+- Provide Standard and Large display-size choices and persist the choice in
+  MMKV for the approved preference boundary.
+- Show a printer-settings entry state that clearly hands hardware discovery,
+  connection, disconnection, and test print to Phase 6; do not add Bluetooth
+  code or claim hardware support in this phase.
+- Show Organization, Store, and Device names/identity fields without secrets.
+- Reuse one session logout mutation for the POS shell and Settings, clearing
+  the existing session/cart/payment/completed-Sale state on success.
+- Add translated labels, selections, printer deferral, and session states in
+  all three approved interface languages.
+
+Acceptance criteria:
+
+1. Settings opens from the authenticated POS workspace and exposes all three
+   approved interface-language choices.
+2. Language changes immediately through i18next and persist through MMKV.
+3. Light, Dark, and System choices update Uniwind and persist; the selected
+   preference is restored on app startup.
+4. Standard and Large display-size choices persist and are visibly selectable
+   without reducing the approved touch-target minimum.
+5. Store and Device information is visible without a Device secret or token.
+6. Printer setup has a clear Phase 6 entry state and does not perform
+   unsupported hardware actions in Phase 5.
+7. Logout uses the existing server/session boundary and preserves active state
+   on a failed logout.
+8. No backend, printer, or public API contract changes are introduced.
+
+Non-goals:
+
+- Bluetooth discovery, pairing, connection, disconnection, or test printing;
+  those remain Phase 6.
+- Advanced receipt customization, cashier shortcuts, account management, or
+  changing Store/Device identity.
+- Reworking every existing screen's typography; the display-size preference is
+  persisted at this boundary and its full visual calibration remains a
+  device-validation follow-up.
+
+Dependencies and public seams:
+
+- Existing `POS_PREFERENCE_KEYS`, MMKV-backed `posStorage`, `setAppLanguage`,
+  i18next provider, Uniwind runtime, `DeviceSessionDTO`, and `deviceLogout`.
+- Existing POS state cleanup and lifecycle transitions used by the POS shell.
+
+Test strategy:
+
+- Pure appearance-boundary tests for supported values, invalid-value fallback,
+  and preference defaults.
+- Focused localization coverage for Settings copy in English, Gujarati, and
+  Hindi.
+- Run `bun run --cwd apps/mobile test`, mobile `tsc --noEmit` only for
+  lightweight type feedback, and `git diff --check`.
+- Do not run builds, Expo, Android, emulator, device, live API, share-sheet,
+  printer, or hardware commands while planned POS mobile phases remain
+  incomplete.
+
+### Internal plan review
+
+Reviewed on 2026-09-07 against `spec.md` Settings decisions, existing MMKV,
+i18next, Uniwind, Device Session, and logout boundaries, `CONTEXT.md`, ADR
+0001, and `AGENTS.md` validation safety.
+
+The plan reuses existing persistence and runtime boundaries, keeps printer
+hardware in Phase 6, avoids secrets, and extracts the already-approved logout
+behavior so the shell and Settings cannot drift. Display size is recorded and
+selectable now while broad device typography calibration remains an explicit
+follow-up rather than an unverified claim.
+
+Plan review result: approved for implementation with the named printer and
+device-visual follow-ups.
+
+### 5.5 Implementation and review result
+
+Implemented on 2026-09-07:
+
+- Replaced the Settings placeholder with a dedicated Settings workspace.
+- Added immediate English, Gujarati, and Hindi switching through the existing
+  i18next language setter and MMKV preference.
+- Added Light, Dark, and System theme selection using Uniwind, with persisted
+  preference restoration during app startup.
+- Added Standard and Large display-size preference selection backed by MMKV;
+  the broad visual calibration remains a device-validation follow-up.
+- Added Store, Device, and Organization identity display without secrets.
+- Added a clear printer-settings entry state that explains the Phase 6
+  Bluetooth implementation boundary and performs no unsupported hardware work.
+- Extracted the existing logout mutation into a shared POS hook and reused it
+  from both the POS shell and Settings so success cleanup and failed-logout
+  recovery remain consistent.
+- Added focused appearance-boundary tests and Settings translation coverage.
+
+Review findings and fixes:
+
+- Preserved the existing server logout behavior and all Cart, Payment, and
+  completed-Sale cleanup while removing duplicate shell code.
+- Used Uniwind's reactive theme hook for the active-theme presentation so
+  system-theme changes are reflected while Settings is open.
+- Validated persisted preference values through explicit allowlists with safe
+  defaults; invalid MMKV values cannot select an unsupported theme or size.
+- Kept printer discovery, pairing, connection, disconnection, and test print
+  out of Phase 5 as required by the Phase 6 boundary.
+- Confirmed no Device secret, auth token, backend contract, or printer native
+  dependency was added.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 98 passed, 0 failed, 423 assertions.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: all new
+  Settings/appearance files typecheck; the command remains red only on the
+  pre-existing missing `@repo/assets/services/whatsapp.webp` import in
+  `login-screen.tsx`.
+- Build, Expo, Android, emulator, device, live API, share-sheet, printer, and
+  hardware checks were intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the named pre-existing typecheck,
+printer, and device-visual validation follow-ups. Phase 5 is ready for its
+phase-level closeout review.

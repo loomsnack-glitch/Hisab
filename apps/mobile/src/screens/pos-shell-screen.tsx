@@ -1,21 +1,16 @@
 import { useEffect, useRef } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
-import { useMutation } from "@tanstack/react-query";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
-import { clearAuthToken, deviceLogout } from "@repo/services";
 
 import PrimaryButton from "../components/primary-button";
 import { PosCard } from "../components/pos-ui";
 import { getPosDestinations, type PosDestination } from "../lib/pos-navigation-boundary";
 import type { PosTranslationKey } from "../lib/localization-boundary";
-import { posStorage } from "../lib/storage";
-import { clearPosCart } from "../store/pos-cart.store";
-import { clearPosPayments } from "../store/pos-payment.store";
-import { clearPosCompletedSale } from "../store/pos-sale-complete.store";
 import type { PosStackParamList } from "../navigation/pos-navigator";
-import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
+import { usePosSessionSnapshot } from "../store/pos-session.store";
+import { usePosLogout } from "../hooks/use-pos-logout";
 
 type PosShellScreenProps = NativeStackScreenProps<PosStackParamList, "PosHome">;
 
@@ -34,34 +29,7 @@ const PosShellScreen = ({ navigation }: PosShellScreenProps) => {
     const { t: tCommon } = useTranslation("common");
     const { t: tPos } = useTranslation("pos");
     const session = usePosSessionSnapshot().session;
-    const dispatch = usePosSessionDispatch();
-
-    const logoutMutation = useMutation({
-        mutationFn: deviceLogout,
-        onMutate: () => {
-            dispatch({ type: "LOGOUT_STARTED" });
-        },
-        onSuccess: async (response) => {
-            if (response.status !== "success") {
-                dispatch({ type: "LOGOUT_FAILED", message: response.message });
-                Alert.alert(tCommon("logoutFailedTitle"), tCommon("genericError"));
-                return;
-            }
-
-            await clearAuthToken();
-            await posStorage.clearSession();
-            clearPosCart();
-            clearPosPayments();
-            clearPosCompletedSale();
-            dispatch({ type: "LOGOUT_COMPLETED" });
-            Alert.alert(tCommon("loggedOutTitle"), tCommon("loggedOutMessage"));
-        },
-        onError: () => {
-            const message = tCommon("genericError");
-            dispatch({ type: "LOGOUT_FAILED", message });
-            Alert.alert(tCommon("logoutFailedTitle"), message);
-        },
-    });
+    const logoutMutation = usePosLogout();
 
     const destinations = getPosDestinations(session);
 
