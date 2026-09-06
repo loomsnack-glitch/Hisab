@@ -1,5 +1,5 @@
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration, type PosCartDiscount } from "../lib/pos-cart-boundary";
+import { getCartDisplayTotals, getCartItemCount, normalizePosCartCustomer, type PosCartConfiguration, type PosCartCustomer, type PosCartDiscount, type PosCartItem } from "../lib/pos-cart-boundary";
 import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 
@@ -75,6 +75,11 @@ export const usePosCart = () => {
         setCompletionRequestId: (nextCompletionRequestId: string) => {
             if (scopeKey) {
                 usePosCartStore.getState().setCompletionRequestId(scopeKey, nextCompletionRequestId);
+            }
+        },
+        restoreDraft: (items: PosCartItem[], nextCustomer: PosCartCustomer | null, nextDiscount: PosCartDiscount | null, nextDraftSaleId: string) => {
+            if (scopeKey) {
+                usePosCartStore.getState().restoreDraft(scopeKey, items, nextCustomer, nextDiscount, nextDraftSaleId);
             }
         },
         clearDraftSale: () => {

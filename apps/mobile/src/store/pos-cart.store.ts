@@ -29,6 +29,7 @@ type PosCartStore = {
     setDraftSaleId: (scopeKey: string, draftSaleId: string | null) => void;
     setDraftRequestId: (scopeKey: string, draftRequestId: string) => void;
     setCompletionRequestId: (scopeKey: string, completionRequestId: string) => void;
+    restoreDraft: (scopeKey: string, items: PosCartItem[], customer: PosCartCustomer | null, discount: PosCartDiscount | null, draftSaleId: string) => void;
     clearDraftSale: (scopeKey: string) => void;
     clear: () => void;
 };
@@ -99,6 +100,10 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
         set((state) => state.scopeKey !== scopeKey ? state : { draftRequestId }),
     setCompletionRequestId: (scopeKey, completionRequestId) =>
         set((state) => state.scopeKey !== scopeKey ? state : { completionRequestId }),
+    restoreDraft: (scopeKey, items, customer, discount, draftSaleId) =>
+        set((state) => state.scopeKey !== null && state.scopeKey !== scopeKey
+            ? state
+            : { scopeKey, items, customer, discount, draftSaleId, draftRequestId: null, completionRequestId: null }),
     clearDraftSale: (scopeKey) =>
         set((state) => state.scopeKey !== scopeKey
             ? state

@@ -17,6 +17,7 @@ export const usePosSales = (filters: PosBillsFilters) => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
     const query = useMemo(() => buildPosBillsQuery(filters, today), [
+        filters.status,
         filters.date,
         filters.paymentMethod,
         filters.paymentStatus,

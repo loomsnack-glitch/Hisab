@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { buildPosBillsQuery, getPosTodayBounds, posBillsKeys, unwrapPosSalesResponse, type PosBillsFilters } from "./pos-bills-boundary";
 
 const filters: PosBillsFilters = {
+    status: "completed",
     date: "today",
     paymentStatus: "due",
     paymentMethod: "upi",
@@ -39,6 +40,7 @@ describe("POS Bills boundary", () => {
 
     it("omits optional filters for the default all-values selection", () => {
         expect(buildPosBillsQuery({
+            status: "completed",
             date: "all",
             paymentStatus: "all",
             paymentMethod: "all",

@@ -1,6 +1,6 @@
 # POS Mobile App — Phase 5 Execution Plan and Review Log
 
-Status: Phase 5 in progress — 5.1 Bills list and filters completed with follow-up
+Status: Phase 5 in progress — 5.2 Sale Details and Draft recovery completed with follow-up
 Phase: 5 — Bills and supporting workspaces
 Scope: Android-only Ganatri POS mobile application
 Started: 2026-09-06
@@ -207,12 +207,148 @@ Subphase review result: approved with the named pre-existing typecheck and
 native/live validation follow-ups. The next subphase is 5.2 Sale Details and
 Draft recovery.
 
+## 5.2 — Sale Details and Draft recovery
+
+### Plan
+
+User-facing outcome: from Bills, a cashier can inspect the complete server Sale
+or switch to Drafts, reopen a saved Draft in the existing Cart flow, and safely
+discard a Draft after confirmation. Receipt preview and Android share remain
+available for completed Sales using the existing English digital-receipt
+boundary.
+
+Implementation scope:
+
+- Replace the 5.1 Sale Details seam with a server-backed Sale Details screen
+  using `getPosSale` and a scope-aware query key.
+- Show Sale identity, date/time, Customer or Walk-in, line items, configured
+  component names, subtotal/discount/total, Payment rows, and authoritative
+  Payment status.
+- Add completed-Sale receipt preview and share actions by reusing the existing
+  `pos-receipt-boundary`; these actions remain read-only.
+- Add a Drafts view from Bills using the existing Sales list with
+  `status: "draft"`, preserving Draft separation from completed Bills.
+- Add Draft Details actions to resume or discard. Resume must resolve Draft
+  product IDs against the current Store Device Catalog before writing the
+  existing scoped Cart state; an unavailable Product or incomplete
+  configuration must show a recoverable error rather than inventing prices or
+  silently dropping lines.
+- Keep the existing Draft identity and request-id boundaries when resuming;
+  do not create a replacement Draft during inspection or resume.
+- Confirm destructive Draft discard, invalidate relevant Sales/Draft queries,
+  and return to the correct Bills view after successful actions.
+
+Acceptance criteria:
+
+1. Tapping a completed Sale from Bills loads its server-authoritative details
+   and shows line items, totals, Customer/Walk-in, and Payment status.
+2. Completed Sale receipt preview/share work without changing Sale data and
+   preserve the English-only receipt content rule.
+3. Drafts are discoverable separately from completed Bills and are never shown
+   as Due completed Sales.
+4. A valid Draft can be resumed into the existing Cart with its Customer,
+   discount, configured selections, and Draft ID preserved.
+5. An invalid or stale Draft is not partially resumed; the cashier gets a clear
+   recoverable error and the Draft remains intact.
+6. Draft discard requires confirmation, deletes only the selected Draft, and
+   refreshes the Draft view after success.
+7. Sale Details and Draft actions remain scoped to the active Organization,
+   Store, and Device and do not add a backend contract.
+
+Non-goals:
+
+- Editing a completed Sale, collecting a Due balance, voiding/replacing a Sale,
+  or changing Payment data.
+- Bluetooth printing; printer actions remain Phase 6.
+- Offline Draft synchronization or recovery across Devices.
+
+Dependencies and public seams:
+
+- Existing `getPosSale`, `getPosSales`, Draft create/update/delete services,
+  `usePosDraftActions`, `usePosCatalog`, Cart store, and receipt/share boundary.
+- Typed `SaleDetails: { saleId: string }` route created in 5.1.
+- Existing server Sale Detail DTO and configured item snapshots.
+
+Test strategy:
+
+- Pure tests for Draft-to-Cart hydration, configuration completeness, and
+  rejection of missing Catalog Products.
+- Focused tests for detail response unwrapping, Draft status query separation,
+  scoped keys, and read-only receipt action reuse.
+- Run mobile focused tests, `tsc --noEmit` only for lightweight type feedback,
+  and `git diff --check`. Do not run builds, Expo, Android, emulator, device,
+  live API, share-sheet, or hardware commands.
+
+Risks and rollback:
+
+- Server Draft snapshots may reference archived Products or incomplete combo
+  groups; resume must fail atomically and retain the Draft.
+- Query invalidation must not clear the current Cart or Draft identity until a
+  resume has succeeded.
+- Keep completed-Sale detail and Draft recovery transformations in pure
+  boundaries so this subphase can be reverted without changing checkout.
+
+### Internal plan review
+
+Reviewed on 2026-09-06 against `spec.md` sections 6, 7, 18, and 19, the Phase 5
+roadmap, existing POS Sales/Draft/Catalog services, current Cart state, receipt
+boundary, `CONTEXT.md`, ADR 0001, ADR 0003, and `AGENTS.md` validation safety.
+
+The plan keeps completed Sales and Draft Sales separate, preserves server
+authority and Store Device scope, reuses the existing Cart and receipt seams,
+and adds no product or public API decision. Atomic Draft hydration is required
+to avoid silently losing stale configured lines.
+
+Plan review result: approved for implementation.
+
+### 5.2 Implementation and review result
+
+Implemented on 2026-09-06:
+
+- Replaced the Sale Details seam with a scoped `getPosSale` query and a full
+  read-only detail screen for completed, Draft, and voided Sales.
+- Added server-detail line items, configured component presentation, Customer
+  or snapshot Walk-in fallback, totals, Payment rows, authoritative status, and
+  English receipt preview/share for completed Sales.
+- Added a separate Drafts view in Bills backed by `status: "draft"`; completed
+  Bills remain explicitly queried with `status: "completed"`.
+- Added atomic Draft-to-Cart hydration against the current Product Catalog and
+  active Combo/Add-on configuration. Missing Products, stale Add-ons/options,
+  and incomplete combo groups leave the Draft untouched and show a recoverable
+  error.
+- Preserved the Draft Sale ID in the scoped Cart, guarded restoration against a
+  changed active scope, and confirmed before replacing non-empty Cart work.
+- Added confirmed Draft discard, scoped query invalidation, and return to Bills
+  after successful deletion. Voided Sales remain read-only.
+
+Review findings and fixes:
+
+- Added the current configuration boundary and handled fixed bundle components
+  without incorrectly requiring a choice-group ID.
+- Suppressed stale detail actions when the detail refetch fails.
+- Fixed Draft-view filter reset to retain the all-dates Draft query.
+- Added focused tests for atomic recovery, missing data, response failures,
+  detail scope keys, every translation, and active Cart scope protection.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 90 passed, 0 failed.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: the Phase 5.2
+  files typecheck; the command remains red only on the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` import in `login-screen.tsx`.
+- Build, Expo, Android, emulator, device, live API, share-sheet, and hardware
+  checks were intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the named pre-existing typecheck and
+native/live validation follow-ups. The next subphase is 5.3 Customer Directory.
+
 ## Subphase status
 
 | Subphase | Status | Evidence / follow-up |
 | --- | --- | --- |
 | 5.1 Bills list and filters | Completed with follow-up | 84 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
-| 5.2 Sale Details and Draft recovery | Not started | Depends on Bills navigation and Sale data boundary |
+| 5.2 Sale Details and Draft recovery | Completed with follow-up | 90 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.3 Customer Directory | Not started | Uses existing Customer services and remains separate from billing |
 | 5.4 Reports | Not started | Read-only summary and Product Sales Summary |
 | 5.5 Settings and Appearance | Not started | Uses existing localization, storage, and session boundaries |

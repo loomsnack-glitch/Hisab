@@ -1,10 +1,12 @@
 import type { PaymentMethod, PaymentStatus, SalesListQuery, SalesListResponse, ServiceResponse } from "@repo/types";
 
 export type PosBillsDateFilter = "today" | "all";
+export type PosBillsStatusFilter = "completed" | "draft";
 export type PosBillsPaymentStatusFilter = "all" | Exclude<PaymentStatus, "pending"> | "due";
 export type PosBillsPaymentMethodFilter = "all" | PaymentMethod;
 
 export type PosBillsFilters = {
+    status: PosBillsStatusFilter;
     date: PosBillsDateFilter;
     paymentStatus: PosBillsPaymentStatusFilter;
     paymentMethod: PosBillsPaymentMethodFilter;
@@ -33,7 +35,7 @@ export const buildPosBillsQuery = (
     return {
         limit: 30,
         sort: "newest",
-        status: "completed",
+        status: filters.status,
         search: filters.search.trim() || undefined,
         paymentStatus,
         paymentMethod: filters.paymentMethod === "all" ? undefined : filters.paymentMethod,

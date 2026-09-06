@@ -10,6 +10,7 @@ import {
     type PosBillsDateFilter,
     type PosBillsPaymentMethodFilter,
     type PosBillsPaymentStatusFilter,
+    type PosBillsStatusFilter,
 } from "../lib/pos-bills-boundary";
 import { getPosPaymentStatusPresentation } from "../lib/pos-payment-status-boundary";
 
@@ -22,18 +23,26 @@ const BillsScreen = ({ navigation }: BillsScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     const [search, setSearch] = useState("");
+    const [view, setView] = useState<PosBillsStatusFilter>("completed");
     const deferredSearch = useDeferredValue(search);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [date, setDate] = useState<PosBillsDateFilter>("today");
     const [paymentStatus, setPaymentStatus] = useState<PosBillsPaymentStatusFilter>("all");
     const [paymentMethod, setPaymentMethod] = useState<PosBillsPaymentMethodFilter>("all");
-    const bills = usePosSales({ date, paymentStatus, paymentMethod, search: deferredSearch });
+    const bills = usePosSales({ status: view, date, paymentStatus, paymentMethod, search: deferredSearch });
 
     const resetFilters = () => {
-        setDate("today");
+        setDate(view === "draft" ? "all" : "today");
         setPaymentStatus("all");
         setPaymentMethod("all");
         setSearch("");
+    };
+
+    const switchView = (nextView: PosBillsStatusFilter) => {
+        setView(nextView);
+        setDate(nextView === "draft" ? "all" : "today");
+        setPaymentStatus("all");
+        setPaymentMethod("all");
     };
 
     return (
@@ -47,6 +56,10 @@ const BillsScreen = ({ navigation }: BillsScreenProps) => {
                 <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("billsSubtitle")}</Text>
             </View>
             <PosCard>
+                <View className="flex-row gap-2">
+                    <PosButton label={t("billsSales")} variant={view === "completed" ? "primary" : "secondary"} accessibilityState={{ selected: view === "completed" }} onPress={() => switchView("completed")} />
+                    <PosButton label={t("billsDrafts")} variant={view === "draft" ? "primary" : "secondary"} accessibilityState={{ selected: view === "draft" }} onPress={() => switchView("draft")} />
+                </View>
                 <PosTextField
                     label={t("billsSearch")}
                     value={search}
@@ -106,7 +119,7 @@ const BillsScreen = ({ navigation }: BillsScreenProps) => {
             ) : null}
             {!bills.isPending && !bills.isError && bills.sales.length === 0 ? (
                 <PosCard>
-                    <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{date !== "today" || search.trim() || paymentStatus !== "all" || paymentMethod !== "all" ? t("billsNoMatchingSales") : t("billsNoSales")}</Text>
+                    <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{view === "draft" ? t("billsNoDrafts") : date !== "today" || search.trim() || paymentStatus !== "all" || paymentMethod !== "all" ? t("billsNoMatchingSales") : t("billsNoSales")}</Text>
                 </PosCard>
             ) : null}
             {bills.sales.map((sale) => {
@@ -120,7 +133,7 @@ const BillsScreen = ({ navigation }: BillsScreenProps) => {
                                     <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{formatDateTime(sale.createdAt)}</Text>
                                     <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("billsCustomer")}: {sale.customerNameSnapshot ?? sale.customer?.name ?? t("walkInCustomer")}</Text>
                                 </View>
-                                <PosStatusBadge label={t(presentation.labelKey)} tone={presentation.tone} />
+                                <PosStatusBadge label={view === "draft" ? t("draft") : t(presentation.labelKey)} tone={view === "draft" ? "neutral" : presentation.tone} />
                             </View>
                             <Text className="text-lg font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(sale.grandTotal)}</Text>
                         </PosCard>

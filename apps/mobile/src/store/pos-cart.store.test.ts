@@ -95,4 +95,14 @@ describe("POS Cart store", () => {
         usePosCartStore.getState().changeQuantity(scope, "product-1", 1);
         expect(usePosCartStore.getState().completionRequestId).toBeNull();
     });
+
+    it("does not restore a Draft into a different active scope", () => {
+        usePosCartStore.getState().clear();
+        const activeScope = "org-1:store-1:device-1";
+        usePosCartStore.getState().addProduct(activeScope, product);
+
+        usePosCartStore.getState().restoreDraft("org-2:store-2:device-2", [], null, null, "draft-2");
+
+        expect(usePosCartStore.getState()).toMatchObject({ scopeKey: activeScope, items: [product], draftSaleId: null });
+    });
 });
