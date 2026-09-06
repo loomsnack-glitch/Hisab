@@ -14,6 +14,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import {
     getGroupedAdminMainDestinations,
     type AdminNavDestination,
@@ -260,6 +261,18 @@ const AppSidebar = ({
                         <div key={item.label}>{renderSecondaryItem(item)}</div>
                     ))}
                 </nav>
+
+                <div
+                    className={cn(
+                        "shrink-0 border-t border-border/50",
+                        isCollapsed && !isMobile ? "px-1 py-2" : "px-2 py-2",
+                    )}
+                >
+                    <AdminWorkspaceSwitcherFromRoute
+                        variant="sidebar"
+                        collapsed={!isMobile && isCollapsed}
+                    />
+                </div>
 
             </div>
 

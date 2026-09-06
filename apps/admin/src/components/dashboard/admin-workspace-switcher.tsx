@@ -100,18 +100,76 @@ export const AdminWorkspaceSwitcherPanel = ({
     );
 };
 
-type AdminWorkspaceSwitcherProps = AdminWorkspaceSwitcherPanelProps;
+type AdminWorkspaceSwitcherProps = AdminWorkspaceSwitcherPanelProps & {
+    collapsed?: boolean;
+    variant?: "header" | "sidebar";
+};
 
 export const AdminWorkspaceSwitcher = ({
     organizationId,
     organizationName,
     stores,
     selectedStoreId = null,
+    collapsed = false,
+    variant = "header",
 }: AdminWorkspaceSwitcherProps) => {
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const triggerLabel = selectedStore
         ? `${selectedStore.name} store workspace`
         : `${organizationName} organization workspace`;
+    const workspaceKindLabel = selectedStore ? "Store workspace" : "Organization workspace";
+    const workspaceName = selectedStore ? selectedStore.name : organizationName;
+    const WorkspaceIcon = selectedStore ? Store : Building2;
+
+    if (variant === "sidebar") {
+        const trigger = (
+            <button
+                type="button"
+                aria-label={triggerLabel}
+                className={cn(
+                    "sidebar-nav-link group flex w-full cursor-pointer appearance-none items-center rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
+                    collapsed
+                        ? "relative mx-auto h-10 w-10 justify-center text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                        : "h-11 gap-2.5 px-2.5 text-left text-foreground hover:bg-muted/70",
+                )}
+            >
+                <WorkspaceIcon
+                    className={cn("size-[18px] shrink-0", selectedStore ? "text-primary" : "text-muted-foreground")}
+                    strokeWidth={selectedStore ? 2.25 : 2}
+                />
+                {collapsed ? null : (
+                    <>
+                        <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                {workspaceKindLabel}
+                            </span>
+                            <span className="block truncate font-semibold leading-tight">{workspaceName}</span>
+                        </span>
+                        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                    </>
+                )}
+            </button>
+        );
+
+        return (
+            <Popover>
+                <PopoverTrigger render={trigger} />
+                <PopoverContent
+                    align="start"
+                    side={collapsed ? "right" : "top"}
+                    sideOffset={8}
+                    className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
+                >
+                    <AdminWorkspaceSwitcherPanel
+                        organizationId={organizationId}
+                        organizationName={organizationName}
+                        stores={stores}
+                        selectedStoreId={selectedStoreId}
+                    />
+                </PopoverContent>
+            </Popover>
+        );
+    }
 
     return (
         <Popover>
@@ -122,10 +180,8 @@ export const AdminWorkspaceSwitcher = ({
                         className="h-9 max-w-[16rem] gap-2 rounded-xl border-border/70 bg-background/80 px-3 text-left font-medium"
                         aria-label={triggerLabel}
                     >
-                        {selectedStore ? <Store className="size-4 shrink-0 text-primary" /> : <Building2 className="size-4 shrink-0 text-primary" />}
-                        <span className="min-w-0 flex-1 truncate">
-                            {selectedStore ? selectedStore.name : organizationName}
-                        </span>
+                        <WorkspaceIcon className="size-4 shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
                         <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
                     </Button>
                 }
@@ -147,7 +203,15 @@ export const AdminWorkspaceSwitcher = ({
 
 export default AdminWorkspaceSwitcher;
 
-export const AdminWorkspaceSwitcherFromRoute = () => {
+type AdminWorkspaceSwitcherFromRouteProps = {
+    collapsed?: boolean;
+    variant?: "header" | "sidebar";
+};
+
+export const AdminWorkspaceSwitcherFromRoute = ({
+    collapsed = false,
+    variant = "header",
+}: AdminWorkspaceSwitcherFromRouteProps) => {
     const { organizationId = "" } = useParams();
     const location = useLocation();
     const workspace = parseStoreWorkspacePath(location.pathname);
@@ -171,7 +235,10 @@ export const AdminWorkspaceSwitcherFromRoute = () => {
             organizationName={organization.name}
             stores={organization.stores}
             selectedStoreId={workspace?.storeId ?? null}
+            collapsed={collapsed}
+            variant={variant}
         />
     );
 };
+
 

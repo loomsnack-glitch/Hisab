@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 
-import { AdminWorkspaceSwitcherPanel } from "@/components/dashboard/admin-workspace-switcher";
+import { AdminWorkspaceSwitcher, AdminWorkspaceSwitcherPanel } from "@/components/dashboard/admin-workspace-switcher";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { getStoreDetailPath } from "@/lib/store-routes";
 import { getStoreWorkspacePath } from "@/lib/store-workspace-routes";
@@ -51,5 +53,33 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain("Organization workspace");
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, vesuId)}"`);
         expect(markup).not.toContain(`href="${getStoreDetailPath(organizationId, adajanId)}"`);
+    });
+
+    test("places the Store workspace control in the sidebar footer", () => {
+        const markup = renderToStaticMarkup(
+            <MemoryRouter>
+                <AdminWorkspaceSwitcher
+                    organizationId={organizationId}
+                    organizationName="Panini House"
+                    stores={stores}
+                    selectedStoreId={adajanId}
+                    variant="sidebar"
+                />
+            </MemoryRouter>,
+        );
+
+        expect(markup).toContain('aria-label="Adajan store workspace"');
+        expect(markup).toContain("Store workspace");
+        expect(markup).toContain("Adajan");
+    });
+
+    test("pins the switcher to the sidebar footer instead of the desktop header", () => {
+        const sidebarSource = readFileSync(join(import.meta.dir, "app-sidebar.tsx"), "utf8");
+        const layoutSource = readFileSync(join(import.meta.dir, "dashboard-layout.tsx"), "utf8");
+
+        expect(sidebarSource).toContain('variant="sidebar"');
+        expect(sidebarSource).toContain("AdminWorkspaceSwitcherFromRoute");
+        expect(layoutSource).toContain("<div className=\"lg:hidden\">");
+        expect(layoutSource).toContain("AdminWorkspaceSwitcherFromRoute");
     });
 });

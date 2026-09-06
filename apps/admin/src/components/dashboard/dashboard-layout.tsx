@@ -157,7 +157,11 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
-                            {isPickerPage ? null : <AdminWorkspaceSwitcherFromRoute />}
+                            {isPickerPage ? null : (
+                                <div className="lg:hidden">
+                                    <AdminWorkspaceSwitcherFromRoute />
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
