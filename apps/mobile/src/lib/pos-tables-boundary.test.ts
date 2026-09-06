@@ -43,6 +43,8 @@ describe("POS Tables boundary", () => {
             tableLabel: "T1",
             tableOrderId: "order-1",
             draftSaleId: null,
+            remainingTotal: null,
+            orderDiscountAmount: 0,
         });
     });
 });

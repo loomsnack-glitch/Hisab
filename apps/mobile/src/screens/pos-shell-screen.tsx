@@ -21,6 +21,7 @@ const destinationKeys: Record<PosDestination, PosTranslationKey> = {
     Reports: "reports",
     Settings: "settings",
     Tables: "tables",
+    Kitchen: "kitchen",
 };
 
 const PosShellScreen = ({ navigation }: PosShellScreenProps) => {

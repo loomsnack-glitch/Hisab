@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 7 active — 7.1–7.3 completed, 7.4 in progress
+Status: Phase 7 completed with follow-ups
 
 Last updated: 2026-09-07
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), and the Phase 7 execution record is in [phase-7.md](./phase-7.md). Phase 6 is complete with follow-ups; Phase 7 is active.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), and the Phase 7 execution record is in [phase-7.md](./phase-7.md). Phase 7 is complete with follow-ups; Phase 8 is next.
 
 ## Current scope
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 7 active — 7.1–7.3 completed, 7.4 in progress | Phases 1–6 app-level slices, service modes, Tables, and table-order checkout are implemented. Native/device/API/share-sheet validation, Product report value support, printer hardware/native transport, and KOT/Kitchen validation remain pending. |
+| Mobile POS implementation | Phase 7 completed with follow-ups | Phases 1–7 app-level slices, including service modes, Tables, table-order checkout, KOT, and Kitchen completion, are implemented. Native/device/API/share-sheet validation, Product report value support, and printer hardware/native transport remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -56,7 +56,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | 4. Payment and Sale completion | Complete Sales with clear Payment status and receipt access. | 4.1–4.5 | Completed with follow-up | Payment entry, server status, checkout adapters, Sale Complete, and digital receipt/share slices are implemented; device/API/share-sheet validation remains pending. |
 | 5. Bills and supporting workspaces | Add post-Sale operations and simple management screens. | 5.1–5.5 | Completed with follow-up | Bills, Sale Details/Draft recovery, Customers, Reports, and Settings are implemented; native/live, printer, and Product report value follow-ups remain. |
 | 6. Bluetooth printing | Validate hardware and print English-only receipts reliably. | 6.1–6.3 | Completed with follow-up | Printer boundary, settings, and receipt actions are implemented; target hardware/native module and physical validation remain external gates. |
-| 7. Restaurant operations | Add capability-gated service modes, Tables, and KOT. | 7.1–7.4 | In progress | Enabled restaurant Store can use its approved operational workflow. |
+| 7. Restaurant operations | Add capability-gated service modes, Tables, and KOT. | 7.1–7.4 | Completed with follow-up | Enabled restaurant Store can use its approved operational workflow; native/live validation remains for Phase 8. |
 | 8. Hardening and release | Complete tests, recovery, security, device, and release checks. | 8.1–8.4 | Not started | Android release passes the complete release checklist. |
 
 ## Small-slice progress
@@ -164,7 +164,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | 7.1 Service modes | Completed with follow-up | Capability-gated Dine-In/Pick-Up controls, scoped Cart state, and Draft/direct checkout propagation are implemented; device/API validation remains pending. |
 | 7.2 Tables | Completed with follow-up | Capability-gated table/area list, state display, and safe start/reopen navigation are implemented; device/API validation remains pending. |
 | 7.3 Table orders | Completed with follow-up | Table context, KOT-backed Table Order checkout, legacy Draft compatibility, and retry-safe dispatch are implemented; device/API validation remains pending. |
-| 7.4 KOT and kitchen completion | In progress | KOT generation and capability-gated Kitchen completion are being implemented; KOT remains separate from Sale and Payment. |
+| 7.4 KOT and kitchen completion | Completed with follow-up | KOT generation, server-total handoff, capability-gated Kitchen completion, and payment separation are implemented; device/API validation remains pending. |
 
 ### Phase 8 — Hardening and release readiness
 
@@ -199,6 +199,6 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 6 is complete with printer follow-ups; Phase 7.1–7.3 are complete and
-7.4 is active in [phase-7.md](./phase-7.md). Do not claim printer readiness
-until its hardware gates are completed.
+Phase 7 is complete with follow-ups. Phase 8 is next for focused hardening,
+device/API validation, and release checks. Do not claim printer readiness until
+its hardware gates are completed.

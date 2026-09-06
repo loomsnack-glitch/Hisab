@@ -5,7 +5,7 @@ import {
     POS_SHARED_DESTINATIONS,
 } from "./pos-navigation-boundary";
 
-const session = (tableManagementEnabled: boolean) => ({ store: { tableManagementEnabled } });
+const session = (tableManagementEnabled: boolean, kotSystemEnabled = false) => ({ store: { tableManagementEnabled, kotSystemEnabled } });
 
 describe("POS navigation boundary", () => {
     it("always exposes the shared workspaces", () => {
@@ -15,6 +15,11 @@ describe("POS navigation boundary", () => {
 
     it("exposes Tables only for capable Stores", () => {
         expect(getPosDestinations(session(true))).toEqual([...POS_SHARED_DESTINATIONS, "Tables"]);
+    });
+
+    it("exposes Kitchen only when KOT is enabled", () => {
+        expect(getPosDestinations(session(false, true))).toEqual([...POS_SHARED_DESTINATIONS, "Kitchen"]);
+        expect(getPosDestinations(session(true, true))).toEqual([...POS_SHARED_DESTINATIONS, "Tables", "Kitchen"]);
     });
 
     it("keeps New Sale and Cart as the initial sale shell routes", () => {

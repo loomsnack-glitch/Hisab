@@ -74,7 +74,7 @@ const buildPosSalePayload = (input: PosCheckoutCartInput) => ({
 export const buildPosTableOrderCheckoutPayload = (input: PosCheckoutCartInput): CheckoutTableOrderJSON => ({
     requestId: input.requestId,
     customerId: input.customer?.id ?? null,
-    orderDiscountAmount: getDraftFields(input).orderDiscountAmount,
+    orderDiscountAmount: input.tableContext?.orderDiscountAmount ?? getDraftFields(input).orderDiscountAmount,
     notes: null,
     payments: mapPosPaymentRowsToInputs(input.payments),
 });

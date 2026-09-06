@@ -33,6 +33,8 @@ export const buildPosTableContext = ({ table, sale, tableOrder }: ServiceTableSa
     tableLabel: table.tableLabel,
     tableOrderId: tableOrder?.id ?? table.currentTableOrderId ?? null,
     draftSaleId: sale?.id ?? null,
+    remainingTotal: tableOrder?.remainingGrandTotal ?? null,
+    orderDiscountAmount: tableOrder?.remainingDiscountTotal ?? 0,
 });
 
 export const unwrapPosTablesResponse = (

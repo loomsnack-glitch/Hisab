@@ -7,6 +7,8 @@ export type PosTableContext = {
     tableLabel: string;
     tableOrderId: string | null;
     draftSaleId: string | null;
+    remainingTotal?: number | null;
+    orderDiscountAmount?: number;
 };
 
 export const DEFAULT_POS_SERVICE_MODE: PosServiceMode = "dine_in";

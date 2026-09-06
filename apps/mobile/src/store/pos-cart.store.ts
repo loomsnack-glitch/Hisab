@@ -34,7 +34,10 @@ type PosCartStore = {
     setCompletionRequestId: (scopeKey: string, completionRequestId: string) => void;
     setServiceMode: (scopeKey: string, serviceMode: PosServiceMode) => void;
     setTableContext: (scopeKey: string, tableContext: PosTableContext | null) => void;
+    setTableOrderTotal: (scopeKey: string, remainingTotal: number | null) => void;
+    setTableOrderDiscount: (scopeKey: string, orderDiscountAmount: number) => void;
     clearTableContext: (scopeKey: string) => void;
+    clearItems: (scopeKey: string) => void;
     restoreDraft: (scopeKey: string, items: PosCartItem[], customer: PosCartCustomer | null, discount: PosCartDiscount | null, draftSaleId: string) => void;
     clearDraftSale: (scopeKey: string) => void;
     clear: () => void;
@@ -125,13 +128,25 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
                 scopeKey,
                 tableContext,
                 serviceMode: resolvePosServiceMode(state.serviceMode, tableContext),
-                draftSaleId: tableContext?.draftSaleId ?? state.draftSaleId,
+                draftSaleId: tableContext?.draftSaleId ?? null,
                 completionRequestId: null,
             }),
+    setTableOrderTotal: (scopeKey, remainingTotal) =>
+        set((state) => state.scopeKey !== scopeKey || !state.tableContext
+            ? state
+            : { tableContext: { ...state.tableContext, remainingTotal }, completionRequestId: null }),
+    setTableOrderDiscount: (scopeKey, orderDiscountAmount) =>
+        set((state) => state.scopeKey !== scopeKey || !state.tableContext
+            ? state
+            : { tableContext: { ...state.tableContext, orderDiscountAmount }, completionRequestId: null }),
     clearTableContext: (scopeKey) =>
         set((state) => state.scopeKey !== scopeKey
             ? state
             : { tableContext: null, serviceMode: DEFAULT_POS_SERVICE_MODE, completionRequestId: null }),
+    clearItems: (scopeKey) =>
+        set((state) => state.scopeKey !== scopeKey
+            ? state
+            : { items: [], draftRequestId: null, completionRequestId: null }),
     restoreDraft: (scopeKey, items, customer, discount, draftSaleId) =>
         set((state) => state.scopeKey !== null && state.scopeKey !== scopeKey
             ? state

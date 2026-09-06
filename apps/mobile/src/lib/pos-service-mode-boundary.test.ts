@@ -11,6 +11,7 @@ const table: PosTableContext = {
     tableLabel: "T1",
     tableOrderId: "order-1",
     draftSaleId: null,
+    remainingTotal: 0,
 };
 
 describe("POS service-mode boundary", () => {

@@ -96,7 +96,41 @@ describe("localization boundary", () => {
         "printReceipt",
         "printerPrintFailed",
     ] as const;
-    const restaurantKeys = ["serviceMode", "serviceModeDineIn", "serviceModePickUp", "tableOrder"] as const;
+    const restaurantKeys = [
+        "serviceMode",
+        "serviceModeDineIn",
+        "serviceModePickUp",
+        "tableOrder",
+        "tablesSubtitle",
+        "tablesUnavailable",
+        "tablesLoading",
+        "tablesLoadFailed",
+        "tablesEmpty",
+        "tableCapacity",
+        "tableTotal",
+        "startTableOrder",
+        "openTableOrder",
+        "tableStateFree",
+        "tableStateAllocated",
+        "tableStateEngaged",
+        "tableStateReadyToBill",
+        "tableStatePaymentDue",
+        "tableStatePaid",
+        "kitchen",
+        "kitchenSubtitle",
+        "kitchenUnavailable",
+        "kitchenLoading",
+        "kitchenLoadFailed",
+        "kitchenEmpty",
+        "kotNumber",
+        "kotTable",
+        "kotItems",
+        "completeKot",
+        "kotCompleteFailed",
+        "sendToKitchen",
+        "kotSent",
+        "kotSendFailed",
+    ] as const;
 
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);

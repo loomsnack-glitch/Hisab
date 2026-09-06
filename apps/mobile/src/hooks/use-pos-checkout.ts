@@ -7,7 +7,7 @@ import { clearPosPayments } from "../store/pos-payment.store";
 
 export const usePosCheckout = () => {
     const cart = usePosCart();
-    const payments = usePosPayments(cart.displayTotals.total);
+    const payments = usePosPayments(cart.checkoutTotal);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
@@ -16,7 +16,13 @@ export const usePosCheckout = () => {
             return null;
         }
 
-        if (cart.items.length === 0) {
+        const isReadyTableCheckout = Boolean(cart.tableContext?.tableOrderId && cart.items.length === 0 && cart.checkoutTotal > 0);
+        if (cart.tableContext?.tableOrderId && cart.items.length > 0) {
+            const nextError = new Error("Send the current Table items to the Kitchen before completing checkout");
+            setError(nextError);
+            throw nextError;
+        }
+        if (cart.items.length === 0 && !isReadyTableCheckout) {
             const nextError = new Error("Add at least one Product before completing the Sale");
             setError(nextError);
             throw nextError;

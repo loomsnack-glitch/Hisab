@@ -18,7 +18,7 @@ const PaymentScreen = ({ navigation }: PaymentScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     const cart = usePosCart();
-    const payments = usePosPayments(cart.displayTotals.total);
+    const payments = usePosPayments(cart.checkoutTotal);
     const checkout = usePosCheckout();
     const setSale = usePosSaleCompleteStore((state) => state.setSale);
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
@@ -45,7 +45,7 @@ const PaymentScreen = ({ navigation }: PaymentScreenProps) => {
                 <View className="gap-1 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
                     <View className="flex-row justify-between gap-3">
                         <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("paymentTotal")}</Text>
-                        <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(cart.displayTotals.total)}</Text>
+                        <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(cart.checkoutTotal)}</Text>
                     </View>
                     <View className="flex-row justify-between gap-3">
                         <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("paymentCollected")}</Text>

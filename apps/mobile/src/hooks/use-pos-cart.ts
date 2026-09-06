@@ -17,6 +17,9 @@ export const usePosCart = () => {
     const completionRequestId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.completionRequestId : null));
     const serviceMode = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.serviceMode : "dine_in" as const));
     const tableContext = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.tableContext : null));
+    const checkoutTotal = tableContext?.tableOrderId && items.length === 0 && tableContext.remainingTotal !== null && tableContext.remainingTotal !== undefined
+        ? tableContext.remainingTotal
+        : getCartDisplayTotals(items, discount).total;
 
     return {
         items,
@@ -27,6 +30,7 @@ export const usePosCart = () => {
         completionRequestId,
         serviceMode,
         tableContext,
+        checkoutTotal,
         itemCount: getCartItemCount(items),
         displayTotals: getCartDisplayTotals(items, discount),
         addProduct: (product: ProductResponseDTO) => {
@@ -95,6 +99,21 @@ export const usePosCart = () => {
         clearTableContext: () => {
             if (scopeKey) {
                 usePosCartStore.getState().clearTableContext(scopeKey);
+            }
+        },
+        setTableOrderTotal: (remainingTotal: number | null) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setTableOrderTotal(scopeKey, remainingTotal);
+            }
+        },
+        setTableOrderDiscount: (orderDiscountAmount: number) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setTableOrderDiscount(scopeKey, orderDiscountAmount);
+            }
+        },
+        clearItems: () => {
+            if (scopeKey) {
+                usePosCartStore.getState().clearItems(scopeKey);
             }
         },
         restoreDraft: (items: PosCartItem[], nextCustomer: PosCartCustomer | null, nextDiscount: PosCartDiscount | null, nextDraftSaleId: string) => {

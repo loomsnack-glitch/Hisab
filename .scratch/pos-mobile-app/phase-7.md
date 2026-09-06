@@ -176,8 +176,40 @@ completion.
   state.
 - Keep KOT failure retryable and retain the Table Order context.
 
+Implementation plan and review:
+
+- Add a KOT boundary that maps the current Cart to the existing table-KOT
+  input using identity only, with a request ID retained for a retry of the same
+  Cart contents.
+- Add Send to Kitchen only for an active KOT-backed Table Order. On success,
+  clear only sent Cart lines, retain Table context, and carry the server's
+  remaining total into Payment; unsent Table items cannot skip the KOT step.
+- Add a capability-gated Kitchen destination using the existing pending-KOT
+  list and completion services. Completing a KOT invalidates only Kitchen
+  data and does not settle or alter Sale payment state.
+- Add translated KOT/Kitchen states and boundary coverage, then run the final
+  whole-Phase 7 review before closing the phase.
+
+Internal review: the split between KOT generation, Table Order checkout, and
+Kitchen completion preserves the existing server state machine and avoids
+charging an unsent local batch. Approved for implementation.
+
+Implementation and review result:
+
+- Added stable retry-aware KOT generation from active Table Orders, server
+  remaining-total handoff, and a separate Send to Kitchen Cart action.
+- Added the capability-gated Kitchen queue with item summaries and completion;
+  KOT completion remains independent of Sale/payment state.
+- Added Kitchen/Tables navigation gating and English, Gujarati, and Hindi
+  copy coverage. Focused mobile tests pass; TypeScript retains only the known
+  missing WhatsApp asset import.
+
+Final Phase 7 review: approved. Standards and scope review found no new
+unscoped API, role assumption, duplicate-order path, payment mutation, or
+whitespace issue. Native/device/live API validation remains a Phase 8 gate.
+
 ## Phase status
 
-Phase 7 is planned after Phase 6's current adapter gate and will be executed
-one subphase at a time. No new product or backend contract decision is added
-by this plan.
+Phase 7 application work is complete with follow-ups. No new product or
+backend contract decision was added by the implementation; native/device/live
+API validation remains a Phase 8 gate.

@@ -15,6 +15,7 @@ import ReportsScreen from "../screens/reports-screen";
 import SettingsScreen from "../screens/settings-screen";
 import PrinterSettingsScreen from "../screens/printer-settings-screen";
 import TablesScreen from "../screens/tables-screen";
+import KitchenScreen from "../screens/kitchen-screen";
 import type { PosTableContext } from "../lib/pos-service-mode-boundary";
 
 export type PosStackParamList = {
@@ -31,6 +32,7 @@ export type PosStackParamList = {
     Settings: undefined;
     PrinterSettings: undefined;
     Tables: undefined;
+    Kitchen: undefined;
 };
 
 const Stack = createNativeStackNavigator<PosStackParamList>();
@@ -51,6 +53,7 @@ const PosNavigator = () => {
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="PrinterSettings" component={PrinterSettingsScreen} />
             <Stack.Screen name="Tables" component={TablesScreen} />
+            <Stack.Screen name="Kitchen" component={KitchenScreen} />
         </Stack.Navigator>
     );
 };

@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { PosButton, PosCard, PosTextField } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosCart } from "../hooks/use-pos-cart";
-import { getCartLineDisplayTotals, isPosCartDiscountValid, type PosCartDiscountMode } from "../lib/pos-cart-boundary";
+import { getCartLineDisplayTotals, getPosCartOrderDiscountAmount, isPosCartDiscountValid, type PosCartDiscountMode } from "../lib/pos-cart-boundary";
 import { usePosConfiguration } from "../hooks/use-pos-configuration";
 import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 import { usePosCustomers } from "../hooks/use-pos-customers";
@@ -15,6 +15,8 @@ import { useCreatePosCustomer } from "../hooks/use-create-pos-customer";
 import { normalizePosCustomerCreatePayload } from "../lib/pos-customer-boundary";
 import { buildPosDraftPayload, buildPosDraftUpdatePayload } from "../lib/pos-draft-boundary";
 import { usePosDraftActions } from "../hooks/use-pos-draft-actions";
+import { usePosSessionSnapshot } from "../store/pos-session.store";
+import { usePosTableKot } from "../hooks/use-pos-table-kot";
 
 type CartShellScreenProps = NativeStackScreenProps<PosStackParamList, "Cart">;
 
@@ -22,6 +24,7 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     const cart = usePosCart();
+    const session = usePosSessionSnapshot().session;
     const configuration = usePosConfiguration();
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [customerSearch, setCustomerSearch] = useState("");
@@ -37,6 +40,9 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
     const customerCreate = useCreatePosCustomer();
     const draftActions = usePosDraftActions();
+    const kot = usePosTableKot();
+    const [kotNotice, setKotNotice] = useState<"sent" | "error" | null>(null);
+    const kotRequestId = useRef<{ signature: string; requestId: string } | null>(null);
     const [draftNotice, setDraftNotice] = useState<"saved" | "discarded" | "error" | null>(null);
     const formatCurrency = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "INR" }).format(value);
     const configurationLookup = {
@@ -132,6 +138,40 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
             selectCustomer(response.customer);
         } catch {
             // Keep the form and Cart intact so the cashier can retry.
+        }
+    };
+    const sendToKitchen = async () => {
+        if (!cart.tableContext?.tableOrderId || cart.items.length === 0 || kot.pending) return;
+        const signature = JSON.stringify({
+            tableId: cart.tableContext.tableId,
+            items: cart.items,
+            customerId: cart.customer?.id ?? null,
+            serviceMode: cart.serviceMode,
+        });
+        const request = kotRequestId.current?.signature === signature
+            ? kotRequestId.current
+            : { signature, requestId: kot.createRequestId() };
+        kotRequestId.current = request;
+        setKotNotice(null);
+        try {
+            const response = await kot.send({
+                tableId: cart.tableContext.tableId,
+                items: cart.items,
+                customer: cart.customer,
+                serviceMode: cart.serviceMode,
+                requestId: request.requestId,
+            });
+            const orderDiscountAmount = getPosCartOrderDiscountAmount(
+                cart.discount,
+                Math.max(0, cart.displayTotals.subtotal - cart.displayTotals.discount),
+            );
+            cart.setTableOrderTotal(response.tableOrder?.remainingGrandTotal ?? cart.tableContext.remainingTotal ?? 0);
+            cart.setTableOrderDiscount(orderDiscountAmount);
+            cart.clearItems();
+            kotRequestId.current = null;
+            setKotNotice("sent");
+        } catch {
+            setKotNotice("error");
         }
     };
 
@@ -369,7 +409,7 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                             ) : null}
                             <View className="flex-row justify-between gap-3">
                                 <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("cartDisplayTotal")}</Text>
-                                <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(cart.displayTotals.total)}</Text>
+                                <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">{formatCurrency(cart.checkoutTotal)}</Text>
                             </View>
                         </View>
                         <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("cartDisplayTotalNote")}</Text>
@@ -393,9 +433,19 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                         {draftNotice === "error" ? (
                             <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("draftActionFailed")}</Text>
                         ) : null}
+                        {session?.store.kotSystemEnabled && cart.tableContext?.tableOrderId && cart.items.length > 0 ? (
+                            <View className="gap-2 border-t border-pos-border pt-3 dark:border-pos-border-dark">
+                                <PosButton label={t("sendToKitchen")} loading={kot.pending} onPress={sendToKitchen} />
+                                {kotNotice === "sent" ? <Text className="text-sm text-pos-success dark:text-pos-success-dark">{t("kotSent")}</Text> : null}
+                                {kotNotice === "error" ? <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("kotSendFailed")}</Text> : null}
+                            </View>
+                        ) : null}
                     </View>
                 )}
-                {cart.itemCount > 0 ? (
+                {cart.itemCount > 0 && !(cart.tableContext?.tableOrderId && session?.store.kotSystemEnabled) ? (
+                    <PosButton label={t("continueToPayment")} onPress={() => navigation.navigate("Payment")} />
+                ) : null}
+                {cart.itemCount === 0 && cart.tableContext?.tableOrderId && cart.checkoutTotal > 0 ? (
                     <PosButton label={t("continueToPayment")} onPress={() => navigation.navigate("Payment")} />
                 ) : null}
                 <PosButton label={t("back")} variant="secondary" onPress={() => navigation.goBack()} />
