@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
+import AuthenticatedHomeRedirect from "@/components/dashboard/authenticated-home-redirect";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
 import LoginPage from "@/pages/login-page";
@@ -114,18 +115,18 @@ const App = () => {
                 ) : (
                     <>
                         <Routes>
-                            <Route path="/" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LandingPage />} />
-                            <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
+                            <Route path="/" element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <LandingPage />} />
+                            <Route path="/login" element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <LoginPage />} />
                             <Route
                                 path="/register"
-                                element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
+                                element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <RegisterPage />}
                             />
                             <Route path="/pos" element={<RetiredPosRoutePage />} />
                             <Route path="/pos/*" element={<RetiredPosRoutePage />} />
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >
-                                <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
+                                <Route path="/dashboard" element={<AuthenticatedHomeRedirect />} />
                                 <Route path="/appearance" element={<AppearancePage />} />
                                 <Route path="/settings" element={<Navigate to="/appearance" replace />} />
                                 <Route path="/organizations" element={<OrganizationsPage />} />

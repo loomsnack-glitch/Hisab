@@ -7,6 +7,14 @@ export const getOrgInitials = (name?: string) => {
     return name.slice(0, 2).toUpperCase();
 };
 
+const hashOrgId = (id: string) => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return Math.abs(hash);
+};
+
 export const getOrgBgColor = (id?: string) => {
     if (!id) return "bg-primary/10 text-primary border-primary/20";
     const colors = [
@@ -17,10 +25,18 @@ export const getOrgBgColor = (id?: string) => {
         "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
         "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
     ];
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-        hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
+    return colors[hashOrgId(id) % colors.length];
+};
+
+export const getOrgTileClass = (id?: string) => {
+    if (!id) return "bg-primary text-white";
+    const colors = [
+        "bg-violet-600 text-white",
+        "bg-amber-500 text-white",
+        "bg-blue-600 text-white",
+        "bg-emerald-600 text-white",
+        "bg-rose-600 text-white",
+        "bg-indigo-600 text-white",
+    ];
+    return colors[hashOrgId(id) % colors.length];
 };
