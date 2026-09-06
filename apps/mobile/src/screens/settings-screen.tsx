@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
@@ -72,7 +72,7 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
             <PosCard>
                 <Text className="text-lg font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("settingsPrinter", { ns: "pos" })}</Text>
                 <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("printerSettingsDeferred", { ns: "pos" })}</Text>
-                <PosButton label={t("printerSettings", { ns: "pos" })} variant="secondary" onPress={() => Alert.alert(t("printerSettings", { ns: "pos" }), t("printerSettingsDeferred", { ns: "pos" }))} />
+                <PosButton label={t("printerSettings", { ns: "pos" })} variant="secondary" onPress={() => navigation.navigate("PrinterSettings")} />
             </PosCard>
             {session ? <PosCard>
                 <Text className="text-lg font-semibold text-pos-foreground dark:text-pos-foreground-dark">{t("storeInformation", { ns: "pos" })}</Text>

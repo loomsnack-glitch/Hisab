@@ -10,6 +10,7 @@ import { clearPosCart } from "../store/pos-cart.store";
 import { clearPosPayments } from "../store/pos-payment.store";
 import { clearPosCompletedSale, usePosSaleCompleteStore } from "../store/pos-sale-complete.store";
 import { buildPosDigitalReceiptText, sharePosDigitalReceipt, type PosReceiptShareAction } from "../lib/pos-receipt-boundary";
+import { usePosPrinter } from "../hooks/use-pos-printer";
 
 type SaleCompleteScreenProps = NativeStackScreenProps<PosStackParamList, "SaleComplete">;
 
@@ -21,6 +22,7 @@ const SaleCompleteScreen = ({ navigation }: SaleCompleteScreenProps) => {
     const sale = usePosSaleCompleteStore((state) => state.sale);
     const [receiptVisible, setReceiptVisible] = useState(false);
     const [shareState, setShareState] = useState<PosReceiptShareAction | "sharing" | null>(null);
+    const printer = usePosPrinter();
 
     const startNewSale = () => {
         clearPosCart();
@@ -37,6 +39,15 @@ const SaleCompleteScreen = ({ navigation }: SaleCompleteScreenProps) => {
         setShareState("sharing");
         const result = await sharePosDigitalReceipt(sale, (content) => Share.share(content));
         setShareState(result);
+    };
+
+    const printReceipt = () => {
+        if (!sale) return;
+        if (printer.status !== "connected") {
+            navigation.navigate("PrinterSettings");
+            return;
+        }
+        void printer.printReceipt(buildPosDigitalReceiptText(sale));
     };
 
     return (
@@ -63,6 +74,8 @@ const SaleCompleteScreen = ({ navigation }: SaleCompleteScreenProps) => {
                         <PosButton label={receiptVisible ? t("hideReceipt") : t("showReceipt")} variant="secondary" onPress={() => setReceiptVisible((visible) => !visible)} />
                         {receiptVisible ? <Text className="rounded-2xl bg-pos-surface-muted p-4 text-sm leading-6 text-pos-foreground dark:bg-pos-surface-muted-dark dark:text-pos-foreground-dark">{buildPosDigitalReceiptText(sale)}</Text> : null}
                         <PosButton label={t("shareReceipt")} variant="secondary" onPress={shareReceipt} loading={shareState === "sharing"} />
+                        <PosButton label={t("printReceipt")} variant="secondary" onPress={printReceipt} loading={printer.status === "printing"} />
+                        {printer.status === "failed" ? <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("printerPrintFailed")}</Text> : null}
                         {shareState === "shared" ? <Text className="text-sm text-pos-success dark:text-pos-success-dark">{t("receiptShared")}</Text> : null}
                         {shareState === "dismissed" ? <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("receiptShareDismissed")}</Text> : null}
                         {shareState === "failed" ? <Text className="text-sm text-pos-danger dark:text-pos-danger-dark">{t("receiptShareFailed")}</Text> : null}

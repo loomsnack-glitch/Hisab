@@ -25,6 +25,7 @@ export const POS_PREFERENCE_KEYS = {
     language: "language",
     theme: "theme",
     displaySize: "displaySize",
+    printer: "printer",
 } as const;
 
 export const createEncryptionKey = () => {

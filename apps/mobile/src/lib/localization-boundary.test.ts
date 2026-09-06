@@ -79,6 +79,22 @@ describe("localization boundary", () => {
         "organizationName",
         "storeName",
         "deviceName",
+        "printerSettingsSubtitle",
+        "selectedPrinter",
+        "discoverPrinters",
+        "connectPrinter",
+        "disconnectPrinter",
+        "testPrint",
+        "retryPrinter",
+        "printerDisconnected",
+        "printerDiscovering",
+        "printerConnecting",
+        "printerConnected",
+        "printerTesting",
+        "printerPrinting",
+        "printerFailed",
+        "printReceipt",
+        "printerPrintFailed",
     ] as const;
 
     it("supports the approved interface languages", () => {

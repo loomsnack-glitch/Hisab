@@ -100,6 +100,47 @@ Acceptance criteria:
 
 ## Phase status
 
-Phase 6 is in progress at 6.1 planning. The hardware model and native
-transport remain external validation gates; app-level implementation proceeds
-only through the generic, testable boundary described above.
+Phase 6 application work is complete with follow-ups. The hardware model and
+native transport remain external validation gates; no printer readiness claim
+is made until those gates are completed.
+
+### 6.2 Implementation and review result
+
+Implemented on 2026-09-07:
+
+- Added the application-level printer state machine for discovery, connection,
+  test, print, disconnect, failure, and retry states.
+- Added persisted selected-printer identity/name in the existing MMKV
+  preference store with malformed-data fallback.
+- Added an injectable transport interface and a clearly named
+  `GanatriBluetoothPrinter` native-module bridge; the bridge reports an
+  unavailable-module error until the target native implementation is selected.
+- Added `PrinterSettings` with discover/select/connect/disconnect/test/retry
+  controls and translated status feedback.
+- Added print actions to Sale Complete and completed Sale Details, reusing the
+  existing server-Sale English receipt builder.
+- Kept print failures local and non-mutating: they do not re-submit checkout,
+  alter Payment state, or remove a confirmed Sale.
+
+Review findings and fixes:
+
+- Fixed the new `PrinterSettings` route typing so the generic destination
+  screen does not require a label for this nested settings route.
+- Added all printer labels and status copy to the English, Gujarati, and Hindi
+  bundles and extended localization coverage.
+- Confirmed no printer hardware, WebUSB transport, or native dependency was
+  falsely claimed or executed.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 101 passed, 0 failed, 483 assertions.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: all Phase 6
+  files typecheck; only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` import in `login-screen.tsx` remains.
+- Build, Expo, Android, emulator, device, live API, share-sheet, printer, and
+  hardware checks were intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the target-printer/native-module and
+physical-device validation follow-ups. Phase 6 application work is complete
+with follow-ups; the next phase is Phase 7 Restaurant operations.
