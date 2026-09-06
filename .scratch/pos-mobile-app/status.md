@@ -1,6 +1,6 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 7 active — 7.1 completed
+Status: Phase 7 active — 7.1–7.2 completed, 7.3 in progress
 
 Last updated: 2026-09-07
 
@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 7 active — 7.1 completed | Phases 1–6 app-level slices and Phase 7.1 service-mode slice are implemented. Native/device/API/share-sheet validation, Product report value support, printer hardware/native transport, and restaurant operations remain pending. |
+| Mobile POS implementation | Phase 7 active — 7.1–7.2 completed, 7.3 in progress | Phases 1–6 app-level slices, service modes, and Tables are implemented. Native/device/API/share-sheet validation, Product report value support, printer hardware/native transport, and remaining restaurant operations remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
@@ -162,8 +162,8 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 | Slice | Status | Dependency / exit condition |
 | --- | --- | --- |
 | 7.1 Service modes | Completed with follow-up | Capability-gated Dine-In/Pick-Up controls, scoped Cart state, and Draft/direct checkout propagation are implemented; device/API validation remains pending. |
-| 7.2 Tables | Approved for planning | Implementation follows the shared Sale flow and Store capability. |
-| 7.3 Table orders | Not started | Start/reopen/checkout behavior avoids duplicate active orders. |
+| 7.2 Tables | Completed with follow-up | Capability-gated table/area list, state display, and safe start/reopen navigation are implemented; device/API validation remains pending. |
+| 7.3 Table orders | In progress | Table context is being connected to Cart, KOT, checkout, and return navigation. |
 | 7.4 KOT and kitchen completion | Deferred | Later restaurant phase; KOT remains separate from Sale and Payment. |
 
 ### Phase 8 — Hardening and release readiness
@@ -199,6 +199,6 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 6 is complete with printer follow-ups; Phase 7.1 is complete and 7.2 is
-next in [phase-7.md](./phase-7.md). Do not claim printer readiness until its
-hardware gates are completed.
+Phase 6 is complete with printer follow-ups; Phase 7.1–7.2 are complete and
+7.3 is active in [phase-7.md](./phase-7.md). Do not claim printer readiness
+until its hardware gates are completed.

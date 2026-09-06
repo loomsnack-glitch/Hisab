@@ -14,10 +14,12 @@ import CustomerDetailsScreen from "../screens/customer-details-screen";
 import ReportsScreen from "../screens/reports-screen";
 import SettingsScreen from "../screens/settings-screen";
 import PrinterSettingsScreen from "../screens/printer-settings-screen";
+import TablesScreen from "../screens/tables-screen";
+import type { PosTableContext } from "../lib/pos-service-mode-boundary";
 
 export type PosStackParamList = {
     PosHome: undefined;
-    NewSale: undefined;
+    NewSale: { table?: PosTableContext } | undefined;
     Cart: undefined;
     Payment: undefined;
     SaleComplete: undefined;
@@ -48,7 +50,7 @@ const PosNavigator = () => {
             <Stack.Screen name="Reports" component={ReportsScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="PrinterSettings" component={PrinterSettingsScreen} />
-            <Stack.Screen name="Tables" component={PosDestinationScreen} />
+            <Stack.Screen name="Tables" component={TablesScreen} />
         </Stack.Navigator>
     );
 };

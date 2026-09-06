@@ -32,7 +32,7 @@ import { isPosRestaurantStore } from "../lib/pos-service-mode-boundary";
 type NewSaleScreenProps = NativeStackScreenProps<PosStackParamList, "NewSale">;
 type ProductQuickFilter = "all" | "recent" | "pinned";
 
-const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
+const NewSaleScreen = ({ navigation, route }: NewSaleScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
     useEffect(() => clearPosCompletedSale(), []);
@@ -61,6 +61,11 @@ const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const cart = usePosCart();
     const session = usePosSessionSnapshot().session;
     const restaurantStore = session ? isPosRestaurantStore(session.store) : false;
+    useEffect(() => {
+        if (route.params?.table) {
+            cart.setTableContext(route.params.table);
+        }
+    }, [route.params?.table?.tableId]);
     const convenience = usePosConvenience(catalog.products);
     const configuration = usePosConfiguration();
     const filteredCatalogProducts = filterCatalogProducts(catalog.products, search, selectedCategoryId);

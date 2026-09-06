@@ -94,6 +94,42 @@ future Cart context.
 - Use existing start/get table-order services and handle conflict responses
   without creating a second order.
 
+Implementation plan and review:
+
+- Add a scoped Tables query boundary for the existing table and area list
+  services, with a single refresh path after allocation or order start.
+- Group the server table list by area, retain an Unassigned group, and expose
+  every server state and current total without inventing local occupancy.
+- For a Free table, allocate it and then start its order; for an Allocated
+  table, start its order; for every occupied state, load the existing order.
+  Any service error remains retryable and refreshes the list before another
+  attempt, so a conflict cannot create a second local order.
+- Navigate successful responses into the existing New Sale route with the
+  future Cart Table context. Retail Stores remain gated by navigation and by
+  the screen's own capability check.
+
+Internal review: this uses the shared table-service contracts and preserves
+server authority for state and totals. It adds no table mutation beyond the
+existing allocate/start/get endpoints. Approved for implementation.
+
+Implementation and review result:
+
+- Replaced the Tables placeholder with scoped table and area queries and an
+  Unassigned fallback for stale or missing area assignments.
+- Added all server table states, capacity, and current totals to the simple
+  table cards. Retail Stores receive a guarded unavailable state even if the
+  route is reached directly.
+- Free tables allocate before starting; allocated tables start directly; active
+  tables reopen through the existing get-order endpoint. Failures refresh both
+  lists and remain retryable.
+- Successful responses navigate to New Sale with server-derived table, order,
+  and legacy draft identity. No local duplicate order is created.
+- Added grouping and identity boundary tests. Focused mobile tests pass;
+  TypeScript retains only the known missing WhatsApp asset import.
+
+Subphase review: approved. No new backend contract, role assumption, or
+unscoped table state was introduced. The next slice is Table Orders.
+
 ### 7.3 — Table orders plan
 
 - Preserve Table ID, Table Order ID, and service mode in scoped Cart context.
