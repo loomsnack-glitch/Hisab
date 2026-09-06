@@ -45,6 +45,23 @@ describe("localization boundary", () => {
         "discardDraftConfirm",
         "saleStatusVoided",
     ] as const;
+    const reportsKeys = [
+        "reportsSubtitle",
+        "reportsDate",
+        "reportsToday",
+        "reportsAllDates",
+        "reportsLoading",
+        "reportsLoadFailed",
+        "reportsEmpty",
+        "salesSummary",
+        "salesCount",
+        "salesValue",
+        "collectedAmount",
+        "dueAmount",
+        "averageSaleValue",
+        "productsSold",
+        "noProductsSold",
+    ] as const;
 
     it("supports the approved interface languages", () => {
         expect(APP_LANGUAGES).toEqual(["en", "gu", "hi"]);
@@ -65,9 +82,12 @@ describe("localization boundary", () => {
         expect(resolveAppLanguage("hi")).toBe("hi");
     });
 
-    it("provides Bills and Sale Details copy in every interface language", () => {
+    it("provides Bills, Reports, and Sale Details copy in every interface language", () => {
         for (const language of APP_LANGUAGES) {
             for (const key of billsKeys) {
+                expect(appResources[language].pos[key]).toBeTruthy();
+            }
+            for (const key of reportsKeys) {
                 expect(appResources[language].pos[key]).toBeTruthy();
             }
         }

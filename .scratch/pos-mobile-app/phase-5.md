@@ -455,5 +455,121 @@ native/live validation follow-ups. The next subphase is 5.4 Reports.
 | 5.1 Bills list and filters | Completed with follow-up | 84 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.2 Sale Details and Draft recovery | Completed with follow-up | 90 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
 | 5.3 Customer Directory | Completed with follow-up | 92 focused tests pass; native/live validation and the pre-existing asset typecheck remain follow-ups |
-| 5.4 Reports | Not started | Read-only summary and Product Sales Summary |
+| 5.4 Reports | In progress — planning | Read-only Today summary, simple date filter, and Product Sales Summary |
 | 5.5 Settings and Appearance | Not started | Uses existing localization, storage, and session boundaries |
+
+## 5.4 — Reports
+
+### Plan
+
+User-facing outcome: an authorized POS user can open Reports and quickly see
+the operational Sales picture for Today or all available dates, without
+editing Sales or entering an analytics workflow.
+
+Implementation scope:
+
+- Replace the Reports placeholder with a read-only Reports screen.
+- Default the period to Today and provide a simple Today/All dates filter.
+- Reuse `getPosSales` with completed Sales and the existing Sales-list summary
+  fields for Sales count, Sales value, collected amount, and due amount.
+- Calculate average Sale value from the server summary when the completed
+  Sales count is non-zero.
+- Reuse `getPosProductSalesSummary` for a Product name/category/quantity list.
+- Scope both queries by the active Organization, Store, and Device through
+  query keys, while leaving server authority with the existing service calls.
+- Provide translated loading, empty, error, and retry states in all three
+  approved interface languages.
+
+Acceptance criteria:
+
+1. Reports opens from the authenticated POS workspace and defaults to Today.
+2. Switching the date filter changes both report requests using the same local
+   day bounds; All dates omits date bounds.
+3. The screen shows Sales count, Sales value, collected amount, due amount,
+   and average Sale value from the existing server summary.
+4. The screen shows Products Sold with Product name and quantity, preserving
+   the existing Product Sales Summary contract.
+5. Reads are read-only, scoped, retryable, and visibly handle loading, empty,
+   and failure states.
+6. No backend or printer/reporting contract changes are introduced.
+
+Non-goals:
+
+- Complex charts, advanced analytics, exports, mutations, or report editing.
+- Per-product value until the existing Product Sales Summary contract exposes
+  a value field; this contract gap is recorded as a follow-up.
+
+Dependencies and public seams:
+
+- Existing `getPosSales`, `getPosProductSalesSummary`, `SalesListSummary`,
+  `ProductSalesSummaryDTO`, and POS session scope.
+- Existing Uniwind POS primitives, i18next namespace, and navigation stack.
+- Existing `getPosTodayBounds` timezone behavior for local calendar days.
+
+Test strategy:
+
+- Pure boundary tests for date query construction, average calculation,
+  scope-aware query keys, response unwrapping, and failure handling.
+- Translation-key coverage for the new Reports labels and states.
+- Run `bun run --cwd apps/mobile test`, mobile `tsc --noEmit` only for
+  lightweight type feedback, and `git diff --check`.
+- Do not run builds, Expo, Android, emulator, device, live API, share-sheet,
+  or hardware commands while planned POS mobile phases remain incomplete.
+
+### Internal plan review
+
+Reviewed on 2026-09-07 against `spec.md` Reports decisions, existing POS Sales
+and Product Sales Summary services/types, the POS session/query-key patterns,
+`CONTEXT.md`, ADR 0001, and `AGENTS.md` validation safety.
+
+The plan reuses existing server summaries and keeps the Reports workspace
+read-only. Average Sale value is a deterministic presentation calculation. The
+shared Product Sales Summary DTO currently exposes quantity but no per-product
+value, so that requested field is explicitly deferred as a contract follow-up
+instead of creating an unapproved API change.
+
+Plan review result: approved for implementation with the named Product value
+contract follow-up.
+
+### 5.4 Implementation and review result
+
+Implemented on 2026-09-07:
+
+- Replaced the Reports placeholder with a read-only Reports workspace.
+- Added a Today default and an All dates filter using the shared local-day
+  bounds behavior for both report requests.
+- Added Store Device-scoped Sales and Product Sales Summary query keys and
+  service-response unwrapping with retryable failure states.
+- Added Sales count, Sales value, collected amount, due amount, and average
+  Sale value from the server summary; average value is calculated only when
+  completed Sales exist.
+- Added the Products Sold list with Product name, optional category, and
+  quantity, preserving the existing shared DTO.
+- Added English, Gujarati, and Hindi Reports labels, loading, empty, and
+  failure copy, plus focused boundary and translation tests.
+
+Review findings and fixes:
+
+- Reused the existing `getPosTodayBounds` boundary rather than duplicating
+  local-calendar calculations.
+- Fixed the initial test to construct expected day bounds in the runtime's
+  local timezone instead of assuming a particular machine timezone.
+- Switched the focused test import to the repository's `bun:test` convention
+  so mobile TypeScript feedback remains limited to the known baseline issue.
+- Confirmed the current Product Sales Summary contract has no per-product
+  value field; per-product value remains a documented API follow-up and no
+  backend contract was changed.
+
+Verification evidence:
+
+- `bun run --cwd apps/mobile test`: 96 passed, 0 failed, 366 assertions.
+- `git diff --check`: passed.
+- `./node_modules/.bin/tsc --noEmit -p apps/mobile/tsconfig.json`: all new
+  Reports files typecheck; the command remains red only on the pre-existing
+  missing `@repo/assets/services/whatsapp.webp` import in `login-screen.tsx`.
+- Build, Expo, Android, emulator, device, live API, share-sheet, and hardware
+  checks were intentionally not run under `AGENTS.md`.
+
+Subphase review result: approved with the named pre-existing typecheck,
+native/live validation, and Product value contract follow-ups. The next
+subphase is 5.5 Settings and Appearance.
