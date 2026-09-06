@@ -166,4 +166,31 @@ work. The highest-risk item is the removed Draft idempotency contract; it must
 be resolved from the shared backend/type boundary rather than hidden in the
 mobile client. No new product decision is required for this sync.
 
-Status: M.1–M.3 complete; M.4 final sync review in progress.
+### M.4 — Final sync review and closeout
+
+Standards review found the sync remains scoped: shared billing authority stays
+on the server, client payloads do not send trusted prices, the web printer and
+native Bluetooth seam remain separate, and the approved MMKV/i18next POS
+runtime was not replaced by mainline's generic SecureStore app. Spec review
+found the mainline selling-unit, Store Offering, entitlement, KOT, Tables, and
+reporting behavior retained while the approved Draft retry contract remains
+available.
+
+Validation completed:
+
+- Mobile focused suite: 112 passed, 0 failed.
+- Merged backend/type boundary suite: 85 passed, 0 failed.
+- `git diff --check`: passed.
+- Targeted mobile TypeScript feedback reports only the pre-existing missing
+  `@repo/assets/services/whatsapp.webp` module in
+  `apps/mobile/src/screens/login-screen.tsx`.
+- No build, Expo, Android/emulator, device-start, live API, migration-run, or
+  printer-hardware command was run.
+
+The merge checkpoint is `23c377c` and the compatibility update is `65de6a5`.
+The worktree is clean after the closeout documentation commit. Remaining gates
+belong to Phase 8: Android/device verification, native Bluetooth transport and
+physical printer validation, live API/database migration verification, and the
+existing asset/typecheck baseline fix.
+
+Status: complete; Phase 8 hardening is next.
