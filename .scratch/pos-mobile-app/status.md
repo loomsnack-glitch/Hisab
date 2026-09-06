@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Phase 7 completed with follow-ups
+Status: Mainline compatibility sync planned before Phase 8
 
 Last updated: 2026-09-07
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), and the Phase 7 execution record is in [phase-7.md](./phase-7.md). Phase 7 is complete with follow-ups; Phase 8 is next.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), the Phase 7 execution record is in [phase-7.md](./phase-7.md), and the origin/main compatibility plan is in [merge-origin-main.md](./merge-origin-main.md). Phase 7 is complete with follow-ups; the mainline sync is planned before Phase 8.
 
 ## Current scope
 
@@ -199,6 +199,7 @@ Mobile POS implementation has completed the Phase 1 foundation. The Draft commit
 
 ## Current next step
 
-Phase 7 is complete with follow-ups. Phase 8 is next for focused hardening,
+Phase 7 is complete with follow-ups. The [origin/main compatibility
+sync](./merge-origin-main.md) is next, followed by Phase 8 hardening,
 device/API validation, and release checks. Do not claim printer readiness until
 its hardware gates are completed.
