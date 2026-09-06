@@ -13,6 +13,8 @@ describe("POS Payment status boundary", () => {
         expect(getPosPaymentStatusPresentation(sale)).toEqual({
             status: "paid",
             labelKey: "paymentStatusPaid",
+            descriptionKey: "paymentStatusPaidDescription",
+            receiptLabel: "Paid",
             tone: "success",
             grandTotal: 125,
             paidTotal: 125,
@@ -57,6 +59,8 @@ describe("POS Payment status boundary", () => {
         })).toEqual({
             status: "paid",
             labelKey: "paymentStatusPaid",
+            descriptionKey: "paymentStatusPaidDescription",
+            receiptLabel: "Paid",
             tone: "success",
             grandTotal: 125,
             paidTotal: 90,

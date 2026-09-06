@@ -7,17 +7,21 @@ type PosPaymentStatusSale = Pick<SaleSummaryDTO, "paymentStatus" | "grandTotal" 
 export type PosPaymentStatusPresentation = {
     status: PaymentStatus;
     labelKey: Extract<PosTranslationKey, "paymentStatusPaid" | "paymentStatusPartial" | "paymentStatusDue">;
+    descriptionKey: Extract<PosTranslationKey, "paymentStatusPaidDescription" | "paymentStatusPartialDescription" | "paymentStatusDueDescription">;
+    receiptLabel: "Paid" | "Partial" | "Due";
     tone: PosStatusTone;
     grandTotal: number;
     paidTotal: number;
     dueTotal: number;
 };
 
-const statusPresentation: Record<PaymentStatus, Pick<PosPaymentStatusPresentation, "labelKey" | "tone">> = {
-    paid: { labelKey: "paymentStatusPaid", tone: "success" },
-    partial: { labelKey: "paymentStatusPartial", tone: "warning" },
-    pending: { labelKey: "paymentStatusDue", tone: "warning" },
+const statusPresentation: Record<PaymentStatus, Pick<PosPaymentStatusPresentation, "labelKey" | "descriptionKey" | "receiptLabel" | "tone">> = {
+    paid: { labelKey: "paymentStatusPaid", descriptionKey: "paymentStatusPaidDescription", receiptLabel: "Paid", tone: "success" },
+    partial: { labelKey: "paymentStatusPartial", descriptionKey: "paymentStatusPartialDescription", receiptLabel: "Partial", tone: "warning" },
+    pending: { labelKey: "paymentStatusDue", descriptionKey: "paymentStatusDueDescription", receiptLabel: "Due", tone: "warning" },
 };
+
+export const getPosPaymentStatusReceiptLabel = (status: PaymentStatus) => statusPresentation[status].receiptLabel;
 
 export const getPosPaymentStatusPresentation = (
     sale: PosPaymentStatusSale,

@@ -11,7 +11,7 @@ verification, standards/spec review, status update, and focused commit.
 
 ## Phase outcome
 
-Convert the reviewed Cart into one confirmed Sale with clear settlement and
+Convert the reviewed Sale draft into one confirmed Sale with clear settlement and
 receipt access. The phase exit condition is that a POS user can complete a
 normal, Partial, Due, or multiple-Payment Sale without duplicate submission and
 reach Sale Complete. Final totals, Payment records, Payment status, Sale number,
@@ -24,7 +24,7 @@ Included in this phase:
 - Cash, UPI, and Card Payment entry.
 - One simple default Payment row plus optional additional Payment rows.
 - Paid, Partial, and Due status display with amount/remaining feedback.
-- Separate checkout adapters for a new Cart, an existing Draft Sale, later
+- Separate checkout adapters for a new Sale draft, an existing Draft Sale, later
   Payment collection, and future Table checkout.
 - Stable request identifiers and controlled retry/recovery for checkout.
 - Sale Complete confirmation with server Sale details.
@@ -46,7 +46,7 @@ Not included in this phase:
 | --- | --- | --- | --- | --- |
 | 4.1 | Payment entry | Phase 3 | Cash/UPI/Card rows, optional additional rows, and local validation work | `2eacaab` |
 | 4.2 | Payment status | 4.1 | Paid/Partial/Due follows server-backed totals and collected values | `e6c9098` |
-| 4.3 | Checkout adapter | 4.1–4.2 | New Cart, Draft commit, later collection, and retry paths are separated | `95a25f7` |
+| 4.3 | Checkout adapter | 4.1–4.2 | New Sale draft, Draft commit, later collection, and retry paths are separated | `95a25f7` |
 | 4.4 | Sale Complete screen | 4.3 | Confirmed Sale details and New Sale action work | `873f9a7` |
 | 4.5 | Digital receipts and sharing | 4.4 | Receipt display/share failures never change the completed Sale | `bdb7cba` |
 
@@ -606,8 +606,8 @@ Plan review result: approved for implementation.
 Implemented the digital receipt and Android sharing slice:
 
 - Added a pure English receipt-text boundary built from the server
-  `SaleDetailDTO`, including Sale identity/date, Customer, items/add-ons,
-  server total, collected, due, and Payment status.
+  `SaleDetailDTO`, including Sale identity/date, items/add-ons, server total,
+  collected, due, and Payment status.
 - Added a failure-safe Share adapter using React Native's built-in Android
   share sheet. Shared, dismissed, and rejected outcomes remain local feedback
   and do not mutate the completed Sale.
@@ -634,6 +634,28 @@ Review evidence:
 Implementation review result: approved with the known asset/native/device/API
 follow-ups. All planned Phase 4 code slices are complete; Bluetooth printing
 remains explicitly deferred to Phase 6.
+
+### Phase 4 follow-up fixes
+
+The branch review identified and fixed the following issues after the initial
+Phase 4 closeout:
+
+- New Sale now explicitly clears active Cart, local Payment rows, and the
+  completed-Sale handoff together, so a new session cannot inherit prior Sale
+  state.
+- Paid, Partial, and Due presentations now include short translated
+  explanations in English, Gujarati, and Hindi, while keeping server totals
+  authoritative.
+- Complete Sale and Draft commit payloads share one internal payload builder;
+  receipt Payment status text uses the same status boundary instead of a second
+  status mapping.
+- The digital receipt is labelled `SALE RECEIPT` and contains only the agreed
+  identity, item, total, settlement, and status fields; it does not add an
+  unrequested Customer line.
+- Discarding a Draft also clears its completion retry identifier.
+
+Focused mobile tests pass after these fixes. Android/build/device, live API,
+share-sheet, migration, and printer validation remain intentionally pending.
 
 ## Subphase status
 

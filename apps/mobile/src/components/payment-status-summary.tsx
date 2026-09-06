@@ -17,6 +17,7 @@ export const PaymentStatusSummary = ({ sale }: PaymentStatusSummaryProps) => {
     return (
         <View className="gap-3 rounded-2xl border border-pos-border bg-pos-surface-muted px-4 py-3 dark:border-pos-border-dark dark:bg-pos-surface-muted-dark">
             <PosStatusBadge label={t(presentation.labelKey)} tone={presentation.tone} />
+            <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t(presentation.descriptionKey)}</Text>
             <View className="gap-1">
                 <View className="flex-row justify-between gap-3">
                     <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">{t("paymentTotal")}</Text>

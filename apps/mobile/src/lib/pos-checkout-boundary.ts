@@ -57,17 +57,15 @@ const getDraftFields = (input: PosCheckoutCartInput) => {
     return fields;
 };
 
-export const buildPosCompleteSalePayload = (input: PosCheckoutCartInput): CompleteSaleJSON => ({
+const buildPosSalePayload = (input: PosCheckoutCartInput) => ({
     requestId: input.requestId,
     ...getDraftFields(input),
     payments: mapPosPaymentRowsToInputs(input.payments),
 });
 
-export const buildPosCommitSalePayload = (input: PosCheckoutCartInput): CommitSaleJSON => ({
-    requestId: input.requestId,
-    ...getDraftFields(input),
-    payments: mapPosPaymentRowsToInputs(input.payments),
-});
+export const buildPosCompleteSalePayload = (input: PosCheckoutCartInput): CompleteSaleJSON => buildPosSalePayload(input);
+
+export const buildPosCommitSalePayload = (input: PosCheckoutCartInput): CommitSaleJSON => buildPosSalePayload(input);
 
 export const createPosCheckoutOperation = (
     input: PosCheckoutCartInput,

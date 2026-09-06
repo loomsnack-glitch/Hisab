@@ -8,7 +8,6 @@ const sale = {
     id: "sale-1",
     saleNumber: "INV-1042",
     createdAt: "2026-09-05T10:00:00.000Z",
-    customer: { name: "Asha" },
     items: [{
         productNameSnapshot: "Masala Tea",
         quantity: 2,
@@ -26,7 +25,7 @@ describe("POS digital receipt boundary", () => {
         const receipt = buildPosDigitalReceiptText(sale);
 
         expect(receipt).toContain("Bill No: INV-1042");
-        expect(receipt).toContain("Customer: Asha");
+        expect(receipt).toContain("SALE RECEIPT");
         expect(receipt).toContain("Masala Tea x2 80");
         expect(receipt).toContain("  + Extra Sugar x1 5");
         expect(receipt).toContain("TOTAL: 85");

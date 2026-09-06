@@ -100,7 +100,9 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
     setCompletionRequestId: (scopeKey, completionRequestId) =>
         set((state) => state.scopeKey !== scopeKey ? state : { completionRequestId }),
     clearDraftSale: (scopeKey) =>
-        set((state) => state.scopeKey !== scopeKey ? state : { draftSaleId: null, draftRequestId: null }),
+        set((state) => state.scopeKey !== scopeKey
+            ? state
+            : { draftSaleId: null, draftRequestId: null, completionRequestId: null }),
     clear: () => set({ scopeKey: null, items: [], customer: null, discount: null, draftSaleId: null, draftRequestId: null, completionRequestId: null }),
 }));
 

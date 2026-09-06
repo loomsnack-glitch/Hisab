@@ -1,21 +1,15 @@
 import type { SaleDetailDTO } from "@repo/types";
+import { getPosPaymentStatusReceiptLabel } from "./pos-payment-status-boundary";
 
-type PosReceiptSale = Pick<SaleDetailDTO, "id" | "saleNumber" | "createdAt" | "customer" | "items" | "paymentStatus" | "grandTotal" | "paidTotal" | "dueTotal">;
+type PosReceiptSale = Pick<SaleDetailDTO, "id" | "saleNumber" | "createdAt" | "items" | "paymentStatus" | "grandTotal" | "paidTotal" | "dueTotal">;
 
 const money = (value: number | null | undefined) => String(value ?? 0);
 
-const paymentStatusLabel = (status: PosReceiptSale["paymentStatus"]) => status === "paid"
-    ? "Paid"
-    : status === "partial"
-      ? "Partial"
-      : "Due";
-
 export const buildPosDigitalReceiptText = (sale: PosReceiptSale) => {
     const lines = [
-        "INVOICE / RECEIPT",
+        "SALE RECEIPT",
         `Bill No: ${sale.saleNumber ?? sale.id}`,
         `Date: ${new Date(sale.createdAt).toISOString()}`,
-        `Customer: ${sale.customer?.name ?? "Walk-in Customer"}`,
         "",
         "ITEMS",
     ];
@@ -32,7 +26,7 @@ export const buildPosDigitalReceiptText = (sale: PosReceiptSale) => {
         `TOTAL: ${money(sale.grandTotal)}`,
         `COLLECTED: ${money(sale.paidTotal)}`,
         `DUE: ${money(sale.dueTotal)}`,
-        `PAYMENT STATUS: ${paymentStatusLabel(sale.paymentStatus)}`,
+        `PAYMENT STATUS: ${getPosPaymentStatusReceiptLabel(sale.paymentStatus)}`,
         "",
         "Thank you! Visit again.",
     );
