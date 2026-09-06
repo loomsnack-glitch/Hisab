@@ -1,4 +1,4 @@
-import type { WhatsAppWorkerMessageEventJSON } from "@repo/types";
+import type { WhatsAppMessageEventJSON } from "@repo/types";
 import {
   type CloudDeferredEvent,
   type CloudNormalizedEvent,
@@ -22,7 +22,7 @@ export type CloudWebhookProcessorDependencies = {
   normalize: typeof normalizeCloudWebhookReceipt;
   ingestMessage: (
     accountId: string,
-    data: WhatsAppWorkerMessageEventJSON,
+    data: WhatsAppMessageEventJSON,
   ) => Promise<{ stored: boolean }>;
   updateStatus: (
     accountId: string,
@@ -117,7 +117,7 @@ const receiptFor = (
 
 const messagePayload = (
   event: Extract<CloudNormalizedEvent, { kind: "message" }>,
-): WhatsAppWorkerMessageEventJSON => ({
+): WhatsAppMessageEventJSON => ({
   providerMessageId: event.providerMessageId,
   externalChatId: event.externalChatId,
   contactPhoneNumber: event.contactPhoneNumber,

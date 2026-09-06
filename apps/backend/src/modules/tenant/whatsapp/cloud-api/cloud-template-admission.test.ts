@@ -29,7 +29,10 @@ describe("Cloud template send admission", () => {
       outboundComponents: [{ type: "body", parameters: [{ type: "text", text: "Asha" }] }],
     });
     expect(result.admitted).toBe(true);
-    if (result.admitted) expect(result.snapshot).toMatchObject({ bindingId: "binding-1", assetId: "asset-1", version: 3 });
+    if (result.admitted) {
+      expect(result.snapshot).toMatchObject({ bindingId: "binding-1", assetId: "asset-1", version: 3 });
+      expect(result.snapshot.templateComponents).toEqual(base.asset.components);
+    }
   });
 
   test("blocks unapproved, mismatched, and suppressed sends", () => {

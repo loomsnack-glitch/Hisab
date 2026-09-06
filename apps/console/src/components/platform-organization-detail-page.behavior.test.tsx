@@ -32,6 +32,7 @@ import {
     type PlatformSaleInspectionListResponse,
     type PlatformStoreDetailResponse,
     type PlatformStoreListResponse,
+    type ConsoleStoreCommercialInspectionResponse,
     type ServiceResponse,
 } from "@repo/types";
 
@@ -520,6 +521,83 @@ const successStoreDetail = (
     },
     message: "Platform Store retrieved successfully",
     code: 200,
+});
+
+const successStoreCommercial = (
+    storeId = mixedStores[0]!.id,
+): ServiceResponse<ConsoleStoreCommercialInspectionResponse> => ({
+    status: "success",
+    message: "Store commercial status fetched successfully",
+    code: 200,
+    data: {
+        commercialStatus: {
+            storeId,
+            organizationId: mixedBistro.id,
+            timezone: "Asia/Kolkata",
+            baseAccess: null,
+            scheduledSuccessor: null,
+            accessGrants: [
+                {
+                    id: "00000000-0000-4000-8000-000000000101",
+                    sourceKind: "store_access_grant",
+                    origin: "legacy_migration",
+                    termKind: "complimentary",
+                    selectionKind: "all_current_modules",
+                    label: "Legacy migration grant",
+                    selectionLabel: "All current Modules",
+                    planKey: null,
+                    planDisplayName: null,
+                    moduleKey: null,
+                    moduleDisplayName: null,
+                    term: { count: 30, unit: "day" },
+                    startsAt: "2026-09-04T15:00:00.000Z",
+                    endsAt: "2026-10-04T15:00:00.000Z",
+                    status: "active",
+                    modules: [
+                        {
+                            key: "core_operations",
+                            displayName: "Core Operations",
+                            features: [{ key: "billing", displayName: "Billing" }],
+                        },
+                    ],
+                },
+            ],
+            activeAddOns: [],
+            availablePaidPlans: [],
+            availableCoTermAddOns: [],
+            pendingCheckout: null,
+            commercialHistory: [],
+            trial: {
+                eligible: true,
+                message: "This Store can start the standard Trial Plan once.",
+            },
+            entitlements: {
+                storeId,
+                features: [
+                    {
+                        key: "billing",
+                        displayName: "Billing",
+                        sources: [
+                            {
+                                sourceKind: "store_access_grant",
+                                sourceId: "00000000-0000-4000-8000-000000000101",
+                                moduleKey: "core_operations",
+                                moduleDisplayName: "Core Operations",
+                                featureDisplayName: "Billing",
+                                startsAt: "2026-09-04T15:00:00.000Z",
+                                endsAt: "2026-10-04T15:00:00.000Z",
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+        grantableAccess: {
+            plans: [{ key: "trial", displayName: "Trial", planType: "trial", term: { count: 7, unit: "day" } }],
+            modules: [{ key: "core_operations", displayName: "Core Operations" }],
+        },
+        refundablePayments: [],
+    },
 });
 
 const successSales = (
@@ -1065,6 +1143,7 @@ describe("Organization Store inspection", () => {
             getPlatformOrganization?: LoadOrganization;
             getPlatformOrganizationStores?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformOrganizationStores"]>;
             getPlatformStore?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStore"]>;
+            getPlatformStoreCommercialStatus?: NonNullable<PlatformOrganizationDetailPageProps["getPlatformStoreCommercialStatus"]>;
         } = {},
     ) => {
         window.history.replaceState(null, "", path);
@@ -1080,6 +1159,9 @@ describe("Organization Store inspection", () => {
                     getPlatformOrganization={options.getPlatformOrganization ?? (async () => successDetail(mixedBistro, mixedStores, undefined, mixedRecentSales))}
                     getPlatformOrganizationStores={options.getPlatformOrganizationStores ?? (async () => successStores())}
                     getPlatformStore={options.getPlatformStore ?? (async () => successStoreDetail())}
+                    getPlatformStoreCommercialStatus={
+                        options.getPlatformStoreCommercialStatus ?? (async () => successStoreCommercial())
+                    }
                 />
             </QueryClientProvider>,
         );
@@ -1112,6 +1194,9 @@ describe("Organization Store inspection", () => {
         expect(view.queryByText("Add device")).toBeNull();
         expect(view.queryByText("Reveal secret")).toBeNull();
         expect(view.queryByText("Open POS")).toBeNull();
+        expect(await view.findByText("Legacy migration grant")).toBeTruthy();
+        expect(view.getByText(/All current Modules/)).toBeTruthy();
+        expect(view.getByRole("button", { name: "Create Store Access Grant" })).toBeTruthy();
     });
 
     test("shows empty, loading, and not-found Store states without exposing other Stores", async () => {

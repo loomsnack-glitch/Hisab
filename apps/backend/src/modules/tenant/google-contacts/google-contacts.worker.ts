@@ -29,7 +29,7 @@ export type GoogleContactsSyncJob = {
 export type GoogleContactsSyncOutcome =
   | { status: "created"; googleResourceName: string }
   | { status: "updated"; googleResourceName: string }
-  | { status: "skipped"; reason: "ineligible" | "connection_inactive" }
+  | { status: "skipped"; reason: "ineligible" | "connection_inactive" | "not_entitled" }
   | { status: "conflict"; reason: "multiple_matches" | "phone_collision" }
   | { status: "retryable"; code: string; message: string }
   | { status: "reconnect_required"; code: string; message: string }

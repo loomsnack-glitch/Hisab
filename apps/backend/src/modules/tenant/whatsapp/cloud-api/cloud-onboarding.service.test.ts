@@ -23,10 +23,17 @@ const createCloudOnboardingStateRecord = mock(
 
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
   getOrganizationByIdForUser,
+  getStoresByOrganizationId: mock(async () => [
+    { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", organizationId: organization.id, name: "Adajan" },
+  ]),
 }));
 mock.module("./cloud-onboarding.repository", () => ({
   createCloudOnboardingStateRecord,
 }));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 
 const { startCloudOnboarding } = await import("./cloud-onboarding.service");
 

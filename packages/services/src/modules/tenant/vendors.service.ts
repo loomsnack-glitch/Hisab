@@ -2,10 +2,16 @@ import type {
     CreateVendorItemJSON,
     CreateVendorJSON,
     ServiceResponse,
+    StoreVendorAvailabilitiesListResponse,
+    StoreVendorAvailabilityResponse,
+    StoreVendorItemOfferingResponse,
+    StoreVendorItemOfferingsListResponse,
     VendorItemResponse,
     VendorItemsListResponse,
     VendorResponse,
     VendorsListResponse,
+    UpdateStoreVendorAvailabilityJSON,
+    UpdateStoreVendorItemOfferingJSON,
     UpdateVendorItemJSON,
     UpdateVendorJSON,
 } from "@repo/types";
@@ -101,6 +107,68 @@ export const updateVendorItem = async (
 ): Promise<ServiceResponse<VendorItemResponse | null>> => {
     try {
         const response = await api.patch(`/organizations/${organizationId}/vendor-items/${vendorItemId}`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreVendorAvailabilities = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreVendorAvailabilitiesListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/vendor-availabilities`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreVendorAvailability = async (
+    organizationId: string,
+    storeId: string,
+    availabilityId: string,
+    data: UpdateStoreVendorAvailabilityJSON,
+): Promise<ServiceResponse<StoreVendorAvailabilityResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/vendor-availabilities/${availabilityId}`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreVendorItemOfferings = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreVendorItemOfferingsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/vendor-item-offerings`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreVendorItemOffering = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+    data: UpdateStoreVendorItemOfferingJSON,
+): Promise<ServiceResponse<StoreVendorItemOfferingResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/vendor-item-offerings/${offeringId}`,
+            data,
+        );
         return response.data;
     } catch (error) {
         return handleApiError(error);

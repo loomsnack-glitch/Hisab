@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { AuthenticatedUserDTO } from "@repo/types";
+import { clearStarredOrgId } from "@/lib/default-org-path";
 import { clearExpenseFormPreferences } from "@/lib/expense-form-preferences";
 import { clearPurchaseFormPreferences } from "@/lib/purchase-form-preferences";
 
@@ -16,6 +17,7 @@ const useAuthStore = create<AuthState>()((set) => ({
     actions: {
         setUser: (user) => set({ user }),
         clearUser: () => {
+            clearStarredOrgId();
             clearExpenseFormPreferences();
             clearPurchaseFormPreferences();
             set({ user: null });

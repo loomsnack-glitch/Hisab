@@ -64,6 +64,9 @@ const billingRepository = await import("./billing.repository");
 const organizationRepository = await import("@/modules/tenant/organization/organization.repository");
 const googleContactsOutbox = await import("@/modules/tenant/google-contacts/google-contacts.outbox");
 const { pg } = await import("@/config/db");
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 const billingService = await import("./billing.service");
 
 describe("Google Contacts automatic Customer synchronization", () => {

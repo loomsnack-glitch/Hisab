@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateVendorItemSchema, CreateVendorSchema, STATUS_CODES, UpdateVendorItemSchema, UpdateVendorSchema } from "@repo/types";
+import { CreateVendorItemSchema, CreateVendorSchema, STATUS_CODES, UpdateStoreVendorAvailabilitySchema, UpdateStoreVendorItemOfferingSchema, UpdateVendorItemSchema, UpdateVendorSchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -199,6 +199,124 @@ export const createVendorsRoutes = (
                 return handleServiceResponse(c, serviceResponse);
             } catch (error) {
                 return handleError(FILE_NAME, "updateVendorItem", c, error);
+            }
+        },
+    );
+
+    router.get("/:organizationId/stores/:storeId/vendor-availabilities", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            const serviceResponse = await vendorsService.getStoreVendorAvailabilities(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getStoreVendorAvailabilities", c, error);
+        }
+    });
+
+    router.patch(
+        "/:organizationId/stores/:storeId/vendor-availabilities/:availabilityId",
+        validateSchema("json", UpdateStoreVendorAvailabilitySchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const availabilityId = c.req.param("availabilityId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+                const invalidAvailabilityId = validateUuidParam(availabilityId, "Invalid availability id");
+                if (invalidAvailabilityId) {
+                    return c.json(invalidAvailabilityId, invalidAvailabilityId.code);
+                }
+
+                const serviceResponse = await vendorsService.updateStoreVendorAvailability(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    availabilityId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "updateStoreVendorAvailability", c, error);
+            }
+        },
+    );
+
+    router.get("/:organizationId/stores/:storeId/vendor-item-offerings", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            const serviceResponse = await vendorsService.getStoreVendorItemOfferings(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "getStoreVendorItemOfferings", c, error);
+        }
+    });
+
+    router.patch(
+        "/:organizationId/stores/:storeId/vendor-item-offerings/:offeringId",
+        validateSchema("json", UpdateStoreVendorItemOfferingSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const offeringId = c.req.param("offeringId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+                const invalidOfferingId = validateUuidParam(offeringId, "Invalid offering id");
+                if (invalidOfferingId) {
+                    return c.json(invalidOfferingId, invalidOfferingId.code);
+                }
+
+                const serviceResponse = await vendorsService.updateStoreVendorItemOffering(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                    offeringId,
+                    c.req.valid("json"),
+                );
+                return handleServiceResponse(c, serviceResponse);
+            } catch (error) {
+                return handleError(FILE_NAME, "updateStoreVendorItemOffering", c, error);
             }
         },
     );

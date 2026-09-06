@@ -1,0 +1,3 @@
+# Customer credit is segregated by Store
+
+Customers remain Organization-owned shared identities and are searchable from every Store, but every Store has an independent Store Customer Account and Customer Ledger for each Customer it serves. Selecting an existing Customer at a new Store creates or uses only that Store's account, initially at zero. A Receivable Sale, payment, void reversal, or adjustment changes only the account for that Sale's Store; another Store cannot collect or settle it. Organization reporting may aggregate these balances for visibility, but the aggregate is not a cross-store collectible balance. This supersedes the organization-wide customer-balance portion of ADR 0001.

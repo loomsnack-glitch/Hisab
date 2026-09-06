@@ -17,6 +17,7 @@ import {
     type PosComposerHandoff,
     type PosRouteContext,
 } from "@/pages/pos-route-context";
+import { isPosSettingsPath } from "@/components/pos/pos-nav-items";
 import { PosPrinterProvider } from "@/providers/pos-printer-provider";
 
 const PosPage = () => {
@@ -26,7 +27,7 @@ const PosPage = () => {
     const [headerSearch, setHeaderSearch] = useState("");
     const [pendingComposerHandoff, setPendingComposerHandoff] = useState<PosComposerHandoff | null>(null);
     const activePanelTab = getPosPanelTabFromPath(location.pathname);
-    const isAppearanceRoute = location.pathname === "/appearance";
+    const isSettingsRoute = isPosSettingsPath(location.pathname);
     const legacyPanel = searchParams.get("panel");
 
     const handlePanelTabChange = useCallback(
@@ -97,9 +98,9 @@ const PosPage = () => {
                 <PosLayout
                     session={session}
                     searchValue={headerSearch}
-                    searchPlaceholder={isAppearanceRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
+                    searchPlaceholder={isSettingsRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
                     onSearchChange={setHeaderSearch}
-                    showSearch={!isAppearanceRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
+                    showSearch={!isSettingsRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
                 >
                     <Outlet context={context} />
                 </PosLayout>

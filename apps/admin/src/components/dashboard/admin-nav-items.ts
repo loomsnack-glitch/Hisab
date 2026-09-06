@@ -3,7 +3,6 @@ import {
     Armchair,
     Banknote,
     BarChart3,
-    Building2,
     Contact,
     Package2,
     ReceiptText,
@@ -18,8 +17,35 @@ import {
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { isStoresNavActive } from "@/lib/store-routes";
+import { getStoreProductsPath, getStoreVendorsPath } from "@/lib/store-workspace-routes";
 
 export type AdminNavIcon = LucideIcon | typeof WhatsAppIcon;
+
+export type AdminNavGroup =
+    | "organization"
+    | "catalog"
+    | "sales"
+    | "reports"
+    | "finance"
+    | "integrations";
+
+export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
+    organization: "Organization",
+    catalog: "Catalog",
+    sales: "Sales & Service",
+    reports: "Reports",
+    finance: "Finance",
+    integrations: "Integrations",
+};
+
+export const adminNavGroupOrder: AdminNavGroup[] = [
+    "organization",
+    "catalog",
+    "sales",
+    "reports",
+    "finance",
+    "integrations",
+];
 
 export type AdminNavDestination = {
     id: string;
@@ -29,31 +55,27 @@ export type AdminNavDestination = {
     requiresOrganization: boolean;
     path: string;
     isActive: (pathname: string) => boolean;
+    group: AdminNavGroup;
 };
 
-type AdminNavDestinationDef = Omit<AdminNavDestination, "path"> & {
-    getPath: (organizationId: string) => string;
+type AdminNavDestinationDef = Omit<AdminNavDestination, "path" | "isActive"> & {
+    getPath: (organizationId: string, storeId?: string) => string;
+    isActive: (pathname: string, storeId?: string) => boolean;
 };
 
 export type VisibleAdminNavArgs = {
     organizationId?: string;
+    storeId?: string;
     hasOrganization: boolean;
 };
 
 const adminDestinationDefs: AdminNavDestinationDef[] = [
     {
-        id: "organizations",
-        label: "Organizations",
-        icon: Building2,
-        requiresOrganization: false,
-        getPath: () => "/organizations",
-        isActive: (pathname) => pathname === "/organizations",
-    },
-    {
         id: "stores",
         label: "Stores",
         icon: Store,
         requiresOrganization: true,
+        group: "organization",
         getPath: (organizationId) => `/organizations/${organizationId}/stores`,
         isActive: isStoresNavActive,
     },
@@ -62,30 +84,41 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         label: "Product",
         icon: Package2,
         requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/products`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/products(\/|$)/.test(pathname),
+        group: "catalog",
+        getPath: (organizationId, storeId) =>
+            storeId
+                ? getStoreProductsPath(organizationId, storeId)
+                : `/organizations/${organizationId}/products`,
+        isActive: (pathname, storeId) =>
+            storeId
+                ? pathname.includes(`/workspaces/${storeId}/products`)
+                : /\/organizations\/[^/]+\/products(\/|$)/.test(pathname) &&
+                  !pathname.includes("/workspaces/"),
+    },
+    {
+        id: "units",
+        label: "Units",
+        icon: Ruler,
+        requiresOrganization: true,
+        group: "catalog",
+        getPath: (organizationId) => `/organizations/${organizationId}/units`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
     },
     {
         id: "billing",
         label: "Billing",
         icon: ReceiptText,
         requiresOrganization: true,
+        group: "sales",
         getPath: (organizationId) => `/organizations/${organizationId}/billing`,
         isActive: (pathname) => /\/organizations\/[^/]+\/billing/.test(pathname),
-    },
-    {
-        id: "reports",
-        label: "Reports",
-        icon: BarChart3,
-        requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/reports`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/reports/.test(pathname),
     },
     {
         id: "tables",
         label: "Tables",
         icon: Armchair,
         requiresOrganization: true,
+        group: "sales",
         getPath: (organizationId) => `/organizations/${organizationId}/tables`,
         isActive: (pathname) => /\/organizations\/[^/]+\/tables/.test(pathname),
     },
@@ -94,22 +127,25 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         label: "Customers",
         icon: Users,
         requiresOrganization: true,
+        group: "sales",
         getPath: (organizationId) => `/organizations/${organizationId}/customers`,
         isActive: (pathname) => /\/organizations\/[^/]+\/customers/.test(pathname),
     },
     {
-        id: "whatsapp",
-        label: "WhatsApp",
-        icon: WhatsAppIcon,
+        id: "reports",
+        label: "Reports",
+        icon: BarChart3,
         requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/whatsapp/accounts`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(pathname),
+        group: "reports",
+        getPath: (organizationId) => `/organizations/${organizationId}/reports`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/reports/.test(pathname),
     },
     {
         id: "money-accounts",
         label: "Money Accounts",
         icon: Wallet,
         requiresOrganization: true,
+        group: "finance",
         getPath: (organizationId) => `/organizations/${organizationId}/money-accounts`,
         isActive: (pathname) => /\/organizations\/[^/]+\/money-accounts(\/|$)/.test(pathname),
     },
@@ -118,14 +154,23 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         label: "Vendors",
         icon: Truck,
         requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/vendors`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname),
+        group: "finance",
+        getPath: (organizationId, storeId) =>
+            storeId
+                ? getStoreVendorsPath(organizationId, storeId)
+                : `/organizations/${organizationId}/vendors`,
+        isActive: (pathname, storeId) =>
+            storeId
+                ? pathname.includes(`/workspaces/${storeId}/vendors`)
+                : /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname) &&
+                  !pathname.includes("/workspaces/"),
     },
     {
         id: "purchases",
         label: "Purchases",
         icon: ShoppingBag,
         requiresOrganization: true,
+        group: "finance",
         getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
         isActive: (pathname) => /\/organizations\/[^/]+\/purchases(\/|$)/.test(pathname),
     },
@@ -134,22 +179,25 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         label: "Expenses",
         icon: Banknote,
         requiresOrganization: true,
+        group: "finance",
         getPath: (organizationId) => `/organizations/${organizationId}/expenses`,
         isActive: (pathname) => /\/organizations\/[^/]+\/expenses(\/|$)/.test(pathname),
     },
     {
-        id: "units",
-        label: "Units",
-        icon: Ruler,
+        id: "whatsapp",
+        label: "WhatsApp",
+        icon: WhatsAppIcon,
         requiresOrganization: true,
-        getPath: (organizationId) => `/organizations/${organizationId}/units`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
+        group: "integrations",
+        getPath: (organizationId) => `/organizations/${organizationId}/whatsapp/accounts`,
+        isActive: (pathname) => /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(pathname),
     },
     {
         id: "google-contacts",
         label: "Google Contacts",
         icon: Contact,
         requiresOrganization: true,
+        group: "integrations",
         getPath: (organizationId) => `/organizations/${organizationId}/settings`,
         isActive: (pathname) => /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname),
     },
@@ -158,6 +206,7 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         label: "Appearance",
         icon: Settings2,
         requiresOrganization: false,
+        group: "organization",
         getPath: () => "/appearance",
         isActive: (pathname) => pathname === "/appearance" || pathname === "/settings",
     },
@@ -165,11 +214,15 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
 
 export const adminPrimaryMobileNavIds = ["stores", "products", "billing"] as const;
 
+const storeWorkspaceDestinationIds = new Set(["products", "vendors"]);
+
 const resolveDestinations = ({
     organizationId = "",
+    storeId,
     hasOrganization,
 }: VisibleAdminNavArgs): AdminNavDestination[] =>
     adminDestinationDefs
+        .filter((destination) => !storeId || storeWorkspaceDestinationIds.has(destination.id))
         .filter((destination) => !destination.requiresOrganization || (hasOrganization && Boolean(organizationId)))
         .map((destination) => ({
             id: destination.id,
@@ -177,8 +230,9 @@ const resolveDestinations = ({
             mobileLabel: destination.mobileLabel,
             icon: destination.icon,
             requiresOrganization: destination.requiresOrganization,
-            path: destination.getPath(organizationId),
-            isActive: destination.isActive,
+            group: destination.group,
+            path: destination.getPath(organizationId, storeId),
+            isActive: (pathname: string) => destination.isActive(pathname, storeId),
         }));
 
 export const getVisibleAdminWorkspaceDestinations = (args: VisibleAdminNavArgs) =>
@@ -186,6 +240,34 @@ export const getVisibleAdminWorkspaceDestinations = (args: VisibleAdminNavArgs) 
 
 export const getVisibleAdminMainDestinations = (args: VisibleAdminNavArgs) =>
     resolveDestinations(args).filter((destination) => destination.id !== "appearance");
+
+export type AdminNavGroupedSection = {
+    group: AdminNavGroup;
+    label: string;
+    items: AdminNavDestination[];
+};
+
+export const getGroupedAdminMainDestinations = (args: VisibleAdminNavArgs): AdminNavGroupedSection[] => {
+    const flat = getVisibleAdminMainDestinations(args);
+    const byGroup = new Map<AdminNavGroup, AdminNavDestination[]>();
+
+    for (const item of flat) {
+        const existing = byGroup.get(item.group);
+        if (existing) {
+            existing.push(item);
+        } else {
+            byGroup.set(item.group, [item]);
+        }
+    }
+
+    return adminNavGroupOrder
+        .filter((group) => byGroup.has(group))
+        .map((group) => ({
+            group,
+            label: adminNavGroupLabels[group],
+            items: byGroup.get(group)!,
+        }));
+};
 
 export const getVisibleAdminPrimaryMobileDestinations = (args: VisibleAdminNavArgs) => {
     const visible = resolveDestinations(args);
@@ -197,7 +279,7 @@ export const getVisibleAdminPrimaryMobileDestinations = (args: VisibleAdminNavAr
         return primary;
     }
 
-    return visible.filter((destination) => destination.id === "organizations");
+    return [];
 };
 
 export const isAdminMoreDestinationActive = (pathname: string, args: VisibleAdminNavArgs) => {

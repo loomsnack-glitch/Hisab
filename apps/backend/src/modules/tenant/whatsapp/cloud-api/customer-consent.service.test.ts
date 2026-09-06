@@ -1,9 +1,19 @@
-import { describe, expect, test } from "bun:test";
-import { listCustomerConsentEvents, recordCustomerConsent, setCustomerSuppression } from "./customer-consent.service";
+import { describe, expect, mock, test } from "bun:test";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const customerId = "33333333-3333-4333-8333-333333333333";
+const storeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+mock.module("@/modules/tenant/organization/organization.repository", () => ({
+  getOrganizationByIdForUser: async () => ({ id: organizationId }),
+  getStoresByOrganizationId: async () => [{ id: storeId, organizationId, name: "Adajan" }],
+}));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
+const { listCustomerConsentEvents, recordCustomerConsent, setCustomerSuppression } = await import("./customer-consent.service");
 const event = {
   id: "44444444-4444-4444-8444-444444444444",
   organizationId,

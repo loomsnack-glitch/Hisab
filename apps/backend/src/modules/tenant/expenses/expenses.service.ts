@@ -25,6 +25,10 @@ import {
     type VoidExpenseSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
+import {
+    requireOrganizationFeatureEntitlement,
+    requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
 import * as outgoingPaymentsRepository from "@/modules/tenant/outgoing-payments/outgoing-payments.repository";
@@ -246,6 +250,16 @@ const requireStore = async (
     return { ok: true, value: store };
 };
 
+const requireExpensesEntitlementForStore = async (
+    storeId: string,
+): Promise<LookupResult<null>> => {
+    const denial = await requireStoreFeatureEntitlement(storeId, "expenses");
+    if (denial) {
+        return { ok: false, error: denial };
+    }
+    return { ok: true, value: null };
+};
+
 const requireActiveExpenseCategory = async (
     organizationId: string,
     expenseCategoryId: string,
@@ -279,6 +293,14 @@ export const getExpenses = async (
         return organizationNotFound();
     }
 
+    const expensesEntitlementError = await requireOrganizationFeatureEntitlement(
+        organizationId,
+        "expenses",
+    );
+    if (expensesEntitlementError) {
+        return expensesEntitlementError;
+    }
+
     const expenses = await expensesRepository.getExpensesByOrganizationId(organizationId);
     return {
         status: "success",
@@ -303,6 +325,11 @@ export const getExpenseDetails = async (
         return expenseNotFound();
     }
 
+    const expensesEntitlementResult = await requireExpensesEntitlementForStore(expense.storeId);
+    if (!expensesEntitlementResult.ok) {
+        return expensesEntitlementResult.error;
+    }
+
     return {
         status: "success",
         data: { expense },
@@ -324,6 +351,11 @@ export const createDraftExpense = async (
     const storeResult = await requireStore(organizationId, expenseData.storeId);
     if (!storeResult.ok) {
         return storeResult.error;
+    }
+
+    const expensesEntitlementResult = await requireExpensesEntitlementForStore(storeResult.value.id);
+    if (!expensesEntitlementResult.ok) {
+        return expensesEntitlementResult.error;
     }
 
     const categoryResult = await requireActiveExpenseCategory(
@@ -408,6 +440,11 @@ export const updateDraftExpense = async (
         return storeResult.error;
     }
 
+    const expensesEntitlementResult = await requireExpensesEntitlementForStore(storeResult.value.id);
+    if (!expensesEntitlementResult.ok) {
+        return expensesEntitlementResult.error;
+    }
+
     const nextCategoryId = expenseData.expenseCategoryId ?? existing.expenseCategoryId;
     const categoryResult = await requireActiveExpenseCategory(organizationId, nextCategoryId);
     if (!categoryResult.ok) {
@@ -480,6 +517,11 @@ export const discardDraftExpense = async (
         return expenseNotFound();
     }
 
+    const expensesEntitlementResult = await requireExpensesEntitlementForStore(existing.storeId);
+    if (!expensesEntitlementResult.ok) {
+        return expensesEntitlementResult.error;
+    }
+
     if (existing.lifecycle !== "draft") {
         return {
             status: "error",
@@ -521,6 +563,11 @@ export const recordExpense = async (
     const existing = await expensesRepository.getExpenseById(organizationId, expenseId);
     if (!existing) {
         return expenseNotFound();
+    }
+
+    const expensesEntitlementResult = await requireExpensesEntitlementForStore(existing.storeId);
+    if (!expensesEntitlementResult.ok) {
+        return expensesEntitlementResult.error;
     }
 
     if (existing.lifecycle !== "draft") {
@@ -653,6 +700,16 @@ export const createOutgoingExpensePayment = async (
             );
             if (!existing) {
                 return null;
+            }
+
+            const expensesEntitlementResult = await requireExpensesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!expensesEntitlementResult.ok) {
+                throw Object.assign(new Error(expensesEntitlementResult.error.message), {
+                    code: expensesEntitlementResult.error.code,
+                    expose: true,
+                });
             }
 
             return applyOutgoingExpensePaymentInTx(tx, {
@@ -789,6 +846,16 @@ export const reverseOutgoingExpensePayment = async (
                 return null;
             }
 
+            const expensesEntitlementResult = await requireExpensesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!expensesEntitlementResult.ok) {
+                throw Object.assign(new Error(expensesEntitlementResult.error.message), {
+                    code: expensesEntitlementResult.error.code,
+                    expose: true,
+                });
+            }
+
             const payment = existing.outgoingPayments.find((item) => item.id === paymentId);
             if (!payment) {
                 throw Object.assign(new Error("Outgoing Payment not found"), {
@@ -888,6 +955,16 @@ export const voidExpense = async (
             );
             if (!existing) {
                 return null;
+            }
+
+            const expensesEntitlementResult = await requireExpensesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!expensesEntitlementResult.ok) {
+                throw Object.assign(new Error(expensesEntitlementResult.error.message), {
+                    code: expensesEntitlementResult.error.code,
+                    expose: true,
+                });
             }
 
             if (existing.lifecycle === "voided") {

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
 import {
+    getGroupedAdminMainDestinations,
     getVisibleAdminMainDestinations,
     getVisibleAdminPrimaryMobileDestinations,
     getVisibleAdminWorkspaceDestinations,
@@ -15,24 +16,45 @@ const withOrg = { organizationId, hasOrganization: true };
 const withoutOrg = { organizationId: "", hasOrganization: false };
 
 describe("Admin mobile navigation", () => {
-    test("orders main sidebar destinations as Organizations through Google Contacts", () => {
+    test("orders main sidebar destinations grouped by Organization, Catalog, Sales, Reports, Finance, Integrations", () => {
         const mainIds = getVisibleAdminMainDestinations(withOrg).map((destination) => destination.id);
 
         expect(mainIds).toEqual([
-            "organizations",
             "stores",
             "products",
+            "units",
             "billing",
-            "reports",
             "tables",
             "customers",
-            "whatsapp",
+            "reports",
             "money-accounts",
             "vendors",
             "purchases",
             "expenses",
-            "units",
+            "whatsapp",
             "google-contacts",
+        ]);
+    });
+
+    test("groups destinations into six named sections", () => {
+        const sections = getGroupedAdminMainDestinations(withOrg);
+
+        expect(sections.map((s) => s.group)).toEqual([
+            "organization",
+            "catalog",
+            "sales",
+            "reports",
+            "finance",
+            "integrations",
+        ]);
+
+        expect(sections.map((s) => s.label)).toEqual([
+            "Organization",
+            "Catalog",
+            "Sales & Service",
+            "Reports",
+            "Finance",
+            "Integrations",
         ]);
     });
 
@@ -105,12 +127,12 @@ describe("Admin mobile navigation", () => {
         expect(primaryIds).toEqual(["stores", "products", "billing"]);
     });
 
-    test("falls back to Organizations when no organization is available", () => {
+    test("shows only global destinations when no organization is available", () => {
         const primary = getVisibleAdminPrimaryMobileDestinations(withoutOrg);
         const workspaceIds = getVisibleAdminWorkspaceDestinations(withoutOrg).map((destination) => destination.id);
 
-        expect(primary.map((destination) => destination.id)).toEqual(["organizations"]);
-        expect(workspaceIds).toEqual(["organizations", "appearance"]);
+        expect(primary).toEqual([]);
+        expect(workspaceIds).toEqual(["appearance"]);
     });
 
     test("marks More as active on secondary pages, not on primary tabs", () => {
@@ -119,7 +141,38 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/reports`, withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/settings`, withOrg)).toBe(true);
         expect(isAdminMoreDestinationActive("/appearance", withOrg)).toBe(true);
-        expect(isAdminMoreDestinationActive("/organizations", withOrg)).toBe(true);
+    });
+
+    test("keeps Organization destinations on Organization routes, including while a Store workspace URL exists", () => {
+        const products = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "products");
+        const billing = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "billing");
+        const stores = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "stores");
+
+        expect(products?.path).toBe(`/organizations/${organizationId}/products`);
+        expect(billing?.path).toBe(`/organizations/${organizationId}/billing`);
+        expect(stores?.path).toBe(`/organizations/${organizationId}/stores`);
+        expect(stores?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
+        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
+    });
+
+    test("shows only Store-scoped destinations when a Store workspace is selected", () => {
+        const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        const withStore = { ...withOrg, storeId };
+        const products = getVisibleAdminWorkspaceDestinations(withStore).find(
+            (destination) => destination.id === "products",
+        );
+        const storeDestinationIds = getVisibleAdminWorkspaceDestinations(withStore).map((destination) => destination.id);
+
+        expect(products?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/products`);
+        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/products`)).toBe(true);
+        expect(products?.isActive(`/organizations/${organizationId}/products`)).toBe(false);
+        const vendors = getVisibleAdminWorkspaceDestinations(withStore).find(
+            (destination) => destination.id === "vendors",
+        );
+        expect(vendors?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/vendors`);
+        expect(vendors?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/vendors`)).toBe(true);
+        expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(false);
+        expect(storeDestinationIds).toEqual(["products", "vendors"]);
     });
 
     test("renders the primary tabs and organization avatar on the More tab", () => {
@@ -151,7 +204,7 @@ describe("Admin mobile navigation", () => {
             </MemoryRouter>,
         );
 
-        expect(markup).toContain('href="/organizations"');
+        expect(markup).toContain('aria-label="Organization and more pages"');
         expect(markup).not.toContain("/stores");
         expect(markup).not.toContain("/billing");
         expect(markup).not.toContain("/products");

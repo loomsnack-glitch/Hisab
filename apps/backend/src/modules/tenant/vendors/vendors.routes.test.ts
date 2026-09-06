@@ -20,9 +20,16 @@ describe("Organization Vendor routes", () => {
         harness.getVendorsByOrganizationId.mockClear();
         harness.getVendorById.mockClear();
         harness.createVendorRepo.mockClear();
+        harness.createStoreVendorAvailabilityRepo.mockClear();
         harness.updateVendorRepo.mockClear();
 
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
+        harness.getStoresByOrganizationId.mockResolvedValue([harness.store, harness.vesuStore]);
+        harness.getStoreById.mockImplementation(async (_organizationId: string, id: string) => {
+            if (id === harness.store.id) return harness.store;
+            if (id === harness.vesuStore.id) return harness.vesuStore;
+            return null;
+        });
         harness.getVendorsByOrganizationId.mockResolvedValue([
             harness.freshFarmsVendor,
             harness.millersVendor,
@@ -71,7 +78,10 @@ describe("Organization Vendor routes", () => {
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: "Fresh Farms", description: "Daily produce supplier" }),
+                body: JSON.stringify({
+                    name: "Fresh Farms",
+                    description: "Daily produce supplier",
+                }),
             },
         );
 
@@ -83,7 +93,42 @@ describe("Organization Vendor routes", () => {
                 description: "Daily produce supplier",
                 status: "active",
             }),
+            expect.anything(),
         );
+        expect(harness.createStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: harness.storeId,
+                vendorId: expect.any(String),
+                status: "active",
+            }),
+            expect.anything(),
+        );
+        expect(harness.createStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: harness.vesuStoreId,
+                vendorId: expect.any(String),
+                status: "active",
+            }),
+            expect.anything(),
+        );
+    });
+
+    test("rejects target Stores when creating a Vendor", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendors`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: "Fresh Farms",
+                    targetStoreIds: [harness.storeId],
+                }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.createVendorRepo).not.toHaveBeenCalled();
+        expect(harness.createStoreVendorAvailabilityRepo).not.toHaveBeenCalled();
     });
 
     test("rejects a Vendor payload that includes Store or Item fields", async () => {
@@ -154,7 +199,6 @@ describe("Organization Vendor routes", () => {
         expect(harness.updateVendorRepo).not.toHaveBeenCalled();
     });
 });
-
 describe("Organization Vendor Item routes", () => {
     beforeEach(() => {
         harness.getOrganizationByIdForUser.mockClear();
@@ -240,6 +284,7 @@ describe("Organization Vendor Item routes", () => {
                 defaultPurchasePrice: 40.5,
                 status: "active",
             }),
+            expect.anything(),
         );
     });
 
@@ -356,5 +401,126 @@ describe("Organization Vendor Item routes", () => {
         expect(response.status).toBe(404);
         expect(harness.updateVendorItemRepo).not.toHaveBeenCalled();
         expect(harness.createVendorItemRepo).not.toHaveBeenCalled();
+    });
+});
+describe("Store Vendor Availability routes", () => {
+    const availabilitiesPath = `http://localhost/${harness.organizationId}/stores/${harness.storeId}/vendor-availabilities`;
+    const offeringsPath = `http://localhost/${harness.organizationId}/stores/${harness.storeId}/vendor-item-offerings`;
+
+    beforeEach(() => {
+        harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
+        harness.getStoresByOrganizationId.mockResolvedValue([harness.store, harness.vesuStore]);
+        harness.getStoreById.mockImplementation(async (_organizationId: string, id: string) => {
+            if (id === harness.store.id) return harness.store;
+            if (id === harness.vesuStore.id) return harness.vesuStore;
+            return null;
+        });
+        harness.getVendorById.mockResolvedValue(harness.freshFarmsVendor);
+        harness.getVendorItemById.mockResolvedValue(harness.tomatoItem);
+        harness.getStoreVendorAvailabilitiesByStoreId.mockResolvedValue([harness.storeVendorAvailability]);
+        harness.getStoreVendorAvailabilityByStoreAndVendor.mockResolvedValue(null);
+        harness.getStoreVendorItemOfferingsByStoreId.mockResolvedValue([harness.tomatoOffering]);
+        harness.getStoreVendorItemOfferingById.mockResolvedValue(harness.tomatoOffering);
+        harness.createStoreVendorAvailabilityRepo.mockClear();
+        harness.createStoreVendorItemOfferingRepo.mockClear();
+        harness.createVendorRepo.mockClear();
+        harness.updateStoreVendorItemOfferingRepo.mockClear();
+        harness.updateStoreVendorAvailabilityRepo.mockClear();
+        harness.createStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...harness.storeVendorAvailability,
+            ...data,
+        }));
+        harness.updateStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...harness.tomatoOffering,
+            ...data,
+        }));
+        harness.updateStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...harness.storeVendorAvailability,
+            ...data,
+        }));
+        harness.getVendorItemsByVendorId.mockResolvedValue([harness.tomatoItem, harness.onionItem]);
+        harness.getStoreVendorAvailabilityById.mockResolvedValue(harness.storeVendorAvailability);
+    });
+
+    test("lists Store Vendor Availabilities for a Store in the Organization", async () => {
+        const response = await vendorsRoutes.request(availabilitiesPath);
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.availabilities[0]?.vendor.name).toBe("Fresh Farms");
+    });
+
+    test("updates Store Vendor Availability status through the Store availability route", async () => {
+        const response = await vendorsRoutes.request(
+            `${availabilitiesPath}/${harness.availabilityId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "inactive" }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        expect(harness.updateStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: harness.availabilityId,
+                storeId: harness.storeId,
+                status: "inactive",
+            }),
+        );
+        expect(harness.createVendorRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not create a Vendor through the Store availability route", async () => {
+        const response = await vendorsRoutes.request(availabilitiesPath, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                name: "Store Farm",
+                targetStoreIds: [harness.storeId],
+            }),
+        });
+
+        expect(response.status).toBe(404);
+        expect(harness.createVendorRepo).not.toHaveBeenCalled();
+        expect(harness.createStoreVendorAvailabilityRepo).not.toHaveBeenCalled();
+    });
+
+    test("updates a Store Vendor Item Offering default purchase price", async () => {
+        const response = await vendorsRoutes.request(
+            `${offeringsPath}/${harness.offeringId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ defaultPurchasePrice: 38 }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        expect(harness.updateStoreVendorItemOfferingRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: harness.offeringId,
+                storeId: harness.storeId,
+                defaultPurchasePrice: 38,
+            }),
+        );
+    });
+
+    test("lists Store Vendor Item Offerings for a Store in the Organization", async () => {
+        const response = await vendorsRoutes.request(offeringsPath);
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.offerings[0]?.defaultPurchasePrice).toBe(40.5);
+    });
+
+    test("does not expose a Store Vendor Availability delete route", async () => {
+        const response = await vendorsRoutes.request(
+            `${availabilitiesPath}/${harness.availabilityId}`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(404);
+        expect(harness.createVendorRepo).not.toHaveBeenCalled();
     });
 });

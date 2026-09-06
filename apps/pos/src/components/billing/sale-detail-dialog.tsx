@@ -295,7 +295,7 @@ const SaleDetailDialog = ({
             }
 
             if (!posPrinter.connected) {
-                toast.error("Connect the 80mm USB printer before printing");
+                toast.error("Connect the receipt printer before printing");
                 return;
             }
 

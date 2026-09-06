@@ -197,6 +197,36 @@ describe("Configured sale billing contracts", () => {
         }
     });
 
+    test("sale item input accepts a Custom Selling Quantity amount", () => {
+        const result = SaleItemInputSchema.safeParse({
+            productId: "11111111-1111-4111-8111-111111111111",
+            quantity: 1,
+            soldQuantity: 500,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.soldQuantity).toBe(500);
+        }
+    });
+
+    test("sale item input rejects an invalid Custom Selling Quantity amount", () => {
+        expect(
+            SaleItemInputSchema.safeParse({
+                productId: "11111111-1111-4111-8111-111111111111",
+                quantity: 1,
+                soldQuantity: 0,
+            }).success,
+        ).toBe(false);
+        expect(
+            SaleItemInputSchema.safeParse({
+                productId: "11111111-1111-4111-8111-111111111111",
+                quantity: 1,
+                soldQuantity: 1.234,
+            }).success,
+        ).toBe(false);
+    });
+
     test("sale detail nests add-ons under parent product rows", () => {
         const now = new Date("2026-07-11T12:00:00.000Z");
         const result = SaleDetailDTOSchema.safeParse({
@@ -241,6 +271,9 @@ describe("Configured sale billing contracts", () => {
                     productId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
                     quantity: 1,
                     configurationSignature: "22222222-2222-4222-8222-222222222222:1",
+                    soldQuantity: 1,
+                    unitId: "99999999-9999-4999-8999-999999999999",
+                    unitLabelSnapshot: "pc",
                     productNameSnapshot: "Burger",
                     unitPriceSnapshot: 100,
                     discountAmount: 0,
@@ -326,6 +359,9 @@ describe("Configured sale billing contracts", () => {
                     productId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
                     quantity: 1,
                     configurationSignature: "",
+                    soldQuantity: 1,
+                    unitId: "99999999-9999-4999-8999-999999999999",
+                    unitLabelSnapshot: "pc",
                     productNameSnapshot: "Burger Combo",
                     unitPriceSnapshot: 99,
                     discountAmount: 0,
@@ -439,6 +475,21 @@ describe("Configured sale billing contracts", () => {
         });
 
         expect(query.success).toBe(true);
+        expect(response.success).toBe(true);
+    });
+
+    test("product sales summary accepts the persisted Sold Product Name length", () => {
+        const response = ProductSalesSummaryResponseSchema.safeParse({
+            products: [
+                {
+                    productId: "11111111-1111-4111-8111-111111111111",
+                    productName: `${"C".repeat(310)} (1pc)`,
+                    categoryName: "Beverages",
+                    quantitySold: 1,
+                },
+            ],
+        });
+
         expect(response.success).toBe(true);
     });
 

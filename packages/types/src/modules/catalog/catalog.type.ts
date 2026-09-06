@@ -26,6 +26,8 @@ import type {
     ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
     ProductResponseDTOSchema,
+    StoreProductOfferingDTOSchema,
+    StoreProductOfferingResponseDTOSchema,
     ReuseInternalProductCodeSchema,
     ReorderCategoriesSchema,
     ReorderProductsSchema,
@@ -37,11 +39,14 @@ import type {
     UpdateProductAddOnAttachmentSchema,
     UpdateProductLabelProfileSchema,
     UpdateProductSchema,
+    UpdateStoreProductOfferingSchema,
 } from "./catalog.schema";
 
 export type CategoryDTO = z.infer<typeof CategoryDTOSchema>;
 export type ProductDTO = z.infer<typeof ProductDTOSchema>;
 export type ProductResponseDTO = z.infer<typeof ProductResponseDTOSchema>;
+export type StoreProductOfferingDTO = z.infer<typeof StoreProductOfferingDTOSchema>;
+export type StoreProductOfferingResponseDTO = z.infer<typeof StoreProductOfferingResponseDTOSchema>;
 export type BundleProductComponentDTO = z.infer<typeof BundleProductComponentDTOSchema>;
 export type BundleProductComponentAddOnDTO = z.infer<typeof BundleProductComponentAddOnDTOSchema>;
 export type BundleProductComponentResponseDTO = z.infer<typeof BundleProductComponentResponseDTOSchema>;
@@ -104,6 +109,9 @@ export type CreateProductREPO = Pick<
     | "productType"
     | "productCode"
     | "productCodeKind"
+    | "unitId"
+    | "defaultSellingQuantity"
+    | "allowCustomSellingQuantity"
     | "status"
     | "createdBy"
 > & {
@@ -124,6 +132,9 @@ export type UpdateProductREPO = Pick<
     | "discount"
     | "productCode"
     | "productCodeKind"
+    | "unitId"
+    | "defaultSellingQuantity"
+    | "allowCustomSellingQuantity"
     | "status"
     | "updatedBy"
 > & {
@@ -296,4 +307,33 @@ export type ProductAddOnAttachmentsListResponse = {
 
 export type ProductAddOnAttachmentResponse = {
     attachment: ProductAddOnAttachmentResponseDTO;
+};
+
+export type CreateStoreProductOfferingREPO = Pick<
+    StoreProductOfferingDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "productId"
+    | "price"
+    | "discount"
+    | "status"
+    | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateStoreProductOfferingJSON = z.infer<typeof UpdateStoreProductOfferingSchema>;
+export type UpdateStoreProductOfferingSVC = UpdateStoreProductOfferingJSON;
+export type UpdateStoreProductOfferingREPO = Pick<
+    StoreProductOfferingDTO,
+    "id" | "organizationId" | "storeId" | "price" | "discount" | "status" | "updatedBy"
+>;
+
+export type StoreProductOfferingsListResponse = {
+    offerings: StoreProductOfferingResponseDTO[];
+};
+
+export type StoreProductOfferingResponse = {
+    offering: StoreProductOfferingResponseDTO;
 };

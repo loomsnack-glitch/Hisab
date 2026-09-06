@@ -69,6 +69,25 @@ lifecycle and the validation safety rule in `AGENTS.md`.
 Exit condition: the repository has one coherent merged tree, with no unresolved
 conflicts and the mobile POS entrypoint still present.
 
+#### M.1 result
+
+- `origin/main` was merged without builds, Android commands, emulator commands,
+  device-start commands, live API checks, or hardware checks.
+- The only textual conflicts were the admin billing page, web POS billing page,
+  shared backend billing service, and `bun.lock`.
+- The billing-page conflicts retain mainline's resolved checkout customer ID
+  flow and this branch's completion request ID. The backend conflict retains
+  both mainline billing entitlement enforcement and this branch's draft and
+  completion replay protection.
+- The approved native mobile POS entrypoint, MMKV/i18next dependencies, agent
+  instructions, phase-loop skill, and Phase 0–7 records remain present.
+- Mainline's commercial licensing, Store Product Offering, product selling-unit,
+  KOT, reporting, vendor, and WhatsApp retirement changes are present.
+
+M.1 exit review: no unresolved merge entries or conflict markers remain. The
+merged tree is staged for the merge checkpoint; M.2 now owns shared-contract
+compatibility review.
+
 ### M.2 — Shared contract reconciliation
 
 - Reconcile Product/Sale Item/KOT types with selling-unit fields and
@@ -113,4 +132,4 @@ work. The highest-risk item is the removed Draft idempotency contract; it must
 be resolved from the shared backend/type boundary rather than hidden in the
 mobile client. No new product decision is required for this sync.
 
-Status: planned; M.1 is next.
+Status: M.1 complete; M.2 in progress.

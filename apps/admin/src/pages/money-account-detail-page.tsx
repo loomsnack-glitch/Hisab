@@ -11,6 +11,7 @@ import {
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
+import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
@@ -36,6 +37,48 @@ import TransferMoneyAccountDialog from "@/components/money-accounts/transfer-mon
 import { getDefaultHistoryQuery } from "@/lib/date-range-filter";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
+
+type MoneyAccountHistorySort = "newest" | "oldest";
+
+const moneyAccountHistorySortOptions: Array<{ value: MoneyAccountHistorySort; label: string }> = [
+    { value: "newest", label: "Newest" },
+    { value: "oldest", label: "Oldest" },
+];
+
+const compareHistoryEntries = (
+    left: MoneyAccountHistoryEntry,
+    right: MoneyAccountHistoryEntry,
+    sort: MoneyAccountHistorySort,
+) => {
+    const leftTime = new Date(left.occurredAt).getTime();
+    const rightTime = new Date(right.occurredAt).getTime();
+
+    if (leftTime !== rightTime) {
+        return sort === "newest" ? rightTime - leftTime : leftTime - rightTime;
+    }
+
+    const leftId = "id" in left ? left.id : "";
+    const rightId = "id" in right ? right.id : "";
+
+    return sort === "newest" ? rightId.localeCompare(leftId) : leftId.localeCompare(rightId);
+};
+
+const sortMoneyAccountHistoryEntries = (
+    entries: MoneyAccountHistoryEntry[],
+    sort: MoneyAccountHistorySort,
+) => {
+    const openingEntries = entries.filter((entry) => entry.kind === "opening_balance");
+    const movementEntries = entries.filter((entry) => entry.kind !== "opening_balance");
+    const sortedMovements = [...movementEntries].sort((left, right) => compareHistoryEntries(left, right, sort));
+
+    if (openingEntries.length === 0) {
+        return sortedMovements;
+    }
+
+    return sort === "newest"
+        ? [...sortedMovements, ...openingEntries]
+        : [...openingEntries, ...sortedMovements];
+};
 
 const paymentMethodLabel = (method: string) => {
     if (method === "upi") return "UPI";
@@ -481,6 +524,7 @@ const MoneyAccountDetailPage = () => {
     const { organizationId = "", moneyAccountId = "" } = useParams();
     const [historyQuery, setHistoryQuery] = useState<MoneyAccountHistoryQuery>(() => getDefaultHistoryQuery());
     const [selectedStoreIds, setSelectedStoreIds] = useState<Set<string>>(() => new Set());
+    const [sortBy, setSortBy] = useState<MoneyAccountHistorySort>("newest");
     const dateRangeNeedsInput =
         (historyQuery.occurredFrom !== undefined && historyQuery.occurredTo === undefined) ||
         (historyQuery.occurredTo !== undefined && historyQuery.occurredFrom === undefined);
@@ -567,6 +611,7 @@ const MoneyAccountDetailPage = () => {
                       entry.storeId != null &&
                       selectedStoreIds.has(entry.storeId),
               );
+    const sortedEntries = sortMoneyAccountHistoryEntries(filteredEntries, sortBy);
     const movementEntries = filteredEntries.filter((entry) => entry.kind !== "opening_balance");
     const showingAllDates = !historyQuery.occurredFrom && !historyQuery.occurredTo;
 
@@ -644,6 +689,12 @@ const MoneyAccountDetailPage = () => {
                                 onSelectedValuesChange={setSelectedStoreIds}
                             />
                         ) : null}
+                        <DataTableSortFilter
+                            title="Sort"
+                            value={sortBy}
+                            onValueChange={(value) => setSortBy(value as MoneyAccountHistorySort)}
+                            options={moneyAccountHistorySortOptions}
+                        />
                     </div>
                     {!dateRangeNeedsInput && filteredEntries.length > 0 ? (
                         <MovementSummaryBar entries={filteredEntries} />
@@ -662,7 +713,7 @@ const MoneyAccountDetailPage = () => {
                         <div className="px-4 py-8 text-center">
                             {showingAllDates && filteredEntries.some((entry) => entry.kind === "opening_balance") ? (
                                 <div className="mb-4 space-y-1.5 px-3 text-left">
-                                    {filteredEntries.map((entry) => (
+                                    {sortedEntries.map((entry) => (
                                         <HistoryEntry
                                             key={entry.kind === "opening_balance" ? "opening-balance" : entry.id}
                                             entry={entry}
@@ -680,7 +731,7 @@ const MoneyAccountDetailPage = () => {
                         </div>
                     ) : (
                         <div className="space-y-1.5 px-3 pb-4">
-                            {filteredEntries.map((entry) => (
+                            {sortedEntries.map((entry) => (
                                 <HistoryEntry
                                     key={entry.kind === "opening_balance" ? "opening-balance" : entry.id}
                                     entry={entry}

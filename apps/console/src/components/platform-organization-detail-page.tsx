@@ -37,6 +37,8 @@ import {
     getPlatformOrganizationTable as getPlatformOrganizationTableRequest,
     getPlatformOrganizationWhatsApp as getPlatformOrganizationWhatsAppRequest,
     getPlatformStore as getPlatformStoreRequest,
+    getPlatformStoreCommercialStatus as getPlatformStoreCommercialStatusRequest,
+    createStoreAccessGrant as createStoreAccessGrantRequest,
 } from "@repo/services";
 import {
     PLATFORM_REPORTING_TIMEZONE,
@@ -72,6 +74,7 @@ import { cn } from "@repo/ui/lib/utils";
 
 import ConsoleBillingInspection from "@/components/console-billing-inspection";
 import ConsoleBillActivityChart from "@/components/console-bill-activity-chart";
+import ConsoleStoreCommercialAccess from "@/components/console-store-commercial-access";
 import {
     billingInspectionSearchString,
     catalogInspectionPath,
@@ -136,6 +139,8 @@ type PlatformOrganizationDetailPageProps = {
     getPlatformOrganizationTables?: typeof getPlatformOrganizationTablesRequest;
     getPlatformOrganizationTable?: typeof getPlatformOrganizationTableRequest;
     getPlatformOrganizationWhatsApp?: typeof getPlatformOrganizationWhatsAppRequest;
+    getPlatformStoreCommercialStatus?: typeof getPlatformStoreCommercialStatusRequest;
+    createStoreAccessGrant?: typeof createStoreAccessGrantRequest;
     onNavigate?: (path: string) => void;
     onUnauthorized?: () => Promise<void>;
 };
@@ -440,6 +445,8 @@ const PlatformOrganizationDetailPage = ({
     getPlatformOrganizationTables = getPlatformOrganizationTablesRequest,
     getPlatformOrganizationTable = getPlatformOrganizationTableRequest,
     getPlatformOrganizationWhatsApp = getPlatformOrganizationWhatsAppRequest,
+    getPlatformStoreCommercialStatus = getPlatformStoreCommercialStatusRequest,
+    createStoreAccessGrant = createStoreAccessGrantRequest,
     onNavigate,
     onUnauthorized,
 }: PlatformOrganizationDetailPageProps) => {
@@ -1388,6 +1395,13 @@ const PlatformOrganizationDetailPage = ({
             </Card>
 
             {renderStoreDevices(storeDetail.devices)}
+            <ConsoleStoreCommercialAccess
+                organizationId={organizationId}
+                storeId={storeDetail.id}
+                getPlatformStoreCommercialStatus={getPlatformStoreCommercialStatus}
+                createStoreAccessGrant={createStoreAccessGrant}
+                onUnauthorized={onUnauthorized}
+            />
             {renderStoreRecentSales(storeDetail.recentSales, storeDetail.name)}
         </div>
     );
@@ -2898,7 +2912,7 @@ const PlatformOrganizationDetailPage = ({
                                                 <TableCell className="font-medium whitespace-nowrap">
                                                     {formatPhoneDisplay(account.phoneNumber)}
                                                 </TableCell>
-                                                <TableCell>{account.provider === "cloud_api" ? "Cloud API" : "Baileys"}</TableCell>
+                                                <TableCell>{account.provider === "cloud_api" ? "Cloud API" : "Legacy provider"}</TableCell>
                                                 <TableCell>
                                                     <Badge variant="outline" className="rounded-full">
                                                         {whatsappAccountStatusLabel(account.status)}

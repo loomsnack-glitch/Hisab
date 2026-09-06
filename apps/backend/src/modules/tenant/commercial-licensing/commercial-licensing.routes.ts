@@ -1,0 +1,153 @@
+import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { z } from "zod";
+import { CreateCoTermAddOnCheckoutSchema, CreatePaidPlanCheckoutSchema, STATUS_CODES } from "@repo/types";
+import { handleError, handleServiceResponse } from "@/helpers/service.helper";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { validateSchema } from "@/middlewares/validate";
+import type { AppVariables } from "@/types/hono";
+import {
+    getCommercialLicensingService,
+    type CommercialLicensingService,
+} from "./commercial-licensing.service";
+
+const FILE_NAME = "commercial-licensing.routes";
+const uuidSchema = z.uuid("Invalid id");
+
+const validateUuidParam = (value: string, message: string) => {
+    const result = uuidSchema.safeParse(value);
+    if (!result.success) {
+        return {
+            status: "error" as const,
+            message,
+            code: STATUS_CODES.BAD_REQUEST,
+        };
+    }
+    return null;
+};
+
+export const createCommercialLicensingRoutes = (
+    authenticate: MiddlewareHandler<{ Variables: AppVariables }> = authMiddleware,
+    licensingService: CommercialLicensingService = getCommercialLicensingService(),
+) => {
+    const router = new Hono<{ Variables: AppVariables }>();
+    router.use("*", authenticate);
+
+    router.get("/:organizationId/stores/:storeId/commercial", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            return handleServiceResponse(
+                c,
+                await licensingService.getStoreCommercialStatus(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                ),
+            );
+        } catch (error) {
+            return handleError(FILE_NAME, "getStoreCommercialStatus", c, error);
+        }
+    });
+
+    router.post("/:organizationId/stores/:storeId/commercial/trial", async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) {
+                return c.json(invalidStoreId, invalidStoreId.code);
+            }
+
+            return handleServiceResponse(
+                c,
+                await licensingService.startStandardTrial(
+                    c.get("authUser").id,
+                    organizationId,
+                    storeId,
+                ),
+            );
+        } catch (error) {
+            return handleError(FILE_NAME, "startStandardTrial", c, error);
+        }
+    });
+
+    router.post(
+        "/:organizationId/stores/:storeId/commercial/checkout",
+        validateSchema("json", CreatePaidPlanCheckoutSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await licensingService.createPaidPlanCheckout(
+                        c.get("authUser").id,
+                        organizationId,
+                        storeId,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError(FILE_NAME, "createPaidPlanCheckout", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/:organizationId/stores/:storeId/commercial/checkout/add-on",
+        validateSchema("json", CreateCoTermAddOnCheckoutSchema),
+        async (c) => {
+            try {
+                const organizationId = c.req.param("organizationId");
+                const storeId = c.req.param("storeId");
+                const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+                if (invalidOrganizationId) {
+                    return c.json(invalidOrganizationId, invalidOrganizationId.code);
+                }
+                const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+                if (invalidStoreId) {
+                    return c.json(invalidStoreId, invalidStoreId.code);
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await licensingService.createCoTermAddOnCheckout(
+                        c.get("authUser").id,
+                        organizationId,
+                        storeId,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError(FILE_NAME, "createCoTermAddOnCheckout", c, error);
+            }
+        },
+    );
+
+    return router;
+};
+
+export default createCommercialLicensingRoutes();

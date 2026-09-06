@@ -214,6 +214,35 @@ router.get("/:organizationId/stores", async (c) => {
   }
 });
 
+router.get("/:organizationId/stores/:storeId", async (c) => {
+  try {
+    const organizationId = c.req.param("organizationId");
+    const storeId = c.req.param("storeId");
+    const invalidOrganizationId = validateUuidParam(
+      organizationId,
+      "Invalid organization id",
+    );
+    if (invalidOrganizationId) {
+      return c.json(invalidOrganizationId, invalidOrganizationId.code);
+    }
+
+    const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+    if (invalidStoreId) {
+      return c.json(invalidStoreId, invalidStoreId.code);
+    }
+
+    const authUser = c.get("authUser");
+    const serviceResponse = await organizationService.getStore(
+      authUser.id,
+      organizationId,
+      storeId,
+    );
+    return handleServiceResponse(c, serviceResponse);
+  } catch (error) {
+    return handleError(FILE_NAME, "getStore", c, error);
+  }
+});
+
 router.post(
   "/:organizationId/stores",
   validateSchema("json", CreateStoreSchema),

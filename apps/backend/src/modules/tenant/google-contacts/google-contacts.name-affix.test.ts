@@ -45,6 +45,7 @@ const saved = {
 
 const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: mock(async () => ({ id: ORGANIZATION_ID })),
+  assertFeatureEntitlement: mock(async () => null),
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
   getStatus: mock(async () => connected),

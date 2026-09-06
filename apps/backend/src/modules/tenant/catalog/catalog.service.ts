@@ -31,6 +31,10 @@ import {
   type ReorderProductsJSON,
   type ReuseInternalProductCodeJSON,
   type ServiceResponse,
+  type StoreProductOfferingDTO,
+  type StoreProductOfferingResponse,
+  type StoreProductOfferingResponseDTO,
+  type StoreProductOfferingsListResponse,
   type UpdateAddOnSVC,
   type UpdateBundleProductSVC,
   type UpdateCategorySVC,
@@ -39,11 +43,17 @@ import {
   type UpdateProductAddOnAttachmentSVC,
   type UpdateProductLabelProfileSVC,
   type UpdateProductSVC,
+  type UpdateStoreProductOfferingSVC,
+  canAssignUnitToCatalogProduct,
+  FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
+  PIECE_PREDEFINED_UNIT_KEY,
+  type UnitDTO,
   normalizeProductCodeInput,
 } from "@repo/types";
 import { pg } from "@/config/db";
 import { deleteObject, generateSignedUrl } from "@/services/storage";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as catalogRepository from "./catalog.repository";
 
 const storageBucketName =
@@ -57,6 +67,138 @@ const normalizeOptionalText = (value?: string | null) => {
 };
 
 export { normalizeProductCodeInput } from "@repo/types";
+
+const unitNotFound = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Unit not found",
+  data: null,
+  code: STATUS_CODES.NOT_FOUND,
+});
+
+const inactiveUnitCannotBeAssigned = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Inactive Units cannot be assigned",
+  data: null,
+  code: STATUS_CODES.BAD_REQUEST,
+});
+
+const withProductUnitLabel = (
+  product: ProductDTO,
+  unit: Pick<UnitDTO, "label">,
+): ProductDTO => ({
+  ...product,
+  defaultSellingQuantity: Number(product.defaultSellingQuantity),
+  allowCustomSellingQuantity: Boolean(product.allowCustomSellingQuantity),
+  unitLabel: unit.label,
+});
+
+const resolvePieceUnit = async (
+  organizationId: string,
+  userId: string,
+  tx?: Bun.TransactionSQL,
+): Promise<
+  | { error: ServiceResponse<null>; unit?: undefined }
+  | { error?: undefined; unit: UnitDTO }
+> => {
+  let unit = await unitsRepository.getUnitByPredefinedKey(
+    organizationId,
+    PIECE_PREDEFINED_UNIT_KEY,
+    tx,
+  );
+  if (!unit) {
+    await unitsRepository.seedDefaultUnits(organizationId, userId, tx);
+    unit = await unitsRepository.getUnitByPredefinedKey(
+      organizationId,
+      PIECE_PREDEFINED_UNIT_KEY,
+      tx,
+    );
+  }
+  if (!unit) {
+    return {
+      error: {
+        status: "error",
+        message: "Failed to resolve the Piece Unit",
+        data: null,
+        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+      },
+    };
+  }
+  return { unit };
+};
+
+const resolveAssignableProductUnit = async (
+  organizationId: string,
+  unitId: string,
+  currentlyAssigned = false,
+): Promise<
+  | { error: ServiceResponse<null>; unit?: undefined }
+  | { error?: undefined; unit: UnitDTO }
+> => {
+  const unit = await unitsRepository.getUnitById(organizationId, unitId);
+  if (!unit) {
+    return { error: unitNotFound() };
+  }
+  if (
+    !canAssignUnitToCatalogProduct({
+      unitStatus: unit.status,
+      currentlyAssigned,
+    })
+  ) {
+    return { error: inactiveUnitCannotBeAssigned() };
+  }
+  return { unit };
+};
+
+const resolveSingleProductSellingUnit = async (
+  organizationId: string,
+  userId: string,
+  input: { unitId?: string; defaultSellingQuantity?: number },
+  existing?: ProductDTO,
+): Promise<
+  | { error: ServiceResponse<null>; unit?: undefined; defaultSellingQuantity?: undefined }
+  | { error?: undefined; unit: UnitDTO; defaultSellingQuantity: number }
+> => {
+  if (input.unitId) {
+    const assigned = await resolveAssignableProductUnit(
+      organizationId,
+      input.unitId,
+      existing ? input.unitId === existing.unitId : false,
+    );
+    if (assigned.error || !assigned.unit) {
+      return { error: assigned.error ?? unitNotFound() };
+    }
+    return {
+      unit: assigned.unit,
+      defaultSellingQuantity:
+        input.defaultSellingQuantity ??
+        Number(existing?.defaultSellingQuantity ?? 1),
+    };
+  }
+
+  if (existing) {
+    const unit = await unitsRepository.getUnitById(
+      organizationId,
+      existing.unitId,
+    );
+    if (!unit) {
+      return { error: unitNotFound() };
+    }
+    return {
+      unit,
+      defaultSellingQuantity:
+        input.defaultSellingQuantity ?? Number(existing.defaultSellingQuantity),
+    };
+  }
+
+  const piece = await resolvePieceUnit(organizationId, userId);
+  if (piece.error || !piece.unit) {
+    return { error: piece.error ?? unitNotFound() };
+  }
+  return {
+    unit: piece.unit,
+    defaultSellingQuantity: input.defaultSellingQuantity ?? 1,
+  };
+};
 
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === "object" &&
@@ -312,9 +454,13 @@ const resolveProduct = async (
       product.organizationId,
       product.id,
     );
+  const unit =
+    product.unitLabel && product.unitLabel.length > 0
+      ? { label: product.unitLabel }
+      : await unitsRepository.getUnitById(product.organizationId, product.unitId);
 
   return {
-    ...product,
+    ...withProductUnitLabel(product, { label: unit?.label ?? "pc" }),
     imageSignedUrl: await getSignedUrlIfPossible(product.imagePath),
     labelProfile,
   };
@@ -332,15 +478,23 @@ const resolveProducts = async (
     return [];
   }
 
-  const labelProfiles =
-    await catalogRepository.getProductLabelProfilesByProductIds(
+  const [labelProfiles, units] = await Promise.all([
+    catalogRepository.getProductLabelProfilesByProductIds(
       firstProduct.organizationId,
       products.map((product) => product.id),
-    );
+    ),
+    unitsRepository.getUnitsByOrganizationId(firstProduct.organizationId),
+  ]);
+  const unitLabelById = new Map(units.map((unit) => [unit.id, unit.label]));
 
   return Promise.all(
     products.map(async (product) => ({
-      ...product,
+      ...withProductUnitLabel(product, {
+        label:
+          product.unitLabel ||
+          unitLabelById.get(product.unitId) ||
+          "pc",
+      }),
       imageSignedUrl: await getSignedUrlIfPossible(product.imagePath),
       labelProfile: labelProfiles.get(product.id) ?? null,
     })),
@@ -359,6 +513,87 @@ const getProductForOrganization = async (
   productId: string,
 ) => {
   return catalogRepository.getProductById(organizationId, productId);
+};
+
+const currentOrganizationStoreIds = async (organizationId: string): Promise<string[]> => {
+  const stores = await organizationRepository.getStoresByOrganizationId(
+    organizationId,
+  );
+  return stores.map((store) => store.id);
+};
+
+const persistStoreProductOfferings = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    productId: string;
+    storeIds: string[];
+    price: number;
+    discount: number;
+    status: "active" | "inactive";
+    createdBy: string;
+  },
+) => {
+  for (const storeId of input.storeIds) {
+    const created = await catalogRepository.createStoreProductOffering(
+      {
+        id: crypto.randomUUID(),
+        organizationId: input.organizationId,
+        storeId,
+        productId: input.productId,
+        price: input.price,
+        discount: input.discount,
+        status: input.status,
+        createdBy: input.createdBy,
+      },
+      tx,
+    );
+    if (!created) {
+      throw new Error("Failed to create Store Product Offering");
+    }
+  }
+};
+
+export const seedInactiveOfferingsForNewStore = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    storeId: string;
+    createdBy: string;
+  },
+) => {
+  const products = await catalogRepository.getProductsByOrganizationId(
+    input.organizationId,
+    tx,
+  );
+  for (const product of products) {
+    await persistStoreProductOfferings(tx, {
+      organizationId: input.organizationId,
+      productId: product.id,
+      storeIds: [input.storeId],
+      price: product.price,
+      discount: product.discount,
+      status: "inactive",
+      createdBy: input.createdBy,
+    });
+  }
+};
+
+const toStoreProductOfferingResponse = async (
+  offering: StoreProductOfferingDTO,
+): Promise<StoreProductOfferingResponseDTO | null> => {
+  const product = await getProductForOrganization(
+    offering.organizationId,
+    offering.productId,
+  );
+  if (!product) {
+    return null;
+  }
+
+  return {
+    ...offering,
+    product: await resolveProduct(product),
+  };
 };
 
 export const getCategories = async (
@@ -709,14 +944,16 @@ export const getProductsForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ProductsListResponse | null>> => {
   const [products, productsForInactiveCodeLookup] = await Promise.all([
-    catalogRepository.getActiveProductsByOrganizationId(
+    catalogRepository.getActiveStoreCatalogProducts(
       session.organization.id,
+      session.store.id,
     ),
     catalogRepository.getProductsByOrganizationId(session.organization.id),
   ]);
+  const activeProductIds = new Set(products.map((product) => product.id));
   const inactiveProductCodes = productsForInactiveCodeLookup.flatMap(
     (product) =>
-      product.status === "inactive" && product.productCode
+      product.productCode && !activeProductIds.has(product.id)
         ? [{ productCode: product.productCode, productName: product.name }]
         : [],
   );
@@ -838,26 +1075,62 @@ export const createProduct = async (
     return releasedInternalCodeError;
   }
 
+  const sellingUnit = await resolveSingleProductSellingUnit(
+    organizationId,
+    userId,
+    {
+      unitId: productData.unitId,
+      defaultSellingQuantity: productData.defaultSellingQuantity,
+    },
+  );
+  if (sellingUnit.error || !sellingUnit.unit) {
+    return sellingUnit.error ?? unitNotFound();
+  }
+
   let product: ProductDTO | null = null;
   try {
-    const sortOrder = await catalogRepository.getNextProductSortOrder(
-      organizationId,
-      productData.categoryId,
-    );
-    product = await catalogRepository.createProduct({
-      id: crypto.randomUUID(),
-      organizationId,
-      categoryId: productData.categoryId,
-      name: productData.name,
-      price: productData.price,
-      discount: productData.discount ?? 0,
-      imagePath: normalizeOptionalText(productData.imagePath),
-      productType: "single",
-      productCode: codeAssignment.productCode,
-      productCodeKind: codeAssignment.productCodeKind,
-      status: productData.status ?? "active",
-      sortOrder,
-      createdBy: userId,
+    await pg.begin(async (tx) => {
+      await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      const storeIds = await currentOrganizationStoreIds(organizationId);
+      const sortOrder = await catalogRepository.getNextProductSortOrder(
+        organizationId,
+        productData.categoryId,
+        tx,
+      );
+      product = await catalogRepository.createProduct(
+        {
+          id: crypto.randomUUID(),
+          organizationId,
+          categoryId: productData.categoryId,
+          name: productData.name,
+          price: productData.price,
+          discount: productData.discount ?? 0,
+          imagePath: normalizeOptionalText(productData.imagePath),
+          productType: "single",
+          productCode: codeAssignment.productCode,
+          productCodeKind: codeAssignment.productCodeKind,
+          unitId: sellingUnit.unit.id,
+          defaultSellingQuantity: sellingUnit.defaultSellingQuantity,
+          allowCustomSellingQuantity: productData.allowCustomSellingQuantity === true,
+          status: productData.status ?? "active",
+          sortOrder,
+          createdBy: userId,
+        },
+        tx,
+      );
+      if (!product) {
+        throw new Error("Failed to create product");
+      }
+      product = withProductUnitLabel(product, sellingUnit.unit);
+      await persistStoreProductOfferings(tx, {
+        organizationId,
+        productId: product.id,
+        storeIds,
+        price: product.price,
+        discount: product.discount,
+        status: "active",
+        createdBy: userId,
+      });
     });
   } catch (error) {
     if (isProductCodeUniqueViolation(error)) {
@@ -966,13 +1239,26 @@ export const updateProduct = async (
 
   const nextCategoryId = productData.categoryId ?? existingProduct.categoryId;
   const nextName = productData.name ?? existingProduct.name;
-  const nextPrice = productData.price ?? existingProduct.price;
-  const nextDiscount = productData.discount ?? existingProduct.discount;
-  const nextStatus = productData.status ?? existingProduct.status;
+  const nextPrice = existingProduct.price;
+  const nextDiscount = existingProduct.discount;
+  const nextStatus = existingProduct.status;
   const nextImagePath =
     productData.imagePath === undefined
       ? (existingProduct.imagePath ?? null)
       : normalizeOptionalText(productData.imagePath);
+
+  const sellingUnit = await resolveSingleProductSellingUnit(
+    organizationId,
+    userId,
+    {
+      unitId: productData.unitId,
+      defaultSellingQuantity: productData.defaultSellingQuantity,
+    },
+    existingProduct,
+  );
+  if (sellingUnit.error || !sellingUnit.unit) {
+    return sellingUnit.error ?? unitNotFound();
+  }
 
   let nextProductCode = existingProduct.productCode;
   let nextProductCodeKind = existingProduct.productCodeKind;
@@ -1057,28 +1343,6 @@ export const updateProduct = async (
     }
   }
 
-  if (existingProduct.status === "active" && nextStatus === "inactive") {
-    const [activeBundleCount, activeComboCount] = await Promise.all([
-      catalogRepository.countActiveBundlesByComponentProductId(
-        organizationId,
-        productId,
-      ),
-      catalogRepository.countActiveCombosByOptionProductId(
-        organizationId,
-        productId,
-      ),
-    ]);
-    if (activeBundleCount > 0 || activeComboCount > 0) {
-      return {
-        status: "error",
-        message:
-          "Product cannot be inactivated while it is used by an active bundle or Combo",
-        data: null,
-        code: STATUS_CODES.CONFLICT,
-      };
-    }
-  }
-
   let product: ProductDTO | null = null;
   try {
     const updateData = {
@@ -1091,6 +1355,11 @@ export const updateProduct = async (
       imagePath: nextImagePath,
       productCode: nextProductCode,
       productCodeKind: nextProductCodeKind,
+      unitId: sellingUnit.unit.id,
+      defaultSellingQuantity: sellingUnit.defaultSellingQuantity,
+      allowCustomSellingQuantity:
+        productData.allowCustomSellingQuantity ??
+        Boolean(existingProduct.allowCustomSellingQuantity),
       status: nextStatus,
       sortOrder: nextSortOrder,
       updatedBy: userId,
@@ -1136,6 +1405,8 @@ export const updateProduct = async (
       code: STATUS_CODES.INTERNAL_SERVER_ERROR,
     };
   }
+
+  product = withProductUnitLabel(product, sellingUnit.unit);
 
   if (
     existingProduct.imagePath &&
@@ -2111,9 +2382,16 @@ export const createComboProduct = async (
   );
   if (!("choiceGroups" in validated)) return validated;
 
+  const piece = await resolvePieceUnit(organizationId, userId);
+  if (piece.error || !piece.unit) {
+    return piece.error ?? unitNotFound();
+  }
+
   let createdProduct: ProductDTO | null = null;
   try {
     await pg.begin(async (tx) => {
+      await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      const storeIds = await currentOrganizationStoreIds(organizationId);
       createdProduct = await catalogRepository.createProduct(
         {
           id: comboProductId,
@@ -2126,6 +2404,9 @@ export const createComboProduct = async (
           productType: "combo",
           productCode: null,
           productCodeKind: null,
+          unitId: piece.unit.id,
+          defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
+          allowCustomSellingQuantity: false,
           status: comboData.status ?? "active",
           sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, comboData.categoryId, tx),
           createdBy: userId,
@@ -2140,6 +2421,15 @@ export const createComboProduct = async (
         validated.choiceGroups,
         tx,
       );
+      await persistStoreProductOfferings(tx, {
+        organizationId,
+        productId: comboProductId,
+        storeIds,
+        price: createdProduct.price,
+        discount: createdProduct.discount,
+        status: "active",
+        createdBy: userId,
+      });
     });
   } catch {
     return {
@@ -2326,6 +2616,11 @@ export const updateComboProduct = async (
       code: STATUS_CODES.NOT_FOUND,
     };
 
+  const piece = await resolvePieceUnit(organizationId, userId);
+  if (piece.error || !piece.unit) {
+    return piece.error ?? unitNotFound();
+  }
+
   const nextCategoryId = comboData.categoryId ?? existingProduct.categoryId;
   const nextName = comboData.name ?? existingProduct.name;
   const category = await getCategoryForOrganization(
@@ -2369,26 +2664,6 @@ export const updateComboProduct = async (
       nextGroups,
     );
     if (!("choiceGroups" in validated)) return validated;
-  } else if (
-    existingProduct.status === "inactive" &&
-    comboData.status === "active"
-  ) {
-    const validationInput = currentGroups.map((group) => ({
-      name: group.name,
-      minSelections: group.minSelections,
-      maxSelections: group.maxSelections,
-      options: group.options.map((option) => ({
-        productId: option.optionProductId,
-        maxQuantity: option.maxQuantity,
-        priceAdjustment: option.priceAdjustment,
-      })),
-    }));
-    const validated = await validateComboChoiceGroups(
-      organizationId,
-      productId,
-      validationInput,
-    );
-    if (!("choiceGroups" in validated)) return validated;
   }
 
   let updatedProduct: ProductDTO | null = null;
@@ -2400,15 +2675,18 @@ export const updateComboProduct = async (
           organizationId,
           categoryId: nextCategoryId,
           name: nextName,
-          price: comboData.price ?? existingProduct.price,
-          discount: comboData.discount ?? existingProduct.discount,
+          price: existingProduct.price,
+          discount: existingProduct.discount,
           imagePath:
             comboData.imagePath === undefined
               ? existingProduct.imagePath
               : normalizeOptionalText(comboData.imagePath),
           productCode: existingProduct.productCode,
           productCodeKind: existingProduct.productCodeKind,
-          status: comboData.status ?? existingProduct.status,
+          unitId: piece.unit.id,
+          defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
+          allowCustomSellingQuantity: false,
+          status: existingProduct.status,
           sortOrder:
             nextCategoryId === existingProduct.categoryId
               ? existingProduct.sortOrder
@@ -2514,6 +2792,11 @@ export const createBundleProduct = async (
     return validatedComponents;
   }
 
+  const piece = await resolvePieceUnit(organizationId, userId);
+  if (piece.error || !piece.unit) {
+    return piece.error ?? unitNotFound();
+  }
+
   const bundleProductId = crypto.randomUUID();
   let createdProduct: ProductDTO | null = null;
   let createdComponents: Awaited<
@@ -2522,6 +2805,8 @@ export const createBundleProduct = async (
 
   try {
     await pg.begin(async (tx) => {
+      await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      const storeIds = await currentOrganizationStoreIds(organizationId);
       createdProduct = await catalogRepository.createProduct(
         {
           id: bundleProductId,
@@ -2534,6 +2819,9 @@ export const createBundleProduct = async (
           productType: "bundle",
           productCode: null,
           productCodeKind: null,
+          unitId: piece.unit.id,
+          defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
+          allowCustomSellingQuantity: false,
           status: bundleData.status ?? "active",
           sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, bundleData.categoryId, tx),
           createdBy: userId,
@@ -2554,6 +2842,15 @@ export const createBundleProduct = async (
           : [],
         tx,
       );
+      await persistStoreProductOfferings(tx, {
+        organizationId,
+        productId: bundleProductId,
+        storeIds,
+        price: createdProduct.price,
+        discount: createdProduct.discount,
+        status: "active",
+        createdBy: userId,
+      });
     });
   } catch {
     return {
@@ -2654,11 +2951,16 @@ export const updateBundleProduct = async (
     };
   }
 
+  const piece = await resolvePieceUnit(organizationId, userId);
+  if (piece.error || !piece.unit) {
+    return piece.error ?? unitNotFound();
+  }
+
   const nextCategoryId = bundleData.categoryId ?? existingProduct.categoryId;
   const nextName = bundleData.name ?? existingProduct.name;
-  const nextPrice = bundleData.price ?? existingProduct.price;
-  const nextDiscount = bundleData.discount ?? existingProduct.discount;
-  const nextStatus = bundleData.status ?? existingProduct.status;
+  const nextPrice = existingProduct.price;
+  const nextDiscount = existingProduct.discount;
+  const nextStatus = existingProduct.status;
   const nextImagePath =
     bundleData.imagePath === undefined
       ? (existingProduct.imagePath ?? null)
@@ -2711,21 +3013,6 @@ export const updateBundleProduct = async (
       return validatedComponents;
     }
     nextComponents = validatedComponents.components;
-  } else if (existingProduct.status === "inactive" && nextStatus === "active") {
-    const validatedComponents = await validateBundleComponents(
-      organizationId,
-      components.map((component) => ({
-        productId: component.componentProductId,
-        quantity: component.quantity,
-        addOns: component.addOns.map((addOn) => ({
-          addOnId: addOn.addOnId,
-          quantity: addOn.quantity,
-        })),
-      })),
-    );
-    if (validatedComponents.status === "error") {
-      return validatedComponents;
-    }
   }
 
   let updatedProduct: ProductDTO | null = null;
@@ -2743,6 +3030,9 @@ export const updateBundleProduct = async (
           imagePath: nextImagePath,
           productCode: existingProduct.productCode,
           productCodeKind: existingProduct.productCodeKind,
+          unitId: piece.unit.id,
+          defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
+          allowCustomSellingQuantity: false,
           status: nextStatus,
           sortOrder:
             nextCategoryId === existingProduct.categoryId
@@ -4000,6 +4290,124 @@ export const updateProductLabelProfile = async (
       },
     },
     message: "Product Label Profile updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const storeNotFound = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Store not found",
+  data: null,
+  code: STATUS_CODES.NOT_FOUND,
+});
+
+const offeringNotFound = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Store Product Offering not found",
+  data: null,
+  code: STATUS_CODES.NOT_FOUND,
+});
+
+const getStoreForOrganization = async (
+  organizationId: string,
+  storeId: string,
+) => organizationRepository.getStoreById(organizationId, storeId);
+
+export const getStoreProductOfferings = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreProductOfferingsListResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const offerings = await catalogRepository.getStoreProductOfferingsByStoreId(
+    organizationId,
+    storeId,
+  );
+  const resolved = (
+    await Promise.all(offerings.map((offering) => toStoreProductOfferingResponse(offering)))
+  ).filter((offering): offering is StoreProductOfferingResponseDTO => offering !== null);
+
+  return {
+    status: "success",
+    data: { offerings: resolved },
+    message: "Store Product Offerings fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updateStoreProductOffering = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  offeringId: string,
+  offeringData: UpdateStoreProductOfferingSVC,
+): Promise<ServiceResponse<StoreProductOfferingResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const existing = await catalogRepository.getStoreProductOfferingById(
+    organizationId,
+    storeId,
+    offeringId,
+  );
+  if (!existing) {
+    return offeringNotFound();
+  }
+
+  const updated = await catalogRepository.updateStoreProductOffering({
+    id: offeringId,
+    organizationId,
+    storeId,
+    price: offeringData.price ?? existing.price,
+    discount: offeringData.discount ?? existing.discount,
+    status: offeringData.status ?? existing.status,
+    updatedBy: userId,
+  });
+
+  if (!updated) {
+    return {
+      status: "error",
+      message: "Failed to update Store Product Offering",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  const response = await toStoreProductOfferingResponse(updated);
+  if (!response) {
+    return offeringNotFound();
+  }
+
+  return {
+    status: "success",
+    data: { offering: response },
+    message: "Store Product Offering updated successfully",
     code: STATUS_CODES.SUCCESS,
   };
 };

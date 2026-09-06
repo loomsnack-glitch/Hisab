@@ -258,8 +258,10 @@ export const createStore = async (
 
 export const getStoresByOrganizationId = async (
   organizationId: string,
+  tx?: Bun.TransactionSQL,
 ): Promise<StoreDTO[]> => {
-  const results = await pg`
+  const db = tx || pg;
+  const results = await db`
         SELECT *
         FROM stores
         WHERE organization_id = ${organizationId}

@@ -47,6 +47,7 @@ export type CloudTemplateSendSnapshot = {
   category: TemplateCategory;
   intent: WhatsAppMessageTemplateKind;
   components: CloudTemplateComponent[];
+  templateComponents?: unknown[];
 };
 
 export type CloudTemplateAdmissionResult =
@@ -95,6 +96,7 @@ export const admitCloudTemplateSend = (input: CloudTemplateAdmissionInput): Clou
         category: input.asset.category,
         intent: input.intent,
         components: input.outboundComponents ?? [],
+        templateComponents: input.asset.components,
       },
     };
   }
@@ -112,6 +114,7 @@ export const admitCloudTemplateSend = (input: CloudTemplateAdmissionInput): Clou
       category: input.asset.category,
       intent: input.intent,
       components: input.outboundComponents ?? [],
+      templateComponents: input.asset.components,
     },
   };
 };

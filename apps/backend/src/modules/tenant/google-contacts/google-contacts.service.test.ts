@@ -79,6 +79,7 @@ const credentials = {
 
 const createDeps = (overrides: Partial<GoogleContactsServiceDependencies> = {}): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: mock(async () => ({ id: ORGANIZATION_ID })),
+  assertFeatureEntitlement: mock(async () => null),
   createOAuthStateRecord: mock(async () => {}),
   replayStore: { consume: mock(async () => true) },
   getStatus: mock(async () => disconnected),
@@ -440,5 +441,29 @@ describe("Google Contacts connection service", () => {
       data: null,
     });
     expect(deps.createOAuthStateRecord).not.toHaveBeenCalled();
+  });
+
+  test("denies Google Contacts operations without entitlement and does not read credentials", async () => {
+    const deps = createDeps({
+      assertFeatureEntitlement: mock(async () => ({
+        status: "error" as const,
+        message:
+          "Google Contacts Synchronization is not available for any Store in this Organization. Review commercial access in Ganatri Admin to purchase or renew access.",
+        data: null,
+        code: 403 as const,
+      })),
+    });
+
+    const response = await getGoogleContactsSyncStatusForOrganization(USER_ID, ORGANIZATION_ID, deps);
+
+    expect(response).toMatchObject({
+      status: "error",
+      code: 403,
+      data: null,
+    });
+    expect(response.message).toContain("Google Contacts Synchronization");
+    expect(deps.getStatus).not.toHaveBeenCalled();
+    expect(JSON.stringify(response)).not.toContain("refresh-token");
+    expect(JSON.stringify(response)).not.toContain("access-token");
   });
 });

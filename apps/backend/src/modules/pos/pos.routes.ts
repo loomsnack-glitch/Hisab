@@ -714,17 +714,6 @@ router.get("/whatsapp/account", async (c) => {
   }
 });
 
-router.post("/whatsapp/account/connect", async (c) => {
-  try {
-    return handleServiceResponse(
-      c,
-      await whatsappService.connectAccountForDevice(c.get("authDevice")),
-    );
-  } catch (error) {
-    return handleError(FILE_NAME, "connectAccountForDevice", c, error);
-  }
-});
-
 router.post("/whatsapp/sync", async (c) => {
   try {
     return handleServiceResponse(

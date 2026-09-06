@@ -11,7 +11,7 @@ import billingRoutes from './modules/tenant/billing/billing.routes';
 import catalogRoutes from './modules/tenant/catalog/catalog.routes';
 import organizationRoutes from './modules/tenant/organization/organization.routes';
 import tableServiceRoutes from './modules/tenant/table-service/table-service.routes';
-import whatsappRoutes, { whatsappInternalRoutes } from './modules/tenant/whatsapp/whatsapp.routes';
+import whatsappRoutes from './modules/tenant/whatsapp/whatsapp.routes';
 import { whatsappCloudWebhookRoutes } from './modules/tenant/whatsapp/cloud-api/cloud-webhook.routes';
 import googleContactsRoutes from './modules/tenant/google-contacts/google-contacts.routes';
 import unitsRoutes from './modules/tenant/units/units.routes';
@@ -20,6 +20,8 @@ import vendorsRoutes from './modules/tenant/vendors/vendors.routes';
 import moneyAccountsRoutes from './modules/tenant/money-accounts/money-accounts.routes';
 import purchasesRoutes from './modules/tenant/purchases/purchases.routes';
 import expensesRoutes from './modules/tenant/expenses/expenses.routes';
+import commercialLicensingRoutes from './modules/tenant/commercial-licensing/commercial-licensing.routes';
+import { createRazorpayWebhookRoutes } from './modules/tenant/commercial-licensing/razorpay-webhook.routes';
 import googleContactsInternalRoutes from './modules/tenant/google-contacts/google-contacts.internal-routes';
 import publicInvoiceRoutes from './modules/tenant/whatsapp/public-invoice.routes';
 
@@ -85,9 +87,10 @@ app.route('/organizations', vendorsRoutes);
 app.route('/organizations', moneyAccountsRoutes);
 app.route('/organizations', purchasesRoutes);
 app.route('/organizations', expensesRoutes);
-app.route('/internal/whatsapp', whatsappInternalRoutes);
+app.route('/organizations', commercialLicensingRoutes);
 app.route('/internal/google-contacts', googleContactsInternalRoutes);
 app.route('/public/whatsapp', publicInvoiceRoutes);
 app.route('/webhooks/whatsapp', whatsappCloudWebhookRoutes);
+app.route('/webhooks/razorpay', createRazorpayWebhookRoutes());
 
 export default app

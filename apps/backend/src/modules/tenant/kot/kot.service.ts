@@ -5,7 +5,12 @@ import * as organizationRepository from "@/modules/tenant/organization/organizat
 import * as tableRepository from "@/modules/tenant/table-service/table-service.repository";
 import * as kotRepository from "./kot.repository";
 import {
+    requireStoreFeatureEntitlement,
+    requireTableManagementFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
+import {
     STATUS_CODES,
+    formatSoldAmount,
     type CheckoutTableOrderSVC,
     type CreateKotItemREPO,
     type CreateTableKotSVC,
@@ -33,7 +38,9 @@ const roundMoney = (value: number) =>
 const configurationKeyFor = (
   productId: string,
   configurationSignature: string,
-) => `${productId}::${configurationSignature}`;
+  soldQuantity?: number | string | null,
+) =>
+  `${productId}::${formatSoldAmount(Number(soldQuantity ?? 1))}::${configurationSignature}`;
 
 const bundleComponentKeyFor = (
     choiceGroupId: string | null | undefined,
@@ -47,6 +54,7 @@ const mergeKotItemsByConfiguration = (items: KotItemDTO[]): KotItemDTO[] => {
     const key = configurationKeyFor(
       item.productId,
       item.configurationSignature ?? "",
+      item.soldQuantity,
     );
         const existing = mergedByKey.get(key);
         if (!existing) {
@@ -140,6 +148,16 @@ const normalizeOptionalText = (value?: string | null) => {
 };
 
 const requireTableKotStore = async (session: DeviceSessionDTO) => {
+    const entitlementError = await requireTableManagementFeatureEntitlement(
+        session.store.id,
+    );
+    if (entitlementError) {
+        return {
+            ok: false as const,
+            response: entitlementError,
+        };
+    }
+
     const store = await organizationRepository.getStoreById(
         session.organization.id,
         session.store.id,
@@ -203,6 +221,9 @@ const mapPreparedLinesToKotItems = (
             productId: line.item.productId,
             quantity: Number(line.item.quantity),
             configurationSignature: line.item.configurationSignature ?? "",
+            soldQuantity: Number(line.item.soldQuantity ?? 1),
+            unitId: line.item.unitId ?? "00000000-0000-4000-8000-000000000001",
+            unitLabelSnapshot: line.item.unitLabelSnapshot ?? "pc",
             productNameSnapshot: line.item.productNameSnapshot,
             unitPriceSnapshot: moneyFrom(line.item.unitPriceSnapshot),
             discountAmount: moneyFrom(line.item.discountAmount),
@@ -280,6 +301,9 @@ const mapKotItemsToTrustedSaleLines = (
                 productId: item.productId,
                 quantity: Number(item.quantity),
                 configurationSignature: item.configurationSignature ?? "",
+                soldQuantity: Number(item.soldQuantity ?? 1),
+                unitId: item.unitId ?? "00000000-0000-4000-8000-000000000001",
+                unitLabelSnapshot: item.unitLabelSnapshot ?? "pc",
                 productNameSnapshot: item.productNameSnapshot,
                 unitPriceSnapshot: moneyFrom(item.unitPriceSnapshot),
                 discountAmount: moneyFrom(item.discountAmount),
@@ -832,6 +856,14 @@ export const prepareStandaloneKotBatchForActor = async (params: {
     };
   }
 
+  const kotEntitlementError = await requireStoreFeatureEntitlement(
+    params.storeId,
+    "kot_system",
+  );
+  if (kotEntitlementError) {
+    return kotEntitlementError;
+  }
+
   const session = {
     device: {
       id: params.deviceId,
@@ -1273,6 +1305,14 @@ export const updateStandaloneKotForDevice = async (
     };
   }
 
+  const kotEntitlementError = await requireStoreFeatureEntitlement(
+    session.store.id,
+    "kot_system",
+  );
+  if (kotEntitlementError) {
+    return kotEntitlementError;
+  }
+
   const [sale, existingKot] = await Promise.all([
     billingRepository.getSaleById(
       session.organization.id,
@@ -1335,6 +1375,14 @@ export const checkoutTableOrderForDevice = async (
     tableId: string,
     checkoutData: CheckoutTableOrderSVC,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  const billingEntitlementError = await requireStoreFeatureEntitlement(
+    session.store.id,
+    "billing",
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const store = await organizationRepository.getStoreById(
     session.organization.id,
     session.store.id,
@@ -1615,6 +1663,17 @@ export const checkoutTableOrderForDevice = async (
 };
 
 const requireKotSystemStore = async (session: DeviceSessionDTO) => {
+    const entitlementError = await requireStoreFeatureEntitlement(
+        session.store.id,
+        "kot_system",
+    );
+    if (entitlementError) {
+        return {
+            ok: false as const,
+            response: entitlementError,
+        };
+    }
+
     const store = await organizationRepository.getStoreById(
         session.organization.id,
         session.store.id,

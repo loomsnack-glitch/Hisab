@@ -1,4 +1,4 @@
-export const storeDetailTabs = ["devices", "settings"] as const;
+export const storeDetailTabs = ["devices", "settings", "license"] as const;
 
 export type StoreDetailTab = (typeof storeDetailTabs)[number];
 
@@ -11,8 +11,11 @@ export const getStoreDetailPath = (
     tab: StoreDetailTab = "devices",
 ) => `/organizations/${organizationId}/stores/${storeId}/${tab}`;
 
-export const getStoreDetailTab = (pathname: string): StoreDetailTab =>
-    pathname.includes("/settings") ? "settings" : "devices";
+export const getStoreDetailTab = (pathname: string): StoreDetailTab => {
+    if (pathname.includes("/license")) return "license";
+    if (pathname.includes("/settings")) return "settings";
+    return "devices";
+};
 
 export const isStoresNavActive = (pathname: string) =>
     /\/organizations\/[^/]+\/stores(\/|$)/.test(pathname) &&

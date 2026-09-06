@@ -1,4 +1,5 @@
 import { mock } from "bun:test";
+import { ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
 
 export const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const userId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -14,10 +15,70 @@ export const sauceAddOnId = "55555555-5555-4555-8555-555555555555";
 export const attachmentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 export const cheeseAttachmentId = "66666666-6666-4666-8666-666666666666";
 export const componentId = "44444444-4444-4444-8444-444444444444";
+export const pieceUnitId = "98989898-9898-4989-8989-989898989898";
+export const gramUnitId = "97979797-9797-4979-8979-979797979797";
+export const inactiveUnitId = "96969696-9696-4969-8969-969696969696";
+export const foreignUnitId = "95959595-9595-4959-8959-959595959595";
 
 export const now = new Date("2026-07-12T12:00:00.000Z");
 
 export const organization = { id: organizationId, name: "Demo Org" };
+
+export const pieceUnit = {
+    id: pieceUnitId,
+    organizationId,
+    name: "piece",
+    label: "pc",
+    kind: "predefined" as const,
+    predefinedKey: "piece",
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const gramUnit = {
+    id: gramUnitId,
+    organizationId,
+    name: "gram",
+    label: "g",
+    kind: "predefined" as const,
+    predefinedKey: "gram",
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const inactiveUnit = {
+    id: inactiveUnitId,
+    organizationId,
+    name: "Retired Slice",
+    label: "slice",
+    kind: "custom" as const,
+    predefinedKey: null,
+    status: "inactive" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
+
+export const foreignUnit = {
+    id: foreignUnitId,
+    organizationId: "99999999-9999-4999-8999-999999999999",
+    name: "gram",
+    label: "g",
+    kind: "predefined" as const,
+    predefinedKey: "gram",
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
 
 export const category = {
     id: categoryId,
@@ -43,6 +104,10 @@ export const product = {
     productType: "single" as const,
     productCode: null as string | null,
     productCodeKind: null as "manufacturer" | "internal_rcn" | null,
+    unitId: pieceUnitId,
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -68,6 +133,10 @@ export const coffee = {
     productType: "single" as const,
     productCode: null as string | null,
     productCodeKind: null as "manufacturer" | "internal_rcn" | null,
+    unitId: pieceUnitId,
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -87,6 +156,10 @@ export const existingBundle = {
     productType: "bundle" as const,
     productCode: null as string | null,
     productCodeKind: null as "manufacturer" | "internal_rcn" | null,
+    unitId: pieceUnitId,
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -164,7 +237,29 @@ export const sauceAttachment = {
     addOn: sauceAddOn,
 };
 
+export const store = { id: "11111111-1111-4111-8111-111111111111", organizationId, name: "Adajan" };
+export const vesuStore = {
+    id: "abababab-abab-4aba-8aba-abababababab",
+    organizationId,
+    name: "Vesu",
+};
+export const offeringId = "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd";
+export const storeProductOffering = {
+    id: offeringId,
+    organizationId,
+    storeId: store.id,
+    productId,
+    price: product.price,
+    discount: product.discount,
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
 export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
+export const getStoresByOrganizationId = mock(async () => [store]);
+export const getStoreById = mock(async () => store);
 export const getCategoryById = mock(async () => category);
 export const getCategoriesByOrganizationId = mock(async () => [category]);
 export const categoryNameExistsInOrganization = mock(async () => false);
@@ -181,23 +276,7 @@ export const getProductByCode = mock(
         _organizationId?: string,
         _productCode?: string,
         _excludeId?: string,
-    ): Promise<{
-        id: string;
-        organizationId: string;
-        categoryId: string;
-        name: string;
-        price: number;
-        discount: number;
-        imagePath: string | null;
-        productType: "single" | "bundle" | "combo";
-        productCode: string | null;
-        productCodeKind: "manufacturer" | "internal_rcn" | null;
-        status: "active" | "inactive";
-        createdBy: string;
-        updatedBy: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-    } | null> => null,
+    ): Promise<typeof product | null> => null,
 );
 export const allocateNextInternalProductCodeSequence = mock(async (): Promise<number | null> => 0);
 export const isReleasedInternalProductCode = mock(async () => false);
@@ -212,6 +291,18 @@ export const assignInternalProductCodeToUncodedProduct = mock(
     }),
 );
 export const createProductRepo = mock(async (data: typeof product) => data);
+export const createStoreProductOfferingRepo = mock(async (data: typeof storeProductOffering) => data);
+export const lockStoreProductOfferingTopology = mock(async () => undefined);
+export const getStoreProductOfferingsByStoreId = mock(async () => [storeProductOffering]);
+export const getStoreProductOfferingById = mock(async (): Promise<typeof storeProductOffering | null> => storeProductOffering);
+export const getStoreProductOfferingByProductAndStore = mock(
+    async (): Promise<typeof storeProductOffering | null> => storeProductOffering,
+);
+export const updateStoreProductOfferingRepo = mock(async (data: typeof storeProductOffering) => data);
+export const deleteStoreProductOfferingRepo = mock(async () => storeProductOffering);
+export const getActiveStoreCatalogProducts = mock(async () => [
+    { ...product, price: storeProductOffering.price, discount: storeProductOffering.discount, status: "active" as const },
+]);
 export const updateProductRepo = mock(async (data: typeof product) => data);
 export const deleteProductRepo = mock(async () => product);
 export const createBundleProductComponentRepo = mock(
@@ -415,8 +506,15 @@ export const upsertProductLabelProfileRepo = mock(async (data: {
 }));
 export const begin = mock(async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback({}));
 
+export const getUnitById = mock(async () => pieceUnit);
+export const getUnitByPredefinedKey = mock(async () => pieceUnit);
+export const getUnitsByOrganizationId = mock(async () => [pieceUnit, gramUnit]);
+export const seedDefaultUnits = mock(async () => [pieceUnit]);
+
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
+    getStoresByOrganizationId,
+    getStoreById,
 }));
 
 mock.module("@/services/storage", () => ({
@@ -426,6 +524,13 @@ mock.module("@/services/storage", () => ({
 
 mock.module("@/config/db", () => ({
     pg: { begin },
+}));
+
+mock.module("@/modules/tenant/units/units.repository", () => ({
+    getUnitById,
+    getUnitByPredefinedKey,
+    getUnitsByOrganizationId,
+    seedDefaultUnits,
 }));
 
 mock.module("./catalog.repository", () => ({
@@ -447,6 +552,14 @@ mock.module("./catalog.repository", () => ({
     claimReleasedInternalProductCode,
     assignInternalProductCodeToUncodedProduct,
     createProduct: createProductRepo,
+    createStoreProductOffering: createStoreProductOfferingRepo,
+    lockStoreProductOfferingTopology,
+    getStoreProductOfferingsByStoreId,
+    getStoreProductOfferingById,
+    getStoreProductOfferingByProductAndStore,
+    updateStoreProductOffering: updateStoreProductOfferingRepo,
+    deleteStoreProductOffering: deleteStoreProductOfferingRepo,
+    getActiveStoreCatalogProducts,
     updateProduct: updateProductRepo,
     deleteProduct: deleteProductRepo,
     createBundleProductComponent: createBundleProductComponentRepo,
@@ -503,5 +616,7 @@ mock.module("./catalog.repository", () => ({
     getProductLabelProfilesByProductIds,
     upsertProductLabelProfile: upsertProductLabelProfileRepo,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const catalogService = await import("./catalog.service");

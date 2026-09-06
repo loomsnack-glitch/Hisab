@@ -7,15 +7,13 @@ import {
   type WhatsAppInvoiceQueueResponseDTO,
   type WhatsAppMessageTemplateDTO,
   type StoreMessageLink,
-  type WhatsAppWorkerOutboundJobDTO,
-  type WhatsAppWorkerInvoiceResultJSON,
-  type WhatsAppWorkerMessageStatusJSON,
 } from "@repo/types";
 import * as storage from "@/services/storage";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as repository from "./whatsapp.repository";
-import { formatInvoiceText, getInvoiceTemplateValues } from "./invoice-text";
+import { getInvoiceTemplateValues } from "./invoice-text";
 import * as messageTemplate from "./message-template";
 import { getCloudAccountScope } from "./cloud-api/cloud-account.repository";
 import { getCloudTemplateBindingSnapshotForStore } from "./cloud-api/cloud-template.repository";
@@ -191,6 +189,8 @@ export const queueInvoiceForStore = async (
   userId?: string,
   options: InvoiceQueueOptions = {},
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const store = await organizationRepository.getStoreById(
     organizationId,
     storeId,
@@ -244,6 +244,14 @@ export const queueInvoiceForStore = async (
       code: STATUS_CODES.CONFLICT,
     };
   }
+  if (account.provider !== "cloud_api") {
+    return {
+      status: "error",
+      message: "This WhatsApp account uses a retired provider; connect a Cloud API account before sending invoices",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
   if (!options.resend) {
     const existing = await repository.getInvoiceOutbox(
       organizationId,
@@ -263,15 +271,6 @@ export const queueInvoiceForStore = async (
     };
   }
 
-  if (options.resend && account.provider !== "cloud_api") {
-    return {
-      status: "error",
-      message: "Invoice resend is supported only for WhatsApp Cloud accounts",
-      data: null,
-      code: STATUS_CODES.CONFLICT,
-    };
-  }
-
   const organization = await organizationRepository.getOrganizationById(organizationId);
   if (!organization) {
     return {
@@ -281,9 +280,6 @@ export const queueInvoiceForStore = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-
-  const bucket = privateBucket();
-  const attachmentStorageKey = invoiceObjectKey(organizationId, storeId, account.id, sale.id);
 
   try {
     const selectedTemplate = templateId
@@ -297,71 +293,28 @@ export const queueInvoiceForStore = async (
         code: STATUS_CODES.NOT_FOUND,
       };
     }
-    if (account.provider === "cloud_api") {
-      if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
-      if (templateId && (!selectedTemplate || !selectedTemplate.isActive)) {
-        return {
-          status: "error",
-          message: "No active bill template is available for this Store",
-          data: null,
-          code: STATUS_CODES.CONFLICT,
-        };
-      }
-      return queueCloudInvoiceForStore(
-        userId ?? null,
-        organizationId,
-        storeId,
-        sale,
-        { name: store.name, address: store.address ?? null, whatsappLinks: store.whatsappLinks },
-        { name: organization.name, tagline: organization.tagline ?? null },
-        account.id,
-        customMessage,
-        selectedTemplate,
-        templateId,
-        invoiceIdempotencyKey(saleId, options),
-      );
-    }
-    if (!bucket) {
+    if (!cloudFeatureCallersEnabled()) return { status: "error", message: "WhatsApp Cloud feature callers are disabled", data: null, code: STATUS_CODES.CONFLICT };
+    if (templateId && (!selectedTemplate || !selectedTemplate.isActive)) {
       return {
         status: "error",
-        message: "Private media storage is not configured for WhatsApp invoices",
+        message: "No active bill template is available for this Store",
         data: null,
-        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+        code: STATUS_CODES.CONFLICT,
       };
     }
-    const pdf = await renderBrandedSalePdf(organizationId, storeId, sale);
-    if (pdf.byteLength > MAX_INVOICE_BYTES) {
-      return {
-        status: "error",
-        message: "Generated invoice PDF is too large to send",
-        data: null,
-        code: STATUS_CODES.INTERNAL_SERVER_ERROR,
-      };
-    }
-    await storage.uploadBuffer(bucket, attachmentStorageKey, pdf, "application/pdf");
-
-    const request = await repository.createInvoiceOutbox({
+    return queueCloudInvoiceForStore(
+      userId ?? null,
       organizationId,
       storeId,
-      whatsappAccountId: account.id,
-      saleId,
-      customerId: sale.customerId,
-      customerPhone: parsedPhone.data,
-      customerName:
-        sale.customerNameSnapshot ?? sale.customer?.name ?? "Customer",
-      caption: formatInvoiceText(sale, {
-        organizationName: organization.name,
-        storeName: store.name,
-        template: customMessage ?? selectedTemplate?.body,
-        links: store.whatsappLinks,
-      }),
-      attachmentStorageKey,
-      attachmentFileName: `Sale_${sale.saleNumber ?? sale.id}.pdf`,
-      attachmentMimeType: "application/pdf",
-      messageId: crypto.randomUUID(),
-      idempotencyKey: invoiceIdempotencyKey(saleId, options),
-    });
-    return response(saleId, request, false);
+      sale,
+      { name: store.name, address: store.address ?? null, whatsappLinks: store.whatsappLinks },
+      { name: organization.name, tagline: organization.tagline ?? null },
+      account.id,
+      customMessage,
+      selectedTemplate,
+      templateId,
+      invoiceIdempotencyKey(saleId, options),
+    );
   } catch (error) {
     try {
       if (!options.resend) {
@@ -378,11 +331,6 @@ export const queueInvoiceForStore = async (
       // Preserve the original preparation failure when the race check cannot run.
     }
 
-    try {
-      await storage.deleteObject(bucket, attachmentStorageKey);
-    } catch {
-      // Preserve the queue error; the deterministic key can be cleaned up later.
-    }
     if (error instanceof repository.WhatsAppOutboxLimitError) {
       return {
         status: "error",
@@ -471,6 +419,8 @@ export const getInvoiceStatus = async (
   if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const store = await organizationRepository.getStoreById(organizationId, storeId);
   if (!store) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const existing = await getExistingInvoice(organizationId, storeId, saleId);
   return existing
     ? response(saleId, existing, true)
@@ -487,6 +437,8 @@ export const retryInvoice = async (
   if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const store = await organizationRepository.getStoreById(organizationId, storeId);
   if (!store) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const account = await repository.getAccount(organizationId, storeId);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(organizationId, storeId, account.id, saleId);
@@ -522,6 +474,8 @@ export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
+  if (entitlementError) return entitlementError;
   const existing = await getExistingInvoice(session.organization.id, session.store.id, saleId);
   return existing
     ? response(saleId, existing, true)
@@ -532,6 +486,8 @@ export const retryInvoiceForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
+  if (entitlementError) return entitlementError;
   const account = await repository.getAccount(session.organization.id, session.store.id);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(session.organization.id, session.store.id, account.id, saleId);
@@ -539,62 +495,3 @@ export const retryInvoiceForDevice = async (
     ? response(saleId, retried, true)
     : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
 };
-
-export const claimInvoiceForWorker = async (
-  workerId = "worker",
-  partition: repository.WorkerPartition = { count: 1, index: 0 },
-): Promise<{ job: WhatsAppWorkerOutboundJobDTO | null }> => {
-  const claimed = await repository.claimNextInvoiceOutbox(`${workerId}-${crypto.randomUUID()}`, 120, partition);
-  if (!claimed) return { job: null };
-
-  try {
-    const bucket = privateBucket();
-    const document = claimed.attachmentStorageKey
-      ? await storage.getObjectBuffer(bucket, claimed.attachmentStorageKey, MAX_INVOICE_BYTES)
-      : null;
-    return {
-      job: {
-        accountId: claimed.accountId,
-        outboxId: claimed.outboxId,
-        messageId: claimed.messageId,
-        phoneNumber: claimed.phoneNumber,
-        messageType: claimed.messageType,
-        body: claimed.body,
-        attachmentFileName: claimed.attachmentFileName,
-        attachmentMimeType: claimed.attachmentMimeType,
-        caption: claimed.caption,
-        documentBase64: document?.toString("base64") ?? null,
-        attemptCount: claimed.attemptCount,
-        leaseOwner: claimed.leaseOwner,
-      },
-    };
-  } catch (error) {
-    await repository.completeInvoiceOutbox(
-      claimed.outboxId,
-      claimed.leaseOwner,
-      null,
-      "attachment_unavailable",
-      "Invoice attachment could not be loaded",
-      true,
-    );
-    console.error("[whatsapp] invoice attachment load failed", error instanceof Error ? error.message : "unknown");
-    return { job: null };
-  }
-};
-
-export const receiveInvoiceResult = (
-  outboxId: string,
-  result: WhatsAppWorkerInvoiceResultJSON,
-): Promise<boolean> => repository.completeInvoiceOutbox(
-  outboxId,
-  result.leaseOwner,
-  result.providerMessageId,
-  result.failureCode,
-  result.failureMessage,
-  result.retryable,
-);
-
-export const receiveInvoiceMessageStatus = (
-  accountId: string,
-  update: WhatsAppWorkerMessageStatusJSON,
-): Promise<boolean> => repository.updateInvoiceMessageStatus(accountId, update.providerMessageId, update.status);

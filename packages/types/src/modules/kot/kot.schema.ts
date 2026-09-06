@@ -5,12 +5,19 @@ import {
   SaleItemInputSchema,
   UpdateDraftSaleSchema,
 } from "../billing/billing.schema";
+import { defaultSellingQuantitySchema } from "../catalog/catalog.schema";
 
 const nameSchema = z
   .string()
   .trim()
   .min(1, "Name is required")
   .max(255, "Name must be at most 255 characters");
+
+const soldProductNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Name is required")
+  .max(320, "Name must be at most 320 characters");
 
 const moneySchema = z
   .number({ error: "Amount is required" })
@@ -99,7 +106,10 @@ export const KotItemDTOSchema = z.object({
   productId: z.uuid("Invalid product id"),
   quantity: quantitySchema,
   configurationSignature: z.string(),
-  productNameSnapshot: nameSchema,
+  soldQuantity: defaultSellingQuantitySchema,
+  unitId: z.uuid("Invalid unit id"),
+  unitLabelSnapshot: z.string().min(1).max(32),
+  productNameSnapshot: soldProductNameSchema,
   unitPriceSnapshot: moneySchema,
   discountAmount: moneySchema,
   lineSubtotal: moneySchema,
@@ -146,7 +156,7 @@ export const KotDTOSchema = z.object({
 });
 
 export const KitchenKotItemSummarySchema = z.object({
-  productNameSnapshot: nameSchema,
+  productNameSnapshot: soldProductNameSchema,
   quantity: quantitySchema,
 });
 

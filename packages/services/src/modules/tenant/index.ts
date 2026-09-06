@@ -11,3 +11,4 @@ export * from "./expenses.service";
 export * from "./vendors.service";
 export * from "./purchases.service";
 export * from "./money-accounts.service";
+export * from "./commercial-licensing.service";

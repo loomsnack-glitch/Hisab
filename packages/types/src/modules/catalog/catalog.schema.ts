@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { dtoDateSchema } from "../../common";
+import { UnitStatusSchema } from "../units/units.schema";
 import {
   keepOutFitsStock,
   millimetreBoxesIntersect,
 } from "./label-template-geometry";
+import { isPositiveDefaultSellingQuantity } from "./sold-product-name";
 
 const nameSchema = z
   .string()
@@ -40,6 +42,19 @@ export const ProductAddOnAttachmentStatusSchema = z.enum([
 /** Remove only scanner transport terminators; Product Code text is otherwise opaque. */
 export const normalizeProductCodeInput = (value: string): string =>
   value.replace(/[\r\n]+$/g, "");
+
+export const defaultSellingQuantitySchema = z
+  .number({ error: "Default Selling Quantity is required" })
+  .gt(0, "Default Selling Quantity must be greater than 0")
+  .refine(isPositiveDefaultSellingQuantity, {
+    message: "Default Selling Quantity must have at most two decimal places",
+  });
+
+export const canAssignUnitToCatalogProduct = (input: {
+  unitStatus: z.infer<typeof UnitStatusSchema>;
+  currentlyAssigned?: boolean;
+}): boolean =>
+  input.currentlyAssigned === true || input.unitStatus === "active";
 
 /** Opaque Product Code text: no trim, no barcode-shape validation. Max length matches DB. */
 const productCodeValueSchema = z.preprocess(
@@ -216,6 +231,10 @@ const ProductDTOObjectSchema = z.object({
   productType: ProductTypeSchema,
   productCode: productCodeValueSchema.nullable(),
   productCodeKind: ProductCodeKindSchema.nullable(),
+  unitId: z.uuid("Invalid unit id"),
+  defaultSellingQuantity: defaultSellingQuantitySchema,
+  allowCustomSellingQuantity: z.boolean(),
+  unitLabel: z.string().min(1).max(32),
   status: ProductStatusSchema,
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
@@ -417,6 +436,9 @@ export const CreateProductObjectSchema = z.object({
   status: ProductStatusSchema.optional(),
   productCode: optionalProductCodeSchema,
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
+  unitId: z.uuid("Invalid unit id").optional(),
+  defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
+  allowCustomSellingQuantity: z.boolean().optional(),
 });
 
 export const CreateProductSchema = CreateProductObjectSchema.refine(
@@ -427,24 +449,24 @@ export const CreateProductSchema = CreateProductObjectSchema.refine(
 const UpdateProductObjectSchema = z.object({
   categoryId: z.uuid("Invalid category id").optional(),
   name: nameSchema.optional(),
-  price: priceSchema.optional(),
-  discount: discountSchema.optional(),
   imagePath: optionalImagePathSchema,
-  status: ProductStatusSchema.optional(),
   productCode: optionalProductCodeSchema,
   productCodeKind: ProductCodeKindSchema.nullable().optional(),
-});
+  unitId: z.uuid("Invalid unit id").optional(),
+  defaultSellingQuantity: defaultSellingQuantitySchema.optional(),
+  allowCustomSellingQuantity: z.boolean().optional(),
+}).strict();
 
 export const UpdateProductSchema = UpdateProductObjectSchema.refine(
   (value) =>
     value.categoryId !== undefined ||
     value.name !== undefined ||
-    value.price !== undefined ||
-    value.discount !== undefined ||
     value.imagePath !== undefined ||
-    value.status !== undefined ||
     value.productCode !== undefined ||
-    value.productCodeKind !== undefined,
+    value.productCodeKind !== undefined ||
+    value.unitId !== undefined ||
+    value.defaultSellingQuantity !== undefined ||
+    value.allowCustomSellingQuantity !== undefined,
   {
     message: "At least one field is required",
   },
@@ -491,23 +513,18 @@ export const UpdateBundleProductSchema = z
   .object({
     categoryId: z.uuid("Invalid category id").optional(),
     name: nameSchema.optional(),
-    price: priceSchema.optional(),
-    discount: discountSchema.optional(),
     imagePath: optionalImagePathSchema,
-    status: ProductStatusSchema.optional(),
     components: z
       .array(BundleProductComponentInputSchema)
       .min(1, "A bundle must include at least one product component")
       .optional(),
   })
+  .strict()
   .refine(
     (value) =>
       value.categoryId !== undefined ||
       value.name !== undefined ||
-      value.price !== undefined ||
-      value.discount !== undefined ||
       value.imagePath !== undefined ||
-      value.status !== undefined ||
       value.components !== undefined,
     {
       message: "At least one field is required",
@@ -530,23 +547,18 @@ export const UpdateComboProductSchema = z
   .object({
     categoryId: z.uuid("Invalid category id").optional(),
     name: nameSchema.optional(),
-    price: priceSchema.optional(),
-    discount: discountSchema.optional(),
     imagePath: optionalImagePathSchema,
-    status: ProductStatusSchema.optional(),
     choiceGroups: z
       .array(ComboChoiceGroupInputSchema)
       .min(1, "A Combo needs at least one choice group")
       .optional(),
   })
+  .strict()
   .refine(
     (value) =>
       value.categoryId !== undefined ||
       value.name !== undefined ||
-      value.price !== undefined ||
-      value.discount !== undefined ||
       value.imagePath !== undefined ||
-      value.status !== undefined ||
       value.choiceGroups !== undefined,
     { message: "At least one field is required" },
   );
@@ -808,6 +820,41 @@ export const UpdateProductAddOnAttachmentSchema = z
   })
   .refine(
     (value) => value.selectionCap !== undefined || value.status !== undefined,
+    {
+      message: "At least one field is required",
+    },
+  );
+
+export const StoreProductOfferingDTOSchema = z.object({
+  id: z.uuid("Invalid offering id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  productId: z.uuid("Invalid product id"),
+  price: priceSchema,
+  discount: discountSchema,
+  status: ProductStatusSchema,
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const StoreProductOfferingResponseDTOSchema =
+  StoreProductOfferingDTOSchema.extend({
+    product: ProductResponseDTOSchema,
+  });
+
+export const UpdateStoreProductOfferingSchema = z
+  .object({
+    price: priceSchema.optional(),
+    discount: discountSchema.optional(),
+    status: ProductStatusSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.price !== undefined ||
+      value.discount !== undefined ||
+      value.status !== undefined,
     {
       message: "At least one field is required",
     },

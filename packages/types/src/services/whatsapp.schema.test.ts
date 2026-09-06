@@ -3,11 +3,8 @@ import {
     WhatsAppAccountDTOSchema,
     WhatsAppSendInvoiceSchema,
     WhatsAppSendTextSchema,
-    WhatsAppWorkerInvoiceJobSchema,
-    WhatsAppWorkerInvoiceResultSchema,
-    WhatsAppWorkerInboundMessageSchema,
-    WhatsAppWorkerMessageEventSchema,
-    WhatsAppWorkerOutboundJobSchema,
+    WhatsAppInboundMessageSchema,
+    WhatsAppMessageEventSchema,
     WhatsAppConversationListResponseSchema,
     WhatsAppCloudAccountSnapshotSchema,
     WhatsAppCloudProvisioningAttemptSchema,
@@ -101,6 +98,12 @@ describe("WhatsApp schemas", () => {
             body: null,
             caption: "Your bill is ready",
             templateName: "bill_ready",
+            templatePreview: {
+                header: { type: "text", text: "Hello Asha" },
+                body: "Your bill is ready.",
+                footer: "Thank you",
+                buttons: [{ type: "url", text: "View invoice", url: "https://example.com/invoice/1" }],
+            },
             attachmentFileName: null,
             attachmentMimeType: null,
             status: "sent",
@@ -178,38 +181,8 @@ describe("WhatsApp schemas", () => {
         expect(WhatsAppSendInvoiceSchema.safeParse({ saleId: "not-a-uuid" }).success).toBe(false);
     });
 
-    test("validates bounded worker invoice payloads and result transitions", () => {
-        expect(WhatsAppWorkerInvoiceJobSchema.safeParse({
-            accountId: uuid,
-            outboxId: uuid,
-            messageId: uuid,
-            phoneNumber: "+919876543210",
-            attachmentFileName: "sale-1001.pdf",
-            attachmentMimeType: "application/pdf",
-            caption: "Sale 1001",
-            documentBase64: "cGRm",
-            attemptCount: 1,
-            leaseOwner: "worker-lease",
-        }).success).toBe(true);
-
-        expect(WhatsAppWorkerInvoiceResultSchema.safeParse({
-            leaseOwner: "worker-lease",
-            providerMessageId: null,
-            failureCode: "provider_unavailable",
-            failureMessage: "WhatsApp provider is temporarily unavailable",
-            retryable: true,
-        }).success).toBe(true);
-        expect(WhatsAppWorkerInvoiceResultSchema.safeParse({
-            leaseOwner: "worker-lease",
-            providerMessageId: null,
-            failureCode: "Unsafe provider message",
-            failureMessage: null,
-            retryable: false,
-        }).success).toBe(false);
-    });
-
-    test("validates inbound events and text outbound jobs", () => {
-        expect(WhatsAppWorkerInboundMessageSchema.safeParse({
+    test("validates inbound events and message content", () => {
+        expect(WhatsAppInboundMessageSchema.safeParse({
             providerMessageId: "wamid-inbound-1",
             externalChatId: "919876543210@s.whatsapp.net",
             contactPhoneNumber: "+919876543210",
@@ -223,7 +196,7 @@ describe("WhatsApp schemas", () => {
             occurredAt: "2026-08-12T10:00:00.000Z",
         }).success).toBe(true);
 
-        expect(WhatsAppWorkerMessageEventSchema.safeParse({
+        expect(WhatsAppMessageEventSchema.safeParse({
             providerMessageId: "wamid-phone-1",
             externalChatId: "919876543210@s.whatsapp.net",
             contactPhoneNumber: "+919876543210",
@@ -239,7 +212,7 @@ describe("WhatsApp schemas", () => {
             source: "realtime",
         }).success).toBe(true);
 
-        expect(WhatsAppWorkerInboundMessageSchema.safeParse({
+        expect(WhatsAppInboundMessageSchema.safeParse({
             providerMessageId: "wamid-inbound-2",
             externalChatId: "919876543210@s.whatsapp.net",
             contactPhoneNumber: "+919876543210",
@@ -251,21 +224,6 @@ describe("WhatsApp schemas", () => {
             attachmentMimeType: "application/pdf",
             documentBase64: "cGRm",
             occurredAt: new Date(),
-        }).success).toBe(true);
-
-        expect(WhatsAppWorkerOutboundJobSchema.safeParse({
-            accountId: uuid,
-            outboxId: uuid,
-            messageId: uuid,
-            phoneNumber: "+919876543210",
-            messageType: "text",
-            body: "Thanks, we are checking.",
-            caption: null,
-            attachmentFileName: null,
-            attachmentMimeType: null,
-            documentBase64: null,
-            attemptCount: 1,
-            leaseOwner: "worker-lease",
         }).success).toBe(true);
 
         expect(WhatsAppConversationListResponseSchema.safeParse({

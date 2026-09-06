@@ -1,19 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Query } from "@tanstack/query-core";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
-import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, Pencil, RefreshCw, Settings2 } from "lucide-react";
+import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, MessageSquareText, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
-import { normalizePhoneNumber, STATUS_CODES, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import {
-    connectWhatsAppOrganizationAccount,
-    changeWhatsAppOrganizationAccountNumber,
-    createWhatsAppOrganizationAccount,
-    disconnectWhatsAppOrganizationAccount,
     getWhatsAppAccounts,
-    getWhatsAppOrganizationAccount,
     getWhatsAppCloudAccounts,
     manuallyProvisionWhatsAppCloudAccount,
     startWhatsAppCloudOnboarding,
@@ -25,7 +17,6 @@ import {
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
-import { PhoneInput } from "@repo/ui/components/phone-input";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
@@ -36,10 +27,8 @@ import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manage
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
 import WhatsAppCloudTemplateManager, { type WhatsAppCloudAccountOption } from "@/components/organizations/whatsapp-cloud-template-manager";
 import WhatsAppCloudSafetyCard from "@/components/organizations/whatsapp-cloud-safety-card";
+import { WhatsAppInboxView } from "@/pages/whatsapp-inbox-page";
 
-const ACCOUNT_STATUS_POLL_INTERVAL_MS = 2_000;
-const ACCOUNT_STATUS_POLL_WINDOW_MS = 60_000;
-const ACCOUNT_STATUS_RETRY_ATTEMPTS = 7;
 
 type EmbeddedSignupSdk = {
     init: (options: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void;
@@ -127,28 +116,14 @@ const launchEmbeddedSignup = async (): Promise<{ code: string; wabaId: string; p
     });
 };
 
-const statusLabel: Record<string, string> = {
-    pending_qr: "Scan the QR code",
-    connecting: "Connecting",
-    connected: "Connected",
-    disconnected: "Disconnected",
-    failed: "Connection failed",
-    revoked: "Session revoked",
-};
-
 const workspaceTabs = [
     { id: "accounts", label: "Accounts", icon: Settings2 },
     { id: "templates", label: "Templates", icon: FileText },
     { id: "promotions", label: "Promotions", icon: Megaphone },
+    { id: "message-history", label: "Message history", icon: MessageSquareText },
 ] as const;
 
 type WorkspaceTab = (typeof workspaceTabs)[number]["id"];
-
-type WhatsAppQueryError = {
-    message?: string;
-    code?: number;
-    data?: WhatsAppAccountStatusResponseDTO | null;
-};
 
 const mutationErrorMessage = (error: unknown, fallback: string): string => {
     if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
@@ -162,18 +137,12 @@ const WhatsAppOrganizationPage = () => {
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
-    const [phoneNumber, setPhoneNumber] = useState("");
-    const [addOpen, setAddOpen] = useState(false);
     const [manualCloudOpen, setManualCloudOpen] = useState(false);
     const [manualWabaId, setManualWabaId] = useState("");
     const [manualPhoneNumberId, setManualPhoneNumberId] = useState("");
     const [manualAccessToken, setManualAccessToken] = useState("");
     const [updateTokenAccountId, setUpdateTokenAccountId] = useState("");
     const [updateAccessToken, setUpdateAccessToken] = useState("");
-    const [qrByAccountId, setQrByAccountId] = useState<Record<string, string>>({});
-    const [changeAccountId, setChangeAccountId] = useState("");
-    const [newPhoneNumber, setNewPhoneNumber] = useState("");
-    const [statusPollUntilByAccountId, setStatusPollUntilByAccountId] = useState<Record<string, number>>({});
     const accountsKey = whatsappKeys.accounts(organizationId);
     const organizationQuery = useQuery({
         queryKey: ["whatsapp-workspace", organizationId, "organization"],
@@ -193,12 +162,7 @@ const WhatsAppOrganizationPage = () => {
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const cloudAccounts = cloudAccountsQuery.data?.data?.accounts ?? [];
     const manualCloudSetupEnabled = import.meta.env.VITE_WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED?.trim() === "true";
-    const baileysLinkingEnabled = import.meta.env.VITE_WHATSAPP_BAILEYS_LINKING_ENABLED?.trim() !== "false";
-    // Legacy Baileys records remain in the database for controlled cleanup, but
-    // must not appear in the active account pool once legacy linking is frozen.
-    const visibleAccounts = baileysLinkingEnabled
-        ? accounts
-        : accounts.filter(account => account.provider === "cloud_api");
+    const visibleAccounts = accounts.filter(account => account.provider === "cloud_api");
     const stores = organizationQuery.data?.status === "success"
         ? organizationQuery.data.data?.organization.stores ?? []
         : [];
@@ -222,24 +186,6 @@ const WhatsAppOrganizationPage = () => {
     const selectedCloudAccount = selectedAccount?.provider === "cloud_api"
         ? cloudAccountsForStore.find(account => account.id === selectedAccount.id)
         : undefined;
-    const statusQueries = useQueries({
-        queries: visibleAccounts.map(account => ({
-            queryKey: whatsappKeys.organizationAccount(organizationId, account.id),
-            queryFn: () => getWhatsAppOrganizationAccount(organizationId, account.id),
-            enabled: Boolean(organizationId) && account.provider !== "cloud_api",
-            refetchInterval: (query: Query<Awaited<ReturnType<typeof getWhatsAppOrganizationAccount>>, Error, Awaited<ReturnType<typeof getWhatsAppOrganizationAccount>>, readonly unknown[]>) => {
-                const error = query.state.error as WhatsAppQueryError | null;
-                const status = query.state.data?.data?.account.status ?? error?.data?.account.status;
-                const pollUntil = statusPollUntilByAccountId[account.id] ?? 0;
-                const pollRequested = pollUntil > Date.now() && status !== "connected" && status !== "failed" && status !== "revoked";
-                const retryBudgetAvailable = query.state.fetchFailureCount < ACCOUNT_STATUS_RETRY_ATTEMPTS;
-                const retryableError = error?.code === STATUS_CODES.SERVICE_UNAVAILABLE && retryBudgetAvailable;
-                return retryBudgetAvailable && (retryableError || pollRequested || status === "pending_qr" || status === "connecting")
-                    ? ACCOUNT_STATUS_POLL_INTERVAL_MS
-                    : false;
-            },
-        })),
-    });
     const cloudConnectMutation = useMutation({
         mutationFn: async () => {
             const started = await startWhatsAppCloudOnboarding(organizationId);
@@ -323,13 +269,6 @@ const WhatsAppOrganizationPage = () => {
         },
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud token could not be updated")),
     });
-    const phoneError = phoneNumber.length > 0 && !normalizePhoneNumber(phoneNumber);
-    const pollAccountStatus = (accountId: string) => {
-        setStatusPollUntilByAccountId(current => ({
-            ...current,
-            [accountId]: Date.now() + ACCOUNT_STATUS_POLL_WINDOW_MS,
-        }));
-    };
     const refresh = (accountId?: string) => {
         void queryClient.invalidateQueries({ queryKey: accountsKey });
         void queryClient.invalidateQueries({ queryKey: whatsappKeys.cloudAccounts(organizationId) });
@@ -340,78 +279,7 @@ const WhatsAppOrganizationPage = () => {
             });
         }
     };
-    const createMutation = useMutation({
-        mutationFn: () => createWhatsAppOrganizationAccount(organizationId, { phoneNumber: phoneNumber.trim() }),
-        onSuccess: response => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            setPhoneNumber("");
-            setAddOpen(false);
-            if (response.data?.qrImageDataUrl) {
-                setQrByAccountId(current => ({ ...current, [response.data!.account.id]: response.data!.qrImageDataUrl! }));
-            }
-            toast.success("WhatsApp account added to the organization");
-            refresh();
-        },
-        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be added")),
-    });
-    const connectMutation = useMutation({
-        mutationFn: (accountId: string) => connectWhatsAppOrganizationAccount(organizationId, accountId),
-        onMutate: accountId => {
-            pollAccountStatus(accountId);
-        },
-        onSuccess: response => {
-            const accountId = connectMutation.variables;
-            if (accountId && response.data) {
-                queryClient.setQueryData(whatsappKeys.organizationAccount(organizationId, accountId), response);
-            }
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            if (response.data?.qrImageDataUrl) {
-                setQrByAccountId(current => ({ ...current, [response.data!.account.id]: response.data!.qrImageDataUrl! }));
-            }
-            toast.success("WhatsApp account linking started");
-            refresh(accountId);
-        },
-        onError: (error, accountId) => {
-            pollAccountStatus(accountId);
-            toast.error(mutationErrorMessage(error, "WhatsApp account could not be linked"));
-        },
-    });
-    const disconnectMutation = useMutation({
-        mutationFn: (accountId: string) => disconnectWhatsAppOrganizationAccount(organizationId, accountId),
-        onSuccess: response => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            toast.success("WhatsApp account disconnected");
-            refresh(disconnectMutation.variables);
-        },
-        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be disconnected")),
-    });
-    const changeMutation = useMutation({
-        mutationFn: () => changeWhatsAppOrganizationAccountNumber(organizationId, changeAccountId, { phoneNumber: newPhoneNumber.trim() }),
-        onSuccess: response => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            const accountId = response.data?.account.id ?? changeAccountId;
-            setChangeAccountId("");
-            setNewPhoneNumber("");
-            if (response.data?.qrImageDataUrl) setQrByAccountId(current => ({ ...current, [response.data!.account.id]: response.data!.qrImageDataUrl! }));
-            toast.success("WhatsApp number changed. Scan the new QR code.");
-            refresh(accountId);
-        },
-        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp number could not be changed")),
-    });
-    const newPhoneError = newPhoneNumber.length > 0 && !normalizePhoneNumber(newPhoneNumber);
-    const isBusy = createMutation.isPending || connectMutation.isPending || disconnectMutation.isPending || changeMutation.isPending || cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending;
+    const isBusy = cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending;
     const selectStore = (storeId: string) => {
         setSearchParams({ storeId });
     };
@@ -445,12 +313,15 @@ const WhatsAppOrganizationPage = () => {
     }
 
     return (
-        <div className="mx-auto max-w-5xl space-y-5">
-            <div className="space-y-3">
+        <div className={cn(
+            "mx-auto space-y-5",
+            activeTab === "message-history" ? "flex h-full min-h-0 max-w-7xl flex-col" : "max-w-5xl",
+        )}>
+            <div className={cn("space-y-3", activeTab === "message-history" && "shrink-0")}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="font-display text-2xl font-semibold sm:text-3xl">WhatsApp</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, templates, and promotions.</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, templates, promotions, and message history.</p>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                         {activeTab !== "accounts" && organizationQuery.data?.status === "success" ? (
@@ -472,14 +343,13 @@ const WhatsAppOrganizationPage = () => {
                             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                                 <Button className="w-full rounded-full sm:w-auto" disabled={isBusy} onClick={() => cloudConnectMutation.mutate()}><Link2 className="size-4" />Connect with Meta</Button>
                                 {manualCloudSetupEnabled ? <Button variant="outline" className="w-full rounded-full sm:w-auto" disabled={isBusy} onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
-                                {baileysLinkingEnabled ? <Button variant="outline" className="w-full rounded-full sm:w-auto" onClick={() => setAddOpen(true)}><Link2 className="size-4" />Add legacy account</Button> : null}
                             </div>
                         ) : null}
                     </div>
                 </div>
 
                 <nav aria-label="WhatsApp workspace tabs" className="border-b border-border/60">
-                    <div className="grid grid-cols-3 gap-1 sm:flex sm:w-fit">
+                    <div className="grid grid-cols-2 gap-1 sm:flex sm:w-fit">
                         {workspaceTabs.map(tab => {
                             const Icon = tab.icon;
                             const active = activeTab === tab.id;
@@ -529,52 +399,24 @@ const WhatsAppOrganizationPage = () => {
                             {manualCloudSetupEnabled ? <Button variant="outline" className="rounded-full" onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
                         </CardContent>
                     </Card>
-                ) : visibleAccounts.map((account, index) => {
-                    const isCloudAccount = account.provider === "cloud_api";
+                ) : visibleAccounts.map(account => {
                     const cloudSnapshot = cloudAccounts.find(cloudAccount => cloudAccount.id === account.id);
-                    const liveResponse = statusQueries[index]?.data?.data;
-                    const statusQuery = statusQueries[index];
-                    const statusError = statusQuery?.error as WhatsAppQueryError | null;
-                    const liveAccount = liveResponse?.account ?? statusError?.data?.account ?? account;
-                    const statusUnavailable = !isCloudAccount && Boolean(statusQuery?.isError);
-                    const statusRetryExhausted = statusUnavailable
-                        && (statusError?.code !== STATUS_CODES.SERVICE_UNAVAILABLE || (statusQuery?.failureCount ?? 0) >= ACCOUNT_STATUS_RETRY_ATTEMPTS);
                     const displayedCloudStatus = cloudSnapshot?.status ?? null;
-                    const qrImageDataUrl = liveResponse?.qrImageDataUrl ?? ((liveAccount.status === "pending_qr" || liveAccount.status === "connecting") ? qrByAccountId[account.id] : null);
-                    const connecting = connectMutation.isPending && connectMutation.variables === account.id;
-                    const disconnecting = disconnectMutation.isPending && disconnectMutation.variables === account.id;
                     return (
                         <Card key={account.id} className="border-border/60 bg-card/80">
                             <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <p className="font-medium">{liveAccount.phoneNumber}</p>
-                                        <Badge variant={statusUnavailable ? "secondary" : "outline"} className="rounded-full">
-                                            {isCloudAccount ? (displayedCloudStatus?.replaceAll("_", " ") ?? "Cloud status unavailable") : statusUnavailable ? "Status unavailable" : statusLabel[liveAccount.status] ?? liveAccount.status}
-                                        </Badge>
-                                        {isCloudAccount ? <Badge variant="secondary" className="rounded-full">Cloud API</Badge> : null}
+                                        <p className="font-medium">{account.phoneNumber}</p>
+                                        <Badge variant="outline" className="rounded-full">{displayedCloudStatus?.replaceAll("_", " ") ?? "Cloud status unavailable"}</Badge>
+                                        <Badge variant="secondary" className="rounded-full">Cloud API</Badge>
                                     </div>
-                                    {statusUnavailable ? (
-                                        statusRetryExhausted ? (
-                                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                <p className="text-xs text-muted-foreground">WhatsApp status could not be loaded.</p>
-                                                <Button variant="link" className="h-auto p-0 text-xs" disabled={statusQuery?.isFetching} onClick={() => void statusQuery?.refetch()}>Retry status</Button>
-                                            </div>
-                                        ) : <p className="mt-2 text-xs text-muted-foreground">WhatsApp status is temporarily unavailable. Retrying automatically.</p>
-                                    ) : null}
                                     <p className="mt-2 text-sm text-muted-foreground">
                                         Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
                                     </p>
-                                    {baileysLinkingEnabled && qrImageDataUrl ? (
-                                        <div className="mt-4 flex flex-col items-start gap-2">
-                                            <img src={qrImageDataUrl} alt={`QR code for ${account.phoneNumber}`} className="size-56 rounded-xl border bg-white p-2" />
-                                            <p className="text-xs text-muted-foreground">Scan from WhatsApp → Linked devices.</p>
-                                        </div>
-                                    ) : null}
                                 </div>
                                 <div className="flex shrink-0 flex-wrap gap-2">
-                                    {isCloudAccount ? (
-                                        <>
+                                    <>
                                             <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => cloudRefreshMutation.mutate(account.id)}>
                                                 {cloudRefreshMutation.isPending && cloudRefreshMutation.variables === account.id ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                                                 Refresh
@@ -596,41 +438,7 @@ const WhatsAppOrganizationPage = () => {
                                                     Connect with Meta
                                                 </Button>
                                             )}
-                                        </>
-                                    ) : null}
-                                    {!isCloudAccount && baileysLinkingEnabled ? <Button variant="outline" className="rounded-full" disabled={isBusy || statusUnavailable} onClick={() => { setChangeAccountId(account.id); setNewPhoneNumber(""); }}>
-                                        <Pencil className="size-4" />
-                                        Change number
-                                    </Button> : null}
-                                    {!isCloudAccount && baileysLinkingEnabled && statusUnavailable ? (
-                                        <>
-                                            {liveAccount.status === "connected" ? (
-                                                <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
-                                                    {disconnecting ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
-                                                    Disconnect
-                                                </Button>
-                                            ) : null}
-                                            <Button variant="outline" className="rounded-full" disabled={statusQuery?.isFetching} onClick={() => void statusQuery?.refetch()}>
-                                                {statusQuery?.isFetching ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                                                Retry status
-                                            </Button>
-                                        </>
-                                    ) : !isCloudAccount && liveAccount.status === "connected" ? (
-                                        <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => disconnectMutation.mutate(account.id)}>
-                                            {disconnecting ? <LoaderCircle className="size-4 animate-spin" /> : <LogOut className="size-4" />}
-                                            Disconnect
-                                        </Button>
-                                    ) : !isCloudAccount && (liveAccount.status === "pending_qr" || liveAccount.status === "connecting") ? (
-                                        <Button variant="outline" className="rounded-full" disabled>
-                                            <LoaderCircle className="size-4 animate-spin" />
-                                            {liveAccount.status === "pending_qr" ? "Waiting for scan" : "Connecting"}
-                                        </Button>
-                                    ) : !isCloudAccount && baileysLinkingEnabled ? (
-                                        <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => connectMutation.mutate(account.id)}>
-                                            {connecting ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                                            Link account
-                                        </Button>
-                                    ) : null}
+                                    </>
                                 </div>
                             </CardContent>
                         </Card>
@@ -638,7 +446,10 @@ const WhatsAppOrganizationPage = () => {
                 })}
                 <WhatsAppCloudSafetyCard organizationId={organizationId} />
             </section> : organizationQuery.data?.status === "success" && selectedStore ? (
-                <section className="space-y-4">
+                <section className={cn(
+                    "space-y-4",
+                    activeTab === "message-history" && "flex min-h-0 flex-1 flex-col",
+                )}>
                     {activeTab === "templates" ? (
                         <Card className="border-border/60 bg-card/80">
                             {cloudAccountsForStore.length > 0 ? <CardContent className="p-6">
@@ -661,36 +472,14 @@ const WhatsAppOrganizationPage = () => {
                     {activeTab === "promotions" ? (
                         <WhatsAppPromotionDashboard organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} links={selectedStore.whatsappLinks} cloudAccount={selectedCloudAccount} cloudEnabled={Boolean(selectedCloudAccount)} />
                     ) : null}
+
+                    {activeTab === "message-history" ? (
+                        <WhatsAppInboxView organizationId={organizationId} storeId={selectedStore.id} embedded />
+                    ) : null}
                 </section>
             ) : organizationQuery.data?.status === "success" ? (
-                <Card className="border-dashed border-border/70 bg-muted/10"><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><Settings2 className="size-7 text-muted-foreground" /><p className="font-medium">Add a Store to configure WhatsApp settings</p><p className="max-w-md text-sm text-muted-foreground">Templates and promotions become available after a Store is created.</p></CardContent></Card>
+                <Card className="border-dashed border-border/70 bg-muted/10"><CardContent className="flex flex-col items-center gap-3 py-12 text-center"><Settings2 className="size-7 text-muted-foreground" /><p className="font-medium">Add a Store to configure WhatsApp settings</p><p className="max-w-md text-sm text-muted-foreground">Templates, promotions, and message history become available after a Store is created.</p></CardContent></Card>
             ) : null}
-
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
-                    <DialogHeader>
-                        <DialogTitle>Add WhatsApp account</DialogTitle>
-                        <DialogDescription>This account will join the organization pool and can then be linked from any Store.</DialogDescription>
-                    </DialogHeader>
-                    <form className="space-y-4" onSubmit={event => {
-                        event.preventDefault();
-                        if (phoneError || !phoneNumber.trim()) {
-                            toast.error("Enter a valid phone number");
-                            return;
-                        }
-                        createMutation.mutate();
-                    }}>
-                        <div className="space-y-2">
-                            <PhoneInput id="organization-whatsapp-phone" className="h-10" value={phoneNumber || undefined} onChange={(value: string | undefined) => setPhoneNumber(value ?? "")} placeholder="9876543210" inputMode="tel" aria-invalid={phoneError} />
-                            <p className="text-xs text-muted-foreground">India (+91) is selected by default.</p>
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddOpen(false)}>Cancel</Button>
-                            <Button type="submit" className="rounded-full" disabled={isBusy || phoneError || !phoneNumber.trim()}>{createMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}Add account</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
 
             {manualCloudSetupEnabled ? <Dialog open={manualCloudOpen} onOpenChange={open => { if (!manualCloudMutation.isPending) setManualCloudOpen(open); }}>
                 <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
@@ -726,30 +515,6 @@ const WhatsAppOrganizationPage = () => {
                 </DialogContent>
             </Dialog> : null}
 
-            <AlertDialog open={Boolean(changeAccountId)} onOpenChange={open => { if (!open && !changeMutation.isPending) setChangeAccountId(""); }}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Change shared WhatsApp number?</AlertDialogTitle>
-                        <AlertDialogDescription>This changes the number for every Store assigned to this account. The current session will disconnect and require a new QR scan.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <PhoneInput
-                        id="organization-whatsapp-new-phone"
-                        className="h-10"
-                        value={newPhoneNumber || undefined}
-                        onChange={(value: string | undefined) => setNewPhoneNumber(value ?? "")}
-                        placeholder="9876543210"
-                        inputMode="tel"
-                        aria-invalid={newPhoneError}
-                    />
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={changeMutation.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction disabled={changeMutation.isPending || newPhoneError || !newPhoneNumber.trim()} onClick={event => { event.preventDefault(); if (!newPhoneError && newPhoneNumber.trim()) changeMutation.mutate(); }}>
-                            {changeMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Pencil className="size-4" />}
-                            Change number
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 };

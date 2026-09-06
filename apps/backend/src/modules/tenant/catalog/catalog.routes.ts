@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
     CreateAddOnSchema,
@@ -20,9 +21,11 @@ import {
     UpdateProductAddOnAttachmentSchema,
     UpdateProductLabelProfileSchema,
     UpdateProductSchema,
+    UpdateStoreProductOfferingSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
+import { createOrganizationFeatureEntitlementMiddleware } from "@/modules/tenant/commercial-licensing/organization-feature-entitlement.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as catalogService from "./catalog.service";
@@ -45,7 +48,31 @@ const validateUuidParam = (value: string, message: string) => {
     return null;
 };
 
+const catalogResourceKeys = new Set([
+    "categories",
+    "products",
+    "bundle-products",
+    "combo-products",
+    "add-ons",
+    "label-templates",
+]);
+
+const requireCatalogProductsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+
+const catalogProductsEntitlement: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
+    const catalogResource = context.req.param("catalogResource");
+    if (!catalogResource || !catalogResourceKeys.has(catalogResource)) {
+        await next();
+        return;
+    }
+
+    return requireCatalogProductsEntitlement(context, next);
+};
+
 router.use("*", authMiddleware);
+// Scope to catalog resources. `/:organizationId/*` would 403 later `/organizations` mounts such as Store commercial status.
+router.use("/:organizationId/:catalogResource", catalogProductsEntitlement);
+router.use("/:organizationId/:catalogResource/*", catalogProductsEntitlement);
 
 router.get("/:organizationId/categories", async (c) => {
     try {
@@ -868,5 +895,59 @@ router.delete("/:organizationId/products/:productId/add-on-attachments/:attachme
         return handleError(FILE_NAME, "deleteProductAddOnAttachment", c, error);
     }
 });
+
+const requireStoreProductOfferingsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+
+router.use("/:organizationId/stores/:storeId/product-offerings", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/stores/:storeId/product-offerings/*", requireStoreProductOfferingsEntitlement);
+
+router.get("/:organizationId/stores/:storeId/product-offerings", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+        if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+
+        const serviceResponse = await catalogService.getStoreProductOfferings(
+            c.get("authUser").id,
+            organizationId,
+            storeId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreProductOfferings", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/stores/:storeId/product-offerings/:offeringId",
+    validateSchema("json", UpdateStoreProductOfferingSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const offeringId = c.req.param("offeringId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+            const invalidOfferingId = validateUuidParam(offeringId, "Invalid offering id");
+            if (invalidOfferingId) return c.json(invalidOfferingId, invalidOfferingId.code);
+
+            const serviceResponse = await catalogService.updateStoreProductOffering(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                offeringId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStoreProductOffering", c, error);
+        }
+    },
+);
 
 export default router;

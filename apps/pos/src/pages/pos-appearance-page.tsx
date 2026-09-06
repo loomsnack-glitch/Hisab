@@ -18,7 +18,7 @@ const PosAppearancePage = () => {
                                 Appearance
                             </h2>
                             <p className="text-sm leading-relaxed text-muted-foreground">
-                                Customize how Ganatri POS looks and feels on this device.
+                                Customize how Ganatri POS looks on this device.
                             </p>
                         </div>
                     </CardContent>

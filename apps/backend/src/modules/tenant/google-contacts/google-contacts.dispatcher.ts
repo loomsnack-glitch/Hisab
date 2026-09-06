@@ -11,6 +11,7 @@ import {
 } from "./google-contacts.people";
 import { completeGoogleContactsOutbox, type GoogleContactsOutboxClaim } from "./google-contacts.outbox";
 import { processGoogleContactsSyncJob, type GoogleContactsSyncOutcome } from "./google-contacts.worker";
+import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 
 const TOKEN_REFRESH_SKEW_MS = 60_000;
 
@@ -23,6 +24,7 @@ export type GoogleContactsDispatcherDependencies = {
     connectionId: string,
     credential: GoogleContactsCredentialBinding,
   ) => Promise<boolean>;
+  isOrganizationEntitled?: (organizationId: string) => Promise<boolean>;
   now?: () => number;
 };
 
@@ -82,6 +84,34 @@ export const dispatchGoogleContactsOutboxJob = async (
     });
     return outcome;
   };
+
+  const skipUnentitled = async (): Promise<GoogleContactsSyncOutcome> => {
+    const outcome: GoogleContactsSyncOutcome = {
+      status: "skipped",
+      reason: "not_entitled",
+    };
+    await dependencies.complete({
+      outboxId: claim.job.outboxId,
+      leaseOwner: claim.leaseOwner,
+      attemptCount: claim.attemptCount,
+      claimedCustomerUpdatedAt: claim.job.customerUpdatedAt,
+      outcome,
+    });
+    return outcome;
+  };
+
+  const isOrganizationEntitled =
+    dependencies.isOrganizationEntitled ??
+    (async (organizationId: string) => {
+      const denial = await requireOrganizationFeatureEntitlement(
+        organizationId,
+        "google_contacts_synchronization",
+      );
+      return denial === null;
+    });
+  if (!(await isOrganizationEntitled(claim.job.organizationId))) {
+    return skipUnentitled();
+  }
 
   let credentials;
   try {

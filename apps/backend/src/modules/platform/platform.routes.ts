@@ -2,7 +2,15 @@ import { Hono } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import {
+    CreateCommercialFeatureSchema,
+    CreateCommercialModuleSchema,
+    CreateCommercialPlanSchema,
     CreateOwnerUserSchema,
+    CreateCommercialRefundAndRevocationSchema,
+    CreateStoreAccessGrantSchema,
+    CommercialFeatureListQuerySchema,
+    CommercialModuleListQuerySchema,
+    CommercialPlanListQuerySchema,
     OwnerLoginSchema,
     OwnerUserActiveStateSchema,
     PlatformDashboardQuerySchema,
@@ -16,15 +24,23 @@ import {
     PlatformTableInspectionQuerySchema,
     PlatformStoreInspectionQuerySchema,
     STATUS_CODES,
+    UpdateCommercialFeatureDraftSchema,
+    UpdateCommercialModuleDraftSchema,
+    UpdateCommercialPlanDraftSchema,
     type PlatformEntryResponse,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { createOwnerAuthMiddleware, OWNER_AUTH_COOKIE } from "@/middlewares/owner-auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
+import { getCommercialCatalogService, type CommercialCatalogService } from "./commercial-catalog.service";
 import { getOwnerAuthService, OWNER_SESSION_SECONDS, type OwnerAuthService } from "./owner-auth.service";
 import { getOwnerUserService, type OwnerUserService } from "./owner-user.service";
 import { getPlatformReportingService, type PlatformReportingService } from "./platform-reporting.service";
+import {
+    getCommercialLicensingService,
+    type CommercialLicensingService,
+} from "@/modules/tenant/commercial-licensing/commercial-licensing.service";
 
 const setOwnerCookie = (c: Parameters<typeof setCookie>[0], token: string) => {
     setCookie(c, OWNER_AUTH_COOKIE, token, {
@@ -40,10 +56,36 @@ export const createPlatformRoutes = (
     authService: OwnerAuthService = getOwnerAuthService(),
     ownerUserService: OwnerUserService = getOwnerUserService(),
     reportingService: PlatformReportingService = getPlatformReportingService(),
+    commercialCatalogService: CommercialCatalogService = getCommercialCatalogService(),
+    commercialLicensingService: CommercialLicensingService = getCommercialLicensingService(),
 ) => {
     const router = new Hono<{ Variables: AppVariables }>();
     const ownerAuthMiddleware = createOwnerAuthMiddleware(authService);
     const ownerUserIdSchema = z.uuid("Invalid Owner User id");
+    const featureIdSchema = z.uuid("Invalid Feature id");
+    const revisionIdSchema = z.uuid("Invalid Feature revision id");
+    const moduleIdSchema = z.uuid("Invalid Module id");
+    const moduleRevisionIdSchema = z.uuid("Invalid Module revision id");
+    const planIdSchema = z.uuid("Invalid Plan id");
+    const planRevisionIdSchema = z.uuid("Invalid Plan revision id");
+
+    const parseFeatureIds = (c: { req: { param: (name: string) => string } }) => {
+        const featureId = featureIdSchema.safeParse(c.req.param("featureId"));
+        const revisionId = revisionIdSchema.safeParse(c.req.param("revisionId"));
+        return { featureId, revisionId };
+    };
+
+    const parseModuleIds = (c: { req: { param: (name: string) => string } }) => {
+        const moduleId = moduleIdSchema.safeParse(c.req.param("moduleId"));
+        const revisionId = moduleRevisionIdSchema.safeParse(c.req.param("revisionId"));
+        return { moduleId, revisionId };
+    };
+
+    const parsePlanIds = (c: { req: { param: (name: string) => string } }) => {
+        const planId = planIdSchema.safeParse(c.req.param("planId"));
+        const revisionId = planRevisionIdSchema.safeParse(c.req.param("revisionId"));
+        return { planId, revisionId };
+    };
 
     router.post("/auth/login", validateSchema("json", OwnerLoginSchema), async (c) => {
         try {
@@ -190,6 +232,117 @@ export const createPlatformRoutes = (
                 );
             } catch (error) {
                 return handleError("platform.routes", "getPlatformStore", c, error);
+            }
+        },
+    );
+
+    router.get("/organizations/:organizationId/stores/:storeId/commercial", async (c) => {
+        try {
+            const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+            const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+            if (!organizationId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid organization id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            if (!storeId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid store id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+
+            return handleServiceResponse(
+                c,
+                await commercialLicensingService.inspectStoreCommercialStatusForPlatform(
+                    organizationId.data,
+                    storeId.data,
+                ),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "inspectStoreCommercialStatus", c, error);
+        }
+    });
+
+    router.post(
+        "/organizations/:organizationId/stores/:storeId/commercial/grants",
+        validateSchema("json", CreateStoreAccessGrantSchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!storeId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid store id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await commercialLicensingService.createStoreAccessGrant(
+                        c.get("authOwner").id,
+                        organizationId.data,
+                        storeId.data,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "createStoreAccessGrant", c, error);
+            }
+        },
+    );
+
+    router.post(
+        "/organizations/:organizationId/stores/:storeId/commercial/refunds",
+        validateSchema("json", CreateCommercialRefundAndRevocationSchema),
+        async (c) => {
+            try {
+                const organizationId = z.uuid("Invalid organization id").safeParse(c.req.param("organizationId"));
+                const storeId = z.uuid("Invalid store id").safeParse(c.req.param("storeId"));
+                if (!organizationId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid organization id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!storeId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid store id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+
+                return handleServiceResponse(
+                    c,
+                    await commercialLicensingService.refundAndRevokeLicense(
+                        c.get("authOwner").id,
+                        organizationId.data,
+                        storeId.data,
+                        c.req.valid("json"),
+                    ),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "refundAndRevokeLicense", c, error);
             }
         },
     );
@@ -589,6 +742,450 @@ export const createPlatformRoutes = (
             }
         },
     );
+
+    router.get("/catalog/features", validateSchema("query", CommercialFeatureListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await commercialCatalogService.listFeatures(c.req.valid("query"), c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "listCommercialFeatures", c, error);
+        }
+    });
+
+    router.post("/catalog/features", validateSchema("json", CreateCommercialFeatureSchema), async (c) => {
+        try {
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createFeature(c.get("authOwner"), c.req.valid("json")),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialFeature", c, error);
+        }
+    });
+
+    router.get("/catalog/features/:featureId", async (c) => {
+        try {
+            const featureId = featureIdSchema.safeParse(c.req.param("featureId"));
+            if (!featureId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid Feature id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(c, await commercialCatalogService.getFeature(featureId.data, c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "getCommercialFeature", c, error);
+        }
+    });
+
+    router.patch(
+        "/catalog/features/:featureId/revisions/:revisionId",
+        validateSchema("json", UpdateCommercialFeatureDraftSchema),
+        async (c) => {
+            try {
+                const { featureId, revisionId } = parseFeatureIds(c);
+                if (!featureId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Feature id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!revisionId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Feature revision id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                return handleServiceResponse(
+                    c,
+                    await commercialCatalogService.updateDraft(featureId.data, revisionId.data, c.req.valid("json")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "updateCommercialFeatureDraft", c, error);
+            }
+        },
+    );
+
+    router.post("/catalog/features/:featureId/revisions/:revisionId/publish", async (c) => {
+        try {
+            const { featureId, revisionId } = parseFeatureIds(c);
+            if (!featureId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !featureId.success ? "Invalid Feature id" : "Invalid Feature revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.publishRevision(c.get("authOwner"), featureId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "publishCommercialFeatureRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/features/:featureId/revisions/:revisionId/retire", async (c) => {
+        try {
+            const { featureId, revisionId } = parseFeatureIds(c);
+            if (!featureId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !featureId.success ? "Invalid Feature id" : "Invalid Feature revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.retireRevision(c.get("authOwner"), featureId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "retireCommercialFeatureRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/features/:featureId/revisions/:revisionId/discard", async (c) => {
+        try {
+            const { featureId, revisionId } = parseFeatureIds(c);
+            if (!featureId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !featureId.success ? "Invalid Feature id" : "Invalid Feature revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.discardRevision(c.get("authOwner"), featureId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "discardCommercialFeatureRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/features/:featureId/revisions/:revisionId/successor", async (c) => {
+        try {
+            const { featureId, revisionId } = parseFeatureIds(c);
+            if (!featureId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !featureId.success ? "Invalid Feature id" : "Invalid Feature revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createSuccessor(c.get("authOwner"), featureId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialFeatureSuccessor", c, error);
+        }
+    });
+
+    router.get("/catalog/modules", validateSchema("query", CommercialModuleListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await commercialCatalogService.listModules(c.req.valid("query"), c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "listCommercialModules", c, error);
+        }
+    });
+
+    router.post("/catalog/modules", validateSchema("json", CreateCommercialModuleSchema), async (c) => {
+        try {
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createModule(c.get("authOwner"), c.req.valid("json")),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialModule", c, error);
+        }
+    });
+
+    router.get("/catalog/modules/:moduleId", async (c) => {
+        try {
+            const moduleId = moduleIdSchema.safeParse(c.req.param("moduleId"));
+            if (!moduleId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid Module id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(c, await commercialCatalogService.getModule(moduleId.data, c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "getCommercialModule", c, error);
+        }
+    });
+
+    router.patch(
+        "/catalog/modules/:moduleId/revisions/:revisionId",
+        validateSchema("json", UpdateCommercialModuleDraftSchema),
+        async (c) => {
+            try {
+                const { moduleId, revisionId } = parseModuleIds(c);
+                if (!moduleId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Module id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!revisionId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Module revision id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                return handleServiceResponse(
+                    c,
+                    await commercialCatalogService.updateModuleDraft(moduleId.data, revisionId.data, c.req.valid("json")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "updateCommercialModuleDraft", c, error);
+            }
+        },
+    );
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/publish", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.publishModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "publishCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/retire", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.retireModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "retireCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/discard", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.discardModuleRevision(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "discardCommercialModuleRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/modules/:moduleId/revisions/:revisionId/successor", async (c) => {
+        try {
+            const { moduleId, revisionId } = parseModuleIds(c);
+            if (!moduleId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !moduleId.success ? "Invalid Module id" : "Invalid Module revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createModuleSuccessor(c.get("authOwner"), moduleId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialModuleSuccessor", c, error);
+        }
+    });
+
+    router.get("/catalog/plans", validateSchema("query", CommercialPlanListQuerySchema), async (c) => {
+        try {
+            return handleServiceResponse(c, await commercialCatalogService.listPlans(c.req.valid("query"), c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "listCommercialPlans", c, error);
+        }
+    });
+
+    router.post("/catalog/plans", validateSchema("json", CreateCommercialPlanSchema), async (c) => {
+        try {
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createPlan(c.get("authOwner"), c.req.valid("json")),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialPlan", c, error);
+        }
+    });
+
+    router.get("/catalog/plans/:planId", async (c) => {
+        try {
+            const planId = planIdSchema.safeParse(c.req.param("planId"));
+            if (!planId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: "Invalid Plan id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(c, await commercialCatalogService.getPlan(planId.data, c.get("authOwner")));
+        } catch (error) {
+            return handleError("platform.routes", "getCommercialPlan", c, error);
+        }
+    });
+
+    router.patch(
+        "/catalog/plans/:planId/revisions/:revisionId",
+        validateSchema("json", UpdateCommercialPlanDraftSchema),
+        async (c) => {
+            try {
+                const { planId, revisionId } = parsePlanIds(c);
+                if (!planId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Plan id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                if (!revisionId.success) {
+                    return handleServiceResponse(c, {
+                        status: "error",
+                        message: "Invalid Plan revision id",
+                        data: null,
+                        code: STATUS_CODES.BAD_REQUEST,
+                    });
+                }
+                return handleServiceResponse(
+                    c,
+                    await commercialCatalogService.updatePlanDraft(planId.data, revisionId.data, c.req.valid("json")),
+                );
+            } catch (error) {
+                return handleError("platform.routes", "updateCommercialPlanDraft", c, error);
+            }
+        },
+    );
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/publish", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.publishPlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "publishCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/retire", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.retirePlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "retireCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/discard", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.discardPlanRevision(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "discardCommercialPlanRevision", c, error);
+        }
+    });
+
+    router.post("/catalog/plans/:planId/revisions/:revisionId/successor", async (c) => {
+        try {
+            const { planId, revisionId } = parsePlanIds(c);
+            if (!planId.success || !revisionId.success) {
+                return handleServiceResponse(c, {
+                    status: "error",
+                    message: !planId.success ? "Invalid Plan id" : "Invalid Plan revision id",
+                    data: null,
+                    code: STATUS_CODES.BAD_REQUEST,
+                });
+            }
+            return handleServiceResponse(
+                c,
+                await commercialCatalogService.createPlanSuccessor(c.get("authOwner"), planId.data, revisionId.data),
+            );
+        } catch (error) {
+            return handleError("platform.routes", "createCommercialPlanSuccessor", c, error);
+        }
+    });
 
     return router;
 };

@@ -16,6 +16,7 @@ import {
   product,
   productId,
   productNameExistsInCategory,
+  store,
   updateProductRepo,
   userId,
 } from "./catalog.service.test-harness";
@@ -71,6 +72,7 @@ describe("Product Code catalog lifecycle", () => {
         productCode: "7622202334009",
         productCodeKind: "manufacturer",
       }),
+      expect.anything(),
     );
   });
 
@@ -93,6 +95,7 @@ describe("Product Code catalog lifecycle", () => {
         productCode: " 0123 ",
         productCodeKind: "manufacturer",
       }),
+      expect.anything(),
     );
   });
 
@@ -279,6 +282,7 @@ describe("Product Code catalog lifecycle", () => {
     expect(reassignment.status).toBe("success");
     expect(createProductRepo).toHaveBeenLastCalledWith(
       expect.objectContaining({ productCode: "7622202334009" }),
+      expect.anything(),
     );
   });
 
@@ -462,6 +466,7 @@ describe("Product Code catalog lifecycle", () => {
     expect(reassignment.status).toBe("success");
     expect(createProductRepo).toHaveBeenLastCalledWith(
       expect.objectContaining({ productCode: "7622202334009" }),
+      expect.anything(),
     );
   });
 
@@ -478,7 +483,6 @@ describe("Product Code catalog lifecycle", () => {
       organizationId,
       productId,
       {
-        price: 60,
         productCode: "0400000001234",
         productCodeKind: "manufacturer",
       },
@@ -487,7 +491,7 @@ describe("Product Code catalog lifecycle", () => {
     expect(response.status).toBe("success");
     expect(updateProductRepo).toHaveBeenCalledWith(
       expect.objectContaining({
-        price: 60,
+        price: 55,
         productCode: "0400000001234",
         productCodeKind: "internal_rcn",
       }),

@@ -9,6 +9,8 @@ export const organizationKeys = {
     [...organizationKeys.all, "username-availability", username] as const,
   detail: (organizationId: string) =>
     [...organizationKeys.all, "detail", organizationId] as const,
+  store: (organizationId: string, storeId: string) =>
+    [...organizationKeys.all, "store", organizationId, storeId] as const,
   catalogSettings: (organizationId: string) =>
     [...organizationKeys.all, "catalog-settings", organizationId] as const,
   invoiceAppearance: (organizationId: string, storeId: string) =>
@@ -56,6 +58,8 @@ export const catalogKeys = {
     ] as const,
   labelTemplates: (organizationId: string) =>
     [...catalogKeys.all, "label-templates", organizationId] as const,
+  storeProductOfferings: (organizationId: string, storeId: string) =>
+    [...catalogKeys.all, "store-product-offerings", organizationId, storeId] as const,
 };
 
 export const billingKeys = {
@@ -162,6 +166,10 @@ export const vendorKeys = {
   all: ["vendors"] as const,
   list: (organizationId: string) => [...vendorKeys.all, organizationId] as const,
   items: (organizationId: string) => [...vendorKeys.all, organizationId, "items"] as const,
+  storeAvailabilities: (organizationId: string, storeId: string) =>
+    [...vendorKeys.all, "store-availabilities", organizationId, storeId] as const,
+  storeItemOfferings: (organizationId: string, storeId: string) =>
+    [...vendorKeys.all, "store-item-offerings", organizationId, storeId] as const,
 };
 
 export const purchaseKeys = {
@@ -169,6 +177,12 @@ export const purchaseKeys = {
   list: (organizationId: string) => [...purchaseKeys.all, organizationId] as const,
   detail: (organizationId: string, purchaseId: string) =>
     [...purchaseKeys.all, organizationId, purchaseId] as const,
+};
+
+export const commercialLicenseKeys = {
+  all: ["commercial-licensing"] as const,
+  status: (organizationId: string, storeId: string) =>
+    [...commercialLicenseKeys.all, organizationId, storeId] as const,
 };
 
 export const moneyAccountKeys = {

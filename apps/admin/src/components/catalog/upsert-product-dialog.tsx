@@ -7,6 +7,7 @@ import {
   generateInternalProductCode,
   getOrganizationCatalogSettings,
   getSignedURLForUpload,
+  getUnits,
   updateProduct,
   updateProductLabelProfile,
   uploadFileToSignedURL,
@@ -14,13 +15,15 @@ import {
 } from "@repo/services";
 import {
   CreateProductObjectSchema,
-  ProductStatusSchema,
+  PIECE_PREDEFINED_UNIT_KEY,
+  canAssignUnitToCatalogProduct,
+  defaultSellingQuantitySchema,
+  formatSoldAmount,
   normalizeProductCodeInput,
   type CategoryDTO,
-  type CreateProductJSON,
   type NutritionRow,
   type ProductResponseDTO,
-  type ProductStatus,
+  type UnitDTO,
 } from "@repo/types";
 import { z } from "zod";
 import {
@@ -44,11 +47,13 @@ import {
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldLabel,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
+import { Switch } from "@repo/ui/components/switch";
 import {
   compressCatalogImage,
   formatCatalogImageSize,
@@ -56,7 +61,7 @@ import {
 import { Plus, UploadCloud, Pencil, ImageOff, Package2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogKeys, organizationKeys, unitKeys } from "@/lib/query-keys";
 import { safeRandomUUID } from "@/lib/uuid";
 
 type UpsertProductDialogProps = {
@@ -68,6 +73,7 @@ type UpsertProductDialogProps = {
 };
 
 const decimalAmountPattern = /^\d+(\.\d*)?$/;
+const twoDecimalAmountPattern = /^\d+(\.\d{0,2})?$/;
 
 const sanitizeDecimalInput = (value: string) => {
   const digitsAndDot = value.replace(/[^\d.]/g, "");
@@ -80,6 +86,20 @@ const sanitizeDecimalInput = (value: string) => {
   return (
     digitsAndDot.slice(0, dotIndex + 1) +
     digitsAndDot.slice(dotIndex + 1).replace(/\./g, "")
+  );
+};
+
+const sanitizeTwoDecimalInput = (value: string) => {
+  const digitsAndDot = value.replace(/[^\d.]/g, "");
+  const dotIndex = digitsAndDot.indexOf(".");
+
+  if (dotIndex === -1) {
+    return digitsAndDot;
+  }
+
+  return (
+    digitsAndDot.slice(0, dotIndex + 1) +
+    digitsAndDot.slice(dotIndex + 1).replace(/\./g, "").slice(0, 2)
   );
 };
 
@@ -99,6 +119,17 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
     .transform((value) => (value === "" ? 0 : Number(value)))
     .pipe(z.number().min(0, "Discount must be 0 or more"))
     .optional(),
+  unitId: z.uuid("Select a Unit"),
+  defaultSellingQuantity: z
+    .string()
+    .refine((value) => value.length > 0, "Default Selling Quantity is required")
+    .refine(
+      (value) => twoDecimalAmountPattern.test(value),
+      "Use at most two decimal places",
+    )
+    .transform((value) => Number(value))
+    .pipe(defaultSellingQuantitySchema),
+  allowCustomSellingQuantity: z.boolean(),
   productCode: z
     .preprocess(
       (value) =>
@@ -109,6 +140,7 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
 });
 
 type UpsertProductFormInput = z.input<typeof UpsertProductFormSchema>;
+type UpsertProductFormOutput = z.output<typeof UpsertProductFormSchema>;
 
 const defaultValues: UpsertProductFormInput = {
   categoryId: "",
@@ -118,12 +150,23 @@ const defaultValues: UpsertProductFormInput = {
   imagePath: "",
   status: "active",
   productCode: "",
+  unitId: "",
+  defaultSellingQuantity: "1",
+  allowCustomSellingQuantity: false,
 };
 
-const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
-  label: status.charAt(0).toUpperCase() + status.slice(1),
-  value: status,
-}));
+const productFormValues = (product: ProductResponseDTO): UpsertProductFormInput => ({
+  categoryId: product.categoryId,
+  name: product.name,
+  price: String(product.price),
+  discount: product.discount ? String(product.discount) : "",
+  imagePath: product.imagePath ?? "",
+  status: product.status,
+  productCode: product.productCode ?? "",
+  unitId: product.unitId,
+  defaultSellingQuantity: formatSoldAmount(Number(product.defaultSellingQuantity)),
+  allowCustomSellingQuantity: product.allowCustomSellingQuantity,
+});
 
 const productCodeKindLabel = (kind: ProductResponseDTO["productCodeKind"]) => {
   if (kind === "manufacturer") {
@@ -189,7 +232,7 @@ const UpsertProductDialog = ({
   const [codeChangeConfirmationOpen, setCodeChangeConfirmationOpen] =
     useState(false);
   const [pendingPayload, setPendingPayload] =
-    useState<CreateProductJSON | null>(null);
+    useState<UpsertProductFormOutput | null>(null);
   const [reuseCodeConfirmationOpen, setReuseCodeConfirmationOpen] =
     useState(false);
   const [releasedInternalCode, setReleasedInternalCode] = useState("");
@@ -201,12 +244,27 @@ const UpsertProductDialog = ({
     queryFn: () => getOrganizationCatalogSettings(organizationId),
     enabled: Boolean(organizationId),
   });
+  const unitsQuery = useQuery({
+    queryKey: unitKeys.list(organizationId),
+    queryFn: () => getUnits(organizationId),
+    enabled: Boolean(organizationId),
+  });
+  const units: UnitDTO[] = useMemo(
+    () =>
+      unitsQuery.data?.status === "success"
+        ? (unitsQuery.data.data?.units ?? [])
+        : [],
+    [unitsQuery.data],
+  );
+  const pieceUnitId =
+    units.find((unit) => unit.predefinedKey === PIECE_PREDEFINED_UNIT_KEY)?.id ??
+    "";
   const isEditMode = Boolean(product);
   const barcodeScanningEnabled =
     catalogSettingsQuery.data?.status === "success" &&
     catalogSettingsQuery.data.data?.settings.barcodeScanningEnabled === true;
 
-  const form = useForm<UpsertProductFormInput, unknown, CreateProductJSON>({
+  const form = useForm<UpsertProductFormInput, unknown, UpsertProductFormOutput>({
     resolver: zodResolver(UpsertProductFormSchema),
     defaultValues,
   });
@@ -229,15 +287,7 @@ const UpsertProductDialog = ({
   useEffect(() => {
     if (open) {
       if (product) {
-        form.reset({
-          categoryId: product.categoryId,
-          name: product.name,
-          price: String(product.price),
-          discount: product.discount ? String(product.discount) : "",
-          imagePath: product.imagePath ?? "",
-          status: product.status,
-          productCode: product.productCode ?? "",
-        });
+        form.reset(productFormValues(product));
         setLabelProfileForm({
           ingredients: product.labelProfile?.ingredients ?? "",
           netWeight: product.labelProfile?.netWeight ?? "",
@@ -256,24 +306,18 @@ const UpsertProductDialog = ({
         form.reset({
           ...defaultValues,
           categoryId: resolveDefaultCategoryId(),
+          unitId: pieceUnitId,
         });
         setLabelProfileForm(emptyLabelProfileForm);
       }
     } else {
       form.reset(
         product
-          ? {
-              categoryId: product.categoryId,
-              name: product.name,
-              price: String(product.price),
-              discount: product.discount ? String(product.discount) : "",
-              imagePath: product.imagePath ?? "",
-              status: product.status,
-              productCode: product.productCode ?? "",
-            }
+          ? productFormValues(product)
           : {
               ...defaultValues,
               categoryId: resolveDefaultCategoryId(),
+              unitId: pieceUnitId,
             },
       );
       setSelectedFile(null);
@@ -286,7 +330,7 @@ const UpsertProductDialog = ({
       setReleasedInternalCode("");
       setLabelProfileForm(emptyLabelProfileForm);
     }
-  }, [categories, defaultCategoryId, form, open, product]);
+  }, [categories, defaultCategoryId, form, open, pieceUnitId, product]);
 
   const categoryOptions = useMemo(
     () =>
@@ -296,6 +340,37 @@ const UpsertProductDialog = ({
       })),
     [categories],
   );
+
+  const unitOptions = useMemo(
+    () =>
+      units
+        .filter((unit) =>
+          canAssignUnitToCatalogProduct({
+            unitStatus: unit.status,
+            currentlyAssigned: unit.id === product?.unitId,
+          }),
+        )
+        .map((unit) => ({
+          label:
+            unit.status === "inactive"
+              ? `${unit.name} (${unit.label}, inactive)`
+              : `${unit.name} (${unit.label})`,
+          value: unit.id,
+        })),
+    [product?.unitId, units],
+  );
+
+  const watchedUnitId = form.watch("unitId");
+  const watchedDefaultSellingQuantity = form.watch("defaultSellingQuantity");
+  const selectedUnitLabel = units.find((unit) => unit.id === watchedUnitId)
+    ?.label;
+  const sellingQuantityNumber = Number(watchedDefaultSellingQuantity);
+  const priceFieldLabel =
+    selectedUnitLabel &&
+    Number.isFinite(sellingQuantityNumber) &&
+    sellingQuantityNumber > 0
+      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} (₹)`
+      : "Price for this quantity (₹)";
 
   const selectedFilePreview = useMemo(() => {
     if (!selectedFile) {
@@ -381,7 +456,7 @@ const UpsertProductDialog = ({
   };
 
   const mutation = useMutation({
-    mutationFn: async (data: CreateProductJSON) => {
+    mutationFn: async (data: UpsertProductFormOutput) => {
       let nextImagePath = "";
 
       if (selectedFile) {
@@ -423,20 +498,25 @@ const UpsertProductDialog = ({
         return "manufacturer" as const;
       })();
 
-      const payload: CreateProductJSON = {
+      const payload = {
         categoryId: data.categoryId,
         name: data.name.trim(),
-        price: Number(data.price),
-        discount: Number(data.discount ?? 0),
         imagePath: nextImagePath,
-        status: (data.status ?? "active") as ProductStatus,
         productCode: nextProductCode,
         productCodeKind: nextProductCodeKind,
+        unitId: data.unitId,
+        defaultSellingQuantity: Number(data.defaultSellingQuantity),
+        allowCustomSellingQuantity: data.allowCustomSellingQuantity,
       };
 
       const response = product
         ? await updateProduct(organizationId, product.id, payload)
-        : await createProduct(organizationId, payload);
+        : await createProduct(organizationId, {
+            ...payload,
+            price: Number(data.price),
+            discount: Number(data.discount ?? 0),
+            status: "active",
+          });
 
       if (response.status !== "success" || !response.data?.product.id) {
         return response;
@@ -519,7 +599,7 @@ const UpsertProductDialog = ({
     return normalizedNext !== existingProductCode;
   };
 
-  const onSubmit: SubmitHandler<CreateProductJSON> = (values) => {
+  const onSubmit: SubmitHandler<UpsertProductFormOutput> = (values) => {
     if (barcodeScanningEnabled && !validateLabelProfileForm()) {
       return;
     }
@@ -632,23 +712,25 @@ const UpsertProductDialog = ({
             <div className="grid gap-4 sm:grid-cols-2">
               <Controller
                 control={form.control}
-                name="price"
+                name="unitId"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Price (₹)</FieldLabel>
+                    <FieldLabel required>Unit</FieldLabel>
                     <FieldContent>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        className="h-11 rounded-xl"
-                        placeholder=""
-                        value={field.value}
-                        onChange={(event) =>
-                          field.onChange(
-                            sanitizeDecimalInput(event.target.value),
-                          )
+                      <ReactSelect
+                        options={unitOptions}
+                        placeholder="Select an active Unit"
+                        value={
+                          unitOptions.find(
+                            (option) => option.value === field.value,
+                          ) ?? null
                         }
-                        onBlur={field.onBlur}
+                        onChange={(option) =>
+                          field.onChange(option?.value ?? "")
+                        }
+                        classNames={{
+                          control: () => "!min-h-11 rounded-xl",
+                        }}
                       />
                       <FieldError errors={[fieldState.error]} />
                     </FieldContent>
@@ -658,25 +740,20 @@ const UpsertProductDialog = ({
 
               <Controller
                 control={form.control}
-                name="discount"
+                name="defaultSellingQuantity"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel>
-                      Discount (₹){" "}
-                      <span className="font-normal text-muted-foreground">
-                        (optional)
-                      </span>
-                    </FieldLabel>
+                    <FieldLabel required>Selling size</FieldLabel>
                     <FieldContent>
                       <Input
                         type="text"
                         inputMode="decimal"
                         className="h-11 rounded-xl"
-                        placeholder=""
-                        value={field.value ?? ""}
+                        placeholder="1"
+                        value={field.value}
                         onChange={(event) =>
                           field.onChange(
-                            sanitizeDecimalInput(event.target.value),
+                            sanitizeTwoDecimalInput(event.target.value),
                           )
                         }
                         onBlur={field.onBlur}
@@ -687,6 +764,109 @@ const UpsertProductDialog = ({
                 )}
               />
             </div>
+
+            <Controller
+              control={form.control}
+              name="allowCustomSellingQuantity"
+              render={({ field }) => (
+                <Field>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/30"
+                    onClick={() => field.onChange(!field.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        field.onChange(!field.value);
+                      }
+                    }}
+                  >
+                    <FieldContent>
+                      <FieldLabel className="cursor-pointer">
+                        Allow custom selling size
+                      </FieldLabel>
+                    </FieldContent>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label="Allow custom selling size"
+                    />
+                  </div>
+                </Field>
+              )}
+            />
+
+            {!isEditMode ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Controller
+                    control={form.control}
+                    name="price"
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel required>{priceFieldLabel}</FieldLabel>
+                        <FieldContent>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-11 rounded-xl"
+                            placeholder=""
+                            value={field.value}
+                            onChange={(event) =>
+                              field.onChange(
+                                sanitizeDecimalInput(event.target.value),
+                              )
+                            }
+                            onBlur={field.onBlur}
+                          />
+                          <FieldError errors={[fieldState.error]} />
+                        </FieldContent>
+                      </Field>
+                    )}
+                  />
+
+                  <Controller
+                    control={form.control}
+                    name="discount"
+                    render={({ field, fieldState }) => (
+                      <Field data-invalid={fieldState.invalid}>
+                        <FieldLabel>
+                          Discount (₹){" "}
+                          <span className="font-normal text-muted-foreground">
+                            (optional)
+                          </span>
+                        </FieldLabel>
+                        <FieldContent>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-11 rounded-xl"
+                            placeholder=""
+                            value={field.value ?? ""}
+                            onChange={(event) =>
+                              field.onChange(
+                                sanitizeDecimalInput(event.target.value),
+                              )
+                            }
+                            onBlur={field.onBlur}
+                          />
+                          <FieldError errors={[fieldState.error]} />
+                        </FieldContent>
+                      </Field>
+                    )}
+                  />
+                </div>
+                <FieldDescription>
+                  This initial selling price applies as an active Offering at every current Store. Each Store can change it later. A newly created Store inherits Catalog Products as inactive.
+                </FieldDescription>
+              </>
+            ) : (
+              <FieldDescription>
+                Selling price, discount, and menu status are configured in each Store workspace.
+              </FieldDescription>
+            )}
 
             {barcodeScanningEnabled ? (
               <Field data-invalid={!!form.formState.errors.productCode}>
@@ -911,36 +1091,6 @@ const UpsertProductDialog = ({
                 </div>
               </div>
             ) : null}
-
-            {isEditMode && (
-              <Controller
-                control={form.control}
-                name="status"
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Status</FieldLabel>
-                    <FieldContent>
-                      <ReactSelect
-                        options={statusSelectOptions}
-                        value={
-                          statusSelectOptions.find(
-                            (option) =>
-                              option.value === (field.value ?? "active"),
-                          ) ?? null
-                        }
-                        onChange={(option) =>
-                          field.onChange(option?.value ?? "active")
-                        }
-                        classNames={{
-                          control: () => "!min-h-11 rounded-xl",
-                        }}
-                      />
-                      <FieldError errors={[fieldState.error]} />
-                    </FieldContent>
-                  </Field>
-                )}
-              />
-            )}
 
             <div className="space-y-2">
               <FieldLabel>Product image</FieldLabel>

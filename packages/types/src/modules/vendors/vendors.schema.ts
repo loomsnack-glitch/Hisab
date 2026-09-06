@@ -134,3 +134,88 @@ export const UpdateVendorItemSchema = z
       value.status !== undefined,
     { message: "At least one field is required" },
   );
+
+export const StoreVendorAvailabilityStatusSchema = VendorStatusSchema;
+
+export const StoreVendorAvailabilityDTOSchema = z.object({
+  id: z.uuid("Invalid availability id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  vendorId: z.uuid("Invalid vendor id"),
+  status: StoreVendorAvailabilityStatusSchema,
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const StoreVendorAvailabilityResponseDTOSchema = StoreVendorAvailabilityDTOSchema.extend({
+  vendor: VendorDTOSchema,
+});
+
+export const UpdateStoreVendorAvailabilitySchema = z
+  .object({
+    status: StoreVendorAvailabilityStatusSchema,
+  })
+  .strict();
+
+export const StoreVendorItemOfferingDTOSchema = z.object({
+  id: z.uuid("Invalid offering id"),
+  organizationId: z.uuid("Invalid organization id"),
+  storeId: z.uuid("Invalid store id"),
+  vendorId: z.uuid("Invalid vendor id"),
+  vendorItemId: z.uuid("Invalid vendor item id"),
+  defaultPurchasePrice: vendorItemDefaultPurchasePriceSchema,
+  createdBy: z.uuid("Invalid creator id"),
+  updatedBy: z.uuid("Invalid updater id").nullable().optional(),
+  createdAt: dtoDateSchema,
+  updatedAt: dtoDateSchema,
+});
+
+export const StoreVendorItemOfferingResponseDTOSchema = StoreVendorItemOfferingDTOSchema.extend({
+  vendorItem: VendorItemDTOSchema,
+});
+
+export const UpdateStoreVendorItemOfferingSchema = z
+  .object({
+    defaultPurchasePrice: vendorItemDefaultPurchasePriceSchema,
+  })
+  .strict();
+
+export const isStoreVendorAvailabilityActive = (input: {
+  availabilityStatus: z.infer<typeof StoreVendorAvailabilityStatusSchema>;
+}): boolean => input.availabilityStatus === "active";
+
+export const isVendorSelectableForStorePurchase = (input: {
+  vendorStatus: z.infer<typeof VendorStatusSchema>;
+  availabilityStatus: z.infer<typeof StoreVendorAvailabilityStatusSchema>;
+}): boolean =>
+  input.vendorStatus === "active" &&
+  isStoreVendorAvailabilityActive({
+    availabilityStatus: input.availabilityStatus,
+  });
+
+export const overlayStoreVendorItemOfferingPrices = <
+  T extends { id: string; defaultPurchasePrice: number },
+>(
+  vendorItems: T[],
+  offerings: Array<{ vendorItemId: string; defaultPurchasePrice: number }>,
+): T[] => {
+  const offeringByVendorItemId = new Map(
+    offerings.map((offering) => [offering.vendorItemId, offering]),
+  );
+
+  return vendorItems.flatMap((vendorItem) => {
+    const offering = offeringByVendorItemId.get(vendorItem.id);
+    if (!offering) {
+      return [];
+    }
+
+    return [
+      {
+        ...vendorItem,
+        defaultPurchasePrice: offering.defaultPurchasePrice,
+      },
+    ];
+  });
+};

@@ -27,7 +27,11 @@ import {
   decryptDeviceSecret,
   encryptDeviceSecret,
 } from "@/helpers/deviceSecret.helper";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
+import * as catalogService from "@/modules/tenant/catalog/catalog.service";
+import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
+import * as vendorsService from "@/modules/tenant/vendors/vendors.service";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
 import * as organizationRepository from "./organization.repository";
@@ -407,6 +411,39 @@ export const getStores = async (
   };
 };
 
+export const getStore = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { store },
+    message: "Store fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
 export const createStore = async (
   userId: string,
   organizationId: string,
@@ -436,13 +473,44 @@ export const createStore = async (
     };
   }
 
-  const store = await organizationRepository.createStore({
-    id: crypto.randomUUID(),
-    organizationId,
-    name: storeData.name,
-    address: normalizeOptionalText(storeData.address),
-    createdBy: userId,
-  });
+  let store: Awaited<ReturnType<typeof organizationRepository.createStore>> = null;
+  try {
+    await pg.begin(async (tx) => {
+      await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      await vendorsRepository.lockStoreVendorAvailabilityTopology(organizationId, tx);
+      store = await organizationRepository.createStore(
+        {
+          id: crypto.randomUUID(),
+          organizationId,
+          name: storeData.name,
+          address: normalizeOptionalText(storeData.address),
+          createdBy: userId,
+        },
+        tx,
+      );
+      if (!store) {
+        throw new Error("Failed to create store");
+      }
+
+      await catalogService.seedInactiveOfferingsForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+      await vendorsService.seedInactiveAvailabilitiesForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+    });
+  } catch {
+    return {
+      status: "error",
+      message: "Failed to create store",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
 
   if (!store) {
     return {
@@ -506,6 +574,20 @@ export const updateStore = async (
     }
   }
 
+  const nextMoneyAccountTrackingEnabled =
+    storeData.moneyAccountTrackingEnabled === undefined
+      ? store.moneyAccountTrackingEnabled
+      : storeData.moneyAccountTrackingEnabled;
+  if (nextMoneyAccountTrackingEnabled && !store.moneyAccountTrackingEnabled) {
+    const moneyAccountTrackingEntitlementError = await requireStoreFeatureEntitlement(
+      storeId,
+      "money_account_tracking",
+    );
+    if (moneyAccountTrackingEntitlementError) {
+      return moneyAccountTrackingEntitlementError;
+    }
+  }
+
   const updatedStore = await organizationRepository.updateStore({
     id: storeId,
     name: nextName,
@@ -535,10 +617,7 @@ export const updateStore = async (
       storeData.tableManagementEnabled === undefined
         ? store.tableManagementEnabled
         : storeData.tableManagementEnabled,
-    moneyAccountTrackingEnabled:
-      storeData.moneyAccountTrackingEnabled === undefined
-        ? store.moneyAccountTrackingEnabled
-        : storeData.moneyAccountTrackingEnabled,
+    moneyAccountTrackingEnabled: nextMoneyAccountTrackingEnabled,
     updatedBy: userId,
   });
 

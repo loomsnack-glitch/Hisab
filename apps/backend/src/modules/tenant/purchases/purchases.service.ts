@@ -9,6 +9,7 @@ import {
     derivePurchasePayableStateFromPayments,
     isOutgoingPaymentActive,
     isPurchaseEffectiveDateAllowed,
+    isStoreVendorAvailabilityActive,
     isVendorItemSelectableForDraftPurchase,
     isVendorSelectableForDraftPurchase,
     mergeSamePricePurchaseLines,
@@ -31,6 +32,10 @@ import {
     type VoidPurchaseSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
+import {
+    requireOrganizationFeatureEntitlement,
+    requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as vendorsRepository from "@/modules/tenant/vendors/vendors.repository";
@@ -131,8 +136,33 @@ const requireStore = async (
     return { ok: true, value: store };
 };
 
+const requirePurchasesEntitlementForStore = async (
+    storeId: string,
+): Promise<LookupResult<null>> => {
+    const denial = await requireStoreFeatureEntitlement(storeId, "purchases");
+    if (denial) {
+        return { ok: false, error: denial };
+    }
+    return { ok: true, value: null };
+};
+
+const inactiveStoreVendor = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Vendor is not active at the selected Store",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
+const unassignedVendorItem = (): ServiceResponse<null> => ({
+    status: "error",
+    message: "This Vendor Item is not available at the selected Store",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+});
+
 const requireActiveVendor = async (
     organizationId: string,
+    storeId: string,
     vendorId: string,
 ): Promise<LookupResult<VendorDTO>> => {
     const vendor = await vendorsRepository.getVendorById(organizationId, vendorId);
@@ -142,6 +172,19 @@ const requireActiveVendor = async (
     if (!isVendorSelectableForDraftPurchase(vendor)) {
         return { ok: false, error: inactiveVendor() };
     }
+
+    const availability = await vendorsRepository.getStoreVendorAvailabilityByStoreAndVendor(
+        organizationId,
+        storeId,
+        vendorId,
+    );
+    if (
+        !availability ||
+        !isStoreVendorAvailabilityActive({ availabilityStatus: availability.status })
+    ) {
+        return { ok: false, error: inactiveStoreVendor() };
+    }
+
     return { ok: true, value: vendor };
 };
 
@@ -149,6 +192,7 @@ type ResolvedLine = CreatePurchaseLineREPO;
 
 const resolveDraftLines = async (
     organizationId: string,
+    storeId: string,
     purchaseId: string,
     vendor: VendorDTO,
     lineInputs: PurchaseLineInputJSON[],
@@ -175,6 +219,15 @@ const resolveDraftLines = async (
             return { ok: false, error: inactiveVendorItem() };
         }
 
+        const offering = await vendorsRepository.getStoreVendorItemOfferingByStoreAndVendorItem(
+            organizationId,
+            storeId,
+            vendorItem.id,
+        );
+        if (!offering) {
+            return { ok: false, error: unassignedVendorItem() };
+        }
+
         const unit = await unitsRepository.getUnitById(organizationId, vendorItem.unitId);
         if (!unit) {
             return {
@@ -188,7 +241,7 @@ const resolveDraftLines = async (
             };
         }
 
-        const agreedUnitPrice = lineInput.agreedUnitPrice ?? vendorItem.defaultPurchasePrice;
+        const agreedUnitPrice = lineInput.agreedUnitPrice ?? offering.defaultPurchasePrice;
         const { linesTotal: lineTotal } = calculatePurchaseTotals([
             { quantity: lineInput.quantity, agreedUnitPrice },
         ]);
@@ -409,6 +462,14 @@ export const getPurchases = async (
         return organizationNotFound();
     }
 
+    const purchasesEntitlementError = await requireOrganizationFeatureEntitlement(
+        organizationId,
+        "purchases",
+    );
+    if (purchasesEntitlementError) {
+        return purchasesEntitlementError;
+    }
+
     const purchases = await purchasesRepository.getPurchasesByOrganizationId(organizationId);
     return {
         status: "success",
@@ -436,6 +497,11 @@ export const getPurchaseDetails = async (
         return purchaseNotFound();
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(purchase.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     return {
         status: "success",
         data: { purchase },
@@ -459,7 +525,16 @@ export const createDraftPurchase = async (
         return storeResult.error;
     }
 
-    const vendorResult = await requireActiveVendor(organizationId, purchaseData.vendorId);
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(storeResult.value.id);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        purchaseData.vendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -472,6 +547,7 @@ export const createDraftPurchase = async (
     const purchaseId = crypto.randomUUID();
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         purchaseData.lines ?? [],
@@ -584,8 +660,17 @@ export const updateDraftPurchase = async (
         return storeResult.error;
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(storeResult.value.id);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     const nextVendorId = purchaseData.vendorId ?? existing.vendorId;
-    const vendorResult = await requireActiveVendor(organizationId, nextVendorId);
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        nextVendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -602,6 +687,7 @@ export const updateDraftPurchase = async (
 
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         nextLineInputs,
@@ -706,6 +792,11 @@ export const discardDraftPurchase = async (
         return purchaseNotFound();
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(existing.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     if (existing.lifecycle !== "draft") {
         return {
             status: "error",
@@ -749,6 +840,11 @@ export const recordPurchase = async (
         return purchaseNotFound();
     }
 
+    const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(existing.storeId);
+    if (!purchasesEntitlementResult.ok) {
+        return purchasesEntitlementResult.error;
+    }
+
     if (existing.lifecycle !== "draft") {
         return {
             status: "error",
@@ -772,7 +868,11 @@ export const recordPurchase = async (
         return storeResult.error;
     }
 
-    const vendorResult = await requireActiveVendor(organizationId, existing.vendorId);
+    const vendorResult = await requireActiveVendor(
+        organizationId,
+        storeResult.value.id,
+        existing.vendorId,
+    );
     if (!vendorResult.ok) {
         return vendorResult.error;
     }
@@ -783,6 +883,7 @@ export const recordPurchase = async (
 
     const resolved = await resolveDraftLines(
         organizationId,
+        storeResult.value.id,
         purchaseId,
         vendorResult.value,
         toLineInputs(existing),
@@ -904,6 +1005,16 @@ export const createOutgoingPurchasePayment = async (
             );
             if (!existing) {
                 return null;
+            }
+
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
             }
 
             return applyOutgoingPurchasePaymentInTx(tx, {
@@ -1042,6 +1153,16 @@ export const reverseOutgoingPurchasePayment = async (
                 return null;
             }
 
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
+            }
+
             const payment = existing.outgoingPayments.find((item) => item.id === paymentId);
             if (!payment) {
                 throw Object.assign(new Error("Outgoing Payment not found"), {
@@ -1141,6 +1262,16 @@ export const voidPurchase = async (
             );
             if (!existing) {
                 return null;
+            }
+
+            const purchasesEntitlementResult = await requirePurchasesEntitlementForStore(
+                existing.storeId,
+            );
+            if (!purchasesEntitlementResult.ok) {
+                throw Object.assign(new Error(purchasesEntitlementResult.error.message), {
+                    code: purchasesEntitlementResult.error.code,
+                    expose: true,
+                });
             }
 
             if (existing.lifecycle === "voided") {

@@ -2,9 +2,8 @@
 
 Date: 2026-08-23
 
-This runbook tests the current Cloud API implementation without removing or
-disabling the existing Baileys worker. Cloud messages are dispatched by the
-backend; the worker remains required only for legacy QR-linked accounts.
+This runbook tests the current Cloud API implementation. WhatsApp Cloud API is
+the only supported WhatsApp transport; messages are dispatched by the backend.
 
 ## 1. Meta prerequisites
 
@@ -115,16 +114,6 @@ bun run --cwd apps/admin dev
 ```
 
 Expected output is normally `http://localhost:5173`.
-
-### Legacy worker
-
-Only required for existing Baileys accounts:
-
-```bash
-bun run --cwd apps/whatsapp-worker dev
-```
-
-Cloud API sends do not use port `8100`.
 
 ## 4. Expose the local app with ngrok
 

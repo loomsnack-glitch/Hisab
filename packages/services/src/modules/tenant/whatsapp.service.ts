@@ -3,8 +3,6 @@ import type {
     WhatsAppAccountsResponseDTO,
     ServiceResponse,
     WhatsAppAccountStatusResponseDTO,
-    WhatsAppChangeAccountNumberJSON,
-    WhatsAppCreateAccountJSON,
     WhatsAppInvoiceQueueResponseDTO,
     WhatsAppReminderQueueResponseDTO,
     WhatsAppMessageTemplateKind,
@@ -357,52 +355,9 @@ export const getWhatsAppCustomerConsentHistory = async (
     }
 };
 
-export const createWhatsAppOrganizationAccount = async (
-    organizationId: string,
-    data: WhatsAppCreateAccountJSON,
-): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(`/organizations/${organizationId}/whatsapp/accounts`, data);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
 export const getWhatsAppOrganizationAccount = async (organizationId: string, accountId: string): Promise<WhatsAppResponse> => {
     try {
         const response = await api.get(`/organizations/${organizationId}/whatsapp/accounts/${accountId}`);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const connectWhatsAppOrganizationAccount = async (organizationId: string, accountId: string): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(`/organizations/${organizationId}/whatsapp/accounts/${accountId}/connect`);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const disconnectWhatsAppOrganizationAccount = async (organizationId: string, accountId: string): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(`/organizations/${organizationId}/whatsapp/accounts/${accountId}/disconnect`);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const changeWhatsAppOrganizationAccountNumber = async (
-    organizationId: string,
-    accountId: string,
-    data: WhatsAppChangeAccountNumberJSON,
-): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(`/organizations/${organizationId}/whatsapp/accounts/${accountId}/change-number`, data);
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -418,19 +373,6 @@ export const getWhatsAppAccount = async (organizationId: string, storeId: string
     }
 };
 
-export const createWhatsAppAccount = async (
-    organizationId: string,
-    storeId: string,
-    data: WhatsAppCreateAccountJSON,
-): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(accountPath(organizationId, storeId), data);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
 export const assignWhatsAppAccount = async (
     organizationId: string,
     storeId: string,
@@ -438,37 +380,6 @@ export const assignWhatsAppAccount = async (
 ): Promise<WhatsAppResponse> => {
     try {
         const response = await api.post(accountPath(organizationId, storeId) + "/assign", data);
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const connectWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(accountPath(organizationId, storeId) + "/connect");
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const disconnectWhatsAppAccount = async (organizationId: string, storeId: string): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(accountPath(organizationId, storeId) + "/disconnect");
-        return response.data;
-    } catch (error) {
-        return handleApiError(error);
-    }
-};
-
-export const changeWhatsAppAccountNumber = async (
-    organizationId: string,
-    storeId: string,
-    data: WhatsAppChangeAccountNumberJSON,
-): Promise<WhatsAppResponse> => {
-    try {
-        const response = await api.post(accountPath(organizationId, storeId) + "/change-number", data);
         return response.data;
     } catch (error) {
         return handleApiError(error);

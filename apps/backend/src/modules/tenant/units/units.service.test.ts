@@ -5,14 +5,17 @@ import {
     createUnitRepo,
     customUnitId,
     getOrganizationByIdForUser,
+    getStoresByOrganizationId,
     getUnitById,
     getUnitsByOrganizationId,
     kilogramUnit,
     organization,
     organizationId,
     otherOrganizationId,
+    resolveFeatureEntitlement,
     seedDefaultUnitsRepo,
     seededUnits,
+    store,
     unitId,
     unitTokenExistsInOrganization,
     unitsService,
@@ -23,6 +26,8 @@ import {
 describe("Organization Unit service", () => {
     beforeEach(() => {
         getOrganizationByIdForUser.mockClear();
+        getStoresByOrganizationId.mockClear();
+        resolveFeatureEntitlement.mockClear();
         getUnitsByOrganizationId.mockClear();
         getUnitById.mockClear();
         unitTokenExistsInOrganization.mockClear();
@@ -31,6 +36,12 @@ describe("Organization Unit service", () => {
         seedDefaultUnitsRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store]);
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         getUnitsByOrganizationId.mockResolvedValue([...seededUnits, crateUnit]);
         getUnitById.mockResolvedValue(kilogramUnit);
         unitTokenExistsInOrganization.mockResolvedValue(false);

@@ -53,6 +53,10 @@ const product = {
     productType: "single" as const,
     productCode: null,
     productCodeKind: null,
+    unitId: "98989898-9898-4989-8989-989898989898",
+    defaultSellingQuantity: 1,
+    allowCustomSellingQuantity: false,
+    unitLabel: "pc",
     status: "active" as const,
     createdBy: userId,
     updatedBy: null,
@@ -584,6 +588,25 @@ mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
     markReadyDraftAsEngaged: mock(async () => false),
     setCommittedSaleTableState: mock(async () => null),
     syncCommittedSalePaymentState: mock(async () => null),
+    getServiceTables: mock(async () => []),
+    serviceTableLabelExists: mock(async () => false),
+    createServiceTable: mock(async () => null),
+    updateServiceTable: mock(async () => null),
+    transitionServiceTableState: mock(async () => null),
+    attachDraftSale: mock(async () => null),
+    clearDraftSale: mock(async () => null),
+    releasePaidTableFromActiveState: mock(async () => null),
+    releaseDueTable: mock(async () => null),
+    releasePaidTable: mock(async () => null),
+    assignServiceTableToArea: mock(async () => null),
+    unassignServiceTableFromArea: mock(async () => null),
+    lockServiceArea: mock(async () => null),
+    getServiceAreas: mock(async () => []),
+    getServiceAreaById: mock(async () => null),
+    serviceAreaTitleExists: mock(async () => false),
+    createServiceArea: mock(async () => null),
+    updateServiceArea: mock(async () => null),
+    deleteServiceArea: mock(async () => null),
 }));
 
 mock.module("./kot.repository", () => ({
@@ -621,8 +644,14 @@ mock.module("./kot.repository", () => ({
 
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
 const billingService = await import("@/modules/tenant/billing/billing.service");
 const kotService = await import("./kot.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const createTableKot = (
   session: DeviceSessionDTO,
@@ -639,6 +668,7 @@ describe("Table Order KOT workflow", () => {
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -680,6 +710,7 @@ describe("Table Order KOT workflow", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
@@ -687,6 +718,7 @@ describe("Table Order KOT workflow", () => {
         getSelectableAttachmentSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("starts one Active Table Order without a Customer or Draft Sale", async () => {
@@ -752,6 +784,32 @@ describe("Table Order KOT workflow", () => {
         expect(response.code).toBe(403);
         expect(response.message).toContain("Table Management");
         expect(createKot).not.toHaveBeenCalled();
+    });
+
+    test("forbids Table KOT generation when table_management is entitled without kot_system", async () => {
+        const { resolveFeatureEntitlement } = await import(
+            "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+        );
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: featureKey === "table_management",
+            featureKey,
+            evidence: [],
+        }));
+
+        const response = await createTableKot(deviceSession, tableId, {
+            items: [{ productId, quantity: 1, addOns: [] }],
+        });
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(403);
+        expect(response.message).toContain("KOT System");
+        expect(createKot).not.toHaveBeenCalled();
+
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
     });
 
     test("generates the first Table KOT with a Store-local KOT Number and trusted snapshots", async () => {
@@ -929,7 +987,7 @@ describe("Table Order KOT workflow", () => {
         expect(edited.data?.tableOrder?.kots[0]?.items).toHaveLength(1);
     expect(
       edited.data?.tableOrder?.kots[0]?.items[0]?.productNameSnapshot,
-    ).toBe("Misal Pav");
+    ).toBe("Misal Pav (1pc)");
 
     const checkedOut = await kotService.checkoutTableOrderForDevice(
       deviceSession,
@@ -942,7 +1000,7 @@ describe("Table Order KOT workflow", () => {
 
         expect(checkedOut.data?.sale?.items).toHaveLength(1);
     expect(checkedOut.data?.sale?.items[0]?.productNameSnapshot).toBe(
-      "Misal Pav",
+      "Misal Pav (1pc)",
     );
         expect(checkedOut.data?.sale?.items[0]?.unitPriceSnapshot).toBe(80);
         expect(checkedOut.data?.sale?.grandTotal).toBe(80);
@@ -982,7 +1040,7 @@ describe("Table Order KOT workflow", () => {
         expect(second.data?.tableOrder?.kots[1]?.kotNumber).toBe("KOT-002");
     expect(
       second.data?.tableOrder?.kots[1]?.items[0]?.productNameSnapshot,
-    ).toBe("Misal Pav");
+    ).toBe("Misal Pav (1pc)");
 
     getProductByIdSpy.mockResolvedValue({
       ...product,
@@ -1147,6 +1205,140 @@ describe("Table Order KOT workflow", () => {
     expect(createKot).toHaveBeenCalledTimes(2);
   });
 
+    test("a measured Cake KOT keeps Cake (500g) and Extra Cheese snapshots", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        const response = await createTableKot(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    soldQuantity: 500,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        expect(response.status).toBe("success");
+        const kotItem = response.data?.tableOrder?.kots[0]?.items[0];
+        expect(kotItem?.productNameSnapshot).toBe("Cake (500g)");
+        expect(kotItem?.soldQuantity).toBe(500);
+        expect(kotItem?.unitPriceSnapshot).toBe(500);
+        expect(kotItem?.addOns[0]?.addOnNameSnapshot).toBe("Extra Cheese");
+        expect(kotItem?.addOns[0]?.lineTotal).toBe(18);
+    });
+
+    test("different sold amounts of the same Product and add-ons stay separate at checkout", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await createTableKot(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    soldQuantity: 250,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+        await createTableKot(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    soldQuantity: 500,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(
+            deviceSession,
+            tableId,
+            {
+                requestId: "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1",
+                payments: [],
+            },
+        );
+
+        expect(checkedOut.status).toBe("success");
+        expect(checkedOut.data?.sale?.items).toHaveLength(2);
+        const names = checkedOut.data?.sale?.items
+            .map((item) => item.productNameSnapshot)
+            .sort();
+        expect(names).toEqual(["Cake (250g)", "Cake (500g)"]);
+        expect(checkedOut.data?.sale?.grandTotal).toBe(786);
+    });
+
+    test("matching Cake (500g) add-on lines across KOTs still merge at checkout", async () => {
+        getProductByIdSpy.mockResolvedValue({
+            ...product,
+            name: "Cake",
+            price: 250,
+            discount: 0,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitLabel: "g",
+        } as never);
+
+        await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
+        await createTableKot(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                    soldQuantity: 500,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+        await createTableKot(deviceSession, tableId, {
+            items: [
+                {
+                    productId,
+                    quantity: 2,
+                    soldQuantity: 500,
+                    addOns: [{ addOnId, quantity: 1 }],
+                },
+            ],
+        });
+
+        const checkedOut = await kotService.checkoutTableOrderForDevice(
+            deviceSession,
+            tableId,
+            {
+                requestId: "a2a2a2a2-a2a2-42a2-82a2-a2a2a2a2a2a2",
+                payments: [],
+            },
+        );
+
+        expect(checkedOut.status).toBe("success");
+        expect(checkedOut.data?.sale?.items).toHaveLength(1);
+        expect(checkedOut.data?.sale?.items[0]?.productNameSnapshot).toBe("Cake (500g)");
+        expect(checkedOut.data?.sale?.items[0]?.quantity).toBe(3);
+        expect(checkedOut.data?.sale?.items[0]?.soldQuantity).toBe(500);
+        expect(checkedOut.data?.sale?.items[0]?.addOns[0]?.totalQuantity).toBe(3);
+        expect(checkedOut.data?.sale?.grandTotal).toBe(1554);
+    });
+
   test("rejects final table checkout when no KOT batches exist", async () => {
     await kotService.startActiveTableOrderForDevice(deviceSession, tableId);
 
@@ -1172,6 +1364,7 @@ describe("KOT fulfillment and standalone batches", () => {
   let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
   let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
   let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+  let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     createdSales.length = 0;
@@ -1207,6 +1400,7 @@ describe("KOT fulfillment and standalone batches", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
   });
 
   afterEach(() => {
@@ -1214,6 +1408,7 @@ describe("KOT fulfillment and standalone batches", () => {
     getSelectableAttachmentSpy.mockRestore();
     getComboChoiceGroupsSpy.mockRestore();
     getComboChoiceOptionsSpy.mockRestore();
+    getStoreProductOfferingSpy.mockRestore();
   });
 
   test("keeps multiple ordered standalone KOT batches on one Sale", async () => {

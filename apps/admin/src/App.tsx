@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
+import AuthenticatedHomeRedirect from "@/components/dashboard/authenticated-home-redirect";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
 import LoginPage from "@/pages/login-page";
@@ -14,6 +15,7 @@ import {
     StoreDetailIndexRedirect,
     StoreDetailShell,
     StoreDevicesPage,
+    StoreLicensePage,
     StoreSettingsPage,
 } from "@/pages/store-detail-page";
 import ProductsPage from "@/pages/products-page";
@@ -40,6 +42,9 @@ import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
 import OrganizationSettingsPage from "@/pages/organization-settings-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
+import StoreWorkspacePage from "@/pages/store-workspace-page";
+import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
+import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
@@ -47,6 +52,17 @@ import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
 
 const SPLASH_DURATION_MS = 2200;
+
+const WhatsAppStoreInboxRedirect = () => {
+    const { organizationId = "", storeId = "" } = useParams();
+    const query = new URLSearchParams({ storeId });
+    return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history?${query.toString()}`} replace />;
+};
+
+const WhatsAppInboxWorkspaceRedirect = () => {
+    const { organizationId = "" } = useParams();
+    return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history`} replace />;
+};
 
 const App = () => {
     const location = useLocation();
@@ -102,27 +118,31 @@ const App = () => {
                 ) : (
                     <>
                         <Routes>
-                            <Route path="/" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LandingPage />} />
-                            <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
+                            <Route path="/" element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <LandingPage />} />
+                            <Route path="/login" element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <LoginPage />} />
                             <Route
                                 path="/register"
-                                element={authenticatedUser ? <Navigate to="/organizations" replace /> : <RegisterPage />}
+                                element={authenticatedUser ? <AuthenticatedHomeRedirect /> : <RegisterPage />}
                             />
                             <Route path="/pos" element={<RetiredPosRoutePage />} />
                             <Route path="/pos/*" element={<RetiredPosRoutePage />} />
                             <Route
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >
-                                <Route path="/dashboard" element={<Navigate to="/organizations" replace />} />
+                                <Route path="/dashboard" element={<AuthenticatedHomeRedirect />} />
                                 <Route path="/appearance" element={<AppearancePage />} />
                                 <Route path="/settings" element={<Navigate to="/appearance" replace />} />
                                 <Route path="/organizations" element={<OrganizationsPage />} />
                                 <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                                 <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId" element={<StoreWorkspacePage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/products" element={<StoreProductOfferingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/vendors" element={<StoreVendorAvailabilitiesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />
                                     <Route path="settings" element={<StoreSettingsPage />} />
+                                    <Route path="license" element={<StoreLicensePage />} />
                                 </Route>
                                 <Route path="/organizations/:organizationId/products" element={<ProductsPage />}>
                                     <Route index element={<Navigate to="list" replace />} />
@@ -152,9 +172,10 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/whatsapp/links" element={<Navigate to="../templates" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/delivery" element={<Navigate to="../accounts" replace />} />
                                 <Route path="/organizations/:organizationId/whatsapp/promotions" element={<WhatsAppOrganizationPage />} />
-                                <Route path="/organizations/:organizationId/whatsapp/inbox" element={<Navigate to="../accounts" replace />} />
+                                <Route path="/organizations/:organizationId/whatsapp/message-history" element={<WhatsAppOrganizationPage />} />
+                                <Route path="/organizations/:organizationId/whatsapp/inbox" element={<WhatsAppInboxWorkspaceRedirect />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId/whatsapp" element={<WhatsAppAccountPage />} />
-                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppInboxPage />} />
+                                <Route path="/organizations/:organizationId/stores/:storeId/whatsapp/inbox" element={<WhatsAppStoreInboxRedirect />} />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>

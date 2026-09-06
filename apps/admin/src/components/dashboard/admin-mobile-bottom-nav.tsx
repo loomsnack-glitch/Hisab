@@ -1,48 +1,33 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Plus } from "lucide-react";
-import { Button } from "@repo/ui/components/button";
+import { Building2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { cn } from "@repo/ui/lib/utils";
 
 import {
     getVisibleAdminPrimaryMobileDestinations,
-    getVisibleAdminWorkspaceDestinations,
+    getGroupedAdminMainDestinations,
     isAdminMoreDestinationActive,
     type VisibleAdminNavArgs,
 } from "@/components/dashboard/admin-nav-items";
-import OrganizationSwitcher from "@/components/dashboard/organization-switcher";
-import CreateOrganizationDialog from "@/components/organizations/create-organization-dialog";
 import { getOrgBgColor, getOrgInitials } from "@/lib/organization-avatar";
 
-type OrganizationOption = {
-    id: string;
-    name: string;
-};
-
 type AdminMobileBottomNavProps = VisibleAdminNavArgs & {
-    organizations?: OrganizationOption[];
     activeOrgName?: string;
-    starredOrgId?: string;
-    onToggleStar?: (organizationId: string) => void;
-    onSelectOrganization?: (organizationId: string) => void;
 };
 
 const AdminMobileBottomNav = ({
     organizationId = "",
+    storeId,
     hasOrganization,
-    organizations = [],
     activeOrgName = "",
-    starredOrgId = "",
-    onToggleStar,
-    onSelectOrganization,
 }: AdminMobileBottomNavProps) => {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
-    const navArgs = { organizationId, hasOrganization };
+    const navArgs = { organizationId, storeId, hasOrganization };
     const isMoreActive = isAdminMoreDestinationActive(location.pathname, navArgs) || moreOpen;
     const primaryDestinations = getVisibleAdminPrimaryMobileDestinations(navArgs);
-    const workspaceDestinations = getVisibleAdminWorkspaceDestinations(navArgs);
+    const groupedSections = getGroupedAdminMainDestinations(navArgs);
     const orgInitials = getOrgInitials(activeOrgName);
 
     const navButtonClassName = (isActive: boolean) =>
@@ -99,72 +84,79 @@ const AdminMobileBottomNav = ({
             <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
                 <SheetContent
                     side="bottom"
-                    className="gap-0 rounded-t-2xl px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4"
                 >
-                    <SheetHeader className="space-y-0 px-0 pb-4 pt-0 pr-10 text-left">
+                    <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
                         <SheetTitle className="sr-only">Pages and organization</SheetTitle>
                         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Organization
                         </p>
-                        <div className="flex min-w-0 items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                                <OrganizationSwitcher
-                                    variant="drawer"
-                                    organizations={organizations}
-                                    activeOrgId={organizationId}
-                                    activeOrgName={activeOrgName}
-                                    starredOrgId={starredOrgId}
-                                    onToggleStar={onToggleStar ?? (() => {})}
-                                    onSelect={(orgId) => {
-                                        onSelectOrganization?.(orgId);
-                                        setMoreOpen(false);
-                                    }}
-                                />
-                            </div>
-                            <CreateOrganizationDialog
-                                trigger={
-                                    <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        className="size-11 shrink-0 rounded-xl border-border/60 bg-card/70 shadow-none hover:bg-muted/50"
-                                        aria-label="Create organization"
-                                    >
-                                        <Plus className="size-4 text-muted-foreground hover:text-foreground" />
-                                    </Button>
-                                }
-                            />
-                        </div>
+                        <Link
+                            to="/organizations"
+                            onClick={() => setMoreOpen(false)}
+                            className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/70 px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted/50"
+                        >
+                            <span
+                                className={cn(
+                                    "flex size-10 items-center justify-center rounded-lg",
+                                    "bg-muted/70 text-muted-foreground",
+                                )}
+                            >
+                                <Building2 className="size-5" />
+                            </span>
+                            Organizations
+                        </Link>
                     </SheetHeader>
 
-                    <div className="grid grid-cols-3 gap-3 border-t border-border/50 pt-4">
-                        {workspaceDestinations.map((destination) => {
-                            const Icon = destination.icon;
-                            const isActive = destination.isActive(location.pathname);
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
+                        <div className="space-y-5 px-6">
+                            {groupedSections.map((section) => {
+                                const items = section.items.filter((destination) => destination.id !== "organizations");
+                                if (items.length === 0) {
+                                    return null;
+                                }
 
-                            return (
-                                <Link
-                                    key={destination.id}
-                                    to={destination.path}
-                                    onClick={() => setMoreOpen(false)}
-                                    className={cn(
-                                        "flex flex-col items-center gap-2 rounded-2xl border px-3 py-4 text-center transition-colors",
-                                        isActive
-                                            ? "border-primary/40 bg-primary/10 text-primary"
-                                            : "border-border/60 bg-card/70 text-foreground hover:bg-muted/50",
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            "flex size-11 items-center justify-center rounded-xl",
-                                            isActive ? "bg-primary text-primary-foreground" : "bg-muted/70 text-muted-foreground",
-                                        )}
-                                    >
-                                        <Icon className="size-5" strokeWidth={isActive ? 2.25 : 2} />
-                                    </span>
-                                    <span className="text-xs font-semibold">{destination.label}</span>
-                                </Link>
-                            );
-                        })}
+                                return (
+                                    <div key={section.group}>
+                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                            {section.label}
+                                        </p>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {items.map((destination) => {
+                                                const Icon = destination.icon;
+                                                const isActive = destination.isActive(location.pathname);
+
+                                                return (
+                                                    <Link
+                                                        key={destination.id}
+                                                        to={destination.path}
+                                                        onClick={() => setMoreOpen(false)}
+                                                        className={cn(
+                                                            "flex flex-col items-center gap-2 rounded-2xl border px-3 py-4 text-center transition-colors",
+                                                            isActive
+                                                                ? "border-primary/40 bg-primary/10 text-primary"
+                                                                : "border-border/60 bg-card/70 text-foreground hover:bg-muted/50",
+                                                        )}
+                                                    >
+                                                        <span
+                                                            className={cn(
+                                                                "flex size-11 items-center justify-center rounded-xl",
+                                                                isActive
+                                                                    ? "bg-primary text-primary-foreground"
+                                                                    : "bg-muted/70 text-muted-foreground",
+                                                            )}
+                                                        >
+                                                            <Icon className="size-5" strokeWidth={isActive ? 2.25 : 2} />
+                                                        </span>
+                                                        <span className="text-xs font-semibold">{destination.label}</span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </SheetContent>
             </Sheet>

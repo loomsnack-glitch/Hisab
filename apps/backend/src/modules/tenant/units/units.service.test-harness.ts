@@ -1,4 +1,9 @@
 import { mock } from "bun:test";
+import { resolveFeatureEntitlement, ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
+import {
+    getOrganizationByIdForUser,
+    getStoresByOrganizationId,
+} from "@/modules/tenant/test-support/organization-repository.test-harness";
 import { SEEDED_UNITS, type UnitDTO } from "@repo/types";
 
 export const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -9,6 +14,7 @@ export const customUnitId = "22222222-2222-4222-8222-222222222222";
 export const now = new Date("2026-08-30T12:00:00.000Z");
 
 export const organization = { id: organizationId, name: "Demo Org" };
+export const store = { id: "11111111-1111-4111-8111-111111111111", organizationId, name: "Adajan" };
 
 export const kilogramUnit: UnitDTO = {
     id: unitId,
@@ -52,7 +58,8 @@ export const seededUnits: UnitDTO[] = SEEDED_UNITS.map((definition, index) => ({
     updatedAt: now,
 }));
 
-export const getOrganizationByIdForUser = mock(async () => organization);
+export { getOrganizationByIdForUser, getStoresByOrganizationId, resolveFeatureEntitlement };
+
 export const getUnitsByOrganizationId = mock(async () => [...seededUnits, crateUnit]);
 export const getUnitById = mock(async () => kilogramUnit);
 export const unitTokenExistsInOrganization = mock(async () => false);
@@ -93,11 +100,7 @@ type UpdateUnitRepoArg = {
     updatedBy: string;
 };
 
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-}));
-
-mock.module("./units.repository", () => ({
+mock.module("@/modules/tenant/units/units.repository", () => ({
     getUnitsByOrganizationId,
     getUnitById,
     unitTokenExistsInOrganization,
@@ -105,5 +108,7 @@ mock.module("./units.repository", () => ({
     updateUnit: updateUnitRepo,
     seedDefaultUnits: seedDefaultUnitsRepo,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const unitsService = await import("./units.service");

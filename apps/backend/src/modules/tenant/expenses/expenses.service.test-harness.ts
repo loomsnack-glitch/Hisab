@@ -1,4 +1,18 @@
 import { mock } from "bun:test";
+import { resolveFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
+import { isMoneyAccountTrackingActive } from "@/modules/tenant/test-support/money-account-tracking.test-harness";
+import {
+    createMoneyAccountMovementRepo,
+    getMovementByOutgoingPaymentId,
+    lockMoneyAccountById,
+    lockPaymentRouteByStoreAndMethod,
+    restoreCreateMoneyAccountMovementRepo,
+} from "../purchases/purchases.service.test-harness";
+import {
+    getOrganizationByIdForUser,
+    getStoreById,
+    getStoresByOrganizationId,
+} from "@/modules/tenant/test-support/organization-repository.test-harness";
 import type {
     CreateExpenseREPO,
     CreateOutgoingPaymentREPO,
@@ -132,12 +146,19 @@ export const resetStoredExpense = (expense: ExpenseDTO | null) => {
     storedMovements = [];
 };
 
-export const getOrganizationByIdForUser = mock(
-    async (): Promise<{ id: string; name: string } | null> => organization,
-);
-export const getStoreById = mock(
-    async (): Promise<{ id: string; organizationId: string; name: string } | null> => store,
-);
+export {
+    getOrganizationByIdForUser,
+    getStoreById,
+    getStoresByOrganizationId,
+    resolveFeatureEntitlement,
+    isMoneyAccountTrackingActive,
+    createMoneyAccountMovementRepo,
+    getMovementByOutgoingPaymentId,
+    lockMoneyAccountById,
+    lockPaymentRouteByStoreAndMethod,
+    restoreCreateMoneyAccountMovementRepo,
+};
+
 export const getExpenseCategoryById = mock(async (_organizationId: string, id: string) => {
     if (id === inactiveExpenseCategoryId) return inactiveMarketingCategory;
     if (id === expenseCategoryId) return rentCategory;
@@ -188,44 +209,6 @@ export const lockExpenseById = mock(async (_organizationId: string, id: string) 
     }
     return storedExpense;
 });
-
-export const isMoneyAccountTrackingActive = mock(async () => false);
-export const lockMoneyAccountById = mock(async () => adajanCashAccount);
-
-const createMoneyAccountMovementImpl = async (
-    data: MoneyAccountMovementDTO,
-): Promise<MoneyAccountMovementDTO | null> => {
-    if (data.reversedMovementId) {
-        const existing = storedMovements.find(
-            (movement) => movement.reversedMovementId === data.reversedMovementId,
-        );
-        if (existing) {
-            return existing;
-        }
-    }
-    const movement: MoneyAccountMovementDTO = {
-        ...data,
-        note: data.note ?? null,
-        createdAt: now,
-    };
-    storedMovements = [...storedMovements, movement];
-    return movement;
-};
-
-export const createMoneyAccountMovementRepo = mock(createMoneyAccountMovementImpl);
-
-export const restoreCreateMoneyAccountMovementRepo = () => {
-    createMoneyAccountMovementRepo.mockImplementation(createMoneyAccountMovementImpl);
-};
-export const lockPaymentRouteByStoreAndMethod = mock(async () => null);
-
-export const getMovementByOutgoingPaymentId = mock(
-    async (_organizationId: string, outgoingPaymentId: string) =>
-        storedMovements.find(
-            (movement) =>
-                movement.outgoingPaymentId === outgoingPaymentId && movement.reversedMovementId == null,
-        ) ?? null,
-);
 
 export const createOutgoingPaymentRepo = mock(async (data: CreateOutgoingPaymentREPO) => {
     const payment: OutgoingPaymentDTO = {
@@ -307,11 +290,6 @@ mock.module("@/config/db", () => ({
     pg: { begin },
 }));
 
-mock.module("@/modules/tenant/organization/organization.repository", () => ({
-    getOrganizationByIdForUser,
-    getStoreById,
-}));
-
 mock.module("@/modules/tenant/expense-categories/expense-categories.repository", () => ({
     getExpenseCategoryById,
 }));
@@ -325,22 +303,50 @@ mock.module("./expenses.repository", () => ({
     deleteExpense: deleteExpenseRepo,
 }));
 
+const purchasesHarness = await import("../purchases/purchases.service.test-harness");
+
+const createOutgoingPayment = mock(async (data: CreateOutgoingPaymentREPO) => {
+    if (data.expenseId != null) {
+        return createOutgoingPaymentRepo(data);
+    }
+    return purchasesHarness.createOutgoingPaymentRepo(data);
+});
+
+const reverseOutgoingPayment = mock(
+    async (data: {
+        id: string;
+        organizationId: string;
+        reversedAt: Date;
+        reversalReason: string;
+        reversalKind: OutgoingPaymentDTO["reversalKind"];
+    }) => {
+        const expensePayment = storedOutgoingPayments.find((payment) => payment.id === data.id);
+        if (expensePayment) {
+            return reverseOutgoingPaymentRepo(data);
+        }
+        return purchasesHarness.reverseOutgoingPaymentRepo(data);
+    },
+);
+
+const getOutgoingPaymentById = mock(async (_organizationId: string, id: string) => {
+    const expensePayment = storedOutgoingPayments.find((payment) => payment.id === id);
+    if (expensePayment) {
+        return expensePayment;
+    }
+
+    const purchasePayments = await purchasesHarness.getOutgoingPaymentsByPurchaseIds(
+        _organizationId,
+        [],
+    );
+    return purchasePayments.find((payment) => payment.id === id) ?? null;
+});
+
 mock.module("@/modules/tenant/outgoing-payments/outgoing-payments.repository", () => ({
-    createOutgoingPayment: createOutgoingPaymentRepo,
-    reverseOutgoingPayment: reverseOutgoingPaymentRepo,
+    createOutgoingPayment,
+    reverseOutgoingPayment,
+    getOutgoingPaymentsByPurchaseIds: purchasesHarness.getOutgoingPaymentsByPurchaseIds,
     getOutgoingPaymentsByExpenseIds,
-    getOutgoingPaymentById: mock(async () => storedOutgoingPayments[0] ?? null),
-}));
-
-mock.module("@/modules/tenant/money-accounts/money-account-tracking", () => ({
-    isMoneyAccountTrackingActive,
-}));
-
-mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
-    lockMoneyAccountById,
-    createMoneyAccountMovement: createMoneyAccountMovementRepo,
-    getMovementByOutgoingPaymentId,
-    lockPaymentRouteByStoreAndMethod,
+    getOutgoingPaymentById,
 }));
 
 export const expensesService = await import("./expenses.service");

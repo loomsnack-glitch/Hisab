@@ -10,9 +10,11 @@ import {
   ProductResponseDTOSchema,
   UpdateAddOnSchema,
   UpdateBundleProductSchema,
+  UpdateComboProductSchema,
   UpdateLabelTemplateSchema,
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
+  UpdateStoreProductOfferingSchema,
 } from "./catalog.schema";
 import {
   keepOutsFromContentInset,
@@ -23,6 +25,8 @@ import {
   A4_SHEET_LABEL_TEMPLATE,
   THERMAL_ROLL_LABEL_TEMPLATE,
 } from "./seeded-label-templates";
+
+const targetStoreIds = ["11111111-1111-4111-8111-111111111111"];
 
 describe("Add-On catalog contracts", () => {
   test("create add-on accepts name, price, discount, and status", () => {
@@ -101,6 +105,7 @@ describe("Bundle Product catalog contracts", () => {
       name: "Burger Combo",
       price: 99,
       discount: 0,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -121,6 +126,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -147,6 +153,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Empty Bundle",
       price: 99,
+      targetStoreIds,
       components: [],
     });
 
@@ -158,6 +165,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -174,6 +182,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -191,10 +200,10 @@ describe("Bundle Product catalog contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  test("update bundle accepts status-based retirement", () => {
-    const result = UpdateBundleProductSchema.safeParse({ status: "inactive" });
-
-    expect(result.success).toBe(true);
+  test("rejects global commercial edits because Store Offerings own them", () => {
+    expect(UpdateProductSchema.safeParse({ price: 100 }).success).toBe(false);
+    expect(UpdateBundleProductSchema.safeParse({ status: "inactive" }).success).toBe(false);
+    expect(UpdateComboProductSchema.safeParse({ discount: 10 }).success).toBe(false);
   });
 });
 
@@ -204,6 +213,7 @@ describe("Combo Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Lunch Combo",
       price: 150,
+      targetStoreIds,
       choiceGroups: [
         {
           name: "Choose a drink",
@@ -228,6 +238,7 @@ describe("Combo Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Invalid Combo",
       price: 150,
+      targetStoreIds,
       choiceGroups: [
         {
           name: "Choose",
@@ -256,6 +267,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Dairy Milk 20 g",
       price: 20,
+      targetStoreIds,
       productCode: "7622202334009",
       productCodeKind: "manufacturer",
     });
@@ -272,6 +284,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Opaque Code Product",
       price: 10,
+      targetStoreIds,
       productCode: " 0123 ",
       productCodeKind: "manufacturer",
     });
@@ -288,6 +301,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Terminated Code Product",
       price: 10,
+      targetStoreIds,
       productCode: `${productCode}\r\n`,
     });
 
@@ -302,6 +316,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Coded Product",
       price: 10,
+      targetStoreIds,
       productCode: "ABC-99",
     });
 
@@ -313,6 +328,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "No Code Product",
       price: 10,
+      targetStoreIds,
       productCode: null,
       productCodeKind: null,
     });
@@ -325,6 +341,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Invalid",
       price: 10,
+      targetStoreIds,
       productCodeKind: "manufacturer",
     });
 
@@ -363,6 +380,10 @@ describe("Product Code catalog contracts", () => {
       price: 100,
       discount: 0,
       productType: "single" as const,
+      unitId: "99999999-9999-4999-8999-999999999999",
+      defaultSellingQuantity: 1,
+      allowCustomSellingQuantity: false,
+      unitLabel: "pc",
       status: "active" as const,
       createdBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       createdAt: new Date("2026-08-10T12:00:00.000Z"),
@@ -401,6 +422,92 @@ describe("Product Code catalog contracts", () => {
         productCodeKind: null,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Product selling unit catalog contracts", () => {
+  const categoryId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const gramUnitId = "99999999-9999-4999-8999-999999999999";
+
+  test("create product accepts an active Unit and Default Selling Quantity", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Cake",
+      price: 250,
+      targetStoreIds,
+      unitId: gramUnitId,
+      defaultSellingQuantity: 250,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.unitId).toBe(gramUnitId);
+      expect(result.data.defaultSellingQuantity).toBe(250);
+    }
+  });
+
+  test("create product still succeeds when Unit and Default Selling Quantity are omitted", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Water Bottle",
+      price: 20,
+      targetStoreIds,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a Default Selling Quantity that is not positive", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        targetStoreIds,
+        defaultSellingQuantity: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateProductSchema.safeParse({
+        defaultSellingQuantity: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a Default Selling Quantity with more than two decimal places", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        targetStoreIds,
+        defaultSellingQuantity: 250.125,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("update product accepts Unit or Default Selling Quantity on their own", () => {
+    expect(
+      UpdateProductSchema.safeParse({ unitId: gramUnitId }).success,
+    ).toBe(true);
+    expect(
+      UpdateProductSchema.safeParse({ defaultSellingQuantity: 0.75 }).success,
+    ).toBe(true);
+  });
+
+  test("create and update product accept Custom Selling Quantity for a single Product", () => {
+    expect(
+      CreateProductSchema.safeParse({
+        categoryId,
+        name: "Cake",
+        price: 250,
+        targetStoreIds,
+        allowCustomSellingQuantity: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateProductSchema.safeParse({ allowCustomSellingQuantity: true }).success,
+    ).toBe(true);
   });
 });
 
@@ -736,5 +843,32 @@ describe("Label Template catalog contracts", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("Store Product Offering catalog contracts", () => {
+  const categoryId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+  test("creating a Catalog Product does not require target Stores", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Cake",
+      price: 250,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("targetStoreIds" in result.data).toBe(false);
+    }
+  });
+
+  test("updating a Store Product Offering requires at least one of price, discount, or status", () => {
+    expect(UpdateStoreProductOfferingSchema.safeParse({}).success).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ price: 135 }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ status: "inactive" }).success,
+    ).toBe(true);
   });
 });
