@@ -1,1 +1,4 @@
-export { useSyncExternalStoreWithSelector } from "./with-selector.impl";
+import { useSyncExternalStoreWithSelector } from "./with-selector.impl";
+
+export { useSyncExternalStoreWithSelector };
+export default { useSyncExternalStoreWithSelector };
