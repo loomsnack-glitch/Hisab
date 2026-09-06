@@ -5,6 +5,7 @@ import {
     addProductToCart,
     changeCartItemQuantity,
     removeCartItem,
+    setCartItemSoldQuantity,
     type PosCartConfiguration,
     type PosCartCustomer,
     type PosCartDiscount,
@@ -25,6 +26,7 @@ type PosCartStore = {
     addProduct: (scopeKey: string, product: ProductResponseDTO) => void;
     addConfiguredProduct: (scopeKey: string, product: ProductResponseDTO, configuration: PosCartConfiguration) => void;
     changeQuantity: (scopeKey: string, lineId: string, delta: number) => void;
+    setSoldQuantity: (scopeKey: string, lineId: string, soldQuantity: number) => void;
     removeItem: (scopeKey: string, lineId: string) => void;
     setCustomer: (scopeKey: string, customer: PosCartCustomer | null) => void;
     clearCustomer: (scopeKey: string) => void;
@@ -81,6 +83,10 @@ export const usePosCartStore = create<PosCartStore>()((set) => ({
         set((state) => state.scopeKey !== scopeKey
             ? state
             : { items: changeCartItemQuantity(state.items, lineId, delta), completionRequestId: null }),
+    setSoldQuantity: (scopeKey, lineId, soldQuantity) =>
+        set((state) => state.scopeKey !== scopeKey
+            ? state
+            : { items: setCartItemSoldQuantity(state.items, lineId, soldQuantity), completionRequestId: null }),
     removeItem: (scopeKey, lineId) =>
         set((state) => state.scopeKey !== scopeKey
             ? state

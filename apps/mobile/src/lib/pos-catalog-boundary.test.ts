@@ -9,6 +9,7 @@ import {
     getProductsFromResponse,
     filterCatalogProducts,
     posCatalogKeys,
+    PosCatalogAccessError,
     unwrapCatalogResponse,
 } from "./pos-catalog-boundary";
 
@@ -60,6 +61,12 @@ describe("POS catalog boundary", () => {
         } as ServiceResponse<null>;
 
         expect(() => unwrapCatalogResponse(response, "Catalog failed")).toThrow("Catalog unavailable");
+    });
+
+    it("identifies a Store without the catalog entitlement for localized UI", () => {
+        const response = { status: "error", message: "Forbidden", code: 403 } as ServiceResponse<null>;
+
+        expect(() => unwrapCatalogResponse(response, "Catalog failed")).toThrow(PosCatalogAccessError);
     });
 
     it("filters Products by name/code and Category", () => {

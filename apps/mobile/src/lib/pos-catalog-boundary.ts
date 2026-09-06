@@ -11,6 +11,13 @@ export type PosCatalogScope = {
     deviceId: string;
 };
 
+export class PosCatalogAccessError extends Error {
+    constructor() {
+        super("POS catalog access is not enabled for this Store");
+        this.name = "PosCatalogAccessError";
+    }
+}
+
 export const posCatalogKeys = {
     all: ["pos", "catalog"] as const,
     categories: (scope: PosCatalogScope | null) =>
@@ -24,6 +31,9 @@ export const unwrapCatalogResponse = <T>(
     fallbackMessage: string,
 ): T => {
     if (response.status !== "success" || !response.data) {
+        if (response.code === 403) {
+            throw new PosCatalogAccessError();
+        }
         throw new Error(response.message || fallbackMessage);
     }
 

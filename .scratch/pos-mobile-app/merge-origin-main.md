@@ -85,7 +85,7 @@ conflicts and the mobile POS entrypoint still present.
   KOT, reporting, vendor, and WhatsApp retirement changes are present.
 
 M.1 exit review: no unresolved merge entries or conflict markers remain. The
-merged tree is staged for the merge checkpoint; M.2 now owns shared-contract
+merge checkpoint is committed as `23c377c`; M.2 owns shared-contract
 compatibility review.
 
 ### M.2 — Shared contract reconciliation
@@ -102,6 +102,22 @@ compatibility review.
 Exit condition: shared types/services/backend code typecheck at the changed
 boundaries and mobile payloads match the merged server contracts.
 
+#### M.2 result
+
+- The merged `@repo/types` contracts retain `draftRequestId`, completion
+  `requestId`, and the new Product/Sale Item/KOT selling-unit fields.
+- Backend billing retains mainline Store Product Offering price lookup and
+  billing entitlement checks while preserving Draft-create and Draft-commit
+  replay protection. Mainline's removed draft migration was not adopted on
+  this branch because the approved mobile retry contract still uses it.
+- Mainline's KOT, Tables, reporting, and commercial-entitlement behavior is
+  retained. The obsolete WhatsApp account-connect endpoint remains removed.
+- Mobile catalog denial now has a typed boundary and localized English,
+  Gujarati, and Hindi presentation; the server response remains authoritative.
+
+M.2 exit review: focused backend/type tests pass and no client price override
+was introduced. M.3 owns the mobile selling-unit/cart compatibility surface.
+
 ### M.3 — Mobile POS compatibility update
 
 - Update the mobile Catalog/Cart/KOT/receipt surfaces for the merged Product
@@ -114,6 +130,24 @@ boundaries and mobile payloads match the merged server contracts.
 
 Exit condition: focused mobile tests cover the merged fields and all approved
 Phase 1–7 flows remain represented.
+
+#### M.3 result
+
+- Mobile Cart lines retain Unit metadata and a `soldQuantity`; ordinary taps
+  use the server Product Default Selling Quantity, while eligible single
+  Products can edit a positive amount with at most two decimal places.
+- Display totals and the shown portion price scale the Product catalog values
+  proportionally for immediate UX feedback; add-ons remain priced per parent
+  portion and final totals remain server-confirmed.
+- Draft, direct checkout, Table KOT, and Draft recovery payloads carry the
+  sold amount. Different sold amounts remain separate Cart lines and equal
+  portions merge safely.
+- Focused mobile coverage includes custom quantity behavior, payload mapping,
+  localized catalog denial, and the existing Phase 1–7 flow boundaries.
+
+M.3 exit review: mobile tests pass with 112 tests and no failures. The only
+typecheck report is the pre-existing missing `@repo/assets/services/whatsapp.webp`
+module in `apps/mobile/src/screens/login-screen.tsx`.
 
 ### M.4 — Final sync review and commit
 
@@ -132,4 +166,4 @@ work. The highest-risk item is the removed Draft idempotency contract; it must
 be resolved from the shared backend/type boundary rather than hidden in the
 mobile client. No new product decision is required for this sync.
 
-Status: M.1 complete; M.2 in progress.
+Status: M.1–M.3 complete; M.4 final sync review in progress.

@@ -28,6 +28,7 @@ describe("POS Draft boundary", () => {
         expect(mapPosCartItemsToSaleInputs([item])).toEqual([{
             productId: "product-1",
             quantity: 2,
+            soldQuantity: 1,
             addOns: [{ addOnId: "addon-1", quantity: 1 }],
             comboSelections: [{
                 groupId: "group-1",

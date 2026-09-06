@@ -21,7 +21,7 @@ describe("POS KOT boundary", () => {
 
         expect(payload).toEqual({
             requestId: "request-1",
-            items: [{ productId: "product-1", quantity: 2, addOns: [], comboSelections: undefined }],
+            items: [{ productId: "product-1", quantity: 2, soldQuantity: 1, addOns: [], comboSelections: undefined }],
             fulfillmentType: "dine_in",
             customerId: null,
             notes: null,

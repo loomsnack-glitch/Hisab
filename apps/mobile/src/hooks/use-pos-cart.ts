@@ -48,6 +48,11 @@ export const usePosCart = () => {
                 usePosCartStore.getState().changeQuantity(scopeKey, lineId, delta);
             }
         },
+        setSoldQuantity: (lineId: string, soldQuantity: number) => {
+            if (scopeKey) {
+                usePosCartStore.getState().setSoldQuantity(scopeKey, lineId, soldQuantity);
+            }
+        },
         removeItem: (lineId: string) => {
             if (scopeKey) {
                 usePosCartStore.getState().removeItem(scopeKey, lineId);

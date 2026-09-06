@@ -78,6 +78,15 @@ export const buildPosCartFromDraft = (
             discount: product.discount,
             productType: product.productType,
             quantity: saleItem.quantity,
+            unitId: product.unitId,
+            defaultSellingQuantity: Number(product.defaultSellingQuantity) > 0 ? Number(product.defaultSellingQuantity) : 1,
+            allowCustomSellingQuantity: product.allowCustomSellingQuantity === true,
+            unitLabel: product.unitLabel || "pc",
+            soldQuantity: Number(saleItem.soldQuantity) > 0
+                ? Number(saleItem.soldQuantity)
+                : Number(product.defaultSellingQuantity) > 0
+                  ? Number(product.defaultSellingQuantity)
+                  : 1,
             lineId: saleItem.id,
             configuration: cartConfiguration,
         });

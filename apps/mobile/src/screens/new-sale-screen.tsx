@@ -614,7 +614,9 @@ const NewSaleScreen = ({ navigation, route }: NewSaleScreenProps) => {
                 ) : null}
                 {catalog.isError ? (
                     <View className="gap-3">
-                        <Text className="text-sm leading-5 text-pos-danger dark:text-pos-danger-dark">{t("catalogLoadFailed")}</Text>
+                        <Text className="text-sm leading-5 text-pos-danger dark:text-pos-danger-dark">
+                            {t(catalog.accessDenied ? "catalogAccessDenied" : "catalogLoadFailed")}
+                        </Text>
                         <PosButton label={t("retry", { ns: "common" })} variant="secondary" onPress={catalog.retry} />
                     </View>
                 ) : null}

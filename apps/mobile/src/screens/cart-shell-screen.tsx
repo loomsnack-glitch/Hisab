@@ -1,5 +1,6 @@
 import { useDeferredValue, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { parseCustomSellingQuantityInput } from "@repo/types";
 import * as Crypto from "expo-crypto";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { PosButton, PosCard, PosTextField } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
 import { usePosCart } from "../hooks/use-pos-cart";
-import { getCartLineDisplayTotals, getPosCartOrderDiscountAmount, isPosCartDiscountValid, type PosCartDiscountMode } from "../lib/pos-cart-boundary";
+import { getCartLineDisplayTotals, getCartLineProductPrice, getCartLineSellingQuantityLabel, getPosCartOrderDiscountAmount, isPosCartDiscountValid, type PosCartDiscountMode } from "../lib/pos-cart-boundary";
 import { usePosConfiguration } from "../hooks/use-pos-configuration";
 import { resolvePosCartConfiguration } from "../lib/pos-cart-review-boundary";
 import { usePosCustomers } from "../hooks/use-pos-customers";
@@ -36,6 +37,9 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
     const [discountMode, setDiscountMode] = useState<PosCartDiscountMode>("percent");
     const [discountValue, setDiscountValue] = useState("");
     const [discountError, setDiscountError] = useState(false);
+    const [sellingQuantityEditorLineId, setSellingQuantityEditorLineId] = useState<string | null>(null);
+    const [sellingQuantityValue, setSellingQuantityValue] = useState("");
+    const [sellingQuantityError, setSellingQuantityError] = useState(false);
     const deferredCustomerSearch = useDeferredValue(customerSearch);
     const customersQuery = usePosCustomers(deferredCustomerSearch, customerPickerOpen);
     const customerCreate = useCreatePosCustomer();
@@ -81,6 +85,26 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
         cart.setDiscount(value === 0 ? null : nextDiscount);
         setDiscountError(false);
         setDiscountEditorOpen(false);
+    };
+    const openSellingQuantityEditor = (lineId: string, value: number) => {
+        setSellingQuantityEditorLineId(lineId);
+        setSellingQuantityValue(String(value));
+        setSellingQuantityError(false);
+    };
+    const applySellingQuantity = () => {
+        if (!sellingQuantityEditorLineId) {
+            return;
+        }
+
+        const value = parseCustomSellingQuantityInput(sellingQuantityValue);
+        if (value === null) {
+            setSellingQuantityError(true);
+            return;
+        }
+
+        cart.setSoldQuantity(sellingQuantityEditorLineId, value);
+        setSellingQuantityEditorLineId(null);
+        setSellingQuantityError(false);
     };
     const saveDraft = async () => {
         if (cart.items.length === 0 || draftActions.savePending) {
@@ -350,8 +374,39 @@ const CartShellScreen = ({ navigation }: CartShellScreenProps) => {
                                     </Text>
                                 </View>
                                 <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
-                                    {t("cartLineUnitPrice", { price: formatCurrency(Number(item.price)) })}
+                                    {t("cartLineUnitPrice", { price: formatCurrency(Number(getCartLineProductPrice(item))) })}
                                 </Text>
+                                <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                                    {t("cartLineSellingQuantity", { quantity: getCartLineSellingQuantityLabel(item) })}
+                                </Text>
+                                {item.productType === "single" && item.allowCustomSellingQuantity === true ? (
+                                    <View className="gap-2">
+                                        <PosButton
+                                            label={t("editSellingQuantity")}
+                                            variant="secondary"
+                                            onPress={() => openSellingQuantityEditor(item.lineId, item.soldQuantity ?? item.defaultSellingQuantity ?? 1)}
+                                        />
+                                        {sellingQuantityEditorLineId === item.lineId ? (
+                                            <View className="gap-2 border-t border-pos-border pt-2 dark:border-pos-border-dark">
+                                                <PosTextField
+                                                    label={t("sellingQuantity")}
+                                                    value={sellingQuantityValue}
+                                                    onChangeText={(value) => {
+                                                        setSellingQuantityValue(value);
+                                                        setSellingQuantityError(false);
+                                                    }}
+                                                    placeholder={t("sellingQuantityPlaceholder")}
+                                                    keyboardType="decimal-pad"
+                                                    error={sellingQuantityError ? t("sellingQuantityInvalid") : undefined}
+                                                />
+                                                <View className="flex-row flex-wrap gap-2">
+                                                    <PosButton label={t("cancelSellingQuantity")} variant="secondary" onPress={() => setSellingQuantityEditorLineId(null)} />
+                                                    <PosButton label={t("applySellingQuantity")} onPress={applySellingQuantity} />
+                                                </View>
+                                            </View>
+                                        ) : null}
+                                    </View>
+                                ) : null}
                                 <View className="flex-row flex-wrap items-center gap-2">
                                     <PosButton
                                         label="−"

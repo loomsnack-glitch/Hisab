@@ -11,6 +11,7 @@ import {
     isPosCartDiscountValid,
     normalizePosCartCustomer,
     removeCartItem,
+    setCartItemSoldQuantity,
     type PosCartItem,
 } from "./pos-cart-boundary";
 
@@ -90,6 +91,27 @@ describe("POS Cart handoff", () => {
         const twice = addProductToCart(items, { ...product, price: 40, discount: 5 });
 
         expect(getCartDisplayTotals(twice)).toEqual({ subtotal: 80, discount: 10, orderDiscount: 0, total: 70 });
+    });
+
+    it("supports eligible custom selling quantities and proportional display totals", () => {
+        const measuredProduct = {
+            ...product,
+            defaultSellingQuantity: 250,
+            allowCustomSellingQuantity: true,
+            unitId: "unit-1",
+            unitLabel: "g",
+        } as ProductResponseDTO;
+        const items = addProductToCart([], measuredProduct);
+        const custom = setCartItemSoldQuantity(items, items[0]!.lineId, 500);
+
+        expect(custom[0]).toMatchObject({ soldQuantity: 500, unitLabel: "g" });
+        expect(getCartLineDisplayTotals(custom[0]!)).toEqual({ subtotal: 80, discount: 0, total: 80 });
+
+        const defaultAgain = addProductToCart(custom, measuredProduct);
+        expect(defaultAgain).toHaveLength(2);
+        const merged = setCartItemSoldQuantity(defaultAgain, custom[0]!.lineId, 250);
+        expect(merged).toHaveLength(1);
+        expect(merged[0]).toMatchObject({ quantity: 2, soldQuantity: 250 });
     });
 
     it("includes configured add-ons and combo adjustments in display totals", () => {

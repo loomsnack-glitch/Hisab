@@ -1,4 +1,12 @@
-import type { CustomerDTO, ProductResponseDTO } from "@repo/types";
+import {
+    catalogDefaultSellingPortion,
+    catalogSoldPortionForAmount,
+    formatSoldAmount,
+    isPositiveDefaultSellingQuantity,
+    isSameSoldAmount,
+    type CustomerDTO,
+    type ProductResponseDTO,
+} from "@repo/types";
 
 export type PosCartCustomer = Pick<CustomerDTO, "id" | "name" | "phone">;
 
@@ -65,13 +73,44 @@ export type PosCartConfiguration = {
     comboSelections: PosCartComboSelection[];
 };
 
+export type PosCartProduct = Pick<
+    ProductResponseDTO,
+    "id" | "categoryId" | "name" | "price" | "discount" | "productType"
+> & Partial<Pick<
+    ProductResponseDTO,
+    "unitId" | "defaultSellingQuantity" | "allowCustomSellingQuantity" | "unitLabel"
+>>;
+
 export type PosCartItem = Pick<
     ProductResponseDTO,
     "id" | "categoryId" | "name" | "price" | "discount" | "productType"
 > & {
     quantity: number;
     lineId: string;
+    unitId?: string;
+    defaultSellingQuantity?: number;
+    allowCustomSellingQuantity?: boolean;
+    unitLabel?: string;
+    soldQuantity?: number;
     configuration?: PosCartConfiguration;
+};
+
+const getSellingPortion = (product: Pick<PosCartProduct, "name" | "price" | "discount" | "defaultSellingQuantity" | "unitLabel">, soldQuantity?: number) => {
+    const defaultPortion = catalogDefaultSellingPortion(product);
+    const amount = soldQuantity ?? defaultPortion.soldQuantity;
+    return catalogSoldPortionForAmount(product, amount);
+};
+
+const getDefaultSellingQuantity = (product: Pick<PosCartProduct, "defaultSellingQuantity">) => {
+    const amount = Number(product.defaultSellingQuantity);
+    return isPositiveDefaultSellingQuantity(amount) ? amount : 1;
+};
+
+const getSoldQuantity = (item: Pick<PosCartItem, "soldQuantity" | "defaultSellingQuantity">) => {
+    const amount = Number(item.soldQuantity);
+    return isPositiveDefaultSellingQuantity(amount)
+        ? amount
+        : getDefaultSellingQuantity(item);
 };
 
 export const posCartConfigurationSignature = (configuration?: PosCartConfiguration) => {
@@ -101,27 +140,34 @@ export const posCartConfigurationSignature = (configuration?: PosCartConfigurati
 
 export const addProductToCart = (
     items: readonly PosCartItem[],
-    product: Pick<
-        ProductResponseDTO,
-        "id" | "categoryId" | "name" | "price" | "discount" | "productType"
-    >,
+    product: PosCartProduct,
 ): PosCartItem[] => {
-    const existing = items.find((item) => item.id === product.id && !item.configuration);
+    const defaultSellingQuantity = getDefaultSellingQuantity(product);
+    const existing = items.find((item) =>
+        item.id === product.id &&
+        !item.configuration &&
+        getSoldQuantity(item) === defaultSellingQuantity,
+    );
     if (existing) {
         return items.map((item) =>
             item.lineId === existing.lineId ? { ...item, quantity: item.quantity + 1 } : item,
         );
     }
 
-    return [...items, { ...product, quantity: 1, lineId: product.id }];
+    return [
+        ...items,
+        {
+            ...product,
+            quantity: 1,
+            lineId: product.id,
+            soldQuantity: defaultSellingQuantity,
+        },
+    ];
 };
 
 export const addConfiguredProductToCart = (
     items: readonly PosCartItem[],
-    product: Pick<
-        ProductResponseDTO,
-        "id" | "categoryId" | "name" | "price" | "discount" | "productType"
-    >,
+    product: PosCartProduct,
     configuration: PosCartConfiguration,
 ): PosCartItem[] => {
     const signature = posCartConfigurationSignature(configuration);
@@ -140,9 +186,52 @@ export const addConfiguredProductToCart = (
             ...product,
             quantity: 1,
             lineId: `${product.id}:${signature}`,
+            soldQuantity: getDefaultSellingQuantity(product),
             configuration,
         },
     ];
+};
+
+export const setCartItemSoldQuantity = (
+    items: readonly PosCartItem[],
+    lineId: string,
+    soldQuantity: number,
+) => {
+    if (!isPositiveDefaultSellingQuantity(soldQuantity)) {
+        return [...items];
+    }
+
+    const target = items.find((item) => item.lineId === lineId);
+    if (
+        !target ||
+        target.productType !== "single" ||
+        target.allowCustomSellingQuantity !== true
+    ) {
+        return [...items];
+    }
+
+    const defaultSellingQuantity = getDefaultSellingQuantity(target);
+    const nextLineId = isSameSoldAmount(soldQuantity, defaultSellingQuantity) && !target.configuration
+        ? target.id
+        : `${target.id}:${formatSoldAmount(soldQuantity)}:${posCartConfigurationSignature(target.configuration)}`;
+    const duplicate = items.find((item) =>
+        item.lineId !== lineId &&
+        item.id === target.id &&
+        posCartConfigurationSignature(item.configuration) === posCartConfigurationSignature(target.configuration) &&
+        getSoldQuantity(item) === soldQuantity,
+    );
+
+    if (duplicate) {
+        return items
+            .filter((item) => item.lineId !== lineId)
+            .map((item) => item.lineId === duplicate.lineId
+                ? { ...item, quantity: item.quantity + target.quantity }
+                : item);
+    }
+
+    return items.map((item) => item.lineId === lineId
+        ? { ...item, soldQuantity, lineId: nextLineId }
+        : item);
 };
 
 export const removeCartItem = (items: readonly PosCartItem[], lineId: string) =>
@@ -174,8 +263,9 @@ export const changeCartItemQuantity = (
 };
 
 export const getCartLineDisplayTotals = (item: PosCartItem) => {
-    const unitPrice = finiteDisplayMoney(Number(item.price));
-    const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(item.discount)));
+    const portion = getSellingPortion(item, getSoldQuantity(item));
+    const unitPrice = finiteDisplayMoney(Number(portion.unitPrice));
+    const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(portion.unitDiscount)));
     const quantity = Math.max(0, item.quantity);
     const directAddOnSubtotal = (item.configuration?.addOns ?? []).reduce(
         (total, addOn) => total + finiteDisplayMoney(Number(addOn.unitPrice)) * Math.max(0, addOn.quantity) * quantity,
@@ -222,6 +312,12 @@ export const getCartLineDisplayTotals = (item: PosCartItem) => {
         total: roundDisplayMoney(Math.max(subtotal - discount, 0)),
     };
 };
+
+export const getCartLineSellingQuantityLabel = (item: PosCartItem) =>
+    `${formatSoldAmount(getSoldQuantity(item))}${item.unitLabel || "pc"}`;
+
+export const getCartLineProductPrice = (item: PosCartItem) =>
+    getSellingPortion(item, getSoldQuantity(item)).unitPrice;
 
 export const getCartDisplayTotals = (items: readonly PosCartItem[], orderDiscount?: PosCartDiscount | null) => {
     const lineTotals = items.reduce(

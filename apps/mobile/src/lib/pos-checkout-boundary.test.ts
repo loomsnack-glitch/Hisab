@@ -54,7 +54,7 @@ describe("POS checkout boundary", () => {
             notes: null,
             serviceMode: "dine_in",
             generateKot: false,
-            items: [{ productId: "product-1", quantity: 2, addOns: [], comboSelections: undefined }],
+            items: [{ productId: "product-1", quantity: 2, soldQuantity: 1, addOns: [], comboSelections: undefined }],
             payments: [{ amount: 100, method: "cash", referenceNumber: null, notes: null }],
         });
         expect(JSON.stringify(buildPosCompleteSalePayload(input))).not.toContain("price");

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPosCategories, getPosProducts } from "@repo/services";
 import { usePosSessionSnapshot } from "../store/pos-session.store";
-import { posCatalogKeys, unwrapCatalogResponse } from "../lib/pos-catalog-boundary";
+import { PosCatalogAccessError, posCatalogKeys, unwrapCatalogResponse } from "../lib/pos-catalog-boundary";
 
 const CATALOG_ERROR_MESSAGE = "Unable to load the POS catalog";
 
@@ -37,6 +37,7 @@ export const usePosCatalog = () => {
         products: productsQuery.data?.products ?? [],
         isPending: categoriesQuery.isPending || productsQuery.isPending,
         isError: categoriesQuery.isError || productsQuery.isError,
+        accessDenied: categoriesQuery.error instanceof PosCatalogAccessError || productsQuery.error instanceof PosCatalogAccessError,
         isSuccess: categoriesQuery.isSuccess && productsQuery.isSuccess,
         retry: () => {
             void Promise.all([categoriesQuery.refetch(), productsQuery.refetch()]);

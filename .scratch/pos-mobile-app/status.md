@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Mainline compatibility sync M.2 in progress before Phase 8
+Status: Mainline compatibility sync M.4 final review in progress before Phase 8
 
 Last updated: 2026-09-07
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), the Phase 7 execution record is in [phase-7.md](./phase-7.md), and the origin/main compatibility plan is in [merge-origin-main.md](./merge-origin-main.md). Phase 7 is complete with follow-ups; M.1 of the mainline sync is complete and M.2 is in progress before Phase 8.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), the Phase 7 execution record is in [phase-7.md](./phase-7.md), and the origin/main compatibility plan is in [merge-origin-main.md](./merge-origin-main.md). Phase 7 is complete with follow-ups; M.1–M.3 of the mainline sync are complete and M.4 is in final review before Phase 8.
 
 ## Current scope
 
