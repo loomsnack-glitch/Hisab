@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import AdminAccountMenu from "@/components/dashboard/admin-account-menu";
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
+import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getAuthenticatedHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
@@ -156,6 +157,7 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
+                            {isPickerPage ? null : <AdminWorkspaceSwitcherFromRoute />}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">

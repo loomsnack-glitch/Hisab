@@ -9,6 +9,8 @@ export const organizationKeys = {
     [...organizationKeys.all, "username-availability", username] as const,
   detail: (organizationId: string) =>
     [...organizationKeys.all, "detail", organizationId] as const,
+  store: (organizationId: string, storeId: string) =>
+    [...organizationKeys.all, "store", organizationId, storeId] as const,
   catalogSettings: (organizationId: string) =>
     [...organizationKeys.all, "catalog-settings", organizationId] as const,
   invoiceAppearance: (organizationId: string, storeId: string) =>

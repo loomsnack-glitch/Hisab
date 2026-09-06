@@ -143,6 +143,18 @@ describe("Admin mobile navigation", () => {
         expect(isAdminMoreDestinationActive("/appearance", withOrg)).toBe(true);
     });
 
+    test("keeps Organization destinations on Organization routes, including while a Store workspace URL exists", () => {
+        const products = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "products");
+        const billing = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "billing");
+        const stores = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "stores");
+
+        expect(products?.path).toBe(`/organizations/${organizationId}/products`);
+        expect(billing?.path).toBe(`/organizations/${organizationId}/billing`);
+        expect(stores?.path).toBe(`/organizations/${organizationId}/stores`);
+        expect(stores?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
+        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
+    });
+
     test("renders the primary tabs and organization avatar on the More tab", () => {
         const markup = renderToStaticMarkup(
             <MemoryRouter initialEntries={[`/organizations/${organizationId}/stores`]}>

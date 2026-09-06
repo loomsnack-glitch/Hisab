@@ -117,6 +117,20 @@ export const getStores = async (
   }
 };
 
+export const getStore = async (
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreResponse | null>> => {
+  try {
+    const response = await api.get(
+      `/organizations/${organizationId}/stores/${storeId}`,
+    );
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
 export const createStore = async (
   organizationId: string,
   data: CreateStoreJSON,

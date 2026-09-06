@@ -42,6 +42,7 @@ import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
 import OrganizationSettingsPage from "@/pages/organization-settings-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
+import StoreWorkspacePage from "@/pages/store-workspace-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
@@ -132,6 +133,7 @@ const App = () => {
                                 <Route path="/organizations" element={<OrganizationsPage />} />
                                 <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
                                 <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId" element={<StoreWorkspacePage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />

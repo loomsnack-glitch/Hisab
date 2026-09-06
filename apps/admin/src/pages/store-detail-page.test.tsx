@@ -213,6 +213,8 @@ describe("Stores list cards", () => {
         expect(markup).toContain("pointer-events-none");
         expect(markup).toContain("pointer-events-auto");
         expect(markup).toContain(`href="/organizations/${organizationId}/stores/${storeId}/devices"`);
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}"`);
+        expect(markup).toContain("Open workspace");
         expect(markup).toContain(`aria-label="Edit Adajan"`);
         expect(markup).toContain("1 device");
         expect(markup).toContain("1 active");

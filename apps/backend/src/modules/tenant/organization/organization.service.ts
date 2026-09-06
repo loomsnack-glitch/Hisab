@@ -408,6 +408,39 @@ export const getStores = async (
   };
 };
 
+export const getStore = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return {
+      status: "error",
+      message: "Store not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { store },
+    message: "Store fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
 export const createStore = async (
   userId: string,
   organizationId: string,
