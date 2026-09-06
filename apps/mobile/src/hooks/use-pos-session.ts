@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { clearAuthToken, deviceAuthenticate, hydrateAuthToken } from "@repo/services";
 import { posStorage } from "../lib/storage";
 import { clearPosCart } from "../store/pos-cart.store";
+import { clearPosPayments } from "../store/pos-payment.store";
+import { clearPosCompletedSale } from "../store/pos-sale-complete.store";
 import { usePosSessionDispatch, usePosSessionSnapshot } from "../store/pos-session.store";
 
 const getErrorCode = (error: unknown): number | undefined => {
@@ -18,6 +20,12 @@ const getErrorCode = (error: unknown): number | undefined => {
 const isExpiredSessionError = (error: unknown) => {
     const code = getErrorCode(error);
     return code === 401 || code === 403;
+};
+
+const clearPosSessionState = () => {
+    clearPosCart();
+    clearPosPayments();
+    clearPosCompletedSale();
 };
 
 export const POS_SESSION_QUERY_KEY = ["pos", "session"] as const;
@@ -45,7 +53,7 @@ export const usePosSession = () => {
                 setHasStoredSession(Boolean(session));
                 setHydrated(true);
                 if (!token || !session) {
-                    clearPosCart();
+                    clearPosSessionState();
                     dispatch({ type: "NO_SESSION" });
                 }
             })
@@ -57,7 +65,7 @@ export const usePosSession = () => {
                 setHasToken(false);
                 setHasStoredSession(false);
                 setHydrated(true);
-                clearPosCart();
+                clearPosSessionState();
                 dispatch({
                     type: "BOOT_RETRYABLE_FAILURE",
                     message: t("storageUnavailable"),
@@ -96,7 +104,10 @@ export const usePosSession = () => {
             return;
         }
 
-        dispatch({ type: "SESSION_EXPIRED", message: t("sessionVerificationFailed") });
+        void Promise.allSettled([clearAuthToken(), posStorage.clearSession()]).then(() => {
+            clearPosSessionState();
+            dispatch({ type: "SESSION_EXPIRED", message: t("sessionVerificationFailed") });
+        });
     }, [dispatch, sessionQuery.data, t]);
 
     useEffect(() => {
@@ -106,7 +117,7 @@ export const usePosSession = () => {
 
         if (isExpiredSessionError(sessionQuery.error)) {
             void Promise.allSettled([clearAuthToken(), posStorage.clearSession()]).then(() => {
-                clearPosCart();
+                clearPosSessionState();
                 dispatch({ type: "SESSION_EXPIRED", message: t("sessionVerificationFailed") });
             });
             return;

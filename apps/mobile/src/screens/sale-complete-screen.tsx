@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { PaymentStatusSummary } from "../components/payment-status-summary";
 import { PosButton, PosCard } from "../components/pos-ui";
 import type { PosStackParamList } from "../navigation/pos-navigator";
+import { clearPosCart } from "../store/pos-cart.store";
+import { clearPosPayments } from "../store/pos-payment.store";
 import { clearPosCompletedSale, usePosSaleCompleteStore } from "../store/pos-sale-complete.store";
 import { buildPosDigitalReceiptText, sharePosDigitalReceipt, type PosReceiptShareAction } from "../lib/pos-receipt-boundary";
 
@@ -21,6 +23,8 @@ const SaleCompleteScreen = ({ navigation }: SaleCompleteScreenProps) => {
     const [shareState, setShareState] = useState<PosReceiptShareAction | "sharing" | null>(null);
 
     const startNewSale = () => {
+        clearPosCart();
+        clearPosPayments();
         clearPosCompletedSale();
         navigation.replace("NewSale");
     };
@@ -48,6 +52,9 @@ const SaleCompleteScreen = ({ navigation }: SaleCompleteScreenProps) => {
                         <Text className="text-sm leading-6 text-pos-muted dark:text-pos-muted-dark">{t("saleCompleteMessage")}</Text>
                         <Text className="text-base font-semibold text-pos-foreground dark:text-pos-foreground-dark">
                             {t("saleNumber")}: {sale.saleNumber ?? sale.id}
+                        </Text>
+                        <Text className="text-sm text-pos-muted dark:text-pos-muted-dark">
+                            {t("saleCustomer")}: {sale.customer?.name ?? t("walkInCustomer")}
                         </Text>
                         <Text className="text-lg font-semibold text-pos-foreground dark:text-pos-foreground-dark">
                             {t("paymentTotal")}: {formatCurrency(sale.grandTotal)}

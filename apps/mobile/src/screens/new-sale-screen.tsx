@@ -25,8 +25,6 @@ import {
     isComboConfigurationValid,
 } from "../lib/pos-configuration-boundary";
 import type { PosCartConfiguration } from "../lib/pos-cart-boundary";
-import { clearPosCart } from "../store/pos-cart.store";
-import { clearPosPayments } from "../store/pos-payment.store";
 import { clearPosCompletedSale } from "../store/pos-sale-complete.store";
 
 type NewSaleScreenProps = NativeStackScreenProps<PosStackParamList, "NewSale">;
@@ -35,11 +33,7 @@ type ProductQuickFilter = "all" | "recent" | "pinned";
 const NewSaleScreen = ({ navigation }: NewSaleScreenProps) => {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation("pos");
-    useEffect(() => {
-        clearPosCart();
-        clearPosPayments();
-        clearPosCompletedSale();
-    }, []);
+    useEffect(() => clearPosCompletedSale(), []);
     const [search, setSearch] = useState("");
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
     const [productQuickFilter, setProductQuickFilter] = useState<ProductQuickFilter>("all");

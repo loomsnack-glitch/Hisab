@@ -26,6 +26,7 @@ describe("POS digital receipt boundary", () => {
 
         expect(receipt).toContain("Bill No: INV-1042");
         expect(receipt).toContain("SALE RECEIPT");
+        expect(receipt).not.toContain("Customer:");
         expect(receipt).toContain("Masala Tea x2 80");
         expect(receipt).toContain("  + Extra Sugar x1 5");
         expect(receipt).toContain("TOTAL: 85");

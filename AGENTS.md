@@ -18,3 +18,5 @@ Do not run build commands, Android/emulator commands, or device-start commands
 while any planned POS mobile phase remains incomplete. The user will run those
 checks after all phases are finished. During phase work, use lightweight
 read-only review and focused unit/type validation only when explicitly useful.
+This rule applies to future work; historical phase records may mention commands
+that were run before this safety rule was added and must not be repeated.

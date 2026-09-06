@@ -509,8 +509,11 @@ Implemented the Sale Complete handoff and confirmation screen:
   translated failure feedback. Navigation occurs only after a server Sale is
   returned; failed checkout keeps the local recovery state intact.
 - Added a prominent New Sale action that clears the completed result and
-  replaces the route with the existing New Sale screen. New Sale also clears
-  stale result data on mount, and logout clears it with the other POS state.
+  replaces the route with the existing New Sale screen. The explicit action
+  clears the active Cart and Payment state so a new Sale starts empty, while
+  ordinary New Sale/Cart navigation preserves an in-progress Sale draft.
+- Added the selected Customer, or translated Walk-in fallback, to the Sale
+  Complete confirmation.
 - Added English, Gujarati, and Hindi completion/recovery labels plus focused
   store tests for result replacement and explicit clearing.
 
@@ -640,9 +643,9 @@ remains explicitly deferred to Phase 6.
 The branch review identified and fixed the following issues after the initial
 Phase 4 closeout:
 
-- New Sale now explicitly clears active Cart, local Payment rows, and the
-  completed-Sale handoff together, so a new session cannot inherit prior Sale
-  state.
+- The explicit New Sale action now clears active Cart, local Payment rows, and
+  the completed-Sale handoff together, while ordinary navigation between New
+  Sale and Cart preserves the in-progress Sale draft.
 - Paid, Partial, and Due presentations now include short translated
   explanations in English, Gujarati, and Hindi, while keeping server totals
   authoritative.
@@ -653,6 +656,12 @@ Phase 4 closeout:
   identity, item, total, settlement, and status fields; it does not add an
   unrequested Customer line.
 - Discarding a Draft also clears its completion retry identifier.
+- Invalid or missing POS sessions now clear stored credentials, stored session,
+  Cart, Payment rows, and completed-Sale state before returning to unlock.
+- Restaurant service-mode selection remains intentionally deferred to Phase 7;
+  the current shared contract still defaults the existing mobile payload to
+  `dine_in`, so retail/device validation must not be treated as complete until
+  capability-aware service-mode modeling is added.
 
 Focused mobile tests pass after these fixes. Android/build/device, live API,
 share-sheet, migration, and printer validation remain intentionally pending.

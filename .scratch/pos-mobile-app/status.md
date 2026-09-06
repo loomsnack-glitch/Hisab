@@ -42,7 +42,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Phase 4 completed with follow-up | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, and Phase 4.1–4.5 Payment/checkout/completion/receipt slices are implemented. Phase 4 review fixes are recorded in `phase-4.md`; native/device/API/share-sheet validation remains pending. |
+| Mobile POS implementation | Phase 4 completed with follow-up | Phase 1.1–1.8 foundation, Phase 2.1–2.5 Catalog/Product selection, Phase 3.1–3.6 Cart/Draft slices, and Phase 4.1–4.5 Payment/checkout/completion/receipt slices are implemented. Phase 4 review fixes are recorded in `phase-4.md`; native/device/API/share-sheet validation and restaurant service-mode modeling remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
