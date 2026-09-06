@@ -3,10 +3,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 export const getStoreWorkspacePath = (organizationId: string, storeId: string) =>
     `/organizations/${organizationId}/workspaces/${storeId}`;
 
+export const getStoreProductsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/products`;
+
 export const parseStoreWorkspacePath = (
     pathname: string,
 ): { organizationId: string; storeId: string } | null => {
-    const match = pathname.match(/^\/organizations\/([^/]+)\/workspaces\/([^/]+)\/?$/);
+    const match = pathname.match(/^\/organizations\/([^/]+)\/workspaces\/([^/]+)(?:\/.*)?$/);
     if (!match) {
         return null;
     }

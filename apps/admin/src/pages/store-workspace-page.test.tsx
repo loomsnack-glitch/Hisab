@@ -8,7 +8,7 @@ import type { StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
-import { getStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import { getStoreProductsPath, getStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import StoreWorkspacePage from "@/pages/store-workspace-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -115,6 +115,9 @@ describe("Store workspace page", () => {
         expect(markup).toContain("Organization workspace");
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, vesuId)}"`);
         expect(markup).toContain("Vesu");
+        expect(markup).toContain(`href="${getStoreProductsPath(organizationId, adajanId)}"`);
+        expect(markup).toContain("Products");
+        expect(markup).not.toContain("Product offerings");
         expect(markup).not.toContain("Create product");
         expect(markup).not.toContain("Add vendor");
     });
@@ -135,6 +138,7 @@ describe("Store workspace page", () => {
         const appSource = readFileSync(join(import.meta.dir, "../App.tsx"), "utf8");
 
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId"');
+        expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/products"');
         expect(appSource).toContain('path="/organizations/:organizationId/stores/:storeId"');
         expect(appSource).toContain('path="/organizations/:organizationId/stores"');
         expect(appSource).toContain('path="/organizations/:organizationId/products"');

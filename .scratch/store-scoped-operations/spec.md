@@ -12,7 +12,7 @@ The application needs Store-specific operational configuration without making ev
 
 Keep the natural ownership of each domain concept fixed, and introduce Store-specific configurations only where the business needs them.
 
-Catalog Products, Categories, Units, Vendors, Vendor Items, and Customers remain Organization-owned shared definitions. The Organization creates Catalog Products and Vendors, selects their target Stores, and owns all shared descriptive data. Stores cannot create private product, vendor, or vendor-item definitions.
+Catalog Products, Categories, Units, Vendors, Vendor Items, and Customers remain Organization-owned shared definitions. The Organization creates Catalog Products and Vendors and owns all shared descriptive data. Every Catalog Product has a Store Product Offering at every Store. Stores cannot create private product, vendor, or vendor-item definitions.
 
 A Store Product Offering controls whether an existing Catalog Product appears in one Store's menu and owns that Store's selling price, discount, and active/inactive status. A Store Vendor Availability controls whether an existing Vendor can be selected for a Store Purchase. A Store Vendor Item Offering owns the default purchase price of an existing Vendor Item at one Store.
 
@@ -26,14 +26,14 @@ Ganatri Admin presents two explicit contexts instead of dynamically redefining s
 
 1. As an Organization administrator, I want to create an Organization and its Stores, so that all Store operations remain within one business.
 2. As an Organization administrator, I want to create a Catalog Product once with shared name, image, category, unit, default selling quantity, and other catalog details, so that the same item does not have duplicate definitions.
-3. As an Organization administrator, I want to select one or more target Stores while creating a Catalog Product, so that I decide exactly where it first appears.
-4. As an Organization administrator, I want a new Catalog Product creation form to select all existing Stores by default, so that a normally shared menu remains quick to create while allowing exceptions.
-5. As an Organization administrator, I want to add an existing Catalog Product to another Store later, so that a previously local menu item can become shared without recreation.
-6. As an Organization administrator, I want to remove or deactivate a Store Product Offering, so that the product no longer appears for new sales at that Store without damaging another Store's menu or sale history.
+3. As an Organization administrator, I want a new Catalog Product to appear at every current Store as an active Offering, so that I do not have to pick target Stores or add it later.
+4. As an Organization administrator, I want a newly created Store to inherit every existing Catalog Product as an inactive Offering, so that a new branch does not start selling the full menu until someone activates it.
+5. As an Organization administrator, I want the Store Products list to show every Organization Catalog Product with that Store's price, discount, and status, so that an inactive product stays visible instead of disappearing.
+6. As an Organization administrator, I want to deactivate a Store Product Offering rather than delete it, so that the product no longer appears for new sales at that Store without damaging another Store's menu or sale history.
 7. As an Organization administrator, I want Surat and Ahmedabad to set different selling prices for the same Catalog Product, so that each branch can follow its local commercial needs.
 8. As an Organization administrator, I want Surat and Ahmedabad to set different discounts and active statuses for the same Catalog Product, so that each branch controls its own live menu.
 9. As a Store operator, I want POS to show only active Store Product Offerings for my authenticated Store, so that I cannot accidentally sell an item unavailable at my branch.
-10. As an Organization administrator, I want shared Catalog Product details to update consistently across its target Stores, so that the same product remains the same product everywhere.
+10. As an Organization administrator, I want shared Catalog Product details to update consistently across all Stores, so that the same product remains the same product everywhere.
 11. As an Organization administrator, I want to create a Vendor once and choose its target Stores, so that local vendor lists are separate without duplicate vendor records.
 12. As an Organization administrator, I want a Vendor assigned only to Ahmedabad to be unavailable in Surat's Purchase workflow, so that each branch sees only usable suppliers.
 13. As an Organization administrator, I want to assign an existing Vendor to another Store later, so that a local vendor can become available elsewhere without re-entry.
@@ -56,10 +56,10 @@ Ganatri Admin presents two explicit contexts instead of dynamically redefining s
 
 - Do not implement generic per-module Organization/Store ownership toggles. Ownership is fixed by the domain model and Store-specific behavior is expressed through explicit configuration records.
 - Extend the existing Catalog module with Store Product Offerings. The module owns creation, listing, updating, activation, deactivation, assignment, and validation of product availability for a Store.
-- A Store Product Offering references one Organization-owned Catalog Product and one Store in the same Organization. It owns selling price, discount, active/inactive status, audit data, and the Store-specific relationship. A Catalog Product can have at most one Offering per Store.
+- A Store Product Offering references one Organization-owned Catalog Product and one Store in the same Organization. It owns selling price, discount, active/inactive status, audit data, and the Store-specific relationship. Every Catalog Product has exactly one Offering per Store.
 - Catalog Product identity and descriptive configuration remain shared: name, image, category, unit, default selling quantity, product type, composition, add-on attachments, and other non-commercial presentation or definition fields. Store workspaces cannot create a Catalog Product or override those fields.
-- Creating a Catalog Product requires target Store identifiers. The Organization catalog UI preselects all current Stores; the backend validates that every target Store belongs to the Organization and creates the Product plus its Offerings atomically.
-- The Store workspace may manage only existing Store Product Offerings: add an existing Organization Catalog Product, edit price/discount/status, or remove/deactivate the Offering. It must not expose Catalog Product creation or shared-detail editing.
+- Creating a Catalog Product writes one Store Product Offering for every current Store in the Organization, default active, seeded from the create-form price and discount. Creating a Store writes one Offering for every existing Catalog Product, default inactive, seeded from the product's stored price and discount. Product and Store creation serialize this matrix expansion per Organization. There is no target-Store picker and no API to create or delete an Offering after the fact. Product price, discount, and status are immutable creation-time seed fields; live commercial edits are only Offering updates.
+- The Store workspace Products list shows every Organization Catalog Product joined to that Store's offering. A Store may edit price/discount/status only. It must not expose Catalog Product creation, shared-detail editing, add-an-offering, or delete. Availability is `status: inactive` only.
 - Adapt POS product discovery, cart pricing, and bill creation to resolve the active Store Product Offering for the device's authenticated Store. The backend, rather than the client, loads the Store offering's price and discount and writes snapshots. A missing or inactive Offering is rejected even if the caller knows the Catalog Product identifier.
 - Preserve historical Sale Item snapshots and Catalog Product references. A later Store Product Offering change must not modify an existing Sale, Sale Item, KOT, or receipt.
 - Extend the existing Vendors module with Store Vendor Availability and Store Vendor Item Offerings. The module owns Vendor assignment to Stores, Store Vendor Item default-price maintenance, Store-filtered listings, and Purchase eligibility validation.
@@ -84,12 +84,12 @@ Ganatri Admin presents two explicit contexts instead of dynamically redefining s
 
 - Test external behavior through the existing Catalog, Vendors, Billing, Purchases, Money Accounts, and route seams. Do not test private implementation structure or UI component internals.
 - Add migration tests that prove existing Organization-wide product/menu and vendor behavior backfills to all existing Stores without dropping history or changing effective price/status/defaults.
-- Add Catalog service and route tests for target-Store validation, atomic Product-and-Offering creation, duplicate-offering prevention, Store-specific price/discount/status changes, and rejection of a Store-private Product creation path.
+- Add Catalog service and route tests for atomic Product-and-Offering creation, concurrent Product/Store creation, complete Product × Store coverage, Store-specific price/discount/status changes, rejected global commercial Product edits, and rejection of a Store-private Product creation path.
 - Add POS/Billing integration tests showing that an active Offering is sellable at its Store with trusted Store price/discount snapshots, while an inactive or absent Offering is unavailable and server-rejected. Verify past Sale Items remain unchanged after later offering edits.
 - Add Vendors service, route, and Purchase integration tests for Store-specific Vendor visibility, Store Vendor Item default price selection, differing Store defaults for the same Vendor Item, actual Purchase Line override and snapshot behavior, and rejection of unassigned vendor/item use.
 - Add Billing service and route tests for Organization-wide Customer lookup, first use at a new Store creating a zero Store Customer Account, Store-local receivable/payment/void/adjustment effects, and rejection of a cross-Store collection attempt.
 - Add report-query tests for all-Store aggregate totals, per-Store breakdowns, selected-Store filters, and correctly labelled non-collectible aggregate Customer balance visibility.
-- Add Admin route/page behavior tests for context switching, Organization versus Store navigation, target-Store selection on central Product/Vendor creation, Store Offering editing, and no Catalog Product/Vendor creation control in the Store workspace.
+- Add Admin route/page behavior tests for context switching, Organization versus Store navigation, Product creation without target-Store selection, Store Offering editing, no Catalog Product/Vendor creation control in the Store workspace, and no Organization-scoped sidebar links while a Store workspace is selected.
 - Reuse the repository's existing service test harnesses, route tests, database migration conventions, POS behavior tests, and Admin page tests as prior art.
 
 ## Out of Scope

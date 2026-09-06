@@ -14,6 +14,7 @@ import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav
 import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getAuthenticatedHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
+import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
 import { getPosLoginUrl } from "@/lib/pos-origin";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -204,6 +205,7 @@ const DashboardLayout = () => {
                     {isPickerPage ? null : (
                         <AdminMobileBottomNav
                             organizationId={organizationId || ""}
+                            storeId={parseStoreWorkspacePath(location.pathname)?.storeId}
                             hasOrganization={Boolean(organizationId)}
                             activeOrgName={selectedOrganizationName}
                         />

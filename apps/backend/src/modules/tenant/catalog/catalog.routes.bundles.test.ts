@@ -105,7 +105,7 @@ describe("Bundle product catalog routes", () => {
         expect(harness.createProductRepo).not.toHaveBeenCalled();
     });
 
-    test("routes bundle retirement through the bundle-specific lifecycle endpoint", async () => {
+    test("rejects global bundle retirement because Store Offerings own menu status", async () => {
         const response = await catalogRoutes.request(
             `http://localhost/${harness.organizationId}/bundle-products/${harness.bundleId}`,
             {
@@ -115,14 +115,7 @@ describe("Bundle product catalog routes", () => {
             },
         );
 
-        expect(response.status).toBe(200);
-        expect(harness.updateProductRepo).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: harness.bundleId,
-                organizationId: harness.organizationId,
-                status: "inactive",
-            }),
-            expect.anything(),
-        );
+        expect(response.status).toBe(400);
+        expect(harness.updateProductRepo).not.toHaveBeenCalled();
     });
 });

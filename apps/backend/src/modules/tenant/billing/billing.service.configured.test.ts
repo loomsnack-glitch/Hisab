@@ -544,6 +544,9 @@ await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-har
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const resolveSelectableAttachment = (requestedAddOnId: string) => {
     if (requestedAddOnId === addOnId) {
@@ -560,6 +563,7 @@ describe("Configured product billing with trusted snapshots", () => {
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -623,6 +627,7 @@ describe("Configured product billing with trusted snapshots", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
@@ -630,6 +635,7 @@ describe("Configured product billing with trusted snapshots", () => {
         getSelectableAttachmentSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("creates a plain product line with trusted catalog pricing snapshots", async () => {
@@ -1877,11 +1883,114 @@ describe("Configured product billing with trusted snapshots", () => {
         });
         expect(createdSaleItems).toHaveLength(2);
     });
+
+    test("bills the Store Product Offering price even when the Catalog Product seed price differs", async () => {
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            price: 175,
+            discount: 25,
+            status: "active",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(175);
+        expect(createdSaleItems[0]?.discountAmount).toBe(25);
+        expect(createdSaleItems[0]?.lineTotal).toBe(150);
+    });
+
+    test("rejects a Catalog Product with no active Offering at the Sale's Store", async () => {
+        getStoreProductOfferingSpy.mockResolvedValue(null as never);
+
+        const missing = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            price: 100,
+            discount: 10,
+            status: "inactive",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+        const inactive = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+
+        expect(missing.status).toBe("error");
+        expect(missing.code).toBe(400);
+        expect(missing.message).toContain("not available at this Store");
+        expect(inactive.status).toBe("error");
+        expect(inactive.message).toContain("not available at this Store");
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("later Offering edits do not change recorded Sale Item snapshots", async () => {
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+        expect(created.status).toBe("success");
+        const originalPrice = createdSaleItems[0]?.unitPriceSnapshot;
+        const originalDiscount = createdSaleItems[0]?.discountAmount;
+
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            price: 999,
+            discount: 0,
+            status: "inactive",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+
+        const fetched = await billingService.getSaleDetails(
+            userId,
+            organizationId,
+            storeId,
+            created.data?.sale.id!,
+        );
+
+        expect(fetched.status).toBe("success");
+        expect(fetched.data?.sale.items[0]?.unitPriceSnapshot).toBe(originalPrice);
+        expect(fetched.data?.sale.items[0]?.discountAmount).toBe(originalDiscount);
+    });
 });
 
 describe("Configuration-aware Draft Sale behavior", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -1909,11 +2018,13 @@ describe("Configuration-aware Draft Sale behavior", () => {
             async (_organizationId, _productId, requestedAddOnId) =>
                 resolveSelectableAttachment(requestedAddOnId) as never,
         );
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("deletes a draft sale and rejects a second deletion", async () => {
@@ -2428,7 +2539,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     );
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("not available for new sale selections");
+        expect(response.message).toContain("not available at this Store");
         expect(createSale).not.toHaveBeenCalled();
     });
 
@@ -2494,7 +2605,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       originalAddOnUnitPrice,
     );
         expect(updated.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(2);
-        expect(getProductByIdSpy).toHaveBeenCalledTimes(1);
+        expect(getProductByIdSpy).toHaveBeenCalledTimes(2);
     });
 
     test("commits a draft with frozen configured lines after later catalog deactivation", async () => {

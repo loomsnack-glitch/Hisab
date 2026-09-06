@@ -401,6 +401,9 @@ await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-har
   (module) => module.ensureFeatureEntitlementMock(),
 );
 const billingService = await import("./billing.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const completeSalePayload = (overrides: Partial<CompleteSaleSVC> = {}): CompleteSaleSVC => ({
     requestId: crypto.randomUUID(),
@@ -436,6 +439,7 @@ describe("Atomic POS Payment Money Account Tracking", () => {
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -500,6 +504,7 @@ describe("Atomic POS Payment Money Account Tracking", () => {
             catalogRepository,
             "getComboChoiceOptionsByGroupIds",
         ).mockResolvedValue([] as never);
+        getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
@@ -507,6 +512,7 @@ describe("Atomic POS Payment Money Account Tracking", () => {
         getSelectableAttachmentSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("checkout of a Cash Payment creates one linked Movement on the Store Cash Account", async () => {

@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { cn } from "@repo/ui/lib/utils";
 
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
+import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
@@ -83,9 +84,15 @@ const AppSidebar = ({
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
     const hasOrganization = organizations.length > 0 && Boolean(effectiveOrgId);
+    const storeWorkspace = parseStoreWorkspacePath(location.pathname);
     const groupedSections = useMemo(
-        () => getGroupedAdminMainDestinations({ hasOrganization, organizationId: effectiveOrgId }),
-        [hasOrganization, effectiveOrgId],
+        () =>
+            getGroupedAdminMainDestinations({
+                hasOrganization,
+                organizationId: effectiveOrgId,
+                storeId: storeWorkspace?.storeId,
+            }),
+        [hasOrganization, effectiveOrgId, storeWorkspace?.storeId],
     );
 
     const renderNavItem = (item: AdminNavDestination, badge?: number) => {

@@ -18,6 +18,7 @@ import {
   getActiveAddOnsByOrganizationId,
   getActiveProductAddOnCountsByOrganizationId,
   getActiveProductsByOrganizationId,
+  getActiveStoreCatalogProducts,
   getAddOnById,
   getOrganizationByIdForUser,
   getProductAddOnAttachmentById,
@@ -29,6 +30,7 @@ import {
   product,
   productAddOnAttachmentExists,
   productId,
+  store,
   updateAddOnRepo,
   updateProductAddOnAttachmentRepo,
   userId,
@@ -50,6 +52,8 @@ describe("Add-On catalog service", () => {
     getActiveAddOnsByOrganizationId.mockClear();
     getActiveProductAddOnCountsByOrganizationId.mockClear();
     getActiveProductsByOrganizationId.mockClear();
+    getActiveStoreCatalogProducts.mockClear();
+    getActiveStoreCatalogProducts.mockImplementation(async () => [product]);
     getProductsByOrganizationId.mockClear();
     countAttachmentsByAddOnId.mockClear();
     countSaleItemAddOnsByAddOnId.mockClear();
@@ -71,6 +75,7 @@ describe("Add-On catalog service", () => {
     getActiveAddOnsByOrganizationId.mockResolvedValue([addOn]);
     getActiveProductAddOnCountsByOrganizationId.mockResolvedValue(new Map());
     getActiveProductsByOrganizationId.mockResolvedValue([product]);
+    getActiveStoreCatalogProducts.mockResolvedValue([product]);
     getProductsByOrganizationId.mockResolvedValue([product]);
     countAttachmentsByAddOnId.mockResolvedValue(0);
     countSaleItemAddOnsByAddOnId.mockResolvedValue(0);
@@ -268,11 +273,11 @@ describe("Add-On catalog service", () => {
   });
 
   test("POS product reads return only active products", async () => {
-    getActiveProductsByOrganizationId.mockResolvedValue([product]);
+    getActiveStoreCatalogProducts.mockResolvedValue([product]);
 
     const response = await catalogService.getProductsForDevice({
       organization: { id: organizationId },
-      store: { id: "store-1" },
+      store: { id: store.id },
       device: { id: "device-1" },
     } as never);
 
@@ -281,8 +286,9 @@ describe("Add-On catalog service", () => {
       { ...product, imageSignedUrl: null, labelProfile: null },
     ]);
     expect(response.data?.inactiveProductCodes).toEqual([]);
-    expect(getActiveProductsByOrganizationId).toHaveBeenCalledWith(
+    expect(getActiveStoreCatalogProducts).toHaveBeenCalledWith(
       organizationId,
+      store.id,
     );
   });
 
@@ -310,7 +316,7 @@ describe("Add-On catalog service", () => {
       price: 85,
       discount: 5,
     };
-    getActiveProductsByOrganizationId.mockImplementation((async (
+    getActiveStoreCatalogProducts.mockImplementation((async (
       requestedOrganizationId: string,
     ) =>
       requestedOrganizationId === organizationId
@@ -319,7 +325,7 @@ describe("Add-On catalog service", () => {
 
     const response = await catalogService.getProductsForDevice({
       organization: { id: organizationId },
-      store: { id: "store-1" },
+      store: { id: store.id },
       device: { id: "device-1" },
     } as never);
     const otherTenantResponse = await catalogService.getProductsForDevice({
@@ -337,25 +343,27 @@ describe("Add-On catalog service", () => {
     ]);
     expect(response.data?.inactiveProductCodes).toEqual([]);
     expect(otherTenantResponse.data?.products).toEqual([]);
-    expect(getActiveProductsByOrganizationId).toHaveBeenLastCalledWith(
+    expect(getActiveStoreCatalogProducts).toHaveBeenLastCalledWith(
       "other-organization",
+      "store-2",
     );
   });
 
   test("POS catalog exposes inactive Product Codes only for safe scan recovery", async () => {
     const inactiveProduct = {
       ...product,
+      id: "99999999-9999-4999-8999-999999999999",
       name: "Retired Burger",
       status: "inactive" as const,
       productCode: "retired-burger",
       productCodeKind: "manufacturer" as const,
     };
-    getActiveProductsByOrganizationId.mockResolvedValue([product]);
+    getActiveStoreCatalogProducts.mockImplementation(async () => [product]);
     getProductsByOrganizationId.mockResolvedValue([product, inactiveProduct] as never);
 
     const response = await catalogService.getProductsForDevice({
       organization: { id: organizationId },
-      store: { id: "store-1" },
+      store: { id: store.id },
       device: { id: "device-1" },
     } as never);
 

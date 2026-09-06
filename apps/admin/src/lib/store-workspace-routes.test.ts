@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    getStoreProductsPath,
     getStoreWorkspacePath,
     isStoreWorkspaceNavActive,
     isStoreWorkspacePath,
@@ -21,6 +22,9 @@ describe("store workspace routes", () => {
         expect(getStoreWorkspacePath(organizationId, otherStoreId)).toBe(
             `/organizations/${organizationId}/workspaces/${otherStoreId}`,
         );
+        expect(getStoreProductsPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/products`,
+        );
     });
 
     test("reads the selected Store from the Store workspace URL", () => {
@@ -28,7 +32,12 @@ describe("store workspace routes", () => {
             organizationId,
             storeId,
         });
+        expect(parseStoreWorkspacePath(getStoreProductsPath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
         expect(isStoreWorkspacePath(`/organizations/${organizationId}/workspaces/${storeId}`)).toBe(true);
+        expect(isStoreWorkspacePath(getStoreProductsPath(organizationId, storeId))).toBe(true);
         expect(isStoreWorkspaceNavActive(`/organizations/${organizationId}/workspaces/${storeId}`)).toBe(true);
         expect(isStoreWorkspaceNavActive(`/organizations/${organizationId}/workspaces/${otherStoreId}`)).toBe(true);
     });

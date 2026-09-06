@@ -238,6 +238,25 @@ export const sauceAttachment = {
 };
 
 export const store = { id: "11111111-1111-4111-8111-111111111111", organizationId, name: "Adajan" };
+export const vesuStore = {
+    id: "abababab-abab-4aba-8aba-abababababab",
+    organizationId,
+    name: "Vesu",
+};
+export const offeringId = "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd";
+export const storeProductOffering = {
+    id: offeringId,
+    organizationId,
+    storeId: store.id,
+    productId,
+    price: product.price,
+    discount: product.discount,
+    status: "active" as const,
+    createdBy: userId,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+};
 export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
 export const getStoresByOrganizationId = mock(async () => [store]);
 export const getStoreById = mock(async () => store);
@@ -272,6 +291,18 @@ export const assignInternalProductCodeToUncodedProduct = mock(
     }),
 );
 export const createProductRepo = mock(async (data: typeof product) => data);
+export const createStoreProductOfferingRepo = mock(async (data: typeof storeProductOffering) => data);
+export const lockStoreProductOfferingTopology = mock(async () => undefined);
+export const getStoreProductOfferingsByStoreId = mock(async () => [storeProductOffering]);
+export const getStoreProductOfferingById = mock(async (): Promise<typeof storeProductOffering | null> => storeProductOffering);
+export const getStoreProductOfferingByProductAndStore = mock(
+    async (): Promise<typeof storeProductOffering | null> => storeProductOffering,
+);
+export const updateStoreProductOfferingRepo = mock(async (data: typeof storeProductOffering) => data);
+export const deleteStoreProductOfferingRepo = mock(async () => storeProductOffering);
+export const getActiveStoreCatalogProducts = mock(async () => [
+    { ...product, price: storeProductOffering.price, discount: storeProductOffering.discount, status: "active" as const },
+]);
 export const updateProductRepo = mock(async (data: typeof product) => data);
 export const deleteProductRepo = mock(async () => product);
 export const createBundleProductComponentRepo = mock(
@@ -521,6 +552,14 @@ mock.module("./catalog.repository", () => ({
     claimReleasedInternalProductCode,
     assignInternalProductCodeToUncodedProduct,
     createProduct: createProductRepo,
+    createStoreProductOffering: createStoreProductOfferingRepo,
+    lockStoreProductOfferingTopology,
+    getStoreProductOfferingsByStoreId,
+    getStoreProductOfferingById,
+    getStoreProductOfferingByProductAndStore,
+    updateStoreProductOffering: updateStoreProductOfferingRepo,
+    deleteStoreProductOffering: deleteStoreProductOfferingRepo,
+    getActiveStoreCatalogProducts,
     updateProduct: updateProductRepo,
     deleteProduct: deleteProductRepo,
     createBundleProductComponent: createBundleProductComponentRepo,

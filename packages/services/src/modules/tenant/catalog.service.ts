@@ -22,6 +22,8 @@ import type {
     LabelTemplateResponse,
     LabelTemplatesListResponse,
     ServiceResponse,
+    StoreProductOfferingResponse,
+    StoreProductOfferingsListResponse,
     UpdateAddOnJSON,
     UpdateBundleProductJSON,
     UpdateComboProductJSON,
@@ -30,6 +32,7 @@ import type {
     UpdateProductAddOnAttachmentJSON,
     UpdateProductLabelProfileJSON,
     UpdateProductJSON,
+    UpdateStoreProductOfferingJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -496,6 +499,37 @@ export const deleteLabelTemplate = async (
     try {
         const response = await api.delete(
             `/organizations/${organizationId}/label-templates/${labelTemplateId}`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreProductOfferings = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreProductOfferingsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/product-offerings`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreProductOffering = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+    data: UpdateStoreProductOfferingJSON,
+): Promise<ServiceResponse<StoreProductOfferingResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/product-offerings/${offeringId}`,
+            data,
         );
         return response.data;
     } catch (error) {

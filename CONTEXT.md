@@ -177,12 +177,12 @@ An Organization-wide measure used to express a Vendor Item's default purchase pr
 _Avoid_: Vendor-only setting, product-only unit, quantity
 
 **Catalog Product**:
-An Organization-owned reusable definition of an item that one or more Stores may sell through Ganatri POS. Each Catalog Product has exactly one Unit and a Default Selling Quantity in that Unit, but its live selling price, discount, and menu status belong to the Store Product Offering.
+An Organization-owned reusable definition of an item that every Store in the Organization has a Store Product Offering for. Each Catalog Product has exactly one Unit and a Default Selling Quantity in that Unit, but its live selling price, discount, and menu status belong to the Store Product Offering.
 _Avoid_: Vendor Item, inventory stock row, packaging variant when the underlying sellable item is unchanged
 
 **Store Product Offering**:
-A Store's sellable configuration of one existing Catalog Product. It determines whether that Catalog Product is active in the Store's menu and owns that Store's selling price and discount; it never creates a Store-private Catalog Product.
-_Avoid_: Store Product, copied Product, private store catalog, menu row
+A Store's sellable configuration of one existing Catalog Product. Every Catalog Product has exactly one Offering per Store. The Offering owns that Store's selling price, discount, and active/inactive menu status; inactive products remain on the Store list and are not sold. An Offering is never deleted and never creates a Store-private Catalog Product.
+_Avoid_: Store Product, copied Product, private store catalog, deleted offering, target-store assignment
 
 **Default Selling Quantity**:
 The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the selected Store Product Offering's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.

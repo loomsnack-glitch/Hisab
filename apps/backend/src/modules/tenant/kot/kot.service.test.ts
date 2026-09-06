@@ -649,6 +649,9 @@ await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-har
 );
 const billingService = await import("@/modules/tenant/billing/billing.service");
 const kotService = await import("./kot.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const createTableKot = (
   session: DeviceSessionDTO,
@@ -665,6 +668,7 @@ describe("Table Order KOT workflow", () => {
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -706,6 +710,7 @@ describe("Table Order KOT workflow", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
@@ -713,6 +718,7 @@ describe("Table Order KOT workflow", () => {
         getSelectableAttachmentSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("starts one Active Table Order without a Customer or Draft Sale", async () => {
@@ -1358,6 +1364,7 @@ describe("KOT fulfillment and standalone batches", () => {
   let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
   let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
   let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+  let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     createdSales.length = 0;
@@ -1393,6 +1400,7 @@ describe("KOT fulfillment and standalone batches", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
   });
 
   afterEach(() => {
@@ -1400,6 +1408,7 @@ describe("KOT fulfillment and standalone batches", () => {
     getSelectableAttachmentSpy.mockRestore();
     getComboChoiceGroupsSpy.mockRestore();
     getComboChoiceOptionsSpy.mockRestore();
+    getStoreProductOfferingSpy.mockRestore();
   });
 
   test("keeps multiple ordered standalone KOT batches on one Sale", async () => {

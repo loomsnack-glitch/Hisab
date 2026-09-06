@@ -18,12 +18,13 @@ type AdminMobileBottomNavProps = VisibleAdminNavArgs & {
 
 const AdminMobileBottomNav = ({
     organizationId = "",
+    storeId,
     hasOrganization,
     activeOrgName = "",
 }: AdminMobileBottomNavProps) => {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
-    const navArgs = { organizationId, hasOrganization };
+    const navArgs = { organizationId, storeId, hasOrganization };
     const isMoreActive = isAdminMoreDestinationActive(location.pathname, navArgs) || moreOpen;
     const primaryDestinations = getVisibleAdminPrimaryMobileDestinations(navArgs);
     const groupedSections = getGroupedAdminMainDestinations(navArgs);

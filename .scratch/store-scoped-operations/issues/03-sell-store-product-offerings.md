@@ -4,10 +4,16 @@
 
 **Blocked by:** 02 — Manage Store Product Offerings.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] POS product discovery for a Store Device contains only active Store Product Offerings for that Device's Store.
-- [ ] Billing derives product price and discount from the selected Store Product Offering on the server and never accepts those values from the client.
-- [ ] Billing rejects a product with no active Offering at the Sale's Store, even if the product identifier belongs to the same Organization.
-- [ ] Later changes to a Store Product Offering do not change Sale Item, KOT, or receipt snapshots already recorded.
-- [ ] Existing product and billing behavior remains valid for the migrated default offerings.
+- [x] POS product discovery for a Store Device contains only active Store Product Offerings for that Device's Store.
+- [x] Billing derives product price and discount from the selected Store Product Offering on the server and never accepts those values from the client.
+- [x] Billing rejects a product with no active Offering at the Sale's Store, even if the product identifier belongs to the same Organization.
+- [x] Later changes to a Store Product Offering do not change Sale Item, KOT, or receipt snapshots already recorded.
+- [x] Existing product and billing behavior remains valid for the migrated default offerings.
+
+## Comments
+
+POS `getProductsForDevice` lists only the Device Store's active Offerings, overlaying trusted offering price/discount. Billing `prepareSaleItems` looks up the Sale Store's Offering and rejects missing/inactive products even when the Catalog Product ID is valid. Frozen draft lines and recorded Sale Item / KOT snapshots keep their original prices after later offering edits. Admin/POS billing (non-device) overlays active offerings for the selected Store; backend validation remains authoritative.
+
+Ticket 02 now always creates one Offering per Product × Store, so "no offering" should be rare. Billing still rejects a missing Offering defensively. Live availability is `status: inactive`, not deletion.

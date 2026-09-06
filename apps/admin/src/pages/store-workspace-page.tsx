@@ -4,12 +4,13 @@ import { getOrganizationDetails, getStore } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Building2, Store } from "lucide-react";
+import { Building2, Package2, Store } from "lucide-react";
 
 import { AdminWorkspaceSwitcherPanel } from "@/components/dashboard/admin-workspace-switcher";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
+import { getStoreProductsPath } from "@/lib/store-workspace-routes";
 
 const StoreWorkspacePage = () => {
     const { organizationId = "", storeId = "" } = useParams();
@@ -109,14 +110,23 @@ const StoreWorkspacePage = () => {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Button
-                        variant="outline"
-                        className="rounded-full"
-                        render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
-                    >
-                        <Building2 className="size-4" />
-                        Organization workspace
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            className="rounded-full"
+                            render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
+                        >
+                            <Building2 className="size-4" />
+                            Organization workspace
+                        </Button>
+                        <Button
+                            className="rounded-full"
+                            render={<Link to={getStoreProductsPath(organizationId, store.id)} />}
+                        >
+                            <Package2 className="size-4" />
+                            Products
+                        </Button>
+                    </div>
                     <AdminWorkspaceSwitcherPanel
                         organizationId={organizationId}
                         organizationName={organization.name}

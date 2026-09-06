@@ -20,6 +20,7 @@ import {
     product,
     productId,
     productNameExistsInCategory,
+    store,
     updateProductRepo,
     userId,
 } from "./catalog.service.test-harness";
@@ -75,6 +76,7 @@ describe("Default Product selling units", () => {
                 defaultSellingQuantity: 1,
                 allowCustomSellingQuantity: false,
             }),
+            expect.anything(),
         );
         expect(response.data?.product.unitId).toBe(pieceUnitId);
         expect(response.data?.product.defaultSellingQuantity).toBe(1);
@@ -101,6 +103,7 @@ describe("Default Product selling units", () => {
                 defaultSellingQuantity: 250,
                 allowCustomSellingQuantity: false,
             }),
+            expect.anything(),
         );
         expect(response.data?.product.unitLabel).toBe("g");
         expect(response.data?.product.defaultSellingQuantity).toBe(250);
@@ -122,6 +125,7 @@ describe("Default Product selling units", () => {
                 name: "Cake",
                 allowCustomSellingQuantity: true,
             }),
+            expect.anything(),
         );
         expect(response.data?.product.allowCustomSellingQuantity).toBe(true);
     });

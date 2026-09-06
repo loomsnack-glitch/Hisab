@@ -99,6 +99,19 @@ mock.module("@/modules/tenant/catalog/catalog.repository", () => ({
         status: "active",
     })),
     getSelectableAddOnAttachmentsByProductId: mock(async () => []),
+    getStoreProductOfferingByProductAndStore: mock(async (_organizationId: string, storeId: string) => ({
+        id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+        organizationId,
+        storeId,
+        productId,
+        price: 100,
+        discount: 0,
+        status: "active",
+        createdBy: "11111111-1111-4111-8111-111111111111",
+        updatedBy: null,
+        createdAt: new Date("2026-09-06T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-06T00:00:00.000Z"),
+    })),
 }));
 
 await ensureFeatureEntitlementMock();

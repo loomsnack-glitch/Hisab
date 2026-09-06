@@ -374,6 +374,9 @@ await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-har
   (module) => module.ensureFeatureEntitlementMock(),
 );
 const billingService = await import("./billing.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const resolveProductById = (productId: string) => {
     if (productId === bundleProductId) {
@@ -394,6 +397,7 @@ describe("Bundle product billing with trusted snapshots", () => {
     let getBundleComponentAddOnsSpy: ReturnType<typeof spyOn>;
     let getAddOnByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -435,6 +439,7 @@ describe("Bundle product billing with trusted snapshots", () => {
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
         ).mockResolvedValue(cheeseAttachment as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
@@ -443,6 +448,7 @@ describe("Bundle product billing with trusted snapshots", () => {
         getBundleComponentAddOnsSpy.mockRestore();
         getAddOnByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("rejects new legacy Bundle selections", async () => {

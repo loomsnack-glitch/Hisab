@@ -155,6 +155,20 @@ describe("Admin mobile navigation", () => {
         expect(products?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
     });
 
+    test("shows only Store-scoped destinations when a Store workspace is selected", () => {
+        const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        const withStore = { ...withOrg, storeId };
+        const products = getVisibleAdminWorkspaceDestinations(withStore).find(
+            (destination) => destination.id === "products",
+        );
+        const storeDestinationIds = getVisibleAdminWorkspaceDestinations(withStore).map((destination) => destination.id);
+
+        expect(products?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/products`);
+        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/products`)).toBe(true);
+        expect(products?.isActive(`/organizations/${organizationId}/products`)).toBe(false);
+        expect(storeDestinationIds).toEqual(["products"]);
+    });
+
     test("renders the primary tabs and organization avatar on the More tab", () => {
         const markup = renderToStaticMarkup(
             <MemoryRouter initialEntries={[`/organizations/${organizationId}/stores`]}>

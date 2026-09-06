@@ -1389,11 +1389,11 @@ const prepareSaleItems = async (
       continue;
     }
 
-    const product = await catalogRepository.getProductById(
+    const catalogProduct = await catalogRepository.getProductById(
       organizationId,
       item.productId,
     );
-    if (!product) {
+    if (!catalogProduct) {
       return {
         error: {
           status: "error",
@@ -1404,16 +1404,28 @@ const prepareSaleItems = async (
       };
     }
 
-    if (product.status !== "active") {
+    const offering =
+      await catalogRepository.getStoreProductOfferingByProductAndStore(
+        organizationId,
+        storeId,
+        catalogProduct.id,
+      );
+    if (!offering || offering.status !== "active") {
       return {
         error: {
           status: "error",
-          message: `Product "${product.name}" is not available for new sale selections`,
+          message: `Product "${catalogProduct.name}" is not available at this Store`,
           data: null,
           code: STATUS_CODES.BAD_REQUEST,
         },
       };
     }
+
+    const product = {
+      ...catalogProduct,
+      price: offering.price,
+      discount: offering.discount,
+    };
 
     const defaultPortion = defaultCatalogSoldPortion(product);
     const resolvedSoldQuantity =

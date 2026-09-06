@@ -17,21 +17,41 @@ import type {
     CreateLabelTemplateREPO,
     CreateProductAddOnAttachmentREPO,
     CreateProductREPO,
+    CreateStoreProductOfferingREPO,
     LabelTemplateDTO,
     ProductLabelProfileDTO,
     ProductLabelProfileREPO,
     ProductAddOnAttachmentDTO,
     ProductAddOnAttachmentResponseDTO,
     ProductDTO,
+    StoreProductOfferingDTO,
     UpdateAddOnREPO,
     UpdateCategoryREPO,
     UpdateLabelTemplateREPO,
     UpdateProductAddOnAttachmentREPO,
     UpdateProductREPO,
+    UpdateStoreProductOfferingREPO,
 } from "@repo/types";
 import { SEEDED_LABEL_TEMPLATES } from "@repo/types";
 
 const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
+
+// Product and Store creation both extend the same Product × Store matrix. Keep
+// those writes serialized per Organization so concurrent creates cannot leave a
+// missing Store Product Offering.
+const STORE_PRODUCT_OFFERING_TOPOLOGY_LOCK_ID = 410041;
+
+export const lockStoreProductOfferingTopology = async (
+    organizationId: string,
+    tx: Bun.TransactionSQL,
+) => {
+    await tx`
+        SELECT pg_advisory_xact_lock(
+            ${STORE_PRODUCT_OFFERING_TOPOLOGY_LOCK_ID},
+            hashtext(${organizationId})
+        )
+    `;
+};
 
 const mapProduct = (row: Record<string, unknown>): ProductDTO => {
     const mapped = mapRow<ProductDTO>(row);
@@ -45,6 +65,15 @@ const mapProduct = (row: Record<string, unknown>): ProductDTO => {
             typeof mapped.unitLabel === "string" && mapped.unitLabel.length > 0
                 ? mapped.unitLabel
                 : "",
+    };
+};
+
+const mapStoreProductOffering = (row: Record<string, unknown>): StoreProductOfferingDTO => {
+    const mapped = mapRow<StoreProductOfferingDTO>(row);
+    return {
+        ...mapped,
+        price: Number(mapped.price),
+        discount: Number(mapped.discount),
     };
 };
 
@@ -246,8 +275,12 @@ export const createProduct = async (
     return result ? mapProduct(result) : null;
 };
 
-export const getProductsByOrganizationId = async (organizationId: string): Promise<ProductDTO[]> => {
-    const results = await pg`
+export const getProductsByOrganizationId = async (
+    organizationId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<ProductDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
         SELECT p.*, u.label AS unit_label
         FROM products p
         INNER JOIN units u
@@ -1544,4 +1577,126 @@ export const upsertProductLabelProfile = async (
     `;
 
     return result ? mapProductLabelProfile(result) : null;
+};
+
+export const createStoreProductOffering = async (
+    offeringData: CreateStoreProductOfferingREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreProductOfferingDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO store_product_offerings ${camelToSnakeSql(offeringData)}
+        RETURNING *
+    `;
+
+    return result ? mapStoreProductOffering(result) : null;
+};
+
+export const getStoreProductOfferingsByStoreId = async (
+    organizationId: string,
+    storeId: string,
+): Promise<StoreProductOfferingDTO[]> => {
+    const results = await pg`
+        SELECT o.*
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+        ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreProductOffering(result));
+};
+
+export const getStoreProductOfferingById = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+): Promise<StoreProductOfferingDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM store_product_offerings
+        WHERE id = ${offeringId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? mapStoreProductOffering(result) : null;
+};
+
+export const getStoreProductOfferingByProductAndStore = async (
+    organizationId: string,
+    storeId: string,
+    productId: string,
+): Promise<StoreProductOfferingDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM store_product_offerings
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND product_id = ${productId}
+    `;
+
+    return result ? mapStoreProductOffering(result) : null;
+};
+
+export const updateStoreProductOffering = async (
+    offeringData: UpdateStoreProductOfferingREPO,
+): Promise<StoreProductOfferingDTO | null> => {
+    const [result] = await pg`
+        UPDATE store_product_offerings
+        SET price = ${offeringData.price},
+            discount = ${offeringData.discount},
+            status = ${offeringData.status},
+            updated_by = ${offeringData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${offeringData.id}
+          AND organization_id = ${offeringData.organizationId}
+          AND store_id = ${offeringData.storeId}
+        RETURNING *
+    `;
+
+    return result ? mapStoreProductOffering(result) : null;
+};
+
+export const getActiveStoreCatalogProducts = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ProductDTO[]> => {
+    const results = await pg`
+        SELECT
+            p.*,
+            u.label AS unit_label,
+            o.price AS offering_price,
+            o.discount AS offering_discount
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        INNER JOIN units u
+            ON u.id = p.unit_id
+           AND u.organization_id = p.organization_id
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.status = 'active'
+        ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => {
+        const product = mapProduct(result);
+        return {
+            ...product,
+            price: Number(result.offering_price),
+            discount: Number(result.offering_discount),
+            status: "active" as const,
+        };
+    });
 };

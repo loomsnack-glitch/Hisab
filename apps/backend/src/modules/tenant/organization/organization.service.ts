@@ -29,6 +29,7 @@ import {
 } from "@/helpers/deviceSecret.helper";
 import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
+import * as catalogService from "@/modules/tenant/catalog/catalog.service";
 import * as unitsRepository from "@/modules/tenant/units/units.repository";
 import * as expenseCategoriesRepository from "@/modules/tenant/expense-categories/expense-categories.repository";
 import * as organizationRepository from "./organization.repository";
@@ -470,13 +471,38 @@ export const createStore = async (
     };
   }
 
-  const store = await organizationRepository.createStore({
-    id: crypto.randomUUID(),
-    organizationId,
-    name: storeData.name,
-    address: normalizeOptionalText(storeData.address),
-    createdBy: userId,
-  });
+  let store: Awaited<ReturnType<typeof organizationRepository.createStore>> = null;
+  try {
+    await pg.begin(async (tx) => {
+      await catalogRepository.lockStoreProductOfferingTopology(organizationId, tx);
+      store = await organizationRepository.createStore(
+        {
+          id: crypto.randomUUID(),
+          organizationId,
+          name: storeData.name,
+          address: normalizeOptionalText(storeData.address),
+          createdBy: userId,
+        },
+        tx,
+      );
+      if (!store) {
+        throw new Error("Failed to create store");
+      }
+
+      await catalogService.seedInactiveOfferingsForNewStore(tx, {
+        organizationId,
+        storeId: store.id,
+        createdBy: userId,
+      });
+    });
+  } catch {
+    return {
+      status: "error",
+      message: "Failed to create store",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
 
   if (!store) {
     return {
