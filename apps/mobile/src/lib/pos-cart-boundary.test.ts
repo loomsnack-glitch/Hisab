@@ -114,6 +114,18 @@ describe("POS Cart handoff", () => {
         expect(getCartLineDisplayTotals(configuredItem)).toEqual({ subtotal: 142, discount: 20, total: 122 });
     });
 
+    it("does not let an add-on discount exceed its price", () => {
+        expect(getCartLineDisplayTotals({
+            ...product,
+            quantity: 1,
+            lineId: "discounted-addon",
+            configuration: {
+                addOns: [{ addOnId: "extra-sugar", quantity: 1, unitPrice: 5, unitDiscount: 20 }],
+                comboSelections: [],
+            },
+        } as PosCartItem)).toEqual({ subtotal: 45, discount: 5, total: 40 });
+    });
+
     it("validates amount and percentage order discounts against the display base", () => {
         expect(isPosCartDiscountValid({ mode: "amount", value: 20 }, 100)).toBe(true);
         expect(isPosCartDiscountValid({ mode: "amount", value: 101 }, 100)).toBe(false);

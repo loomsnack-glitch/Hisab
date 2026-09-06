@@ -666,7 +666,8 @@ Phase 4 closeout:
   open New Sale, kept Draft actions secondary to Continue to Payment, and made
   local configured-product totals include add-ons and combo price adjustments.
   Configuration pricing is retained only for local display and is stripped
-  from Draft/checkout payloads.
+  from Draft/checkout payloads; add-on discounts are capped at their catalog
+  prices.
 
 Focused mobile tests pass after these fixes. Android/build/device, live API,
 share-sheet, migration, and printer validation remain intentionally pending.

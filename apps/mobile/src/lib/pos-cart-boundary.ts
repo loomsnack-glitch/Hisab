@@ -182,7 +182,11 @@ export const getCartLineDisplayTotals = (item: PosCartItem) => {
         0,
     );
     const directAddOnDiscount = (item.configuration?.addOns ?? []).reduce(
-        (total, addOn) => total + finiteDisplayMoney(Number(addOn.unitDiscount)) * Math.max(0, addOn.quantity) * quantity,
+        (total, addOn) => {
+            const unitPrice = finiteDisplayMoney(Number(addOn.unitPrice));
+            const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(addOn.unitDiscount)));
+            return total + unitDiscount * Math.max(0, addOn.quantity) * quantity;
+        },
         0,
     );
     const comboAdjustmentTotal = (item.configuration?.comboSelections ?? []).reduce((total, selection) => {
@@ -200,7 +204,11 @@ export const getCartLineDisplayTotals = (item: PosCartItem) => {
     );
     const comboAddOnDiscount = (item.configuration?.comboSelections ?? []).reduce(
         (total, selection) => total + selection.addOns.reduce(
-            (selectionTotal, addOn) => selectionTotal + finiteDisplayMoney(Number(addOn.unitDiscount)) * Math.max(0, addOn.quantity) * Math.max(0, selection.quantity) * quantity,
+            (selectionTotal, addOn) => {
+                const unitPrice = finiteDisplayMoney(Number(addOn.unitPrice));
+                const unitDiscount = Math.min(unitPrice, finiteDisplayMoney(Number(addOn.unitDiscount)));
+                return selectionTotal + unitDiscount * Math.max(0, addOn.quantity) * Math.max(0, selection.quantity) * quantity;
+            },
             0,
         ),
         0,
