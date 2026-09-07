@@ -35,7 +35,7 @@ import {
     getOrganizationByIdForUser,
     getProductAddOnAttachmentById,
     getProductById,
-    getSelectableProductAddOnAttachmentByProductAndAddOn,
+    getActiveProductAddOnAttachmentByProductAndAddOn,
     now,
     organization,
     organizationId,
@@ -44,6 +44,7 @@ import {
     productNameExistsInCategory,
     sauceAddOnId,
     sauceAttachment,
+    store,
     updateAddOnRepo,
     updateProductAddOnAttachmentRepo,
     updateProductRepo,
@@ -63,7 +64,7 @@ describe("Bundle Product catalog service", () => {
         getBundleProductComponentsByBundleProductId.mockClear();
         getBundleProductComponentAddOnsByComponentIds.mockClear();
         deleteBundleProductComponentsByBundleProductId.mockClear();
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockClear();
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockClear();
         countActiveBundlesByComponentProductId.mockClear();
         countActiveBundlesByComponentAddOnId.mockClear();
         countActiveBundlesByProductAddOnPair.mockClear();
@@ -106,7 +107,7 @@ describe("Bundle Product catalog service", () => {
             }
             return null;
         });
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockImplementation(
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockImplementation(
             async (_organizationId: string, productId: string, addOnId: string) => {
                 if (productId === burgerId && addOnId === cheeseAddOnId) return cheeseAttachment;
                 if (productId === burgerId && addOnId === sauceAddOnId) return sauceAttachment;
@@ -152,6 +153,7 @@ describe("Bundle Product catalog service", () => {
             name: "Burger Combo",
             price: 99,
             discount: 0,
+            status: "active",
             components: [
                 { productId: burgerId, quantity: 1 },
                 { productId: coffeeId, quantity: 1 },
@@ -251,7 +253,7 @@ describe("Bundle Product catalog service", () => {
     });
 
     test("rejects bundle add-ons without an active product attachment", async () => {
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockResolvedValue(null);
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockResolvedValue(null);
 
         const response = await catalogService.createBundleProduct(userId, organizationId, {
             categoryId,
@@ -359,29 +361,9 @@ describe("Bundle Product catalog service", () => {
         expect(createBundleProductComponentAddOnRepo).toHaveBeenCalledTimes(1);
     });
 
-    test("retires a bundle product through status update", async () => {
-        const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
-            status: "inactive",
-        });
-
-        expect(response.status).toBe("success");
-        expect(response.data?.product.status).toBe("inactive");
-        expect(updateProductRepo).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: bundleId,
-                status: "inactive",
-                unitId: pieceUnitId,
-                defaultSellingQuantity: 1,
-                allowCustomSellingQuantity: false,
-            }),
-            expect.anything(),
-        );
-    });
-
     test("allows in-place bundle edits for future sales", async () => {
         const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
             name: "Burger Combo Plus",
-            price: 109,
             components: [
                 {
                     productId: burgerId,
@@ -394,35 +376,10 @@ describe("Bundle Product catalog service", () => {
 
         expect(response.status).toBe("success");
         expect(response.data?.product.name).toBe("Burger Combo Plus");
-        expect(response.data?.product.price).toBe(109);
+        expect(response.data?.product.price).toBe(existingBundle.price);
         expect(deleteBundleProductComponentsByBundleProductId).toHaveBeenCalled();
         expect(createBundleProductComponentRepo).toHaveBeenCalled();
         expect(createBundleProductComponentAddOnRepo).toHaveBeenCalled();
-    });
-
-    test("blocks product inactivation while an active bundle depends on it", async () => {
-        countActiveBundlesByComponentProductId.mockResolvedValue(1);
-
-        const response = await catalogService.updateProduct(userId, organizationId, burgerId, {
-            status: "inactive",
-        });
-
-        expect(response.status).toBe("error");
-        expect(response.code).toBe(409);
-        expect(response.message).toContain("used by an active bundle");
-        expect(updateProductRepo).not.toHaveBeenCalled();
-    });
-
-    test("allows product inactivation after dependent active bundles are gone", async () => {
-        countActiveBundlesByComponentProductId.mockResolvedValue(0);
-
-        const response = await catalogService.updateProduct(userId, organizationId, burgerId, {
-            status: "inactive",
-        });
-
-        expect(response.status).toBe("success");
-        expect(response.data?.product.status).toBe("inactive");
-        expect(updateProductRepo).toHaveBeenCalled();
     });
 
     test("blocks add-on inactivation while an active bundle depends on it", async () => {
@@ -487,74 +444,9 @@ describe("Bundle Product catalog service", () => {
         expect(updateProductAddOnAttachmentRepo).toHaveBeenCalled();
     });
 
-    test("revalidates stored components before reactivating a bundle", async () => {
-        getProductById.mockImplementation(async (_organizationId: string, productId: string) => {
-            if (productId === burgerId) return { ...burger, status: "inactive" as const };
-            if (productId === bundleId) {
-                return {
-                    ...existingBundle,
-                    id: bundleId,
-                    name: "Burger Combo",
-                    status: "inactive" as const,
-                };
-            }
-            return null;
-        });
-
-        const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
-            status: "active",
-        });
-
-        expect(response.status).toBe("error");
-        expect(response.code).toBe(400);
-        expect(response.message).toContain("active products");
-        expect(updateProductRepo).not.toHaveBeenCalled();
-    });
-
-    test("revalidates stored add-on quantities before reactivating a bundle", async () => {
-        getProductById.mockImplementation(async (_organizationId: string, productId: string) => {
-            if (productId === burgerId) return burger;
-            if (productId === bundleId) {
-                return {
-                    ...existingBundle,
-                    id: bundleId,
-                    name: "Burger Combo",
-                    status: "inactive" as const,
-                };
-            }
-            return null;
-        });
-        getBundleProductComponentAddOnsByComponentIds.mockResolvedValue([
-            {
-                id: cheeseAttachmentId,
-                organizationId,
-                bundleProductComponentId: componentId,
-                addOnId: cheeseAddOnId,
-                quantity: 2,
-                createdBy: userId,
-                updatedBy: null,
-                createdAt: now,
-                updatedAt: now,
-            },
-        ]);
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockResolvedValue({
-            ...cheeseAttachment,
-            selectionCap: 1,
-        });
-
-        const response = await catalogService.updateBundleProduct(userId, organizationId, bundleId, {
-            status: "active",
-        });
-
-        expect(response.status).toBe("error");
-        expect(response.code).toBe(400);
-        expect(response.message).toContain("selection cap");
-        expect(updateProductRepo).not.toHaveBeenCalled();
-    });
-
     test("requires bundle products to use the bundle update workflow", async () => {
         const response = await catalogService.updateProduct(userId, organizationId, bundleId, {
-            status: "inactive",
+            name: "Renamed through the wrong workflow",
         });
 
         expect(response.status).toBe("error");

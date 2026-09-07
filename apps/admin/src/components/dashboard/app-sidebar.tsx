@@ -12,8 +12,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { cn } from "@repo/ui/lib/utils";
 
 import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
+import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
+import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import {
     getGroupedAdminMainDestinations,
     type AdminNavDestination,
@@ -82,9 +84,15 @@ const AppSidebar = ({
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
     const hasOrganization = organizations.length > 0 && Boolean(effectiveOrgId);
+    const storeWorkspace = parseStoreWorkspacePath(location.pathname);
     const groupedSections = useMemo(
-        () => getGroupedAdminMainDestinations({ hasOrganization, organizationId: effectiveOrgId }),
-        [hasOrganization, effectiveOrgId],
+        () =>
+            getGroupedAdminMainDestinations({
+                hasOrganization,
+                organizationId: effectiveOrgId,
+                storeId: storeWorkspace?.storeId,
+            }),
+        [hasOrganization, effectiveOrgId, storeWorkspace?.storeId],
     );
 
     const renderNavItem = (item: AdminNavDestination, badge?: number) => {
@@ -248,12 +256,7 @@ const AppSidebar = ({
                                     </p>
                                 )}
                                 <div className="space-y-0.5">
-                                    {section.items.map((item) =>
-                                        renderNavItem(
-                                            item,
-                                            item.id === "organizations" ? organizations.length : undefined,
-                                        ),
-                                    )}
+                                    {section.items.map((item) => renderNavItem(item))}
                                 </div>
                             </div>
                         );
@@ -265,6 +268,18 @@ const AppSidebar = ({
                         <div key={item.label}>{renderSecondaryItem(item)}</div>
                     ))}
                 </nav>
+
+                <div
+                    className={cn(
+                        "shrink-0 border-t border-border/50",
+                        isCollapsed && !isMobile ? "px-1 py-2" : "px-2 py-2",
+                    )}
+                >
+                    <AdminWorkspaceSwitcherFromRoute
+                        variant="sidebar"
+                        collapsed={!isMobile && isCollapsed}
+                    />
+                </div>
 
             </div>
 

@@ -6,6 +6,7 @@ import {
   type WhatsAppSetCustomerSuppressionJSON,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as repository from "./customer-consent.repository";
 
 type ConsentRepository = Pick<typeof repository, "recordCustomerConsent" | "setCustomerSuppression" | "listCustomerConsentEvents">;
@@ -38,6 +39,8 @@ export const recordCustomerConsent = async (
   if (!await deps.organizationAccess(organizationId, userId)) {
     return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
+  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
+  if (entitlementError) return entitlementError;
   try {
     const event = await deps.recordCustomerConsent(organizationId, customerId, userId, input);
     return event ? { status: "success", message: "Customer WhatsApp consent updated", data: event, code: STATUS_CODES.SUCCESS } : notFound();
@@ -57,6 +60,8 @@ export const setCustomerSuppression = async (
   if (!await deps.organizationAccess(organizationId, userId)) {
     return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
+  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
+  if (entitlementError) return entitlementError;
   try {
     const event = await deps.setCustomerSuppression(organizationId, customerId, userId, input);
     return event ? { status: "success", message: "Customer WhatsApp suppression updated", data: event, code: STATUS_CODES.SUCCESS } : notFound();
@@ -75,6 +80,8 @@ export const listCustomerConsentEvents = async (
   if (!await deps.organizationAccess(organizationId, userId)) {
     return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
+  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const events = await deps.listCustomerConsentEvents(organizationId, customerId);
   if (!events) return { status: "error", message: "Customer not found", data: null, code: STATUS_CODES.NOT_FOUND };
   return {

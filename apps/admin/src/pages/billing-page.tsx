@@ -28,6 +28,7 @@ import {
     getProducts,
     getSale,
     getSales,
+    getStoreProductOfferings,
     updatePosSettings,
     updatePosDraftSale,
     updateDraftSale,
@@ -53,7 +54,7 @@ import type {
     SaleServiceMode,
     UpdateDraftSaleJSON,
 } from "@repo/types";
-import { normalizePhoneNumber } from "@repo/types";
+import { normalizePhoneNumber, overlayActiveStoreProductOfferings, inactiveProductCodesWithoutActiveOffering } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
@@ -752,6 +753,11 @@ const BillingPage = ({
         queryFn: () => (isDeviceMode ? getPosProducts() : getProducts(organizationId)),
         enabled: Boolean(organizationId),
     });
+    const storeOfferingsQuery = useQuery({
+        queryKey: catalogKeys.storeProductOfferings(organizationId, selectedStoreId),
+        queryFn: () => getStoreProductOfferings(organizationId, selectedStoreId),
+        enabled: !isDeviceMode && Boolean(organizationId && selectedStoreId),
+    });
 
     const posSettingsQuery = useQuery({
         queryKey: ["pos", "settings", session?.device.id],
@@ -875,17 +881,37 @@ const BillingPage = ({
         () => (categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : []),
         [categoriesQuery.data],
     );
-    const products = useMemo(
+    const catalogProducts = useMemo(
         () => (productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : []),
         [productsQuery.data],
     );
-    const inactiveProductCodes = useMemo(
+    const storeOfferings = useMemo(
         () =>
-            productsQuery.data?.status === "success"
-                ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+            storeOfferingsQuery.data?.status === "success"
+                ? (storeOfferingsQuery.data.data?.offerings ?? [])
                 : [],
-        [productsQuery.data],
+        [storeOfferingsQuery.data],
     );
+    const products = useMemo(() => {
+        if (isDeviceMode) {
+            return catalogProducts;
+        }
+        if (!selectedStoreId) {
+            return catalogProducts;
+        }
+        return overlayActiveStoreProductOfferings(catalogProducts, storeOfferings);
+    }, [catalogProducts, isDeviceMode, selectedStoreId, storeOfferings]);
+    const inactiveProductCodes = useMemo(() => {
+        if (isDeviceMode) {
+            return productsQuery.data?.status === "success"
+                ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+                : [];
+        }
+        if (!selectedStoreId) {
+            return [];
+        }
+        return inactiveProductCodesWithoutActiveOffering(catalogProducts, storeOfferings);
+    }, [catalogProducts, isDeviceMode, productsQuery.data, selectedStoreId, storeOfferings]);
     const barcodeScanningEnabled =
         posSettingsQuery.data?.status === "success" &&
         posSettingsQuery.data.data?.organizationCatalogSettings.barcodeScanningEnabled === true;
@@ -2076,7 +2102,7 @@ const BillingPage = ({
                     if (!posPrinter?.supported) {
                         toast.error("WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS");
                     } else if (!posPrinter.connected) {
-                        toast.error("Connect the 80mm USB printer before printing");
+                        toast.error("Connect the USB receipt printer before printing");
                     } else {
                         void posPrinter.printSale(sale, receiptContext)
                             .then(() => toast.success("Receipt sent to printer"))

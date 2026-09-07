@@ -9,11 +9,9 @@ import {
     updateBundleProduct,
 } from "@repo/services";
 import {
-    ProductStatusSchema,
     type CategoryDTO,
     type CreateBundleProductJSON,
     type ProductResponseDTO,
-    type ProductStatus,
 } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
@@ -26,7 +24,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@repo/ui/components/dialog";
-import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -86,7 +84,6 @@ const UpsertBundleProductFormSchema = z.object({
         .transform((value) => (value === "" ? 0 : Number(value)))
         .pipe(z.number().min(0, "Discount must be 0 or more"))
         .optional(),
-    status: ProductStatusSchema.optional(),
     components: z
         .array(
             z.object({
@@ -107,6 +104,7 @@ const UpsertBundleProductFormSchema = z.object({
 });
 
 type UpsertBundleProductFormInput = z.input<typeof UpsertBundleProductFormSchema>;
+type UpsertBundleProductFormOutput = z.output<typeof UpsertBundleProductFormSchema>;
 type BundleFormComponentInput = UpsertBundleProductFormInput["components"][number];
 type BundleFormAddOnInput = NonNullable<BundleFormComponentInput["addOns"]>[number];
 
@@ -124,7 +122,6 @@ const defaultValues: UpsertBundleProductFormInput = {
     name: "",
     price: "",
     discount: "",
-    status: "active",
     components: [{ productId: "", quantity: "1", addOns: [] }],
 };
 
@@ -186,11 +183,6 @@ const mergeBundleFormComponents = (components: BundleFormComponentSource[]): Bun
     return [...merged.values(), ...pending];
 };
 
-const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
-    label: status.charAt(0).toUpperCase() + status.slice(1),
-    value: status,
-}));
-
 const UpsertBundleProductDialog = ({
     organizationId,
     categories,
@@ -203,7 +195,7 @@ const UpsertBundleProductDialog = ({
     const queryClient = useQueryClient();
     const isEditMode = Boolean(product);
 
-    const form = useForm<UpsertBundleProductFormInput, unknown, CreateBundleProductJSON>({
+    const form = useForm<UpsertBundleProductFormInput, unknown, UpsertBundleProductFormOutput>({
         resolver: zodResolver(UpsertBundleProductFormSchema),
         defaultValues,
     });
@@ -314,7 +306,6 @@ const UpsertBundleProductDialog = ({
             name: product.name,
             price: String(product.price),
             discount: product.discount ? String(product.discount) : "",
-            status: product.status,
             components: details?.components.length
                 ? mergeBundleFormComponents(details.components.map((component) => ({
                     productId: component.componentProductId,
@@ -337,10 +328,10 @@ const UpsertBundleProductDialog = ({
     ]);
 
     const mutation = useMutation({
-        mutationFn: (data: CreateBundleProductJSON) =>
+        mutationFn: (data: CreateBundleProductJSON | Parameters<typeof updateBundleProduct>[2]) =>
             product
                 ? updateBundleProduct(organizationId, product.id, data)
-                : createBundleProduct(organizationId, data),
+                : createBundleProduct(organizationId, data as CreateBundleProductJSON),
         onSuccess: (response) => {
             if (response.status === "success") {
                 toast.success(response.message);
@@ -357,13 +348,10 @@ const UpsertBundleProductDialog = ({
         },
     });
 
-    const onSubmit: SubmitHandler<CreateBundleProductJSON> = (values) => {
-        mutation.mutate({
+    const onSubmit: SubmitHandler<UpsertBundleProductFormOutput> = (values) => {
+        const shared = {
             categoryId: values.categoryId,
             name: values.name.trim(),
-            price: values.price,
-            discount: values.discount ?? 0,
-            status: (values.status ?? "active") as ProductStatus,
             components: mergeBundleFormComponents(values.components).map((component) => ({
                 productId: component.productId,
                 quantity: Number(component.quantity),
@@ -374,7 +362,17 @@ const UpsertBundleProductDialog = ({
                         quantity: Number(addOn.quantity),
                     })),
             })),
-        });
+        };
+        mutation.mutate(
+            isEditMode
+                ? shared
+                : {
+                    ...shared,
+                    price: values.price,
+                    discount: values.discount ?? 0,
+                    status: "inactive" as const,
+                },
+        );
     };
 
     const hasCategories = categories.length > 0;
@@ -507,69 +505,54 @@ const UpsertBundleProductDialog = ({
                             </FieldContent>
                         </Field>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field data-invalid={!!form.formState.errors.price}>
-                                <FieldLabel required>Price</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={form.watch("price")}
-                                        onChange={(event) =>
-                                            form.setValue("price", sanitizeDecimalInput(event.target.value), {
-                                                shouldValidate: true,
-                                            })
-                                        }
-                                        inputMode="decimal"
-                                        placeholder="99"
-                                        className="h-11 rounded-xl"
-                                    />
-                                    <FieldError errors={[form.formState.errors.price]} />
-                                </FieldContent>
-                            </Field>
-
-                            <Field data-invalid={!!form.formState.errors.discount}>
-                                <FieldLabel>Discount</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={form.watch("discount") ?? ""}
-                                        onChange={(event) =>
-                                            form.setValue("discount", sanitizeDecimalInput(event.target.value), {
-                                                shouldValidate: true,
-                                            })
-                                        }
-                                        inputMode="decimal"
-                                        placeholder="0"
-                                        className="h-11 rounded-xl"
-                                    />
-                                    <FieldError errors={[form.formState.errors.discount]} />
-                                </FieldContent>
-                            </Field>
-                        </div>
-
-                        {isEditMode ? (
-                            <Controller
-                                control={form.control}
-                                name="status"
-                                render={({ field, fieldState }) => (
-                                    <Field data-invalid={fieldState.invalid}>
-                                        <FieldLabel>Status</FieldLabel>
+                        {!isEditMode ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field data-invalid={!!form.formState.errors.price}>
+                                        <FieldLabel required>Organization default price (₹)</FieldLabel>
                                         <FieldContent>
-                                            <ReactSelect
-                                                options={statusSelectOptions}
-                                                value={
-                                                    statusSelectOptions.find((option) => option.value === field.value)
-                                                    ?? null
+                                            <Input
+                                                value={form.watch("price")}
+                                                onChange={(event) =>
+                                                    form.setValue("price", sanitizeDecimalInput(event.target.value), {
+                                                        shouldValidate: true,
+                                                    })
                                                 }
-                                                onChange={(option) => field.onChange(option?.value ?? "active")}
-                                                classNames={{
-                                                    control: () => "!min-h-11 rounded-xl",
-                                                }}
+                                                inputMode="decimal"
+                                                placeholder="99"
+                                                className="h-11 rounded-xl"
                                             />
-                                            <FieldError errors={[fieldState.error]} />
+                                            <FieldError errors={[form.formState.errors.price]} />
                                         </FieldContent>
                                     </Field>
-                                )}
-                            />
-                        ) : null}
+
+                                    <Field data-invalid={!!form.formState.errors.discount}>
+                                        <FieldLabel>Organization default discount (₹)</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={form.watch("discount") ?? ""}
+                                                onChange={(event) =>
+                                                    form.setValue("discount", sanitizeDecimalInput(event.target.value), {
+                                                        shouldValidate: true,
+                                                    })
+                                                }
+                                                inputMode="decimal"
+                                                placeholder="0"
+                                                className="h-11 rounded-xl"
+                                            />
+                                            <FieldError errors={[form.formState.errors.discount]} />
+                                        </FieldContent>
+                                    </Field>
+                                </div>
+                                <FieldDescription>
+                                    Organization defaults apply to every Store that has not set a local override. Store menu status stays in each Store workspace.
+                                </FieldDescription>
+                            </>
+                        ) : (
+                            <FieldDescription>
+                                Organization default price and discount are edited here. Effective selling values and local menu status are configured in each Store workspace.
+                            </FieldDescription>
+                        )}
 
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">

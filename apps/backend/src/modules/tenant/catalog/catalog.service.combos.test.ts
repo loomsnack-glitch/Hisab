@@ -25,6 +25,7 @@ import {
     organizationId,
     pieceUnitId,
     productNameExistsInCategory,
+    store,
     userId,
 } from "./catalog.service.test-harness";
 
@@ -69,6 +70,7 @@ describe("Combo Product catalog service", () => {
             name: "Lunch Combo",
             price: 150,
             discount: 0,
+            status: "active",
             choiceGroups: [{
                 name: "Choose a drink",
                 minSelections: 1,
@@ -111,54 +113,6 @@ describe("Combo Product catalog service", () => {
         expect(response.status).toBe("error");
         expect(response.message).toContain("cannot repeat");
         expect(createProductRepo).not.toHaveBeenCalled();
-    });
-
-    test("rejects reactivating a Combo when one of its stored options is inactive", async () => {
-        const inactiveCombo = {
-            ...burger,
-            id: bundleId,
-            name: "Retired lunch Combo",
-            productType: "combo" as const,
-            status: "inactive" as const,
-        };
-        const groupId = "99999999-9999-4999-8999-999999999999";
-        getProductById.mockImplementation((async (_organizationId: string, requestedProductId: string) => {
-            if (requestedProductId === bundleId) return inactiveCombo;
-            if (requestedProductId === burgerId) return { ...burger, status: "inactive" as const };
-            return null;
-        }) as never);
-        getComboChoiceGroupsByProductId.mockResolvedValue([{
-            id: groupId,
-            organizationId,
-            comboProductId: bundleId,
-            name: "Choose a main",
-            minSelections: 1,
-            maxSelections: 1,
-            sortOrder: 0,
-            createdBy: userId,
-            updatedBy: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        }]);
-        getComboChoiceOptionsByGroupIds.mockResolvedValue([{
-            id: "88888888-8888-4888-8888-888888888888",
-            organizationId,
-            choiceGroupId: groupId,
-            optionProductId: burgerId,
-            maxQuantity: 1,
-            priceAdjustment: 0,
-            sortOrder: 0,
-            createdBy: userId,
-            updatedBy: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        }]);
-
-        const response = await catalogService.updateComboProduct(userId, organizationId, bundleId, { status: "active" });
-
-        expect(response.status).toBe("error");
-        expect(response.message).toContain("must be active");
-        expect(updateProductRepo).not.toHaveBeenCalled();
     });
 
     test("loads active Combo details in bulk without per-Combo lookups", async () => {

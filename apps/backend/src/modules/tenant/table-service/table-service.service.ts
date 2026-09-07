@@ -20,6 +20,7 @@ import * as billingRepository from "@/modules/tenant/billing/billing.repository"
 import * as billingService from "@/modules/tenant/billing/billing.service";
 import * as kotService from "@/modules/tenant/kot/kot.service";
 import * as tableRepository from "./table-service.repository";
+import { requireTableManagementFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 
 const isActiveDraftTableState = (state: ServiceTableDTO["state"]) =>
   state === "engaged" || state === "ready_to_bill";
@@ -81,6 +82,16 @@ const getStoreForUser = async (
   return { ok: true };
 };
 
+const requireTableManagementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireTableManagementFeatureEntitlement(storeId);
+
+const requireTableManagementForDevice = async (
+  session: DeviceSessionDTO,
+): Promise<ServiceResponse<null> | null> =>
+  requireTableManagementForStore(session.store.id);
+
 const isUniqueViolation = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
@@ -110,6 +121,11 @@ export const getServiceTables = async (
       code: scope.code,
     };
 
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const tables = await tableRepository.getServiceTables(
     organizationId,
     storeId,
@@ -125,6 +141,11 @@ export const getServiceTables = async (
 export const getServiceTablesForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const tables = await tableRepository.getServiceTables(
     session.organization.id,
     session.store.id,
@@ -140,6 +161,11 @@ export const getServiceTablesForDevice = async (
 export const getServiceAreasForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ServiceAreasListResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const areas = await tableRepository.getServiceAreas(
     session.organization.id,
     session.store.id,
@@ -158,6 +184,11 @@ const transitionServiceTableForDevice = async (
   fromState: "free" | "allocated",
   toState: "free" | "allocated",
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const table = await tableRepository.transitionServiceTableState(
     session.organization.id,
     session.store.id,
@@ -217,6 +248,11 @@ export const startServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   if (await usesKotTableOrders(session)) {
     return kotService.startActiveTableOrderForDevice(session, tableId);
   }
@@ -317,6 +353,11 @@ export const getServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableSaleResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const table = await tableRepository.getServiceTableById(
     session.organization.id,
     session.store.id,
@@ -381,6 +422,11 @@ export const cancelServiceTableOrderForDevice = async (
   session: DeviceSessionDTO,
   tableId: string,
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   if (await usesKotTableOrders(session)) {
     const table = await tableRepository.getServiceTableById(
       session.organization.id,
@@ -533,6 +579,11 @@ const releaseCommittedServiceTableForDevice = async (
   tableId: string,
   expectedState: "payment_due" | "paid",
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const entitlementError = await requireTableManagementForDevice(session);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const result = await pg.begin(async (tx) => {
     const table = await tableRepository.lockServiceTableForDevice(
       session.organization.id,
@@ -638,6 +689,11 @@ export const createServiceTable = async (
       code: scope.code,
     };
 
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const tableLabel = data.tableLabel.trim();
   if (await tableRepository.serviceTableLabelExists(storeId, tableLabel))
     return conflictResponse();
@@ -690,6 +746,11 @@ export const updateServiceTable = async (
       data: null,
       code: scope.code,
     };
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
 
   const existing = await tableRepository.getServiceTableById(
     organizationId,
@@ -768,6 +829,11 @@ export const getServiceAreas = async (
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
 
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const areas = await tableRepository.getServiceAreas(organizationId, storeId);
   return {
     status: "success",
@@ -785,6 +851,11 @@ export const createServiceArea = async (
 ): Promise<ServiceResponse<ServiceAreaResponse | null>> => {
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
 
   const title = data.title.trim();
   if (await tableRepository.serviceAreaTitleExists(storeId, title))
@@ -832,6 +903,11 @@ export const updateServiceArea = async (
 ): Promise<ServiceResponse<ServiceAreaResponse | null>> => {
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
 
   const existing = await tableRepository.getServiceAreaById(
     organizationId,
@@ -891,6 +967,11 @@ export const deleteServiceArea = async (
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
 
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
   const existing = await tableRepository.getServiceAreaById(
     organizationId,
     storeId,
@@ -931,6 +1012,11 @@ export const assignServiceTablesToArea = async (
 ): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
 
   const tableIds = [...new Set(data.tableIds)];
   const result = await pg.begin(async (tx) => {
@@ -1024,6 +1110,11 @@ export const unassignServiceTableFromArea = async (
 ): Promise<ServiceResponse<ServiceTableResponse | null>> => {
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
 
   const result = await pg.begin(async (tx) => {
     const area = await tableRepository.lockServiceArea(

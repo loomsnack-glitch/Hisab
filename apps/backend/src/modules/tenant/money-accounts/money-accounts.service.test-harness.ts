@@ -1,4 +1,5 @@
 import { mock } from "bun:test";
+import { resolveFeatureEntitlement, ensureFeatureEntitlementMock } from "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness";
 import type {
     MoneyAccountDTO,
     MoneyAccountHistoryMovementREPO,
@@ -248,6 +249,9 @@ export const wrappedActiveCashUniqueViolation = () =>
 
 export const getOrganizationByIdForUser = mock(async () => organization);
 export const getStoreById = mock(async () => store);
+export const getStoresByOrganizationId = mock(async () => [store, vesuStore]);
+export { resolveFeatureEntitlement };
+
 export const getMoneyAccountsByOrganizationId = mock(async () => [
     hdfcBankAccount,
     inactivePettyCashAccount,
@@ -337,6 +341,7 @@ mock.module("@/config/db", () => ({
 mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser,
     getStoreById,
+    getStoresByOrganizationId,
 }));
 
 mock.module("./money-accounts.repository", () => ({
@@ -356,5 +361,7 @@ mock.module("./money-accounts.repository", () => ({
     lockPaymentRouteByStoreAndMethod,
     lockMoneyAccountById,
 }));
+
+await ensureFeatureEntitlementMock();
 
 export const moneyAccountsService = await import("./money-accounts.service");

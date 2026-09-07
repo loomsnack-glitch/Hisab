@@ -8,6 +8,7 @@ import {
   test,
 } from "bun:test";
 import type { DeviceSessionDTO } from "@repo/types";
+import { installTableServiceRepositoryMock } from "@/modules/tenant/table-service/table-service.repository.test-harness";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -472,6 +473,7 @@ mock.module("@/modules/tenant/organization/organization.repository", () => ({
     getOrganizationByIdForUser: mock(async () => organization),
     getOrganizationById: mock(async () => organization),
     getStoreById: mock(async () => store),
+    getStoresByOrganizationId: mock(async () => [store]),
 }));
 
 mock.module("@/modules/tenant/money-accounts/money-accounts.repository", () => ({
@@ -518,27 +520,33 @@ mock.module("./billing.repository", () => ({
     getAddOnScopedSalesRollups,
 }));
 
-mock.module("@/modules/tenant/table-service/table-service.repository", () => ({
+installTableServiceRepositoryMock({
     lockServiceTableForSale,
     markReadyDraftAsEngaged,
     setCommittedSaleTableState,
-    getServiceTableById: mock(async () => null),
-}));
+});
 
-mock.module("./billing-kot-read", () => ({
+mock.module("@/modules/tenant/billing/billing-kot-read", () => ({
   getKotNumbersBySaleId,
   getKotsBySaleId,
 }));
 
-mock.module("./billing-kot-write", () => ({
+mock.module("@/modules/tenant/billing/billing-kot-write", () => ({
   getStandaloneKotByGenerationRequestIdForActor,
   prepareStandaloneKotBatchForActor,
   persistPreparedStandaloneKotBatch,
 }));
 
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
+
 const catalogRepository =
   await import("@/modules/tenant/catalog/catalog.repository");
 const billingService = await import("./billing.service");
+const { installStoreProductOfferingLookupSpy } = await import(
+  "@/modules/tenant/catalog/store-product-offering.test-helpers"
+);
 
 const resolveSelectableAttachment = (requestedAddOnId: string) => {
     if (requestedAddOnId === addOnId) {
@@ -553,8 +561,11 @@ const resolveSelectableAttachment = (requestedAddOnId: string) => {
 describe("Configured product billing with trusted snapshots", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getActiveAttachmentSpy: ReturnType<typeof spyOn>;
+    let getStoreAddOnOfferingSpy: ReturnType<typeof spyOn>;
     let getComboChoiceGroupsSpy: ReturnType<typeof spyOn>;
     let getComboChoiceOptionsSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -607,9 +618,45 @@ describe("Configured product billing with trusted snapshots", () => {
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
         ).mockImplementation(
+            async (_organizationId, _storeId, _productId, requestedAddOnId) =>
+                resolveSelectableAttachment(requestedAddOnId) as never,
+        );
+        getActiveAttachmentSpy = spyOn(
+            catalogRepository,
+            "getActiveProductAddOnAttachmentByProductAndAddOn",
+        ).mockImplementation(
             async (_organizationId, _productId, requestedAddOnId) =>
                 resolveSelectableAttachment(requestedAddOnId) as never,
         );
+        getStoreAddOnOfferingSpy = spyOn(
+            catalogRepository,
+            "getStoreAddOnOfferingByAddOnAndStore",
+        ).mockImplementation(async (_organizationId, storeIdArg, requestedAddOnId) => {
+            const attachment = resolveSelectableAttachment(requestedAddOnId);
+            if (!attachment) {
+                return null;
+            }
+
+            return {
+                id: `0ffeeeee-0000-4000-8000-${requestedAddOnId.replace(/-/g, "").slice(-12)}`,
+                organizationId,
+                storeId: storeIdArg,
+                addOnId: requestedAddOnId,
+                priceOverride: null,
+                discountOverride: null,
+                effectivePrice: attachment.addOn.price,
+                effectiveDiscount: attachment.addOn.discount,
+                isPriceInherited: true,
+                isDiscountInherited: true,
+                price: attachment.addOn.price,
+                discount: attachment.addOn.discount,
+                status: "active" as const,
+                createdBy: userId,
+                updatedBy: null,
+                createdAt: now,
+                updatedAt: now,
+            } as never;
+        });
     getComboChoiceGroupsSpy = spyOn(
       catalogRepository,
       "getComboChoiceGroupsByProductId",
@@ -618,13 +665,17 @@ describe("Configured product billing with trusted snapshots", () => {
       catalogRepository,
       "getComboChoiceOptionsByGroupIds",
     ).mockResolvedValue([] as never);
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getActiveAttachmentSpy.mockRestore();
+        getStoreAddOnOfferingSpy.mockRestore();
         getComboChoiceGroupsSpy.mockRestore();
         getComboChoiceOptionsSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("creates a plain product line with trusted catalog pricing snapshots", async () => {
@@ -1257,6 +1308,7 @@ describe("Configured product billing with trusted snapshots", () => {
         expect(response.status).toBe("success");
     expect(getSelectableAttachmentSpy).toHaveBeenCalledWith(
       organizationId,
+      storeId,
       productId,
       addOnId,
     );
@@ -1872,11 +1924,118 @@ describe("Configured product billing with trusted snapshots", () => {
         });
         expect(createdSaleItems).toHaveLength(2);
     });
+
+    test("bills the Store Product Offering price even when the Catalog Product seed price differs", async () => {
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            priceOverride: 175,
+            discountOverride: 25,
+            effectivePrice: 175,
+            effectiveDiscount: 25,
+            isPriceInherited: false,
+            isDiscountInherited: false,
+            status: "active",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+
+        const response = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+
+        expect(response.status).toBe("success");
+        expect(createdSaleItems[0]?.unitPriceSnapshot).toBe(175);
+        expect(createdSaleItems[0]?.discountAmount).toBe(25);
+        expect(createdSaleItems[0]?.lineTotal).toBe(150);
+    });
+
+    test("rejects a Catalog Product with no active Offering at the Sale's Store", async () => {
+        getStoreProductOfferingSpy.mockResolvedValue(null as never);
+
+        const missing = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            price: 100,
+            discount: 10,
+            status: "inactive",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+        const inactive = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+
+        expect(missing.status).toBe("error");
+        expect(missing.code).toBe(400);
+        expect(missing.message).toContain("not available at this Store");
+        expect(inactive.status).toBe("error");
+        expect(inactive.message).toContain("not available at this Store");
+        expect(createSaleItem).not.toHaveBeenCalled();
+    });
+
+    test("later Offering edits do not change recorded Sale Item snapshots", async () => {
+        const created = await billingService.createDraftSale(
+            userId,
+            organizationId,
+            storeId,
+            { items: [{ productId, quantity: 1, addOns: [] }] },
+        );
+        expect(created.status).toBe("success");
+        const originalPrice = createdSaleItems[0]?.unitPriceSnapshot;
+        const originalDiscount = createdSaleItems[0]?.discountAmount;
+
+        getStoreProductOfferingSpy.mockResolvedValue({
+            id: "0ffeeeee-0000-4000-8000-dddddddddddd",
+            organizationId,
+            storeId,
+            productId,
+            price: 999,
+            discount: 0,
+            status: "inactive",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: now,
+            updatedAt: now,
+        } as never);
+
+        const fetched = await billingService.getSaleDetails(
+            userId,
+            organizationId,
+            storeId,
+            created.data?.sale.id!,
+        );
+
+        expect(fetched.status).toBe("success");
+        expect(fetched.data?.sale.items[0]?.unitPriceSnapshot).toBe(originalPrice);
+        expect(fetched.data?.sale.items[0]?.discountAmount).toBe(originalDiscount);
+    });
 });
 
 describe("Configuration-aware Draft Sale behavior", () => {
     let getProductByIdSpy: ReturnType<typeof spyOn>;
     let getSelectableAttachmentSpy: ReturnType<typeof spyOn>;
+    let getStoreProductOfferingSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         createdSales.length = 0;
@@ -1901,14 +2060,16 @@ describe("Configuration-aware Draft Sale behavior", () => {
             catalogRepository,
             "getSelectableProductAddOnAttachmentByProductAndAddOn",
         ).mockImplementation(
-            async (_organizationId, _productId, requestedAddOnId) =>
+            async (_organizationId, _storeId, _productId, requestedAddOnId) =>
                 resolveSelectableAttachment(requestedAddOnId) as never,
         );
+    getStoreProductOfferingSpy = installStoreProductOfferingLookupSpy(catalogRepository);
     });
 
     afterEach(() => {
         getProductByIdSpy.mockRestore();
         getSelectableAttachmentSpy.mockRestore();
+        getStoreProductOfferingSpy.mockRestore();
     });
 
     test("deletes a draft sale and rejects a second deletion", async () => {
@@ -2423,7 +2584,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
     );
 
         expect(response.status).toBe("error");
-        expect(response.message).toContain("not available for new sale selections");
+        expect(response.message).toContain("not available at this Store");
         expect(createSale).not.toHaveBeenCalled();
     });
 
@@ -2489,7 +2650,7 @@ describe("Configuration-aware Draft Sale behavior", () => {
       originalAddOnUnitPrice,
     );
         expect(updated.data?.sale.items[0]?.addOns[0]?.totalQuantity).toBe(2);
-        expect(getProductByIdSpy).toHaveBeenCalledTimes(1);
+        expect(getProductByIdSpy).toHaveBeenCalledTimes(2);
     });
 
     test("commits a draft with frozen configured lines after later catalog deactivation", async () => {

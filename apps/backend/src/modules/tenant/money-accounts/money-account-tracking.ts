@@ -5,7 +5,7 @@ export const isMoneyAccountTrackingActive = async (
     organizationId: string,
     storeId: string,
 ): Promise<boolean> => {
-    const available = await isMoneyAccountTrackingAvailable(organizationId);
+    const available = await isMoneyAccountTrackingAvailable(organizationId, storeId);
     if (!available) {
         return false;
     }

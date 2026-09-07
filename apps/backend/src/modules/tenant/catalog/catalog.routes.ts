@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
     CreateAddOnSchema,
@@ -10,6 +11,7 @@ import {
     CreateProductSchema,
     ReorderCategoriesSchema,
     ReorderProductsSchema,
+    ReorderStoreCategoryPresentationsSchema,
     ReuseInternalProductCodeSchema,
     STATUS_CODES,
     UpdateAddOnSchema,
@@ -20,12 +22,19 @@ import {
     UpdateProductAddOnAttachmentSchema,
     UpdateProductLabelProfileSchema,
     UpdateProductSchema,
+    UpdateStoreCategoryPresentationSchema,
+    UpdateStoreProductOfferingSchema,
+    UpdateStoreAddOnOfferingSchema,
+    PreviewCatalogCommercialOperationSchema,
+    ApplyCatalogCommercialOperationSchema,
 } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
+import { createOrganizationFeatureEntitlementMiddleware } from "@/modules/tenant/commercial-licensing/organization-feature-entitlement.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as catalogService from "./catalog.service";
+import * as catalogCommercialOperations from "./catalog-commercial-operations";
 
 const FILE_NAME = "catalog.routes";
 const uuidSchema = z.uuid("Invalid id");
@@ -45,7 +54,31 @@ const validateUuidParam = (value: string, message: string) => {
     return null;
 };
 
+const catalogResourceKeys = new Set([
+    "categories",
+    "products",
+    "bundle-products",
+    "combo-products",
+    "add-ons",
+    "label-templates",
+]);
+
+const requireCatalogProductsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+
+const catalogProductsEntitlement: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
+    const catalogResource = context.req.param("catalogResource");
+    if (!catalogResource || !catalogResourceKeys.has(catalogResource)) {
+        await next();
+        return;
+    }
+
+    return requireCatalogProductsEntitlement(context, next);
+};
+
 router.use("*", authMiddleware);
+// Scope to catalog resources. `/:organizationId/*` would 403 later `/organizations` mounts such as Store commercial status.
+router.use("/:organizationId/:catalogResource", catalogProductsEntitlement);
+router.use("/:organizationId/:catalogResource/*", catalogProductsEntitlement);
 
 router.get("/:organizationId/categories", async (c) => {
     try {
@@ -868,5 +901,291 @@ router.delete("/:organizationId/products/:productId/add-on-attachments/:attachme
         return handleError(FILE_NAME, "deleteProductAddOnAttachment", c, error);
     }
 });
+
+const requireStoreProductOfferingsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+
+router.use("/:organizationId/store-commercial-operations", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/store-commercial-operations/*", requireStoreProductOfferingsEntitlement);
+
+router.post(
+    "/:organizationId/store-commercial-operations/preview",
+    validateSchema("json", PreviewCatalogCommercialOperationSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const serviceResponse = await catalogCommercialOperations.previewCatalogCommercialOperation(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "previewCatalogCommercialOperation", c, error);
+        }
+    },
+);
+
+router.post(
+    "/:organizationId/store-commercial-operations/apply",
+    validateSchema("json", ApplyCatalogCommercialOperationSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) {
+                return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            }
+
+            const serviceResponse = await catalogCommercialOperations.applyCatalogCommercialOperation(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "applyCatalogCommercialOperation", c, error);
+        }
+    },
+);
+
+router.get("/:organizationId/store-commercial-operations/audits", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const serviceResponse = await catalogCommercialOperations.getCatalogCommercialOperationAudits(
+            c.get("authUser").id,
+            organizationId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getCatalogCommercialOperationAudits", c, error);
+    }
+});
+
+router.get("/:organizationId/store-product-offering-override-summary", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const serviceResponse = await catalogService.getStoreProductOfferingOverrideSummary(
+            c.get("authUser").id,
+            organizationId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreProductOfferingOverrideSummary", c, error);
+    }
+});
+
+router.use("/:organizationId/stores/:storeId/product-offerings", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/stores/:storeId/product-offerings/*", requireStoreProductOfferingsEntitlement);
+
+router.get("/:organizationId/stores/:storeId/product-offerings", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+        if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+
+        const serviceResponse = await catalogService.getStoreProductOfferings(
+            c.get("authUser").id,
+            organizationId,
+            storeId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreProductOfferings", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/stores/:storeId/product-offerings/:offeringId",
+    validateSchema("json", UpdateStoreProductOfferingSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const offeringId = c.req.param("offeringId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+            const invalidOfferingId = validateUuidParam(offeringId, "Invalid offering id");
+            if (invalidOfferingId) return c.json(invalidOfferingId, invalidOfferingId.code);
+
+            const serviceResponse = await catalogService.updateStoreProductOffering(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                offeringId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStoreProductOffering", c, error);
+        }
+    },
+);
+
+router.get("/:organizationId/store-add-on-offering-override-summary", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) {
+            return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        }
+
+        const serviceResponse = await catalogService.getStoreAddOnOfferingOverrideSummary(
+            c.get("authUser").id,
+            organizationId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreAddOnOfferingOverrideSummary", c, error);
+    }
+});
+
+router.use("/:organizationId/stores/:storeId/add-on-offerings", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/stores/:storeId/add-on-offerings/*", requireStoreProductOfferingsEntitlement);
+
+router.get("/:organizationId/stores/:storeId/add-on-offerings", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+        if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+
+        const serviceResponse = await catalogService.getStoreAddOnOfferings(
+            c.get("authUser").id,
+            organizationId,
+            storeId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreAddOnOfferings", c, error);
+    }
+});
+
+router.patch(
+    "/:organizationId/stores/:storeId/add-on-offerings/:offeringId",
+    validateSchema("json", UpdateStoreAddOnOfferingSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const offeringId = c.req.param("offeringId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+            const invalidOfferingId = validateUuidParam(offeringId, "Invalid offering id");
+            if (invalidOfferingId) return c.json(invalidOfferingId, invalidOfferingId.code);
+
+            const serviceResponse = await catalogService.updateStoreAddOnOffering(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                offeringId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStoreAddOnOffering", c, error);
+        }
+    },
+);
+
+router.use("/:organizationId/stores/:storeId/category-presentations", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/stores/:storeId/category-presentations/*", requireStoreProductOfferingsEntitlement);
+
+router.get("/:organizationId/stores/:storeId/category-presentations", async (c) => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+        if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+        const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+        if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+
+        const serviceResponse = await catalogService.getStoreCategoryPresentations(
+            c.get("authUser").id,
+            organizationId,
+            storeId,
+        );
+        return handleServiceResponse(c, serviceResponse);
+    } catch (error) {
+        return handleError(FILE_NAME, "getStoreCategoryPresentations", c, error);
+    }
+});
+
+router.put(
+    "/:organizationId/stores/:storeId/category-presentations/order",
+    validateSchema("json", ReorderStoreCategoryPresentationsSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+
+            const serviceResponse = await catalogService.reorderStoreCategoryPresentations(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "reorderStoreCategoryPresentations", c, error);
+        }
+    },
+);
+
+router.patch(
+    "/:organizationId/stores/:storeId/category-presentations/:presentationId",
+    validateSchema("json", UpdateStoreCategoryPresentationSchema),
+    async (c) => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const presentationId = c.req.param("presentationId");
+            const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
+            if (invalidOrganizationId) return c.json(invalidOrganizationId, invalidOrganizationId.code);
+            const invalidStoreId = validateUuidParam(storeId, "Invalid store id");
+            if (invalidStoreId) return c.json(invalidStoreId, invalidStoreId.code);
+            const invalidPresentationId = validateUuidParam(presentationId, "Invalid presentation id");
+            if (invalidPresentationId) return c.json(invalidPresentationId, invalidPresentationId.code);
+
+            const serviceResponse = await catalogService.updateStoreCategoryPresentation(
+                c.get("authUser").id,
+                organizationId,
+                storeId,
+                presentationId,
+                c.req.valid("json"),
+            );
+            return handleServiceResponse(c, serviceResponse);
+        } catch (error) {
+            return handleError(FILE_NAME, "updateStoreCategoryPresentation", c, error);
+        }
+    },
+);
 
 export default router;

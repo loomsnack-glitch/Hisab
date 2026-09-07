@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { SaleDetailDTO } from "@repo/types";
 
-import { build80mmEscPosPayload } from "./pos-printer";
+import {
+  build80mmEscPosPayload,
+  buildEscPosPayload,
+  describeUsbPrinterError,
+} from "./pos-printer";
+import { getReceiptPaperWidth } from "./receipt-paper-size";
 import { buildReceiptText, RECEIPT_WIDTH } from "./receipt-text";
 
 const sale = {
@@ -303,5 +308,46 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(() => buildReceiptText(sale, {}, { width: 22 })).toThrow(
       "Receipt width must be an integer",
     );
+  });
+
+  test("wraps a 58mm receipt to 32 characters", () => {
+    const width = getReceiptPaperWidth("58mm");
+    const output = new TextDecoder().decode(
+      buildEscPosPayload(
+        sale,
+        {
+          organizationName: "Hisab Foods",
+          organizationTagline: "A".repeat(80),
+        },
+        { width },
+      ),
+    );
+    const receipt = buildReceiptText(
+      sale,
+      { organizationName: "Hisab Foods", organizationTagline: "A".repeat(80) },
+      { width },
+    );
+
+    expect(width).toBe(32);
+    expect(output).toContain("A".repeat(32));
+    expect(receipt.split("\n").every((line) => line.length <= 32)).toBe(true);
+  });
+});
+
+describe("USB printer errors", () => {
+  test("explains Windows Access denied instead of the raw WebUSB message", () => {
+    expect(
+      describeUsbPrinterError(
+        new Error("Failed to execute 'open' on 'USBDevice': Access denied."),
+      ),
+    ).toContain("Use Zadig to install WinUSB");
+  });
+
+  test("keeps unrelated USB errors unchanged", () => {
+    expect(
+      describeUsbPrinterError(
+        new Error("No USB bulk OUT endpoint found on this printer"),
+      ),
+    ).toBe("No USB bulk OUT endpoint found on this printer");
   });
 });

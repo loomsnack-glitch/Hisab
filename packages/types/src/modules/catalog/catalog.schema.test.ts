@@ -10,9 +10,14 @@ import {
   ProductResponseDTOSchema,
   UpdateAddOnSchema,
   UpdateBundleProductSchema,
+  UpdateComboProductSchema,
   UpdateLabelTemplateSchema,
   UpdateProductAddOnAttachmentSchema,
   UpdateProductSchema,
+  UpdateStoreProductOfferingSchema,
+  UpdateStoreAddOnOfferingSchema,
+  PreviewCatalogCommercialOperationSchema,
+  ApplyCatalogCommercialOperationSchema,
 } from "./catalog.schema";
 import {
   keepOutsFromContentInset,
@@ -23,6 +28,8 @@ import {
   A4_SHEET_LABEL_TEMPLATE,
   THERMAL_ROLL_LABEL_TEMPLATE,
 } from "./seeded-label-templates";
+
+const targetStoreIds = ["11111111-1111-4111-8111-111111111111"];
 
 describe("Add-On catalog contracts", () => {
   test("create add-on accepts name, price, discount, and status", () => {
@@ -101,6 +108,7 @@ describe("Bundle Product catalog contracts", () => {
       name: "Burger Combo",
       price: 99,
       discount: 0,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -121,6 +129,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -147,6 +156,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Empty Bundle",
       price: 99,
+      targetStoreIds,
       components: [],
     });
 
@@ -158,6 +168,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -174,6 +185,7 @@ describe("Bundle Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Burger Combo",
       price: 99,
+      targetStoreIds,
       components: [
         {
           productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -191,10 +203,14 @@ describe("Bundle Product catalog contracts", () => {
     expect(result.success).toBe(false);
   });
 
-  test("update bundle accepts status-based retirement", () => {
-    const result = UpdateBundleProductSchema.safeParse({ status: "inactive" });
+  test("accepts Organization default commercial edits", () => {
+    expect(UpdateProductSchema.safeParse({ price: 100 }).success).toBe(true);
+    expect(UpdateBundleProductSchema.safeParse({ status: "inactive" }).success).toBe(true);
+    expect(UpdateComboProductSchema.safeParse({ discount: 10 }).success).toBe(true);
+  });
 
-    expect(result.success).toBe(true);
+  test("rejects Organization default discount greater than price", () => {
+    expect(UpdateProductSchema.safeParse({ price: 10, discount: 11 }).success).toBe(false);
   });
 });
 
@@ -204,6 +220,7 @@ describe("Combo Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Lunch Combo",
       price: 150,
+      targetStoreIds,
       choiceGroups: [
         {
           name: "Choose a drink",
@@ -228,6 +245,7 @@ describe("Combo Product catalog contracts", () => {
       categoryId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       name: "Invalid Combo",
       price: 150,
+      targetStoreIds,
       choiceGroups: [
         {
           name: "Choose",
@@ -256,6 +274,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Dairy Milk 20 g",
       price: 20,
+      targetStoreIds,
       productCode: "7622202334009",
       productCodeKind: "manufacturer",
     });
@@ -272,6 +291,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Opaque Code Product",
       price: 10,
+      targetStoreIds,
       productCode: " 0123 ",
       productCodeKind: "manufacturer",
     });
@@ -288,6 +308,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Terminated Code Product",
       price: 10,
+      targetStoreIds,
       productCode: `${productCode}\r\n`,
     });
 
@@ -302,6 +323,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Coded Product",
       price: 10,
+      targetStoreIds,
       productCode: "ABC-99",
     });
 
@@ -313,6 +335,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "No Code Product",
       price: 10,
+      targetStoreIds,
       productCode: null,
       productCodeKind: null,
     });
@@ -325,6 +348,7 @@ describe("Product Code catalog contracts", () => {
       categoryId,
       name: "Invalid",
       price: 10,
+      targetStoreIds,
       productCodeKind: "manufacturer",
     });
 
@@ -417,6 +441,7 @@ describe("Product selling unit catalog contracts", () => {
       categoryId,
       name: "Cake",
       price: 250,
+      targetStoreIds,
       unitId: gramUnitId,
       defaultSellingQuantity: 250,
     });
@@ -433,6 +458,7 @@ describe("Product selling unit catalog contracts", () => {
       categoryId,
       name: "Water Bottle",
       price: 20,
+      targetStoreIds,
     });
 
     expect(result.success).toBe(true);
@@ -444,6 +470,7 @@ describe("Product selling unit catalog contracts", () => {
         categoryId,
         name: "Cake",
         price: 250,
+        targetStoreIds,
         defaultSellingQuantity: 0,
       }).success,
     ).toBe(false);
@@ -460,6 +487,7 @@ describe("Product selling unit catalog contracts", () => {
         categoryId,
         name: "Cake",
         price: 250,
+        targetStoreIds,
         defaultSellingQuantity: 250.125,
       }).success,
     ).toBe(false);
@@ -480,6 +508,7 @@ describe("Product selling unit catalog contracts", () => {
         categoryId,
         name: "Cake",
         price: 250,
+        targetStoreIds,
         allowCustomSellingQuantity: true,
       }).success,
     ).toBe(true);
@@ -821,5 +850,146 @@ describe("Label Template catalog contracts", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("Store Product Offering catalog contracts", () => {
+  const categoryId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+  test("creating a Catalog Product does not require target Stores", () => {
+    const result = CreateProductSchema.safeParse({
+      categoryId,
+      name: "Cake",
+      price: 250,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("targetStoreIds" in result.data).toBe(false);
+    }
+  });
+
+  test("updating a Store Product Offering requires at least one commercial or status field", () => {
+    expect(UpdateStoreProductOfferingSchema.safeParse({}).success).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ priceOverride: 135 }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ priceOverride: null }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ clearPriceOverride: true }).success,
+    ).toBe(true);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ status: "inactive" }).success,
+    ).toBe(true);
+  });
+
+  test("updating a Store Product Offering rejects legacy copied price and discount fields", () => {
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ price: 135 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ discount: 5 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({ price: 135, discount: 5 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({ price: 20 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({ discount: 2 }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        price: 135,
+        status: "active",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        discount: 2,
+        status: "active",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects contradictory Store Offering override instructions", () => {
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        priceOverride: 135,
+        clearPriceOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreProductOfferingSchema.safeParse({
+        discountOverride: 5,
+        clearDiscountOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        priceOverride: 20,
+        clearPriceOverride: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateStoreAddOnOfferingSchema.safeParse({
+        discountOverride: 2,
+        clearDiscountOverride: true,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("Store commercial operation catalog contracts", () => {
+  const productId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  test("preview requires at least one Store and catalog item", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: [],
+        itemIds: [productId],
+        value: 120,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("preview requires a value for set override operations", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: targetStoreIds,
+        itemIds: [productId],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("apply requires explicit confirmation in the request body", () => {
+    expect(
+      ApplyCatalogCommercialOperationSchema.safeParse({
+        itemType: "product",
+        operation: "set_price_override",
+        storeIds: targetStoreIds,
+        itemIds: [productId],
+        value: 120,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("clear override operations reject a value payload", () => {
+    expect(
+      PreviewCatalogCommercialOperationSchema.safeParse({
+        itemType: "add_on",
+        operation: "clear_discount_override",
+        storeIds: targetStoreIds,
+        itemIds: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"],
+        value: 0,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -1,7 +1,29 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { Window } from "happy-dom";
 import type { SaleDetailDTO } from "@repo/types";
 
-import { build80mmEscPosPayload } from "./pos-printer";
+import {
+  build80mmEscPosPayload,
+  buildEscPosPayload,
+  chunkBluetoothPrinterPayload,
+  connectBluetoothPrinterWithRetry,
+  describeBluetoothRestoreReason,
+  describeUsbPrinterError,
+  diagnoseBluetoothPrinterRestore,
+  inspectBluetoothManagerCapabilities,
+  bluetoothFiltersMatchDeviceName,
+  findRememberedBluetoothPrinter,
+  findWritableBluetoothCharacteristic,
+  getBluetoothPrinterRequestOptions,
+  isPrinterPickerCancelled,
+  isUsbAccessDeniedError,
+  parseRememberedPrinter,
+  requestBluetoothPrinter,
+  saveRememberedBluetoothPrinter,
+  writeBluetoothPrinter,
+  writeSerialPrinter,
+} from "./pos-printer";
+import { getReceiptPaperWidth } from "./receipt-paper-size";
 import { buildReceiptText, RECEIPT_WIDTH } from "./receipt-text";
 
 const sale = {
@@ -337,5 +359,416 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(() => buildReceiptText(sale, {}, { width: 22 })).toThrow(
       "Receipt width must be an integer",
     );
+  });
+
+  test("wraps a 58mm receipt to 32 characters", () => {
+    const width = getReceiptPaperWidth("58mm");
+    const output = new TextDecoder().decode(
+      buildEscPosPayload(
+        sale,
+        {
+          organizationName: "Hisab Foods",
+          organizationTagline: "A".repeat(80),
+        },
+        { width },
+      ),
+    );
+    const receipt = buildReceiptText(
+      sale,
+      { organizationName: "Hisab Foods", organizationTagline: "A".repeat(80) },
+      { width },
+    );
+
+    expect(width).toBe(32);
+    expect(output).toContain("A".repeat(32));
+    expect(receipt.split("\n").every((line) => line.length <= 32)).toBe(true);
+  });
+});
+
+describe("USB printer errors", () => {
+  test("explains Windows Access denied and points to COM port", () => {
+    expect(
+      describeUsbPrinterError(
+        new Error("Failed to execute 'open' on 'USBDevice': Access denied."),
+      ),
+    ).toContain("Use Zadig to install WinUSB");
+    expect(
+      isUsbAccessDeniedError(
+        new Error("Failed to execute 'open' on 'USBDevice': Access denied."),
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps unrelated USB errors unchanged", () => {
+    expect(
+      describeUsbPrinterError(
+        new Error("No USB bulk OUT endpoint found on this printer"),
+      ),
+    ).toBe("No USB bulk OUT endpoint found on this printer");
+  });
+});
+
+describe("remembered printer identity", () => {
+  test("treats legacy USB records as usb transport", () => {
+    expect(parseRememberedPrinter({ vendorId: 1046, productId: 20497 })).toEqual({
+      transport: "usb",
+      vendorId: 1046,
+      productId: 20497,
+    });
+  });
+
+  test("reads a serial COM-port record", () => {
+    expect(
+      parseRememberedPrinter({
+        transport: "serial",
+        usbVendorId: 6790,
+        usbProductId: 29987,
+      }),
+    ).toEqual({
+      transport: "serial",
+      usbVendorId: 6790,
+      usbProductId: 29987,
+    });
+  });
+
+  test("reads a Bluetooth printer record", () => {
+    expect(
+      parseRememberedPrinter({
+        transport: "bluetooth",
+        deviceId: "ble-58printer",
+      }),
+    ).toEqual({
+      transport: "bluetooth",
+      deviceId: "ble-58printer",
+    });
+    expect(
+      parseRememberedPrinter({
+        transport: "bluetooth",
+        deviceId: "ble-58printer",
+        name: "58Printer",
+      }),
+    ).toEqual({
+      transport: "bluetooth",
+      deviceId: "ble-58printer",
+      name: "58Printer",
+    });
+  });
+
+  test("writes receipt bytes through a serial port", async () => {
+    const written: Uint8Array[] = [];
+    let released = false;
+    await writeSerialPrinter(
+      {
+        writable: {
+          getWriter: () => ({
+            write: async (data: Uint8Array) => {
+              written.push(data);
+            },
+            releaseLock: () => {
+              released = true;
+            },
+          }),
+        },
+        readable: null,
+        open: async () => undefined,
+        close: async () => undefined,
+        getInfo: () => ({}),
+      },
+      new Uint8Array([0x1b, 0x40]),
+    );
+
+    expect(Array.from(written[0] ?? [])).toEqual([0x1b, 0x40]);
+    expect(released).toBe(true);
+  });
+});
+
+describe("Bluetooth printer transport", () => {
+  test("treats a cancelled Bluetooth chooser as a cancelled picker", () => {
+    expect(
+      isPrinterPickerCancelled(
+        new Error("User cancelled the requestDevice() chooser."),
+      ),
+    ).toBe(true);
+  });
+
+  test("chunks receipt bytes to the Bluetooth write size", () => {
+    const chunks = chunkBluetoothPrinterPayload(new Uint8Array(45), 20);
+
+    expect(chunks.map((chunk) => chunk.length)).toEqual([20, 20, 5]);
+  });
+
+  test("writes receipt bytes through a writable Bluetooth characteristic", async () => {
+    const written: number[][] = [];
+    await writeBluetoothPrinter(
+      {
+        properties: { writeWithoutResponse: true, write: false },
+        writeValueWithoutResponse: async (data) => {
+          written.push(Array.from(data));
+        },
+      },
+      new Uint8Array([1, 2, 3, 4, 5]),
+      2,
+    );
+
+    expect(written).toEqual([[1, 2], [3, 4], [5]]);
+  });
+
+  test("selects a writable Bluetooth characteristic from the printer GATT services", async () => {
+    const writable = {
+      properties: { writeWithoutResponse: true, write: false },
+      writeValueWithoutResponse: async () => undefined,
+    };
+    const characteristic = await findWritableBluetoothCharacteristic({
+      getPrimaryServices: async () => [
+        {
+          getCharacteristics: async () => [
+            { properties: { writeWithoutResponse: false, write: false } },
+            writable,
+          ],
+        },
+      ],
+    });
+
+    expect(characteristic).toBe(writable);
+  });
+
+  test("asks Chrome to persist printer permission with filters instead of acceptAllDevices", () => {
+    const options = getBluetoothPrinterRequestOptions("58Printer");
+
+    expect(options.acceptAllDevices).toBeUndefined();
+    expect(options.filters?.some((filter) => filter.name === "58Printer")).toBe(true);
+    expect(options.filters?.some((filter) => filter.namePrefix === "58")).toBe(true);
+    expect(options.optionalServices).toContain("000018f0-0000-1000-8000-00805f9b34fb");
+  });
+
+  test("keeps a named printer like Seznik_Veer_0101 inside persistable filters", () => {
+    const options = getBluetoothPrinterRequestOptions();
+
+    expect(options.acceptAllDevices).toBeUndefined();
+    expect(
+      bluetoothFiltersMatchDeviceName(options.filters ?? [], "Seznik_Veer_0101"),
+    ).toBe(true);
+    expect(
+      bluetoothFiltersMatchDeviceName(
+        getBluetoothPrinterRequestOptions("Seznik_Veer_0101").filters ?? [],
+        "Seznik_Veer_0101",
+      ),
+    ).toBe(true);
+  });
+
+  test("falls back to acceptAllDevices when no filtered printer is found", async () => {
+    const requested: Array<{ acceptAllDevices?: boolean; filters?: unknown }> = [];
+    const fallbackDevice = {
+      id: "ble-fallback",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const device = await requestBluetoothPrinter({
+      requestDevice: async (options) => {
+        requested.push(options);
+        if (options.acceptAllDevices) {
+          return fallbackDevice;
+        }
+        throw new Error("No Bluetooth device found matching the criteria.");
+      },
+    });
+
+    expect(device).toBe(fallbackDevice);
+    expect(requested[0]?.filters).toBeDefined();
+    expect(requested[1]).toMatchObject({ acceptAllDevices: true });
+  });
+
+  test("does not fall back to acceptAllDevices when reconnecting a remembered named printer", async () => {
+    const requested: Array<{ acceptAllDevices?: boolean }> = [];
+
+    await expect(
+      requestBluetoothPrinter(
+        {
+          requestDevice: async (options) => {
+            requested.push(options);
+            throw new Error("No Bluetooth device found matching the criteria.");
+          },
+        },
+        "Seznik_Veer_0101",
+      ),
+    ).rejects.toThrow("No Bluetooth device found matching the criteria.");
+
+    expect(requested.every((options) => !options.acceptAllDevices)).toBe(true);
+    expect(requested.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("remembered Bluetooth printer restore", () => {
+  const testWindow = new Window({ url: "http://localhost" });
+
+  Object.assign(globalThis, {
+    window: testWindow,
+    localStorage: testWindow.localStorage,
+  });
+
+  afterEach(() => {
+    testWindow.localStorage.clear();
+  });
+
+  test("restores a Bluetooth printer by remembered id, then name, then the only permitted device", async () => {
+    saveRememberedBluetoothPrinter({
+      id: "ble-58printer",
+      name: "58Printer",
+      addEventListener() {},
+      removeEventListener() {},
+    });
+
+    const byId = {
+      id: "ble-58printer",
+      name: "58Printer",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    expect(
+      await findRememberedBluetoothPrinter({
+        requestDevice: async () => byId,
+        getDevices: async () => [{ id: "other" }, byId],
+      }),
+    ).toBe(byId);
+
+    const byName = {
+      id: "ble-renamed-id",
+      name: "58Printer",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    expect(
+      await findRememberedBluetoothPrinter({
+        requestDevice: async () => byName,
+        getDevices: async () => [byName],
+      }),
+    ).toBe(byName);
+
+    const onlyDevice = {
+      id: "ble-only",
+      name: "POS-80",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    testWindow.localStorage.setItem(
+      "hisab_pos_usb_printer",
+      JSON.stringify({ transport: "bluetooth", deviceId: "missing", name: "Gone" }),
+    );
+    expect(
+      await findRememberedBluetoothPrinter({
+        requestDevice: async () => onlyDevice,
+        getDevices: async () => [onlyDevice],
+      }),
+    ).toBe(onlyDevice);
+  });
+
+  test("explains when Chrome has no permitted Bluetooth devices to restore", async () => {
+    saveRememberedBluetoothPrinter({
+      id: "ble-seznik",
+      name: "Seznik_Veer_0101",
+      addEventListener() {},
+      removeEventListener() {},
+    });
+
+    const diagnosis = await diagnoseBluetoothPrinterRestore({
+      requestDevice: async () => {
+        throw new Error("chooser");
+      },
+      getDevices: async () => [],
+    });
+
+    expect(diagnosis.reason).toBe("no-permitted-devices");
+    expect(diagnosis.remembered).toEqual({
+      deviceId: "ble-seznik",
+      name: "Seznik_Veer_0101",
+    });
+    expect(describeBluetoothRestoreReason(diagnosis)).toContain("0 permitted Bluetooth devices");
+  });
+
+  test("explains when Chrome cannot restore Bluetooth because getDevices is missing", async () => {
+    saveRememberedBluetoothPrinter({
+      id: "ble-seznik",
+      name: "Seznik_Veer_0101",
+      addEventListener() {},
+      removeEventListener() {},
+    });
+
+    const diagnosis = await diagnoseBluetoothPrinterRestore({
+      requestDevice: async () => {
+        throw new Error("chooser");
+      },
+    });
+
+    expect(diagnosis.reason).toBe("get-devices-unavailable");
+    expect(describeBluetoothRestoreReason(diagnosis)).toContain("cannot restore Bluetooth after reload");
+    expect(
+      inspectBluetoothManagerCapabilities({ requestDevice: async () => undefined }).hasGetDevices,
+    ).toBe(false);
+  });
+
+  test("falls back to the first permitted Bluetooth device when the saved id is gone", async () => {
+    testWindow.localStorage.setItem(
+      "hisab_pos_usb_printer",
+      JSON.stringify({ transport: "bluetooth", deviceId: "missing", name: "Gone" }),
+    );
+    const first = {
+      id: "ble-first",
+      name: "Seznik_Veer_0101",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const second = {
+      id: "ble-second",
+      name: "Other",
+      addEventListener() {},
+      removeEventListener() {},
+    };
+
+    expect(
+      await findRememberedBluetoothPrinter({
+        requestDevice: async () => first,
+        getDevices: async () => [first, second],
+      }),
+    ).toBe(first);
+  });
+
+  test("retries a transient GATT connect failure", async () => {
+    let attempts = 0;
+    const characteristic = {
+      properties: { write: true },
+      writeValue: async () => undefined,
+    };
+    const connectedServer = {
+      connected: true,
+      connect: async () => connectedServer,
+      disconnect: () => undefined,
+      getPrimaryServices: async () => [
+        { getCharacteristics: async () => [characteristic] },
+      ],
+    };
+    const prepared = await connectBluetoothPrinterWithRetry(
+      {
+        id: "ble-seznik",
+        name: "Seznik_Veer_0101",
+        gatt: {
+          connected: false,
+          connect: async () => {
+            attempts += 1;
+            if (attempts < 2) {
+              throw new Error("GATT Error: Not connected.");
+            }
+            return connectedServer;
+          },
+          disconnect: () => undefined,
+          getPrimaryServices: async () => [],
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      },
+      3,
+    );
+
+    expect(attempts).toBe(2);
+    expect(prepared.characteristic).toBe(characteristic);
   });
 });

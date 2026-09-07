@@ -20,6 +20,10 @@ import {
     type UpsertMoneyAccountPaymentRouteSVC,
 } from "@repo/types";
 import { pg } from "@/config/db";
+import {
+    requireOrganizationFeatureEntitlement,
+    requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as moneyAccountsRepository from "./money-accounts.repository";
 
@@ -63,6 +67,16 @@ const moneyAccountLockedAfterMovements = (): ServiceResponse<null> => ({
     data: null,
     code: STATUS_CODES.BAD_REQUEST,
 });
+
+const denyUnlessMoneyAccountTrackingEntitled = async (
+    organizationId: string,
+): Promise<ServiceResponse<null> | null> =>
+    requireOrganizationFeatureEntitlement(organizationId, "money_account_tracking");
+
+const denyUnlessStoreMoneyAccountTrackingEntitled = async (
+    storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+    requireStoreFeatureEntitlement(storeId, "money_account_tracking");
 
 const errorChainText = (error: unknown, depth = 0): string => {
     if (depth > 5 || error == null) {
@@ -174,6 +188,13 @@ export const getMoneyAccounts = async (
         return organizationNotFound();
     }
 
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
+    }
+
     const moneyAccounts = await moneyAccountsRepository.getMoneyAccountsByOrganizationId(organizationId);
     return {
         status: "success",
@@ -191,6 +212,13 @@ export const getMoneyAccountDetails = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const moneyAccount = await moneyAccountsRepository.getMoneyAccountById(organizationId, moneyAccountId);
@@ -214,6 +242,13 @@ export const createMoneyAccount = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const resolved = await resolveMoneyAccountScopeAndStore(organizationId, moneyAccountData);
@@ -268,6 +303,13 @@ export const updateMoneyAccount = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const existing = await moneyAccountsRepository.getMoneyAccountById(organizationId, moneyAccountId);
@@ -375,6 +417,13 @@ export const getMoneyAccountPaymentRoutes = async (
         return storeNotFound();
     }
 
+    const moneyAccountTrackingEntitlementError = await denyUnlessStoreMoneyAccountTrackingEntitled(
+        storeId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
+    }
+
     const routes = await moneyAccountsRepository.getPaymentRoutesByStoreId(organizationId, storeId);
     return {
         status: "success",
@@ -398,6 +447,13 @@ export const upsertMoneyAccountPaymentRoute = async (
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     if (!store) {
         return storeNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessStoreMoneyAccountTrackingEntitled(
+        storeId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const destination = await moneyAccountsRepository.getMoneyAccountById(
@@ -467,6 +523,13 @@ export const clearMoneyAccountPaymentRoute = async (
         return storeNotFound();
     }
 
+    const moneyAccountTrackingEntitlementError = await denyUnlessStoreMoneyAccountTrackingEntitled(
+        storeId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
+    }
+
     await moneyAccountsRepository.deletePaymentRoute(organizationId, storeId, paymentMethod);
     const routes = await moneyAccountsRepository.getPaymentRoutesByStoreId(organizationId, storeId);
 
@@ -487,6 +550,13 @@ export const getMoneyAccountHistory = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const moneyAccount = await moneyAccountsRepository.getMoneyAccountById(
@@ -830,6 +900,13 @@ const recordManualMoneyMovement = async (
         return organizationNotFound();
     }
 
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
+    }
+
     const result = await pg.begin(async (tx) => {
         const locked = await moneyAccountsRepository.lockMoneyAccountById(
             organizationId,
@@ -939,6 +1016,13 @@ export const recordMoneyAccountBalanceAdjustment = async (
         return organizationNotFound();
     }
 
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
+    }
+
     const result = await pg.begin(async (tx) => {
         const locked = await moneyAccountsRepository.lockMoneyAccountById(
             organizationId,
@@ -1025,6 +1109,13 @@ export const recordMoneyAccountTransfer = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
+    }
+
+    const moneyAccountTrackingEntitlementError = await denyUnlessMoneyAccountTrackingEntitled(
+        organizationId,
+    );
+    if (moneyAccountTrackingEntitlementError) {
+        return moneyAccountTrackingEntitlementError;
     }
 
     const destinationMoneyAccountId = transferData.destinationMoneyAccountId;

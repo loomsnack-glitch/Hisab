@@ -1,11 +1,27 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
-import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
 import type { CloudProvisioningState } from "./cloud-provisioning";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const secret = "cloud-account-service-test-secret";
+const storeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+mock.module("@/modules/tenant/organization/organization.repository", () => ({
+  getOrganizationByIdForUser: async () => ({ id: organizationId }),
+  getStoresByOrganizationId: async () => [{ id: storeId, organizationId, name: "Adajan" }],
+  getStoreById: async () => ({ id: storeId, organizationId, name: "Adajan" }),
+}));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
+const {
+  completeCloudAccountProvisioning,
+  manuallyProvisionCloudAccount,
+  refreshCloudAccountForOrganization,
+  revokeCloudAccountForOrganization,
+} = await import("./cloud-account.service");
 
 describe("Cloud account provisioning service", () => {
   test("exchanges, validates, subscribes, stores credentials, and persists a safe account", async () => {

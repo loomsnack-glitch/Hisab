@@ -63,6 +63,26 @@ import {
   googleContactsCustomerIsEligible,
 } from "@/modules/tenant/google-contacts/google-contacts.customer-sync";
 import * as googleContactsOutbox from "@/modules/tenant/google-contacts/google-contacts.outbox";
+import {
+  featureEntitlementDeniedForOrganization,
+  listEntitledStoreIdsForOrganization,
+  requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
+
+const requireBillingEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "billing");
+
+const requireKotSystemEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "kot_system");
+
+const requireReportsEntitlementForStore = async (
+  storeId: string,
+): Promise<ServiceResponse<null> | null> =>
+  requireStoreFeatureEntitlement(storeId, "reports");
 
 const normalizeOptionalText = (value?: string | null) => {
   const trimmed = value?.trim();
@@ -86,6 +106,32 @@ const roundMoney = (value: number) =>
 
 const moneyFrom = (value: number | string | null | undefined) =>
   roundMoney(Number(value ?? 0));
+
+const resolveStoreAddOnCommercialSnapshot = async (
+  organizationId: string,
+  storeId: string,
+  addOn: {
+    id: string;
+    price: number | string;
+    discount: number | string;
+  },
+) => {
+  const offering =
+    await catalogRepository.getStoreAddOnOfferingByAddOnAndStore(
+      organizationId,
+      storeId,
+      addOn.id,
+    );
+
+  return {
+    price: moneyFrom(
+      offering?.effectivePrice ?? addOn.price,
+    ),
+    discount: moneyFrom(
+      offering?.effectiveDiscount ?? addOn.discount,
+    ),
+  };
+};
 
 const sumMoney = (values: Array<number | string | null | undefined>) =>
   roundMoney(
@@ -915,9 +961,15 @@ const prepareBundleSaleLine = async (
         };
       }
 
+      const effectiveAddOnCommercial = await resolveStoreAddOnCommercialSnapshot(
+        organizationId,
+        storeId,
+        addOn,
+      );
+
       const quantityPerComponent = Number(componentAddOn.quantity);
       const attachment =
-        await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+        await catalogRepository.getActiveProductAddOnAttachmentByProductAndAddOn(
           organizationId,
           component.componentProductId,
           componentAddOn.addOnId,
@@ -955,8 +1007,8 @@ const prepareBundleSaleLine = async (
         quantityPerComponent,
         totalQuantity: quantityPerComponent * totalQuantity,
         addOnNameSnapshot: addOn.name,
-        unitPriceSnapshot: moneyFrom(addOn.price),
-        unitDiscountSnapshot: moneyFrom(addOn.discount),
+        unitPriceSnapshot: effectiveAddOnCommercial.price,
+        unitDiscountSnapshot: effectiveAddOnCommercial.discount,
       });
     }
 
@@ -1156,7 +1208,7 @@ const prepareComboSaleLine = async (
       const preparedAddOns: CreateSaleItemBundleComponentAddOnREPO[] = [];
       for (const selectedAddOn of selection.addOns) {
         const attachment =
-          await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+          await catalogRepository.getActiveProductAddOnAttachmentByProductAndAddOn(
             organizationId,
             optionProduct.id,
             selectedAddOn.addOnId,
@@ -1172,10 +1224,14 @@ const prepareComboSaleLine = async (
           };
         }
 
-        if (
-          moneyFrom(attachment.addOn.discount) >
-          moneyFrom(attachment.addOn.price)
-        ) {
+        const effectiveAddOnCommercial =
+          await resolveStoreAddOnCommercialSnapshot(
+            organizationId,
+            storeId,
+            attachment.addOn,
+          );
+
+        if (effectiveAddOnCommercial.discount > effectiveAddOnCommercial.price) {
           return {
             error: {
               status: "error",
@@ -1188,9 +1244,9 @@ const prepareComboSaleLine = async (
 
         const addOnTotalQuantity = selectedAddOn.quantity * totalQuantity;
         optionAddOnSubtotal +=
-          addOnTotalQuantity * moneyFrom(attachment.addOn.price);
+          addOnTotalQuantity * effectiveAddOnCommercial.price;
         optionAddOnDiscountTotal +=
-          addOnTotalQuantity * moneyFrom(attachment.addOn.discount);
+          addOnTotalQuantity * effectiveAddOnCommercial.discount;
         preparedAddOns.push({
           id: crypto.randomUUID(),
           organizationId,
@@ -1202,8 +1258,8 @@ const prepareComboSaleLine = async (
           quantityPerComponent: selectedAddOn.quantity,
           totalQuantity: addOnTotalQuantity,
           addOnNameSnapshot: attachment.addOn.name,
-          unitPriceSnapshot: moneyFrom(attachment.addOn.price),
-          unitDiscountSnapshot: moneyFrom(attachment.addOn.discount),
+          unitPriceSnapshot: effectiveAddOnCommercial.price,
+          unitDiscountSnapshot: effectiveAddOnCommercial.discount,
         });
       }
 
@@ -1369,11 +1425,11 @@ const prepareSaleItems = async (
       continue;
     }
 
-    const product = await catalogRepository.getProductById(
+    const catalogProduct = await catalogRepository.getProductById(
       organizationId,
       item.productId,
     );
-    if (!product) {
+    if (!catalogProduct) {
       return {
         error: {
           status: "error",
@@ -1384,16 +1440,39 @@ const prepareSaleItems = async (
       };
     }
 
-    if (product.status !== "active") {
+    if (catalogProduct.status !== "active") {
       return {
         error: {
           status: "error",
-          message: `Product "${product.name}" is not available for new sale selections`,
+          message: `Product "${catalogProduct.name}" is not available at this Store`,
           data: null,
           code: STATUS_CODES.BAD_REQUEST,
         },
       };
     }
+
+    const offering =
+      await catalogRepository.getStoreProductOfferingByProductAndStore(
+        organizationId,
+        storeId,
+        catalogProduct.id,
+      );
+    if (!offering || offering.status !== "active") {
+      return {
+        error: {
+          status: "error",
+          message: `Product "${catalogProduct.name}" is not available at this Store`,
+          data: null,
+          code: STATUS_CODES.BAD_REQUEST,
+        },
+      };
+    }
+
+    const product = {
+      ...catalogProduct,
+      price: offering.effectivePrice,
+      discount: offering.effectiveDiscount,
+    };
 
     const defaultPortion = defaultCatalogSoldPortion(product);
     const resolvedSoldQuantity =
@@ -1450,14 +1529,41 @@ const prepareSaleItems = async (
     const saleItemId = crypto.randomUUID();
 
     if (product.productType === "bundle") {
-      return {
-        error: {
-          status: "error",
-          message: `Legacy Bundle product "${product.name}" cannot be added to new sales. Use a Combo instead`,
-          data: null,
-          code: STATUS_CODES.BAD_REQUEST,
-        },
-      };
+      if (selectedAddOns.length > 0) {
+        return {
+          error: {
+            status: "error",
+            message: `Bundle product "${product.name}" does not accept add-on selections`,
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+          },
+        };
+      }
+
+      if (selectedComboSelections.length > 0) {
+        return {
+          error: {
+            status: "error",
+            message: `Combo selections are only valid for Combo products`,
+            data: null,
+            code: STATUS_CODES.BAD_REQUEST,
+          },
+        };
+      }
+
+      const preparedBundle = await prepareBundleSaleLine(
+        organizationId,
+        storeId,
+        saleId,
+        saleItemId,
+        product,
+        parentQuantity,
+      );
+      if (preparedBundle.error) {
+        return { error: preparedBundle.error };
+      }
+      preparedLines.push(preparedBundle.line);
+      continue;
     }
 
     if (product.productType === "combo") {
@@ -1503,6 +1609,7 @@ const prepareSaleItems = async (
       const attachment =
         await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
           organizationId,
+          storeId,
           item.productId,
           selectedAddOn.addOnId,
         );
@@ -2008,6 +2115,37 @@ const getProductSalesSummaryInOrganization = async (
     return scopeError;
   }
 
+  if (query.storeId) {
+    const reportsEntitlementError = await requireReportsEntitlementForStore(
+      query.storeId,
+    );
+    if (reportsEntitlementError) {
+      return reportsEntitlementError;
+    }
+  } else {
+    const entitledStoreIds = await listEntitledStoreIdsForOrganization(
+      organizationId,
+      "reports",
+    );
+    if (entitledStoreIds.length === 0) {
+      return featureEntitlementDeniedForOrganization("reports");
+    }
+
+    const products = await billingRepository.getProductSalesSummary(
+      organizationId,
+      undefined,
+      query,
+      entitledStoreIds,
+    );
+
+    return {
+      status: "success",
+      data: { summary: { products } },
+      message: "Product sales summary fetched successfully",
+      code: STATUS_CODES.SUCCESS,
+    };
+  }
+
   const products = await billingRepository.getProductSalesSummary(
     organizationId,
     query.storeId,
@@ -2076,6 +2214,11 @@ const validateStandaloneKotGenerationRequest = async (
       data: null,
       code: STATUS_CODES.FORBIDDEN,
     };
+  }
+
+  const kotEntitlementError = await requireKotSystemEntitlementForStore(storeId);
+  if (kotEntitlementError) {
+    return kotEntitlementError;
   }
 
   return null;
@@ -2292,6 +2435,11 @@ const createDraftSaleInStore = async (
   storeId: string,
   saleData: CreateDraftSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const customerId = normalizeOptionalUuid(saleData.customerId);
   const customerResult = await validateCustomerAssignment(
     organizationId,
@@ -2456,6 +2604,11 @@ const updateSaleInStore = async (
   saleData: UpdateDraftSaleSVC,
   additionalWrite?: (tx: Bun.TransactionSQL) => Promise<void>,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -2821,6 +2974,11 @@ const deleteDraftSaleInStore = async (
   storeId: string,
   saleId: string,
 ): Promise<ServiceResponse<null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await billingRepository.getSaleById(
     organizationId,
     storeId,
@@ -2882,6 +3040,11 @@ const commitSaleInStore = async (
   saleId: string,
   commitData: CommitSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSaleSnapshot = await buildSaleDetails(
     organizationId,
     storeId,
@@ -3396,6 +3559,11 @@ const completeSaleInStore = async (
     return getSaleDetailsInStore(organizationId, storeId, existingSaleId);
   }
 
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const customerId = normalizeOptionalUuid(saleData.customerId);
   const customerResult = await validateCustomerAssignment(
     organizationId,
@@ -3549,6 +3717,11 @@ const replaceSaleInStore = async (
       storeId,
       existingReplacementId,
     );
+  }
+
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
   }
 
   const originalSale = await buildSaleDetails(
@@ -3766,6 +3939,11 @@ const collectPaymentInStore = async (
   saleId: string,
   paymentData: CreatePaymentSVC,
 ): Promise<ServiceResponse<PaymentResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -3974,6 +4152,11 @@ const voidSaleInStore = async (
   saleId: string,
   voidData: VoidSaleSVC,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(storeId);
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const existingSale = await buildSaleDetails(organizationId, storeId, saleId);
   if (!existingSale) {
     return {
@@ -4565,6 +4748,13 @@ export const getCustomersForDevice = async (
   session: DeviceSessionDTO,
   query: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getCustomersInOrganization(session.organization.id, query);
 };
 
@@ -4572,6 +4762,13 @@ export const createCustomerForDevice = async (
   session: DeviceSessionDTO,
   customerData: CreateCustomerSVC,
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const organization = await getOrganizationById(session.organization.id);
   if (!organization) {
     return {
@@ -4594,6 +4791,13 @@ export const updateCustomerForDevice = async (
   customerId: string,
   customerData: UpdateCustomerSVC,
 ): Promise<ServiceResponse<CustomerResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   const organization = await getOrganizationById(session.organization.id);
   if (!organization) {
     return {
@@ -4616,6 +4820,13 @@ export const getSalesForDevice = async (
   session: DeviceSessionDTO,
   query: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getSalesInStore(session.organization.id, session.store.id, query);
 };
 
@@ -4623,6 +4834,13 @@ export const getProductSalesSummaryForDevice = async (
   session: DeviceSessionDTO,
   query: ProductSalesSummaryQuery,
 ): Promise<ServiceResponse<ProductSalesSummaryListResponse | null>> => {
+  const reportsEntitlementError = await requireReportsEntitlementForStore(
+    session.store.id,
+  );
+  if (reportsEntitlementError) {
+    return reportsEntitlementError;
+  }
+
   const products = await billingRepository.getProductSalesSummary(
     session.organization.id,
     session.store.id,
@@ -4641,6 +4859,13 @@ export const getSaleDetailsForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<SaleResponse | null>> => {
+  const billingEntitlementError = await requireBillingEntitlementForStore(
+    session.store.id,
+  );
+  if (billingEntitlementError) {
+    return billingEntitlementError;
+  }
+
   return getSaleDetailsInStore(
     session.organization.id,
     session.store.id,

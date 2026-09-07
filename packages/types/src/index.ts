@@ -17,6 +17,7 @@ export * from "./modules/device-auth";
 export * from "./modules/organization";
 export * from "./modules/invoice-appearance";
 export * from "./modules/platform";
+export * from "./modules/commercial-licensing";
 export * from "./modules/user";
 export * from "./modules/units";
 export * from "./modules/expense-categories";

@@ -9,7 +9,6 @@ import {
 } from "@/lib/receipt-text";
 
 const rememberedPrinterKey = "hisab_pos_usb_printer";
-const paperWidth = RECEIPT_WIDTH;
 
 const esc = {
   init: [0x1b, 0x40],
@@ -60,12 +59,57 @@ type UsbManager = {
   removeEventListener: (type: string, listener: EventListener) => void;
 };
 
+type SerialPortInfo = {
+  usbVendorId?: number;
+  usbProductId?: number;
+};
+
+type SerialPort = {
+  readable: unknown;
+  writable: { getWriter: () => SerialWriter } | null;
+  open: (options: { baudRate: number }) => Promise<void>;
+  close: () => Promise<void>;
+  getInfo: () => SerialPortInfo;
+};
+
+type SerialWriter = {
+  write: (data: Uint8Array) => Promise<void>;
+  releaseLock: () => void;
+};
+
+type SerialManager = {
+  requestPort: (options?: {
+    filters?: Array<{ usbVendorId?: number; usbProductId?: number }>;
+  }) => Promise<SerialPort>;
+  getPorts: () => Promise<SerialPort[]>;
+  addEventListener: (type: string, listener: EventListener) => void;
+  removeEventListener: (type: string, listener: EventListener) => void;
+};
+
+export type RememberedPrinter =
+  | { transport: "usb"; vendorId: number; productId: number }
+  | {
+      transport: "serial";
+      usbVendorId: number | null;
+      usbProductId: number | null;
+    };
+
+export const SERIAL_BAUD_RATE = 9600;
+
 const getUsbManager = (): UsbManager | null => {
   if (typeof navigator === "undefined") {
     return null;
   }
 
   return (navigator as Navigator & { usb?: UsbManager }).usb ?? null;
+};
+
+const getSerialManager = (): SerialManager | null => {
+  if (typeof navigator === "undefined") {
+    return null;
+  }
+
+  return (navigator as Navigator & { serial?: SerialManager }).serial ?? null;
 };
 
 const concatBytes = (...chunks: Uint8Array[]) => {
@@ -88,35 +132,53 @@ const encoder = new TextEncoder();
 const toPrinterText = (value: string) =>
   value.normalize("NFKD").replace(/[^\x00-\x7F]/g, "?");
 
-const wrapLine = (line: string) => {
+const wrapLine = (line: string, width: number) => {
   const characters = Array.from(toPrinterText(line));
   if (characters.length === 0) {
     return [""];
   }
 
   const lines: string[] = [];
-  for (let index = 0; index < characters.length; index += paperWidth) {
-    lines.push(characters.slice(index, index + paperWidth).join(""));
+  for (let index = 0; index < characters.length; index += width) {
+    lines.push(characters.slice(index, index + width).join(""));
   }
   return lines;
 };
 
-export const build80mmEscPosPayload = (
+export const isUsbAccessDeniedError = (error: unknown) =>
+  /access denied/i.test(error instanceof Error ? error.message : String(error));
+
+export const isPrinterPickerCancelled = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no device selected|no port selected|not found/i.test(message);
+};
+
+export const describeUsbPrinterError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (isUsbAccessDeniedError(error)) {
+    return "Windows already claimed this USB printer. It will not appear as a COM port. Use Zadig to install WinUSB on 58Printer, restart Chrome, then connect USB again.";
+  }
+  return message;
+};
+
+export const buildEscPosPayload = (
   sale: SaleDetailDTO,
   context?: ReceiptContext,
+  options?: { width?: number },
 ) => {
+  const paperWidth = options?.width ?? RECEIPT_WIDTH;
   const receiptLines = buildReceiptText(sale, context, {
     doubleWidthEmphasis: true,
-    width: RECEIPT_WIDTH,
+    width: paperWidth,
   })
     .split("\n")
-    .flatMap(wrapLine);
+    .flatMap((line) => wrapLine(line, paperWidth));
   const organizationLineIndex = context?.organizationName?.trim() ? 1 : -1;
   const organizationLineCount =
     organizationLineIndex >= 0
       ? countWrappedReceiptLines(
           context?.organizationName?.trim() ?? "",
-          Math.floor(RECEIPT_WIDTH / 2),
+          Math.floor(paperWidth / 2),
         )
       : 0;
   const finalAmountLineIndex = receiptLines.findIndex((line) =>
@@ -124,7 +186,7 @@ export const build80mmEscPosPayload = (
   );
   const finalAmountEndIndex = receiptLines.findIndex(
     (line, index) =>
-      index > finalAmountLineIndex && line.trim() === "=".repeat(RECEIPT_WIDTH),
+      index > finalAmountLineIndex && line.trim() === "=".repeat(paperWidth),
   );
   const body = receiptLines
     .map((line, index) => {
@@ -156,6 +218,11 @@ export const build80mmEscPosPayload = (
     bytes(esc.feed(), esc.cut),
   );
 };
+
+export const build80mmEscPosPayload = (
+  sale: SaleDetailDTO,
+  context?: ReceiptContext,
+) => buildEscPosPayload(sale, context, { width: RECEIPT_WIDTH });
 
 const findBulkOutEndpoint = async (device: UsbDevice) => {
   if (!device.configuration) {
@@ -198,6 +265,38 @@ const findBulkOutEndpoint = async (device: UsbDevice) => {
   throw new Error("No USB bulk OUT endpoint found on this printer");
 };
 
+export const parseRememberedPrinter = (
+  value: unknown,
+): RememberedPrinter | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (record.transport === "serial") {
+    return {
+      transport: "serial",
+      usbVendorId:
+        typeof record.usbVendorId === "number" ? record.usbVendorId : null,
+      usbProductId:
+        typeof record.usbProductId === "number" ? record.usbProductId : null,
+    };
+  }
+
+  if (
+    typeof record.vendorId === "number" &&
+    typeof record.productId === "number"
+  ) {
+    return {
+      transport: "usb",
+      vendorId: record.vendorId,
+      productId: record.productId,
+    };
+  }
+
+  return null;
+};
+
 const deviceIdentity = (device: UsbDevice) => ({
   vendorId: device.vendorId,
   productId: device.productId,
@@ -206,9 +305,7 @@ const deviceIdentity = (device: UsbDevice) => ({
 const readRememberedIdentity = () => {
   try {
     const value = window.localStorage.getItem(rememberedPrinterKey);
-    return value
-      ? (JSON.parse(value) as { vendorId: number; productId: number })
-      : null;
+    return value ? parseRememberedPrinter(JSON.parse(value)) : null;
   } catch {
     return null;
   }
@@ -216,14 +313,32 @@ const readRememberedIdentity = () => {
 
 export const getRememberedPrinterFilters = () => {
   const identity = readRememberedIdentity();
-  return identity ? [identity] : [];
+  return identity?.transport === "usb"
+    ? [{ vendorId: identity.vendorId, productId: identity.productId }]
+    : [];
 };
 
 export const saveRememberedPrinter = (device: UsbDevice) => {
   try {
     window.localStorage.setItem(
       rememberedPrinterKey,
-      JSON.stringify(deviceIdentity(device)),
+      JSON.stringify({ transport: "usb", ...deviceIdentity(device) }),
+    );
+  } catch {
+    // Local storage may be unavailable; the active connection still works.
+  }
+};
+
+export const saveRememberedSerialPrinter = (port: SerialPort) => {
+  try {
+    const info = port.getInfo();
+    window.localStorage.setItem(
+      rememberedPrinterKey,
+      JSON.stringify({
+        transport: "serial",
+        usbVendorId: info.usbVendorId ?? null,
+        usbProductId: info.usbProductId ?? null,
+      }),
     );
   } catch {
     // Local storage may be unavailable; the active connection still works.
@@ -232,7 +347,7 @@ export const saveRememberedPrinter = (device: UsbDevice) => {
 
 export const findRememberedPrinter = async (usb: UsbManager) => {
   const identity = readRememberedIdentity();
-  if (!identity) {
+  if (!identity || identity.transport !== "usb") {
     return null;
   }
 
@@ -244,6 +359,26 @@ export const findRememberedPrinter = async (usb: UsbManager) => {
         device.productId === identity.productId,
     ) ?? null
   );
+};
+
+export const findRememberedSerialPort = async (serial: SerialManager) => {
+  const identity = readRememberedIdentity();
+  if (!identity || identity.transport !== "serial") {
+    return null;
+  }
+
+  const ports = await serial.getPorts();
+  const matched = ports.find((port) => {
+    const info = port.getInfo();
+    return (
+      identity.usbVendorId != null &&
+      identity.usbProductId != null &&
+      info.usbVendorId === identity.usbVendorId &&
+      info.usbProductId === identity.usbProductId
+    );
+  });
+
+  return matched ?? (ports.length === 1 ? (ports[0] ?? null) : null);
 };
 
 export const prepareUsbPrinter = async (device: UsbDevice) => {
@@ -259,5 +394,35 @@ export const prepareUsbPrinter = async (device: UsbDevice) => {
   }
 };
 
+export const prepareSerialPrinter = async (port: SerialPort) => {
+  try {
+    await port.open({ baudRate: SERIAL_BAUD_RATE });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/already open/i.test(message)) {
+      throw error;
+    }
+  }
+
+  return port;
+};
+
+export const writeSerialPrinter = async (
+  port: SerialPort,
+  data: Uint8Array,
+) => {
+  if (!port.writable) {
+    throw new Error("Serial printer is not writable");
+  }
+
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(data);
+  } finally {
+    writer.releaseLock();
+  }
+};
+
 export const getUsbPrinter = getUsbManager;
-export type { UsbDevice, UsbManager };
+export const getSerialPrinter = getSerialManager;
+export type { UsbDevice, UsbManager, SerialPort, SerialManager };

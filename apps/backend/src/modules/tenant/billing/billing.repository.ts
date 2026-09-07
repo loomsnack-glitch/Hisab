@@ -772,9 +772,12 @@ export const getProductSalesSummary = async (
     organizationId: string,
     storeId: string | undefined,
     query: ProductSalesSummaryQuery,
+    entitledStoreIds?: readonly string[],
 ): Promise<ProductSalesSummaryDTO[]> => {
     const createdFrom = query.createdFrom ?? null;
     const createdTo = query.createdTo ?? null;
+    const restrictToStoreIds = storeId ? [storeId] : entitledStoreIds ?? null;
+    const unrestricted = restrictToStoreIds === null;
 
     const results = await pg`
         SELECT
@@ -794,7 +797,7 @@ export const getProductSalesSummary = async (
             ON c.id = p.category_id
             AND c.organization_id = p.organization_id
         WHERE s.organization_id = ${organizationId}
-          AND (${storeId ?? null}::uuid IS NULL OR s.store_id = ${storeId ?? null}::uuid)
+          AND (${unrestricted}::boolean OR s.store_id = ANY(${restrictToStoreIds ?? []}::uuid[]))
           AND s.status = 'completed'
           AND (${createdFrom}::timestamptz IS NULL OR s.created_at >= ${createdFrom}::timestamptz)
           AND (${createdTo}::timestamptz IS NULL OR s.created_at < ${createdTo}::timestamptz)

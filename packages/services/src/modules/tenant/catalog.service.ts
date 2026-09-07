@@ -19,9 +19,21 @@ import type {
     ProductsListResponse,
     ReorderCategoriesJSON,
     ReorderProductsJSON,
+    ReorderStoreCategoryPresentationsJSON,
     LabelTemplateResponse,
     LabelTemplatesListResponse,
     ServiceResponse,
+    StoreProductOfferingOverrideSummaryResponse,
+    StoreProductOfferingResponse,
+    StoreProductOfferingsListResponse,
+    StoreAddOnOfferingOverrideSummaryResponse,
+    StoreAddOnOfferingResponse,
+    StoreAddOnOfferingsListResponse,
+    StoreCategoryPresentationResponse,
+    StoreCategoryPresentationsListResponse,
+    CatalogCommercialOperationPreviewResponse,
+    CatalogCommercialOperationApplyResponse,
+    CatalogCommercialOperationAuditsListResponse,
     UpdateAddOnJSON,
     UpdateBundleProductJSON,
     UpdateComboProductJSON,
@@ -30,6 +42,11 @@ import type {
     UpdateProductAddOnAttachmentJSON,
     UpdateProductLabelProfileJSON,
     UpdateProductJSON,
+    UpdateStoreCategoryPresentationJSON,
+    UpdateStoreProductOfferingJSON,
+    UpdateStoreAddOnOfferingJSON,
+    PreviewCatalogCommercialOperationJSON,
+    ApplyCatalogCommercialOperationJSON,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -496,6 +513,184 @@ export const deleteLabelTemplate = async (
     try {
         const response = await api.delete(
             `/organizations/${organizationId}/label-templates/${labelTemplateId}`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreProductOfferings = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreProductOfferingsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/product-offerings`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreProductOffering = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+    data: UpdateStoreProductOfferingJSON,
+): Promise<ServiceResponse<StoreProductOfferingResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/product-offerings/${offeringId}`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreProductOfferingOverrideSummary = async (
+    organizationId: string,
+): Promise<ServiceResponse<StoreProductOfferingOverrideSummaryResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/store-product-offering-override-summary`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreAddOnOfferings = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreAddOnOfferingsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/add-on-offerings`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreAddOnOffering = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+    data: UpdateStoreAddOnOfferingJSON,
+): Promise<ServiceResponse<StoreAddOnOfferingResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/add-on-offerings/${offeringId}`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreAddOnOfferingOverrideSummary = async (
+    organizationId: string,
+): Promise<ServiceResponse<StoreAddOnOfferingOverrideSummaryResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/store-add-on-offering-override-summary`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getStoreCategoryPresentations = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<StoreCategoryPresentationsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/stores/${storeId}/category-presentations`,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const updateStoreCategoryPresentation = async (
+    organizationId: string,
+    storeId: string,
+    presentationId: string,
+    data: UpdateStoreCategoryPresentationJSON,
+): Promise<ServiceResponse<StoreCategoryPresentationResponse | null>> => {
+    try {
+        const response = await api.patch(
+            `/organizations/${organizationId}/stores/${storeId}/category-presentations/${presentationId}`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const reorderStoreCategoryPresentations = async (
+    organizationId: string,
+    storeId: string,
+    data: ReorderStoreCategoryPresentationsJSON,
+): Promise<ServiceResponse<null>> => {
+    try {
+        const response = await api.put(
+            `/organizations/${organizationId}/stores/${storeId}/category-presentations/order`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const previewCatalogCommercialOperation = async (
+    organizationId: string,
+    data: PreviewCatalogCommercialOperationJSON,
+): Promise<ServiceResponse<CatalogCommercialOperationPreviewResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/store-commercial-operations/preview`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const applyCatalogCommercialOperation = async (
+    organizationId: string,
+    data: ApplyCatalogCommercialOperationJSON,
+): Promise<ServiceResponse<CatalogCommercialOperationApplyResponse | null>> => {
+    try {
+        const response = await api.post(
+            `/organizations/${organizationId}/store-commercial-operations/apply`,
+            data,
+        );
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const getCatalogCommercialOperationAudits = async (
+    organizationId: string,
+): Promise<ServiceResponse<CatalogCommercialOperationAuditsListResponse | null>> => {
+    try {
+        const response = await api.get(
+            `/organizations/${organizationId}/store-commercial-operations/audits`,
         );
         return response.data;
     } catch (error) {

@@ -14,6 +14,8 @@ import {
     getPurchasesByOrganizationId,
     getMovementByOutgoingPaymentId,
     getStoreById,
+    getStoreVendorAvailabilityByStoreAndVendor,
+    getStoreVendorItemOfferingByStoreAndVendorItem,
     getUnitById,
     getVendorById,
     getVendorItemById,
@@ -33,6 +35,8 @@ import {
     recordedPurchase,
     replacePurchaseLinesRepo,
     resetStoredPurchase,
+    resetStoreVendorPurchaseLookups,
+    resolveFeatureEntitlement,
     restoreCreateMoneyAccountMovementRepo,
     storeId,
     tomatoItem,
@@ -75,9 +79,18 @@ describe("Organization Purchase service", () => {
         lockMoneyAccountById.mockClear();
         lockPaymentRouteByStoreAndMethod.mockClear();
         isMoneyAccountTrackingActive.mockClear();
+        resolveFeatureEntitlement.mockClear();
+        getStoreVendorAvailabilityByStoreAndVendor.mockClear();
+        getStoreVendorItemOfferingByStoreAndVendorItem.mockClear();
+        resetStoreVendorPurchaseLookups();
 
         getOrganizationByIdForUser.mockResolvedValue({ id: organizationId, name: "Demo Org" });
         getStoreById.mockResolvedValue({ id: storeId, organizationId, name: "Adajan" });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         isMoneyAccountTrackingActive.mockResolvedValue(false);
         lockMoneyAccountById.mockResolvedValue(adajanCashAccount);
         resetStoredPurchase(draftPurchase);
@@ -170,7 +183,7 @@ describe("Organization Purchase service", () => {
         expect(response.data?.purchase.linesTotal).toBe(22);
     });
 
-    test("prefills agreed unit price from the Vendor Item and snapshots names and Unit label", async () => {
+    test("prefills agreed unit price from the Store Vendor Item Offering and snapshots names and Unit label", async () => {
         const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
 
         expect(response.status).toBe("success");
@@ -206,6 +219,17 @@ describe("Organization Purchase service", () => {
         expect(createPurchaseRepo).not.toHaveBeenCalled();
     });
 
+    test("rejects a Draft Purchase from a Vendor that is not in the Organization", async () => {
+        getVendorById.mockResolvedValueOnce(null);
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(response.message).toBe("Vendor not found");
+        expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
     test("rejects a Vendor Item that does not belong to the selected Vendor", async () => {
         const response = await purchasesService.createDraftPurchase(userId, organizationId, {
             ...createPayload,
@@ -226,6 +250,110 @@ describe("Organization Purchase service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(400);
         expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Vendor Item that is not in the Organization", async () => {
+        getVendorItemById.mockResolvedValueOnce(null);
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(response.message).toBe("Vendor Item not found");
+        expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Draft Purchase from a Vendor that is not active at the selected Store", async () => {
+        getStoreVendorAvailabilityByStoreAndVendor.mockResolvedValue(null);
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toMatch(/not active at the selected Store/i);
+        expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Draft Purchase from a Vendor whose Store Vendor Availability is inactive", async () => {
+        getStoreVendorAvailabilityByStoreAndVendor.mockResolvedValue({
+            id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            organizationId,
+            storeId,
+            vendorId,
+            status: "inactive",
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: new Date("2026-08-31T12:00:00.000Z"),
+            updatedAt: new Date("2026-08-31T12:00:00.000Z"),
+        });
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toMatch(/not active at the selected Store/i);
+        expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects a Vendor Item that has no Store Vendor Item Offering at the selected Store", async () => {
+        getStoreVendorItemOfferingByStoreAndVendorItem.mockResolvedValue(null);
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, createPayload);
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(400);
+        expect(response.message).toMatch(/not available at the selected Store/i);
+        expect(createPurchaseRepo).not.toHaveBeenCalled();
+    });
+
+    test("prefills the agreed unit price from this Store's Offering when it differs from the Vendor Item seed", async () => {
+        getStoreVendorItemOfferingByStoreAndVendorItem.mockResolvedValue({
+            id: "eeeeeeee-ffff-4aaa-8bbb-cccccccccccc",
+            organizationId,
+            storeId,
+            vendorId,
+            vendorItemId,
+            defaultPurchasePrice: 38,
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: new Date("2026-08-31T12:00:00.000Z"),
+            updatedAt: new Date("2026-08-31T12:00:00.000Z"),
+        });
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, {
+            ...createPayload,
+            adjustment: 0,
+            lines: [{ vendorItemId, quantity: 2 }],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(38);
+        expect(response.data?.purchase.lines[0]?.lineTotal).toBe(76);
+    });
+
+    test("keeps an explicit Purchase Line agreed unit price when it differs from the Store default", async () => {
+        getStoreVendorItemOfferingByStoreAndVendorItem.mockResolvedValue({
+            id: "eeeeeeee-ffff-4aaa-8bbb-cccccccccccc",
+            organizationId,
+            storeId,
+            vendorId,
+            vendorItemId,
+            defaultPurchasePrice: 38,
+            createdBy: userId,
+            updatedBy: null,
+            createdAt: new Date("2026-08-31T12:00:00.000Z"),
+            updatedAt: new Date("2026-08-31T12:00:00.000Z"),
+        });
+
+        const response = await purchasesService.createDraftPurchase(userId, organizationId, {
+            ...createPayload,
+            adjustment: 0,
+            lines: [{ vendorItemId, quantity: 2, agreedUnitPrice: 41 }],
+        });
+
+        expect(response.status).toBe("success");
+        expect(response.data?.purchase.lines[0]?.agreedUnitPrice).toBe(41);
+        expect(response.data?.purchase.lines[0]?.lineTotal).toBe(82);
     });
 
     test("rejects a Draft Purchase whose adjustment makes the total negative", async () => {

@@ -5,7 +5,7 @@ Hisab is a multi-tenant retail/POS system for managing stores, products, sales, 
 ## Language
 
 **Platform Administrator**:
-A Ganatri owner or internal operator authorized to inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User, is distinct from an Organization's administrators, and has read-only access in Ganatri Console.
+A Ganatri owner or internal operator authorized to manage the Commercial Catalog and inspect cross-organization platform data. A Platform Administrator is represented by a separate Owner User and is distinct from an Organization's administrators.
 _Avoid_: Organization admin, tenant admin, superuser
 
 **Owner User**:
@@ -13,7 +13,7 @@ An internal Ganatri identity stored separately from customer Users and used to s
 _Avoid_: Organization user, tenant user, customer administrator
 
 **Active Owner User**:
-An Owner User permitted to authenticate to Ganatri Console and use its read-only capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
+A Owner User permitted to authenticate to Ganatri Console and use its commercial-catalog management and read-only inspection capabilities. An inactive Owner User is denied console access, including from an already-open session on its next authenticated request. Owner Users cannot deactivate themselves, and the final active Owner User cannot be deactivated.
 _Avoid_: Enabled Organization User, active store device
 
 **Seed Owner User**:
@@ -21,20 +21,112 @@ The first Owner User, created through a secure operator-run CLI command rather t
 _Avoid_: Public owner signup, organization registration
 
 **Ganatri Console**:
-The read-only internal Ganatri application at `console.ganatri.in` used by Platform Administrators to analyze Organization adoption and operational activity across the platform.
+The internal Ganatri application at `console.ganatri.in` used by Platform Administrators to manage the Commercial Catalog and analyze Organization adoption and operational activity across the platform. Its Organization Inspection Workspaces remain read-only.
 _Avoid_: Organization admin, customer dashboard, POS back office
+
+**Commercial Catalog**:
+The platform-owned configuration of sellable Plans, Modules, and Features, managed only by Platform Administrators in Ganatri Console. It does not contain Organization business data or payment transactions.
+_Avoid_: Organization catalog, tenant configuration, subscription ledger
+
+**Feature**:
+A stable platform capability that may be made available to a Store only through a Module. A Feature may be included in multiple Modules and is never directly included in a Plan or directly purchased.
+_Avoid_: Module, plan item, directly purchasable add-on
+
+**Module**:
+A reusable Commercial Catalog bundle of one or more Features, composed by Platform Administrators according to the workflow they choose to offer. A Module may be included in multiple Plans and may be offered as a separately purchasable add-on to a Store with an active Plan; Ganatri Console does not enforce Feature-dependency completeness.
+_Avoid_: Feature, plan, arbitrary feature selection
+
+**Plan**:
+A sellable Commercial Catalog offering with a price and duration that includes one or more Modules but no direct Feature memberships. A Store obtains access through a Plan before it can obtain separately purchasable Modules.
+_Avoid_: Module, subscription record, feature bundle
+
+**Store License**:
+The future Store-specific commercial access record through which one Store receives a Plan and separately purchased Modules for a bounded period. Stores in the same Organization may have different Store Licenses and therefore different available Features.
+_Avoid_: Organization-wide subscription, user license, shared tenant plan
+
+**Subscription Checkout**:
+An Organization administrator's self-service purchase flow in Ganatri Admin for one Store's Plan or Co-Term Add-Ons. It obtains payment through Razorpay but does not itself grant access.
+_Avoid_: Ganatri Console sale, browser-return activation, Organization-wide checkout
+
+**Verified Subscription Payment**:
+A Razorpay payment for a server-created Razorpay Order, confirmed by a signature-verified webhook for a Subscription Checkout. It is the event that activates or changes the Store License; a checkout redirect or client-side payment claim is not sufficient.
+_Avoid_: Browser payment success, unverified callback, payment intent
+
+**Commercial Quote**:
+An immutable server-calculated selection of Commercial Catalog Revisions, terms, dates, and final amounts for one intended Store License change. It creates the corresponding Razorpay Order and is the only source from which that Order may be fulfilled; an unpaid Quote expires after 30 minutes.
+_Avoid_: Client-supplied amount, mutable cart, live catalog lookup after payment, indefinite payment link
+
+**Commercial Payment Event**:
+A signature-verified, durably retained Razorpay `order.paid` webhook for a Commercial Quote. It is processed idempotently by its Razorpay event ID; related payment events never independently change access.
+_Avoid_: Browser callback, duplicate fulfillment, payment.captured fulfillment
+
+**Term Purchase**:
+A one-time paid checkout that charges the Plan's snapshotted final GST-inclusive price and starts or renews a Store License for its fixed term. It does not create a recurring Razorpay mandate; the next term requires a new checkout.
+_Avoid_: Auto-renewal, recurring subscription, open-ended entitlement
+
+**Scheduled Store License**:
+A paid Store License created by a successful Term Purchase while another Store License is active, whose term begins when the active term ends. A Store may have only one Scheduled Store License, preserving its current access without allowing stacked prepaid years.
+_Avoid_: Immediate trial replacement, shortened paid term, stacked prepaid years, payment-only record
+
+**Plan Upgrade**:
+An immediate change from a Store's active paid Plan to a higher Plan that keeps the existing term end. The payment credits the unused portion of the original purchased price and charges the new Plan's price for the same exact remaining calendar days; downgrades take effect only at renewal.
+_Avoid_: Mid-term downgrade, restarted annual term, forfeited unused term
+
+**License Revocation**:
+A Platform Administrator's recorded termination of a paid Store License after a corresponding Razorpay refund. A scheduled License is revoked before it starts; an active License ends on the administrator-selected date, without automatic prorated refunds.
+_Avoid_: Self-service cancellation, deleted purchase, automatic refund calculation
+
+**Co-Term Add-On**:
+A separately purchased Module whose catalog term matches the Store's active base Plan term, and whose access ends at the same Asia/Kolkata local timestamp as that Plan. Its initial charge is prorated from its catalog price by the exact remaining local-calendar-time fraction in that Plan term, rounded to the nearest paise; it never creates a later expiry date than its base Plan.
+_Avoid_: Independently expiring module, full-year add-on charge, plan extension
+
+**Commercial Term Clock**:
+The Asia/Kolkata local timestamp arithmetic that starts a Trial Plan, Term Purchase, or Store Access Grant immediately and ends it at the corresponding local day, month, or year boundary. It supplies the exact remaining-term fraction used by commercial proration.
+_Avoid_: UTC-midnight expiry, whole-day truncation, browser-local timezone
+
+**Store-Scoped Commercial Access**:
+The rule that a Store License controls whether a Store may use a paid workflow, even where that workflow uses Organization-owned shared data such as Catalog Products, Units, or Vendors. Shared setup is created once for the Organization; each Store independently needs the relevant commercial access to operate with it.
+_Avoid_: Per-store data copy, Organization-wide feature unlock, user-based access
+
+**Feature Entitlement**:
+A Store's currently available Feature, derived as the union of active Store License Plan Modules, paid Co-Term Add-Ons, and Store Access Grants. Each source independently grants access using its own catalog-revision snapshot and expiry; no source denies another.
+_Avoid_: Mutable global feature flag, entitlement override, Organization-wide unlock
+
+**Trial Plan**:
+A zero-price, standard seven-day Plan that an Organization administrator may start once for each newly created Store, with access to the Modules selected by Ganatri. It is a Plan type, not a separate trial subsystem or a Console exception.
+_Avoid_: Console complimentary grant, trial-only architecture, free module, permanent free plan
+
+**Store Access Grant**:
+A Store-specific commercial access record that a Platform Administrator may grant at any time, with time-bounded Plan or Module access that differs from the reusable Commercial Catalog, such as a seven-day trial, trial extension, complimentary period, custom date range, or special price. It is not a Commercial Catalog definition.
+_Avoid_: Standard Trial Plan, one-off global plan, catalog exception, payment transaction
+
+**Commercial Catalog Revision**:
+An immutable published version of a Plan, Module, or Feature definition, including its sellable configuration and memberships. Revisions are created as Drafts, become Active for future use, and are Retired when no longer available; definitions that have been Active are retained rather than deleted or edited in place.
+_Avoid_: Live overwrite, deleted plan, mutable historical catalog row
+
+**Commercial Catalog Key**:
+The unique, immutable lowercase identifier of a Plan, Module, or Feature, used by access checks and historical records instead of its editable display name. A key cannot be reused for a different commercial concept.
+_Avoid_: Display name as identifier, renamed access code, recycled catalog key
 
 **Ganatri Admin**:
 The user-authenticated Ganatri application used by an Organization's administrators to manage that Organization's settings and business data. It is separate from Ganatri Console and Ganatri POS.
 _Avoid_: Ganatri Console, POS, platform administration
 
 **Vendor**:
-An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items that may later be selected in Store-scoped Purchases; an inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
-_Avoid_: Store vendor, supplier record when referring to the vendor's offered goods
+An Organization-owned business from which the Organization buys goods. A Vendor has a name, optional description, active or inactive status, and a shared catalogue of Vendor Items; every Store has exactly one Store Vendor Availability for it. An inactive Vendor makes all of its items unavailable for selection without changing their own statuses. Vendors are retained and managed by status rather than deleted in Ganatri Admin.
+_Avoid_: Store vendor, assigned vendor, supplier record when referring to the vendor's offered goods
+
+**Store Vendor Availability**:
+A Store's local purchasing switch for one existing Organization Vendor. Every Vendor has exactly one Availability per Store. The Availability owns active/inactive status; inactive Vendors remain on the Store list and cannot be selected for new Purchases. An Availability is never deleted and never creates a Store-private Vendor.
+_Avoid_: Assigned store, unassigned vendor, private store vendor, vendor request workflow, copied vendor, deleted availability, target-store assignment
 
 **Vendor Item**:
-An Organization-owned good available from exactly one Vendor, with a name, purchase unit, required non-negative two-decimal default purchase price, and active or inactive status. Identically named Vendor Items may belong to different Vendors and retain independent prices. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
+An Organization-owned good available from exactly one Vendor, with a name, purchase unit, and active or inactive status. Its Store-specific default purchase price belongs to its Store Vendor Item Offering. Vendor Items are retained and managed by status rather than deleted in Ganatri Admin. A Vendor Item is not a sellable Catalog Product and does not yet represent inventory.
 _Avoid_: Product, stock item, purchase line
+
+**Store Vendor Item Offering**:
+A Store's purchasable configuration of one existing Vendor Item, including that Store's default purchase price. Every Vendor Item has an Offering at every Store where its Vendor has an Availability. The price is retained while the Vendor is inactive at that Store; it is a suggested value for a new Purchase and does not replace the historical agreed price recorded on a Purchase Line.
+_Avoid_: Store-private vendor item, purchase-line price, global vendor-item price, deleted offering
 
 **Purchase**:
 A Store-scoped record of goods acquired from one Vendor, including its effective date, optional invoice/reference and notes, Purchase Lines, Purchase Adjustment, and settlement state. A Purchase belongs to the Store that incurred it even when an Organization-wide Money Account funds its payment.
@@ -85,15 +177,31 @@ An Organization-wide measure used to express a Vendor Item's default purchase pr
 _Avoid_: Vendor-only setting, product-only unit, quantity
 
 **Catalog Product**:
-An Organization-owned item offered for sale through Ganatri POS. Each Catalog Product has exactly one Unit, a Default Selling Quantity in that Unit, and a selling price for exactly that default amount. Existing Catalog Products are treated as one piece at their existing selling price.
+An Organization-owned reusable definition of an item that every Store in the Organization has a Store Product Offering for. It owns the organization default selling price and discount, which apply wherever a Store has not set the corresponding local override, and its active/inactive status is the organization-wide sellability switch.
 _Avoid_: Vendor Item, inventory stock row, packaging variant when the underlying sellable item is unchanged
 
+**Store Product Offering**:
+A Store's sellable configuration of one existing Catalog Product. Every Catalog Product has exactly one Offering per Store. An Offering may independently override the organization default selling price and discount, and owns its active/inactive local menu status; it is sellable only when both its local status and the Catalog Product status are active. An Offering is never deleted and never creates a Store-private Catalog Product.
+_Avoid_: Store Product, copied Product, private store catalog, deleted offering, target-store assignment
+
+**Store Commercial Override**:
+An explicitly configured Store-specific price or discount that replaces the corresponding Organization default for one Store Product Offering or Store Add-On Offering. Ordinary Organization default changes never overwrite it; removing the override restores inheritance immediately.
+_Avoid_: Copied default, implicit exception, silent bulk replacement
+
+**Catalog Category**:
+An Organization-owned shared menu classification for Catalog Products. Its identity and structure are common to every Store; a Store may only control whether the Category is visible in its menu and its local display order.
+_Avoid_: Store-private category, copied category tree, per-store product classification
+
+**Bundle Product**:
+A Catalog Product sold as one fixed commercial offer whose centrally owned composition contains Catalog Products and Add-Ons. It inherits or overrides selling price, discount, and availability through its Store Product Offering exactly as a plain Catalog Product does; “Combo” is its UI label.
+_Avoid_: Store-private combo, price derived from component prices, editable local composition
+
 **Default Selling Quantity**:
-The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the Catalog Product's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
+The positive amount of a Catalog Product's Unit contained in one ordinary POS item. A normal POS tap adds one Default Selling Quantity at the selected Store Product Offering's selling price; for example, a Cake configured as 250 g for ₹250 adds `Cake (250g)` at ₹250. It is distinct from the whole-number Sale Item quantity, which counts how many equal portions are sold.
 _Avoid_: Sale Item quantity, unit conversion, per-gram price
 
 **Proportional Product Price**:
-The calculated selling price for a custom amount of a Catalog Product: its configured selling price multiplied by the chosen amount divided by its Default Selling Quantity. POS does not ask the cashier to override this price; the bill records the resulting amount and price snapshot. If that calculation exceeds two decimal places, Hisab rounds the one sold portion to the nearest paise before multiplying it by the Sale Item quantity.
+The calculated selling price for a custom amount of a Catalog Product: the selected Store Product Offering's configured selling price multiplied by the chosen amount divided by its Default Selling Quantity. POS does not ask the cashier to override this price; the bill records the resulting amount and price snapshot. If that calculation exceeds two decimal places, Hisab rounds the one sold portion to the nearest paise before multiplying it by the Sale Item quantity.
 _Avoid_: Cashier-entered custom price, independent packaging-variant price, rounded display-only calculation
 
 **Custom Selling Quantity**:
@@ -187,6 +295,14 @@ _Avoid_: Name match, fuzzy person match, Google-authoritative contact
 The part of the system that records a sale, its line items, and the payments collected against it. In this project, Billing is modeled through Sales and Payments rather than a separate invoice domain.
 _Avoid_: Invoicing, bill book
 
+**Organization Report**:
+A read-only view that aggregates an Organization's Store-attributed operational data for a chosen period and may be limited to one Store. It is not Organization-owned operational data and does not permit cross-Store changes.
+_Avoid_: Organization-wide sale, storeless report, report ownership mode
+
+**Customer**:
+An Organization-owned person or business that may buy from one or more Stores. A Customer's identity and contact details are searchable across the Organization, while each Store maintains any credit balance independently through a Store Customer Account.
+_Avoid_: Store-private customer, organization-wide customer balance
+
 **Payment Status**:
 The settlement state of a Sale based on how much money has been collected against its grand total. A Sale may be pending, partial, or paid.
 _Avoid_: Transaction status, order status
@@ -196,8 +312,12 @@ A committed Sale whose payment status is pending or partial and therefore still 
 _Avoid_: Customer-only due bill, synthetic unpaid payment
 
 **Customer Ledger**:
-The append-only history of balance-changing entries for a Customer, including sales, payments, void reversals, and manual adjustments. It exists to explain why the Customer's running balance is what it is.
-_Avoid_: Balance cache, statement total
+The append-only, Store-specific history of balance-changing entries for one Store Customer Account, including sales, payments, void reversals, and manual adjustments. It exists to explain that Store's running balance for that Customer.
+_Avoid_: Organization-wide customer ledger, balance cache, statement total
+
+**Store Customer Account**:
+One Store's independent credit balance for one shared Customer. Selecting an existing Customer at a new Store creates or uses that Store's zero-or-greater balance without changing the Customer's accounts at other Stores; a Receivable Sale, its payments, and adjustments affect only the Store Customer Account for the Sale's Store.
+_Avoid_: Organization-wide customer balance, cross-store receivable, shared credit account
 
 **Draft Sale**:
 A Sale that is being assembled but has not yet been committed as a receivable or completed sale. Draft Sales may change freely without affecting customer balances.
@@ -372,8 +492,12 @@ An Active Table Order intentionally abandoned before checkout because the guests
 _Avoid_: Discarded Table Draft, void completed sale, unpaid cancellation, retained abandoned cart
 
 **KOT System**:
-An optional Store feature that enables KOT generation. KOTs may be used for table service only when the Store also enables Table Management.
+An optional Store feature that enables KOT generation. KOTs may be used without Table Management, but Table Management requires KOT System; table service is available only when the Store enables both.
 _Avoid_: Table Management, required restaurant workflow, table-only KOT feature
+
+**Table Management**:
+An optional Store feature that enables Service Tables and Table Orders for table service. It requires KOT System and is therefore not offered as a standalone Module in the initial Commercial Catalog.
+_Avoid_: Standalone table module, table-only workflow, KOT System
 
 **Table Order**:
 The non-financial parent record for a seated party's service, which collects one or more KOTs before checkout. A Table Order belongs to exactly one Service Table and produces at most one final Sale.
@@ -472,12 +596,16 @@ In billing v1, a Device-Authenticated Billing Session uses the Organization's sh
 _Avoid_: Store-private v1 catalog, device-private customer list
 
 **Add-On**:
-An organization-scoped catalog item that may be attached to many different Products and selected under a parent Sale Item during billing. An Add-On is not sold by itself in the POS flow; it uses catalog-defined pricing and discount that are snapshotted onto the bill when selected, attached Add-Ons are optional unless the model later grows explicit requirement rules, and the Add-On itself has its own active/inactive lifecycle.
+An Organization-owned catalog item that may be attached to many different Catalog Products and selected under a parent Sale Item during billing. It is not sold by itself; its permitted product attachments and global lifecycle are shared, while each Store has a Store Add-On Offering that inherits or overrides its price and discount and controls local availability.
 _Avoid_: Suggested product, independent sale item, upsell hint
 
 **Add-On Discount**:
-A Discount defined on the Add-On itself and applied to the Add-On portion of billing separately from any Discount on the parent Product. Parent Product pricing rules do not implicitly change Add-On pricing rules.
+A Discount defined for an Add-On and applied to the Add-On portion of billing separately from any Discount on the parent Product. A Store Add-On Offering inherits the organization default unless it has its own discount override; parent Product pricing rules do not implicitly change it.
 _Avoid_: Inherited product discount, bundled hidden markdown, parent-only discount logic
+
+**Store Add-On Offering**:
+A Store's sellable configuration of one existing Add-On. It may independently override the organization default price and discount and has its own active/inactive local status; it is sellable only when both local and organization Add-On status are active.
+_Avoid_: Store-private add-on, copied add-on, local attachment rule
 
 **Retired Add-On**:
 An Add-On that is no longer offered for future billing but remains in the system for historical bill snapshots, product attachment integrity, and reporting. In the initial model, retiring an Add-On happens through its active/inactive status rather than destructive deletion once it has dependencies or billing history, and inactive Add-Ons stop appearing for new customize actions immediately while already-added Draft Sale lines keep their frozen snapshots until removed.

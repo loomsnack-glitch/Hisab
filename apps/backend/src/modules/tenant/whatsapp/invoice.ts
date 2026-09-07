@@ -11,6 +11,7 @@ import {
 import * as storage from "@/services/storage";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as repository from "./whatsapp.repository";
 import { getInvoiceTemplateValues } from "./invoice-text";
 import * as messageTemplate from "./message-template";
@@ -188,6 +189,8 @@ export const queueInvoiceForStore = async (
   userId?: string,
   options: InvoiceQueueOptions = {},
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const store = await organizationRepository.getStoreById(
     organizationId,
     storeId,
@@ -416,6 +419,8 @@ export const getInvoiceStatus = async (
   if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const store = await organizationRepository.getStoreById(organizationId, storeId);
   if (!store) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const existing = await getExistingInvoice(organizationId, storeId, saleId);
   return existing
     ? response(saleId, existing, true)
@@ -432,6 +437,8 @@ export const retryInvoice = async (
   if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const store = await organizationRepository.getStoreById(organizationId, storeId);
   if (!store) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const account = await repository.getAccount(organizationId, storeId);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(organizationId, storeId, account.id, saleId);
@@ -467,6 +474,8 @@ export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
+  if (entitlementError) return entitlementError;
   const existing = await getExistingInvoice(session.organization.id, session.store.id, saleId);
   return existing
     ? response(saleId, existing, true)
@@ -477,6 +486,8 @@ export const retryInvoiceForDevice = async (
   session: DeviceSessionDTO,
   saleId: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
+  if (entitlementError) return entitlementError;
   const account = await repository.getAccount(session.organization.id, session.store.id);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(session.organization.id, session.store.id, account.id, saleId);

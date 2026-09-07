@@ -11,14 +11,20 @@ import {
 import type { SaleDetailDTO } from "@repo/types";
 
 import {
-  build80mmEscPosPayload,
+  buildEscPosPayload,
+  describeUsbPrinterError,
   findRememberedPrinter,
-  getRememberedPrinterFilters,
   getUsbPrinter,
   prepareUsbPrinter,
   saveRememberedPrinter,
   type UsbDevice,
 } from "@/lib/pos-printer";
+import {
+  getReceiptPaperWidth,
+  persistReceiptPaperSize,
+  readReceiptPaperSize,
+  type ReceiptPaperSize,
+} from "@/lib/receipt-paper-size";
 import type { ReceiptContext } from "@/lib/receipt-text";
 
 type PosPrinterStatus =
@@ -35,6 +41,8 @@ type PosPrinterContextValue = {
   status: PosPrinterStatus;
   printerName: string | null;
   error: string | null;
+  paperSize: ReceiptPaperSize;
+  setPaperSize: (paperSize: ReceiptPaperSize) => void;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   printSale: (sale: SaleDetailDTO, context?: ReceiptContext) => Promise<void>;
@@ -42,8 +50,7 @@ type PosPrinterContextValue = {
 
 const PosPrinterContext = createContext<PosPrinterContextValue | null>(null);
 
-const messageForError = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const messageForError = (error: unknown) => describeUsbPrinterError(error);
 
 export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
   const usb = getUsbPrinter();
@@ -57,6 +64,14 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
   );
   const [printerName, setPrinterName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paperSize, setPaperSizeState] = useState<ReceiptPaperSize>(() =>
+    readReceiptPaperSize("admin"),
+  );
+
+  const setPaperSize = useCallback((nextPaperSize: ReceiptPaperSize) => {
+    setPaperSizeState(nextPaperSize);
+    persistReceiptPaperSize("admin", nextPaperSize);
+  }, []);
 
   const disconnectDevice = useCallback(async () => {
     const device = deviceRef.current;
@@ -101,14 +116,14 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
       // Keep requestDevice directly inside the click handler's promise chain;
       // browsers require the device picker to originate from a user gesture.
       const device = await manager.requestDevice({
-        filters: getRememberedPrinterFilters(),
+        filters: [],
       });
       await attachDevice(device);
     } catch (connectionError) {
       const message = messageForError(connectionError);
       setError(message);
       setStatus("error");
-      throw connectionError;
+      throw new Error(message);
     }
   }, [attachDevice]);
 
@@ -123,7 +138,7 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
     const endpoint = endpointRef.current;
 
     if (!device || !endpoint || !device.opened) {
-      throw new Error("Connect the 80mm USB printer first");
+      throw new Error("Connect the USB receipt printer first");
     }
 
     setStatus("printing");
@@ -132,7 +147,9 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
     try {
       const result = await device.transferOut(
         endpoint.endpointNumber,
-        build80mmEscPosPayload(sale, context),
+        buildEscPosPayload(sale, context, {
+          width: getReceiptPaperWidth(paperSize),
+        }),
       );
       if (result.status !== "ok") {
         throw new Error(`Printer transfer failed: ${result.status}`);
@@ -148,9 +165,9 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
         await disconnectDevice();
         setStatus("disconnected");
       }
-      throw printError;
+      throw new Error(message);
     }
-  }, []);
+  }, [disconnectDevice, paperSize]);
 
   useEffect(() => {
     if (!usb) {
@@ -199,11 +216,23 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
       status,
       printerName,
       error,
+      paperSize,
+      setPaperSize,
       connect,
       disconnect,
       printSale,
     }),
-    [connect, disconnect, error, printerName, printSale, status, usb],
+    [
+      connect,
+      disconnect,
+      error,
+      paperSize,
+      printerName,
+      printSale,
+      setPaperSize,
+      status,
+      usb,
+    ],
   );
 
   return (

@@ -2,12 +2,18 @@ import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
 import type {
+    CreateStoreVendorAvailabilityREPO,
+    CreateStoreVendorItemOfferingREPO,
     CreateVendorItemREPO,
     CreateVendorREPO,
+    StoreVendorAvailabilityDTO,
+    StoreVendorItemOfferingDTO,
     VendorDTO,
     VendorItemDTO,
+    UpdateStoreVendorItemOfferingREPO,
     UpdateVendorItemREPO,
     UpdateVendorREPO,
+    UpdateStoreVendorAvailabilityREPO,
 } from "@repo/types";
 
 const mapVendor = (row: Record<string, unknown>): VendorDTO =>
@@ -145,4 +151,242 @@ export const updateVendorItem = async (
     `;
 
     return result ? mapVendorItem(result) : null;
+};
+
+export const getVendorItemsByVendorId = async (
+    organizationId: string,
+    vendorId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<VendorItemDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM vendor_items
+        WHERE organization_id = ${organizationId}
+          AND vendor_id = ${vendorId}
+        ORDER BY lower(name) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapVendorItem(result));
+};
+
+const STORE_VENDOR_AVAILABILITY_TOPOLOGY_LOCK_ID = 410042;
+
+export const lockStoreVendorAvailabilityTopology = async (
+    organizationId: string,
+    tx: Bun.TransactionSQL,
+) => {
+    await tx`
+        SELECT pg_advisory_xact_lock(
+            ${STORE_VENDOR_AVAILABILITY_TOPOLOGY_LOCK_ID},
+            hashtext(${organizationId})
+        )
+    `;
+};
+
+const mapStoreVendorAvailability = (row: Record<string, unknown>): StoreVendorAvailabilityDTO =>
+    snakeToCamel(row) as StoreVendorAvailabilityDTO;
+
+const mapStoreVendorItemOffering = (row: Record<string, unknown>): StoreVendorItemOfferingDTO => {
+    const mapped = snakeToCamel(row) as StoreVendorItemOfferingDTO;
+    return {
+        ...mapped,
+        defaultPurchasePrice: Number(mapped.defaultPurchasePrice),
+    };
+};
+
+export const createStoreVendorAvailability = async (
+    availabilityData: CreateStoreVendorAvailabilityREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO store_vendor_availabilities ${camelToSnakeSql(availabilityData)}
+        RETURNING *
+    `;
+
+    return result ? mapStoreVendorAvailability(result) : null;
+};
+
+export const getStoreVendorAvailabilitiesByStoreId = async (
+    organizationId: string,
+    storeId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT a.*
+        FROM store_vendor_availabilities a
+        INNER JOIN vendors v
+            ON v.id = a.vendor_id
+           AND v.organization_id = a.organization_id
+        WHERE a.organization_id = ${organizationId}
+          AND a.store_id = ${storeId}
+        ORDER BY lower(v.name) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreVendorAvailability(result));
+};
+
+export const getStoreVendorAvailabilitiesByVendorId = async (
+    organizationId: string,
+    vendorId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT *
+        FROM store_vendor_availabilities
+        WHERE organization_id = ${organizationId}
+          AND vendor_id = ${vendorId}
+        ORDER BY created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreVendorAvailability(result));
+};
+
+export const getStoreVendorAvailabilityById = async (
+    organizationId: string,
+    storeId: string,
+    availabilityId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM store_vendor_availabilities
+        WHERE id = ${availabilityId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? mapStoreVendorAvailability(result) : null;
+};
+
+export const getStoreVendorAvailabilityByStoreAndVendor = async (
+    organizationId: string,
+    storeId: string,
+    vendorId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM store_vendor_availabilities
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND vendor_id = ${vendorId}
+    `;
+
+    return result ? mapStoreVendorAvailability(result) : null;
+};
+
+export const updateStoreVendorAvailability = async (
+    availabilityData: UpdateStoreVendorAvailabilityREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorAvailabilityDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        UPDATE store_vendor_availabilities
+        SET status = ${availabilityData.status},
+            updated_by = ${availabilityData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${availabilityData.id}
+          AND organization_id = ${availabilityData.organizationId}
+          AND store_id = ${availabilityData.storeId}
+        RETURNING *
+    `;
+
+    return result ? mapStoreVendorAvailability(result) : null;
+};
+
+export const createStoreVendorItemOffering = async (
+    offeringData: CreateStoreVendorItemOfferingREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorItemOfferingDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO store_vendor_item_offerings ${camelToSnakeSql(offeringData)}
+        RETURNING *
+    `;
+
+    return result ? mapStoreVendorItemOffering(result) : null;
+};
+
+export const getStoreVendorItemOfferingsByStoreId = async (
+    organizationId: string,
+    storeId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorItemOfferingDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT o.*
+        FROM store_vendor_item_offerings o
+        INNER JOIN vendor_items i
+            ON i.id = o.vendor_item_id
+           AND i.organization_id = o.organization_id
+        INNER JOIN vendors v
+            ON v.id = o.vendor_id
+           AND v.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+        ORDER BY lower(v.name) ASC, lower(i.name) ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreVendorItemOffering(result));
+};
+
+export const getStoreVendorItemOfferingById = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorItemOfferingDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM store_vendor_item_offerings
+        WHERE id = ${offeringId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? mapStoreVendorItemOffering(result) : null;
+};
+
+export const getStoreVendorItemOfferingByStoreAndVendorItem = async (
+    organizationId: string,
+    storeId: string,
+    vendorItemId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorItemOfferingDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT *
+        FROM store_vendor_item_offerings
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND vendor_item_id = ${vendorItemId}
+    `;
+
+    return result ? mapStoreVendorItemOffering(result) : null;
+};
+
+export const updateStoreVendorItemOffering = async (
+    offeringData: UpdateStoreVendorItemOfferingREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreVendorItemOfferingDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        UPDATE store_vendor_item_offerings
+        SET default_purchase_price = ${offeringData.defaultPurchasePrice},
+            updated_by = ${offeringData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${offeringData.id}
+          AND organization_id = ${offeringData.organizationId}
+          AND store_id = ${offeringData.storeId}
+        RETURNING *
+    `;
+
+    return result ? mapStoreVendorItemOffering(result) : null;
 };

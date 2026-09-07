@@ -1,0 +1,160 @@
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+
+mock.module("@/middlewares/auth.middleware", () => ({
+    authMiddleware: async (context: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+        context.set("authUser", { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
+        await next();
+    },
+}));
+
+const harness = await import("./catalog.service.test-harness");
+
+const { default: catalogRoutes } = await import("./catalog.routes");
+
+const offeringsPath = `http://localhost/${harness.organizationId}/stores/${harness.store.id}/product-offerings`;
+const productPath = `http://localhost/${harness.organizationId}/products/${harness.productId}`;
+
+describe("Store Product Offering catalog routes", () => {
+    beforeEach(() => {
+        harness.getOrganizationByIdForUser.mockClear();
+        harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
+        harness.getStoreById.mockClear();
+        harness.getStoreById.mockResolvedValue(harness.store);
+        harness.getProductById.mockClear();
+        harness.getProductById.mockResolvedValue(harness.product);
+        harness.getStoreProductOfferingsByStoreId.mockClear();
+        harness.getStoreProductOfferingsByStoreId.mockResolvedValue([harness.storeProductOffering]);
+        harness.getStoreProductOfferingById.mockClear();
+        harness.getStoreProductOfferingById.mockResolvedValue(harness.storeProductOffering);
+        harness.createStoreProductOfferingRepo.mockClear();
+        harness.deleteStoreProductOfferingRepo.mockClear();
+        harness.updateStoreProductOfferingRepo.mockClear();
+        harness.updateStoreProductOfferingRepo.mockImplementation(async (data) => ({
+            ...harness.storeProductOffering,
+            ...data,
+            effectivePrice: data.priceOverride ?? harness.product.price,
+            effectiveDiscount: data.discountOverride ?? harness.product.discount,
+            isPriceInherited: data.priceOverride === null,
+            isDiscountInherited: data.discountOverride === null,
+        }));
+        harness.getProductLabelProfileByProductId.mockResolvedValue(null);
+        harness.getStoreProductOfferingsByProductId.mockClear();
+        harness.getStoreProductOfferingsByProductId.mockResolvedValue([]);
+        harness.updateProductRepo.mockClear();
+    });
+
+    test("lists Store Product Offerings for a Store in the Organization, including inactive ones", async () => {
+        harness.getStoreProductOfferingsByStoreId.mockResolvedValue([
+            { ...harness.storeProductOffering, status: "inactive" as "active" | "inactive" },
+        ]);
+
+        const response = await catalogRoutes.request(offeringsPath);
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.offerings[0]?.product.name).toBe(harness.product.name);
+        expect(body.data.offerings[0]?.status).toBe("inactive");
+        expect(harness.getStoreProductOfferingsByStoreId).toHaveBeenCalledWith(
+            harness.organizationId,
+            harness.store.id,
+        );
+    });
+
+    test("does not create a Store Product Offering through POST", async () => {
+        const response = await catalogRoutes.request(offeringsPath, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                productId: harness.productId,
+                price: 135,
+            }),
+        });
+
+        expect(response.status).toBe(404);
+        expect(harness.createStoreProductOfferingRepo).not.toHaveBeenCalled();
+    });
+
+    test("updates Offering price override, discount override, and status without changing shared Catalog Product details", async () => {
+        const response = await catalogRoutes.request(
+            `${offeringsPath}/${harness.offeringId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    priceOverride: 180,
+                    discountOverride: 20,
+                    status: "inactive",
+                }),
+            },
+        );
+
+        expect(response.status).toBe(200);
+        expect(harness.updateStoreProductOfferingRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: harness.offeringId,
+                storeId: harness.store.id,
+                priceOverride: 180,
+                discountOverride: 20,
+                status: "inactive",
+            }),
+        );
+        expect(harness.updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects legacy copied-price update fields on Store Product Offerings", async () => {
+        const response = await catalogRoutes.request(
+            `${offeringsPath}/${harness.offeringId}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ price: 180, discount: 20 }),
+            },
+        );
+
+        expect(response.status).toBe(400);
+        expect(harness.updateStoreProductOfferingRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects changing global Product commercial fields when invalid", async () => {
+        const response = await catalogRoutes.request(productPath, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ price: 10, discount: 11 }),
+        });
+
+        expect(response.status).toBe(400);
+        expect(harness.updateProductRepo).not.toHaveBeenCalled();
+    });
+
+    test("updates Organization default price without touching Store overrides", async () => {
+        harness.updateProductRepo.mockImplementation(async (data) => ({
+            ...harness.product,
+            ...data,
+            unitLabel: "pc",
+        }));
+
+        const response = await catalogRoutes.request(productPath, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ price: 120 }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(harness.updateProductRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: harness.productId,
+                price: 120,
+            }),
+        );
+    });
+
+    test("does not delete a Store Product Offering", async () => {
+        const response = await catalogRoutes.request(
+            `${offeringsPath}/${harness.offeringId}`,
+            { method: "DELETE" },
+        );
+
+        expect(response.status).toBe(404);
+        expect(harness.deleteStoreProductOfferingRepo).not.toHaveBeenCalled();
+    });
+});

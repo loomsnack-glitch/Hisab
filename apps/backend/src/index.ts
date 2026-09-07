@@ -2,6 +2,7 @@ import app from "./app";
 import { redis } from "./config/redis";
 import { handleShutdown } from "./helpers/server.helper";
 import { replayPendingMessageEvents } from "./modules/tenant/whatsapp/whatsapp.service";
+import { getCommercialLicensingService } from "./modules/tenant/commercial-licensing/commercial-licensing.service";
 import {
   dispatchCloudOutbox,
   replayPendingCloudWebhookEvents,
@@ -25,6 +26,13 @@ process.on("SIGQUIT", handleShutdown);
 
 console.log(`🚀 Server running at http://localhost:${port}/api`);
 await redis.connect();
+
+void getCommercialLicensingService().applyLegacyStoreMigrationGrants().catch((error) => {
+  console.warn(
+    "[commercial-licensing] legacy Store migration grant failed",
+    error instanceof Error ? error.message : "unknown error",
+  );
+});
 
 const providerEventReplay = setInterval(() => {
   void replayPendingMessageEvents().catch(() => {

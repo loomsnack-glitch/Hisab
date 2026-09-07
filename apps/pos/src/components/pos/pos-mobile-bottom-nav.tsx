@@ -8,6 +8,7 @@ import {
     getVisiblePosPrimaryMobileDestinations,
     getVisiblePosWorkspaceDestinations,
     isPosMoreDestinationActive,
+    isPosSettingsPath,
 } from "@/components/pos/pos-nav-items";
 import { getPosPanelTabFromPath } from "@/pages/pos-route-context";
 
@@ -21,7 +22,7 @@ const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemE
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const activeTab = getPosPanelTabFromPath(location.pathname);
-    const isAppearanceRoute = location.pathname === "/appearance" || location.pathname === "/settings";
+    const isSettingsRoute = isPosSettingsPath(location.pathname);
     const isMoreActive = isPosMoreDestinationActive(location.pathname) || moreOpen;
     const primaryDestinations = getVisiblePosPrimaryMobileDestinations({ tableManagementEnabled, kotSystemEnabled });
     const workspaceDestinations = getVisiblePosWorkspaceDestinations({ tableManagementEnabled, kotSystemEnabled });
@@ -41,7 +42,7 @@ const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemE
                 <div className="mx-auto flex max-w-lg items-stretch gap-0.5">
                     {primaryDestinations.map((destination) => {
                         const Icon = destination.icon;
-                        const isActive = !isAppearanceRoute && destination.tab === activeTab;
+                        const isActive = !isSettingsRoute && destination.tab === activeTab;
 
                         return (
                             <Link
@@ -83,10 +84,10 @@ const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemE
                     <div className="grid grid-cols-3 gap-3">
                         {workspaceDestinations.map((destination) => {
                             const Icon = destination.icon;
-                            const isActive =
-                                destination.path === "/appearance"
-                                    ? isAppearanceRoute
-                                    : destination.tab === activeTab;
+                            const isActive = isPosSettingsPath(destination.path)
+                                    ? location.pathname === destination.path ||
+                                      (destination.path === "/appearance" && location.pathname === "/settings")
+                                    : !isSettingsRoute && destination.tab === activeTab;
 
                             return (
                                 <Link

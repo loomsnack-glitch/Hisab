@@ -3,6 +3,7 @@ import {
     STATUS_CODES,
     validateWhatsAppTemplate,
     type ServiceResponse,
+    type StatusCode,
     type WhatsAppAccountDTO,
     type WhatsAppAccountStatusResponseDTO,
     type WhatsAppReminderQueueResponseDTO,
@@ -10,6 +11,10 @@ import {
     type DeviceSessionDTO,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import {
+    requireOrganizationFeatureEntitlement,
+    requireStoreFeatureEntitlement,
+} from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as billingRepository from "@/modules/tenant/billing/billing.repository";
 import * as repository from "./whatsapp.repository";
 import * as invoiceService from "./invoice";
@@ -33,8 +38,14 @@ const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const dueReminderObjectKey = (organizationId: string, storeId: string, accountId: string, customerId: string, saleId?: string) =>
     `whatsapp-due-reminders/${organizationId}/${storeId}/${accountId}/${customerId}/${saleId ?? "statement"}.pdf`;
 type StoreScope =
-    | { error: string; code: 404 }
+    | { error: string; code: StatusCode }
     | { organization: Awaited<ReturnType<typeof organizationRepository.getOrganizationByIdForUser>>; store: Awaited<ReturnType<typeof organizationRepository.getStoreById>> };
+
+const requireWhatsAppStoreEntitlement = (storeId: string) =>
+    requireStoreFeatureEntitlement(storeId, "whatsapp");
+
+const requireWhatsAppOrganizationEntitlement = (organizationId: string) =>
+    requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
 
 const accountResponse = (
     account: WhatsAppAccountDTO,
@@ -60,6 +71,8 @@ const scopeStore = async (userId: string, organizationId: string, storeId: strin
 
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     if (!store) return { error: "Store not found", code: STATUS_CODES.NOT_FOUND };
+    const entitlementError = await requireWhatsAppStoreEntitlement(storeId);
+    if (entitlementError) return { error: entitlementError.message, code: entitlementError.code };
     return { organization, store };
 };
 
@@ -67,9 +80,11 @@ const getOrganizationAccount = async (
     userId: string,
     organizationId: string,
     accountId: string,
-): Promise<{ error: string; code: 404 } | { account: WhatsAppAccountDTO }> => {
+): Promise<{ error: string; code: StatusCode } | { account: WhatsAppAccountDTO }> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { error: "Organization not found", code: STATUS_CODES.NOT_FOUND };
+    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
+    if (entitlementError) return { error: entitlementError.message, code: entitlementError.code };
 
     const account = await repository.getAccountById(accountId);
     if (!account || account.organizationId !== organizationId) return { error: "WhatsApp account not found", code: STATUS_CODES.NOT_FOUND };
@@ -100,6 +115,8 @@ export const listAccounts = async (
 ): Promise<ServiceResponse<{ accounts: WhatsAppAccountDTO[] } | null>> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
+    if (entitlementError) return entitlementError;
     return {
         status: "success",
         message: "WhatsApp accounts loaded",
@@ -215,6 +232,8 @@ export const syncAccount = async (
 export const syncAccountForDevice = async (
     session: DeviceSessionDTO,
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(session.store.id);
+    if (entitlementError) return entitlementError;
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
     return syncAccountForScope(account);
@@ -237,6 +256,8 @@ export const getAccount = async (
 export const getAccountForDevice = async (
     session: DeviceSessionDTO,
 ): Promise<ServiceResponse<WhatsAppAccountStatusResponseDTO | null>> => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(session.store.id);
+    if (entitlementError) return entitlementError;
     const account = await repository.getAccount(session.organization.id, session.store.id);
     if (!account) return { status: "error", message: "WhatsApp account is not linked", data: null, code: STATUS_CODES.NOT_FOUND };
     return account.provider === "cloud_api"
@@ -252,12 +273,16 @@ export const resendInvoiceForDevice = invoiceService.resendInvoiceForDevice;
 export const listMessageTemplatesForDevice = async (
     session: DeviceSessionDTO,
     kind?: import("@repo/types").WhatsAppMessageTemplateKind,
-) => ({
-    status: "success" as const,
-    message: "WhatsApp message templates fetched successfully",
-    data: { templates: await messageTemplate.listTemplates(session.organization.id, session.store.id, kind) },
-    code: STATUS_CODES.SUCCESS,
-});
+) => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(session.store.id);
+    if (entitlementError) return entitlementError;
+    return {
+        status: "success" as const,
+        message: "WhatsApp message templates fetched successfully",
+        data: { templates: await messageTemplate.listTemplates(session.organization.id, session.store.id, kind) },
+        code: STATUS_CODES.SUCCESS,
+    };
+};
 
 export const listMessageTemplates = async (
     userId: string,
@@ -332,6 +357,8 @@ const queueDueReminderForStore = async (
   saleId?: string,
   userId?: string,
 ): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(storeId);
+    if (entitlementError) return entitlementError;
     const store = await organizationRepository.getStoreById(organizationId, storeId);
     const customer = await billingRepository.getCustomerById(organizationId, customerId);
     if (!store || !customer) return { status: "error", message: "Store or customer not found", data: null, code: STATUS_CODES.NOT_FOUND };
@@ -465,6 +492,8 @@ export const getPublicInvoiceTemplateConfig = async (
             code: STATUS_CODES.NOT_FOUND,
         };
     }
+    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
+    if (entitlementError) return entitlementError;
     return {
         status: "success",
         message: "Public invoice template configuration fetched successfully",
@@ -478,6 +507,8 @@ const getDueReminderStatusForStore = async (
     storeId: string,
     saleId: string,
 ): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(storeId);
+    if (entitlementError) return entitlementError;
     const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
     const customerId = sale?.customerId ?? null;
     if (!customerId) return { status: "success", message: "Due reminder has not been sent for this bill", data: null, code: STATUS_CODES.SUCCESS };

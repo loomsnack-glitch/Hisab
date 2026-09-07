@@ -1,0 +1,116 @@
+# Store Commercial Licensing and Feature Entitlement
+
+Status: ready-for-agent
+
+## Problem Statement
+
+Ganatri Console can define a versioned Commercial Catalog of Plans, Modules, and Features, but Organizations cannot yet obtain those offerings for a Store, pay for them, or have the product enforce the resulting access. Hisab needs a safe self-service way for an Organization administrator to start a Store trial, purchase and renew paid Plans, buy eligible Co-Term Add-Ons, and see the resulting commercial history. Platform Administrators also need Console tools to inspect commercial state, grant exceptional access, and reconcile refunds. Once a Store has access, every paid workflow must be enforced server-side at the Store boundary without duplicating Organization-owned business data.
+
+## Solution
+
+Introduce Store Commercial Licensing as the commercial lifecycle for a Store. Ganatri Admin creates immutable Commercial Quotes from active Commercial Catalog Revisions, starts server-created Razorpay Orders, and uses only a signature-verified Razorpay `order.paid` webhook to fulfil those Quotes. Fulfilment creates or changes Store Licenses and paid Co-Term Add-Ons; it never trusts a browser success callback.
+
+Introduce one Feature Entitlement resolver used by operational server-side guards. It derives the currently available Feature Keys for a Store from the union of active Plan Modules, paid Co-Term Add-Ons, and active Store Access Grants, all using the memberships snapshotted at the time their access source was created. Ganatri Admin presents Store commercial status and self-service actions; Ganatri Console presents cross-Organization inspection plus access-grant and refund/revocation operations. Existing Stores receive a 30-day complimentary migration Store Access Grant containing all current Modules when enforcement launches.
+
+## User Stories
+
+1. As an Organization administrator, I want to view every Store's current Plan, expiry, active add-ons, and available Features, so that I can understand what each Store may use.
+2. As an Organization administrator, I want to start the standard Trial Plan once for a newly created Store, so that I can evaluate Hisab without paying during setup.
+3. As an Organization administrator, I want a newly started trial to activate immediately and last the full configured seven local calendar days, so that I do not lose trial time because I started later in the day.
+4. As an Organization administrator, I want a Store to keep its own trial eligibility, so that opening a new Store can be evaluated independently of my other Stores.
+5. As an Organization administrator, I want to select a paid active Plan for one Store, so that I can buy Core or Pro only where it is needed.
+6. As an Organization administrator, I want checkout to show the exact final GST-inclusive amount, term, start, and end before I pay, so that I know what I am purchasing.
+7. As an Organization administrator, I want Hisab to open Razorpay Checkout for a server-created Order, so that I can use the merchant's supported payment methods without supplying a price from the browser.
+8. As an Organization administrator, I want a browser payment success screen to show that Hisab is confirming the payment, so that I understand access may take a moment to appear.
+9. As an Organization administrator, I want paid access to activate only after a confirmed Razorpay payment, so that accidental or abandoned checkouts do not unlock a Store.
+10. As an Organization administrator, I want an abandoned or failed checkout to leave my existing Store access unchanged, so that retries cannot damage a working license.
+11. As an Organization administrator, I want an unpaid checkout to expire after 30 minutes, so that a later retry receives an accurate eligible price and commercial state.
+12. As an Organization administrator, I want a paid Plan purchased during an active trial to start when the trial ends, so that I receive both the remaining trial and the complete paid annual term.
+13. As an Organization administrator, I want to renew a Store before its paid term ends, so that access does not lapse while I wait to pay at the deadline.
+14. As an Organization administrator, I want an early renewal to become exactly one scheduled successor term, so that I can plan ahead without accidentally stacking prepaid years.
+15. As an Organization administrator, I want to choose a lower Plan for the next renewal, so that I can reduce future cost without losing features in the middle of an active term.
+16. As an Organization administrator, I want to upgrade an active paid Plan immediately, so that a Store can gain needed capabilities without waiting for its annual renewal.
+17. As an Organization administrator, I want an upgrade quote to credit the unused portion of my original paid Plan and charge only the proportional amount of the higher Plan, so that mid-term upgrades are fair and understandable.
+18. As an Organization administrator, I want an upgrade to retain the Store's existing expiry, so that it does not create another renewal date.
+19. As an Organization administrator, I want separately purchasable Modules to be offered only when they match my base Plan's term, so that their co-term price and expiry are clear.
+20. As an Organization administrator, I want to buy an eligible Module partway through an active paid Plan and receive access immediately, so that I can add a capability when my Store needs it.
+21. As an Organization administrator, I want a paid Co-Term Add-On to end with the base Plan, so that I have one renewal date for a Store.
+22. As an Organization administrator, I want the add-on price to be prorated to the exact remaining local-calendar-time fraction and rounded only to paise, so that I do not pay a full term for partial access.
+23. As an Organization administrator, I want to see my purchase, payment, quote, license, add-on, expiry, and revocation history, so that I can reconcile commercial access.
+24. As an Organization administrator, I want catalog edits after a purchase to leave my purchased access and price history unchanged, so that a later plan revision cannot silently alter my term.
+25. As a Store Device user, I want paid workflows to work when my Store is entitled, so that a valid license does not get in the way of daily operations.
+26. As a Store Device user, I want a paid workflow to be rejected on the server when my Store lacks its Feature Entitlement, so that commercial rules cannot be bypassed from an old or manipulated client.
+27. As an Organization administrator, I want shared Organization data such as products and vendors to remain shared while paid workflow use is controlled per Store, so that I do not need to duplicate setup.
+28. As a Platform Administrator, I want to inspect an Organization's Store commercial state and payment history in Ganatri Console, so that I can support customers without modifying their business data.
+29. As a Platform Administrator, I want to grant a Store a standard seven-day, extended, complimentary, or custom-range Plan or Module access period, so that I can provide approved exceptions without changing the Commercial Catalog.
+30. As a Platform Administrator, I want a Store Access Grant to add access alongside active paid or trial access, so that support grants never remove another valid entitlement.
+31. As a Platform Administrator, I want to refund a payment through Razorpay and record the corresponding License Revocation in Console, so that financial and access histories agree.
+32. As a Platform Administrator, I want a revocation of a scheduled term to prevent it from starting, so that a refunded future renewal cannot activate later.
+33. As a Platform Administrator, I want to select the end date of an active refunded term, so that exceptional refunds do not force an automatic pro-rata refund policy.
+34. As a Platform Administrator, I want all commercial lifecycle changes to retain who made the change and the catalog revisions used, so that support and audit work can explain access at any point in time.
+35. As a Platform Administrator, I want every existing Store to receive a visible 30-day complimentary migration grant when enforcement launches, so that live operations keep running while customers transition to licensed access.
+36. As a Platform Administrator, I want the migration grant to expire instead of acting as a permanent bypass, so that feature enforcement becomes real after the announced grace period.
+37. As the platform, I want duplicate or out-of-order Razorpay webhooks to cause no duplicate access change, so that at-least-once delivery cannot grant multiple terms.
+38. As the platform, I want a payment-provider outage or webhook delay to preserve the Quote and show pending confirmation rather than grant access prematurely, so that payment proof remains authoritative.
+39. As the platform, I want all commercial term arithmetic to use Asia/Kolkata local timestamps, so that trials, annual licenses, scheduled terms, and proration use one customer-relevant clock.
+40. As the platform, I want each Store's Feature Entitlement to be the union of all its active sources, so that a valid Plan, Co-Term Add-On, or Store Access Grant independently unlocks its Features.
+
+## Implementation Decisions
+
+- Add a dedicated Commercial Licensing service as the authoritative lifecycle boundary for standard trials, Commercial Quotes, Razorpay Orders, verified Commercial Payment Events, Store Licenses, paid Co-Term Add-Ons, Plan Upgrades, Scheduled Store Licenses, Store Access Grants, refunds, and License Revocations.
+- Model commercial records separately from the reusable Commercial Catalog. Every access-bearing or payment-bearing record references and snapshots the selected active Plan, Module, and Feature revision memberships, display details, price, and term necessary to reproduce historical access and pricing after catalog revisions are retired or replaced.
+- A Store has an active base Plan source at most once at a time and at most one Scheduled Store License. A scheduled paid term begins at the prior active source's end timestamp. An early renewal replaces any existing future successor only through an explicit, safe lifecycle rule; it must never stack prepaid years.
+- The standard Trial Plan is a one-time opt-in action per newly created Store. It starts immediately and has the existing catalog's standard seven-day term. Platform Administrators may use Store Access Grants to supply a new seven-day period, extension, or any custom time range at any time.
+- Paid Plan purchases are one-time Term Purchases, not Razorpay subscriptions or mandates. Renewal requires a new checkout. Core and Pro remain annual under their current active catalog revisions; future Plan terms remain catalog-driven.
+- A payment during a trial or active paid term creates the one Scheduled Store License. It preserves the active source through its current expiry and begins at that exact end timestamp.
+- A paid Plan Upgrade is the only supported active-term Plan replacement. It applies immediately, retains the existing end timestamp, credits the exact unused fraction of the Store's original purchased Plan price, charges the exact remaining fraction of the higher Plan's current price, and rounds the final charge to paise. A downgrade is selectable only for the next scheduled renewal.
+- A separately purchasable Module is eligible as a Co-Term Add-On only when it is active, separately purchasable, not already provided to that Store by an active access source, and its configured term equals the active base Plan term. It activates immediately, ends at the base Plan end timestamp, and charges its catalog price multiplied by the exact remaining fraction, rounded to paise.
+- All catalog prices are INR final customer-facing GST-inclusive amounts. Quotes charge only catalog prices, upgrade calculations, or add-on proration; coupon codes, negotiated discounts, partial payments, instalments, and a separate tax calculation are excluded.
+- Store and commercial terms use Asia/Kolkata local timestamp arithmetic. A day, month, or year term ends at the corresponding local timestamp. Proration uses the exact remaining fraction of that term rather than truncating to whole days.
+- A Commercial Quote is immutable, calculates from current eligible Store state, records all line items and derivations, and expires 30 minutes after creation if unpaid. Its quoted catalog revisions and prices remain valid only until that expiry; a new attempt requires a new Quote.
+- The backend alone creates the Razorpay Order for the Commercial Quote's exact paise amount and stores the Razorpay order ID and receipt correlation. Ganatri Admin passes only that server-approved Order into standard Razorpay Checkout.
+- Add a Razorpay payment-provider adapter that is responsible for creating and retrieving Orders and initiating approved refunds. Razorpay API credentials and the distinct webhook secret are server-only configuration and never appear in Ganatri Admin, Ganatri Console, logs, or response DTOs.
+- Add a public HTTPS webhook route that consumes the untouched raw request body, validates `X-Razorpay-Signature` with the webhook secret, persists a Commercial Payment Event keyed by `x-razorpay-event-id`, and quickly returns a 2xx response after durable acceptance. It processes only `order.paid` as payment fulfilment. Other events may be retained for diagnostic state but do not independently grant commercial access.
+- Fulfilment is idempotent and retry-safe. It verifies that the webhook's paid Order, currency, and amount exactly match one unexpired Commercial Quote before one transaction creates the resulting commercial records. Duplicate delivery, reordered related events, and a browser callback cannot create duplicate terms or access.
+- Persist payment status, Razorpay Order and payment identifiers, amounts, timestamps, quote links, and relevant webhook-event audit data. Do not store payment instruments, card details, raw payment credentials, or secrets.
+- Ganatri Admin gains a Store commercial area that presents the current base access source, expiry, scheduled successor, active add-ons, entitlement summary, available purchases, quote breakdown, pending payment confirmation, completed commercial history, and start-trial action. Its buying actions are authorized only for a user authorized for the selected Organization and Store.
+- Ganatri Console gains Organization Inspection commercial views and Platform Administrator-only commands to create Store Access Grants, view lifecycle/payment history, initiate a Razorpay refund, and record a License Revocation. Console does not expose Razorpay credentials or mutate Organization business data.
+- Store Access Grants are time-bounded access sources for a Plan or Module selection. They independently add Feature Entitlement, retain the exact grant terms and catalog snapshot, and do not alter a paid Store License, a Commercial Quote, or the Commercial Catalog.
+- Refunds are operator-managed: there is no Organization self-service cancellation or automatic pro-rata refund. After a successful Razorpay refund, a Platform Administrator records the matching License Revocation. A scheduled source is terminated before it starts; an active source ends at the administrator-selected timestamp.
+- Create a Feature Entitlement service as the one authoritative server-side access seam. Given a Store and Feature Key at a point in time, it resolves the union of active Plan Module memberships, active paid Co-Term Add-On memberships, and active Store Access Grant memberships. It returns a clear decision and evidence suitable for the caller and support diagnostics.
+- Replace commercial use of direct Store feature booleans with Feature Entitlement guards at the existing workflow service boundaries. Preserve non-commercial operational configuration checks where they remain meaningful: an entitled Feature may still require its Store-level operational setting to be enabled. A Store must satisfy both when both rules apply.
+- Apply Feature Entitlement to every seeded Commercial Feature and to future catalog Features as their workflows are introduced: billing, reports, catalog products, units, vendors, purchases, expenses, money account tracking, KOT system, table management, WhatsApp, and Google Contacts Synchronization. The existing KOT/Table relationship remains intact: access to Table Management never bypasses the required KOT System workflow relationship.
+- Add a launch migration that creates a 30-day Console-created complimentary Store Access Grant containing all currently available Modules for every Store that existed before enforcement. New Stores do not receive that migration grant and use the standard one-time Trial Plan path instead.
+- Surface access denials as stable, user-safe forbidden responses that identify the unavailable capability without revealing another Organization's data or payment details. Ganatri Admin and POS should turn them into an actionable commercial status or purchase path where appropriate, while the server remains authoritative.
+- Retain current Commercial Catalog lifecycle semantics: only active catalog revisions are purchasable or grantable for new records, while retired revisions remain readable through historical commercial records. A Quote and its fulfilment must never re-resolve memberships from a newly published revision.
+
+## Testing Decisions
+
+- Test external commercial behavior at the two confirmed seams: Commercial Licensing lifecycle behavior and Feature Entitlement decisions. Route/UI tests should verify authorization, user-visible state, and integration with those seams rather than re-testing internal pricing queries or database helper calls.
+- Add Commercial Licensing service tests for starting a new-Store trial once, rejecting repeat self-service trials, trial-to-paid scheduling, full-term purchase, early renewal, one-successor enforcement, immediate upgrade credit/charge calculations, next-term-only downgrades, matching-term add-on eligibility, precise proration and paise rounding, quote expiry, catalog revision snapshots, Console grants, refunds, revocations, and the 30-day migration grant.
+- Add Razorpay adapter and webhook-route tests using signed raw payload fixtures. Cover invalid signatures, raw-body preservation, wrong Order/currency/amount, `order.paid` fulfilment, duplicate `x-razorpay-event-id`, duplicate payment attempts, reordered `payment.captured`, webhook retry after fulfilment failure, and fast successful durable receipt.
+- Add repository/integration tests that prove a fulfilment transaction cannot produce more than one License change for a Quote, cannot stack future terms, preserves audit records, and remains correct under concurrent checkouts for the same Store.
+- Add Feature Entitlement tests for the union of a Plan, paid Co-Term Add-On, and Store Access Grant; each source's start/end timestamps; expired/revoked sources; revision snapshots; Store isolation within one Organization; and rejection when the Store lacks an active source.
+- Add behavior tests at existing guarded workflow seams. Extend the KOT/Table and money-account-tracking test patterns to verify that a valid Store configuration still requires the matching Feature Entitlement, and that a valid entitlement still respects required operational configuration. Add equivalent service-level coverage as catalog, purchasing, expense, reporting, WhatsApp, and Google Contacts feature gates are wired.
+- Add Ganatri Admin behavior tests for Store selection, trial availability, checkout quote presentation, Razorpay pending confirmation, renewal scheduling, upgrade price presentation, add-on availability, commercial history, and access-denied state. Do not attempt real Razorpay browser checkout in unit tests.
+- Add Ganatri Console behavior and route tests for read-only commercial inspection, grant creation, refund/revocation audit behavior, and the absence of credentials or Organization business-data mutation.
+- Use the repository's existing backend service, route, transaction, and Console component behavior tests as prior art. Good tests assert observed lifecycle states, response codes, access results, and user-visible outputs—not private helper calls, SQL ordering, or implementation-specific storage layouts.
+- Add end-to-end staging verification against Razorpay Test Mode before production enablement: create a test Order, complete payment, observe one verified `order.paid` event, confirm exactly one access change, replay the event, validate an expired quote, test a refund/revocation, and confirm an entitlement-denied workflow call.
+
+## Out of Scope
+
+- Razorpay subscriptions, mandates, automatic renewal, recurring billing, dunning, or automatic retry charging.
+- Coupon codes, promotions, negotiated discounts, credits, partial payments, payment plans, invoices with tax breakdowns, and tax-exclusive catalog pricing.
+- Organization self-service cancellation, automatic pro-rata refunds, chargeback/dispute automation, and automated reconciliation beyond recorded webhook/payment status.
+- Direct Feature purchases, arbitrary customer-built feature bundles, or automatic Feature dependency validation. Plans continue to contain Modules only, and Platform Administrators remain responsible for Module composition.
+- Organization-wide licenses, user licenses, data copying per Store, and client-only enforcement.
+- Changing existing organization/store authorization or introducing a new Organization role model beyond reusing the application's established Organization authorization checks.
+- A permanent compatibility bypass for legacy Stores. The migration grant is deliberately limited to 30 days.
+- Turning every future workflow into a new bespoke licensing system; new paid workflows must integrate through Feature Entitlement.
+
+## Further Notes
+
+- The initial catalog currently offers Trial (7 days), Core (₹2,999/year), and Pro (₹4,999/year). No seeded Module is separately purchasable yet, but the design and Admin UI must support future active matching-term Modules without a redesign.
+- KOT/Table composition remains commercial-catalog responsibility: Table Management has no standalone KOT-free offering. Entitlement checks complement, rather than replace, the existing KOT and Store operational constraints.
+- Razorpay configuration must use a public HTTPS webhook endpoint, a separately configured webhook secret, raw-body HMAC verification, and `x-razorpay-event-id` duplicate detection. Razorpay documents at-least-once and potentially reordered webhooks; Order-backed `order.paid` fulfilment is therefore the authoritative path. [Razorpay webhook validation](https://razorpay.com/docs/webhooks/validate-test/), [Razorpay webhook best practices](https://razorpay.com/docs/webhooks/best-practices/), [Razorpay Orders webhooks](https://razorpay.com/docs/webhooks/orders/)
+- The definitive domain language and architectural decisions are recorded in `CONTEXT.md` and ADRs 0018–0040. In particular, Commercial Catalog revisions are retained, access is Store-scoped, grants are exceptions rather than catalog edits, paid add-ons co-term, and commercial access sources are additive.

@@ -55,8 +55,7 @@ const LoginPage = () => {
                 setUser(response.data.user);
                 queryClient.setQueryData(authKeys.me, response);
                 toast.success(response.message);
-                sessionStorage.removeItem("hisab_initial_org_redirected");
-                navigate("/organizations", { replace: true });
+                navigate("/", { replace: true });
                 return;
             }
 

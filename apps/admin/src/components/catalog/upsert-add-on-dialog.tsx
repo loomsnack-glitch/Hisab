@@ -75,7 +75,7 @@ const defaultValues: UpsertAddOnFormInput = {
     name: "",
     price: "",
     discount: "",
-    status: "active",
+    status: "inactive",
 };
 
 const statusSelectOptions = AddOnStatusSchema.options.map((status) => ({
@@ -132,7 +132,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
             name: values.name.trim(),
             price: values.price,
             discount: values.discount ?? 0,
-            status: (values.status ?? "active") as AddOnStatus,
+            status: (values.status ?? "inactive") as AddOnStatus,
         });
     };
 
@@ -151,7 +151,8 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
             <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Puzzle className="size-5" />}
-                    title={isEditMode ? "Edit add-on" : "Create add-on"}
+                    title={isEditMode ? "Edit Organization add-on" : "Create Organization add-on"}
+                    subtitle={isEditMode ? "Manage shared definition, Organization defaults, and global publication." : "New add-ons start unpublished. Publish when ready for Stores to sell."}
                 />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
@@ -165,7 +166,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
 
                     <div className="grid grid-cols-2 gap-3">
                         <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Price</FieldLabel>
+                            <FieldLabel required>Organization default price</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
@@ -183,7 +184,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                         </Field>
 
                         <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Discount</FieldLabel>
+                            <FieldLabel>Organization default discount</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
@@ -207,7 +208,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                             name="status"
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldLabel required>Global publication</FieldLabel>
                                     <FieldContent>
                                         <ReactSelect
                                             options={statusSelectOptions}

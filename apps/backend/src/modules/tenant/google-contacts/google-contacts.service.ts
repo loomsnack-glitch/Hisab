@@ -6,6 +6,7 @@ import {
   type ServiceResponse,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import {
   GoogleContactsCredentialError,
   type GoogleContactsCredentialVault,
@@ -61,6 +62,9 @@ export type GoogleContactsServiceDependencies = {
   scheduleDisplayNameRefresh: typeof scheduleGoogleContactsDisplayNameRefresh;
   vault: GoogleContactsCredentialVault;
   oauth: GoogleOAuthProvider;
+  assertFeatureEntitlement: (
+    organizationId: string,
+  ) => Promise<ServiceResponse<null> | null>;
 };
 const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   getOrganizationByIdForUser: organizationRepository.getOrganizationByIdForUser,
@@ -77,6 +81,8 @@ const defaultDependencies = (): GoogleContactsServiceDependencies => ({
   scheduleDisplayNameRefresh: scheduleGoogleContactsDisplayNameRefresh,
   vault: databaseGoogleContactsCredentialVault,
   oauth: createGoogleOAuthProvider(),
+  assertFeatureEntitlement: (organizationId) =>
+    requireOrganizationFeatureEntitlement(organizationId, "google_contacts_synchronization"),
 });
 
 const oauthStateSecret = (): string =>
@@ -94,6 +100,22 @@ const requireOrganization = async (
   userId: string,
   organizationId: string,
 ) => deps.getOrganizationByIdForUser(organizationId, userId);
+
+const requireGoogleContactsAccess = async (
+  deps: GoogleContactsServiceDependencies,
+  userId: string,
+  organizationId: string,
+): Promise<{ organization: { id: string } } | ServiceResponse<null>> => {
+  const organization = await requireOrganization(deps, userId, organizationId);
+  if (!organization) return organizationNotFound();
+  const denial = await deps.assertFeatureEntitlement(organizationId);
+  if (denial) return denial;
+  return { organization };
+};
+
+const isGoogleContactsAccessDenied = (
+  access: { organization: { id: string } } | ServiceResponse<null>,
+): access is ServiceResponse<null> => "status" in access;
 
 const configurationUnavailable = (
   error: unknown,
@@ -127,8 +149,8 @@ export const getGoogleContactsSyncStatusForOrganization = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   return {
     status: "success",
@@ -159,8 +181,8 @@ const startGoogleContactsOAuthWithIntent = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsOAuthStartResponse | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   const current = await deps.getStatus(organizationId);
   if (intent === "connect" && current.connectionStatus === "connected") {
@@ -259,8 +281,8 @@ export const completeGoogleContactsOAuth = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   const current = await deps.getStatus(organizationId);
   if (current.connectionStatus === "connected") {
@@ -388,8 +410,8 @@ export const startGoogleContactsInitialSync = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   const current = await deps.getStatus(organizationId);
   if (current.connectionStatus !== "connected") {
@@ -417,8 +439,8 @@ export const updateGoogleContactsNameAffixForOrganization = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   const current = await deps.getStatus(organizationId);
   if (current.connectionStatus !== "connected" && current.connectionStatus !== "reconnect_required") {
@@ -463,8 +485,8 @@ export const disconnectGoogleContactsForOrganization = async (
   injected: Partial<GoogleContactsServiceDependencies> = {},
 ): Promise<ServiceResponse<GoogleContactsSyncStatus | null>> => {
   const deps = { ...defaultDependencies(), ...injected };
-  const organization = await requireOrganization(deps, userId, organizationId);
-  if (!organization) return organizationNotFound();
+  const access = await requireGoogleContactsAccess(deps, userId, organizationId);
+  if (isGoogleContactsAccessDenied(access)) return access;
 
   const lifecycle = await deps.getLifecycle(organizationId);
   if (!lifecycle) {

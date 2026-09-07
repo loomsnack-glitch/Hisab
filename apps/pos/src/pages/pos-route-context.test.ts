@@ -50,6 +50,9 @@ describe("POS route context", () => {
     expect(getPosLoginPath("/appearance")).toBe(
       "/login?returnTo=%2Fappearance",
     );
+    expect(getPosLoginPath("/printer")).toBe(
+      "/login?returnTo=%2Fprinter",
+    );
     });
 
     test("preserves only internal POS return paths after login", () => {
@@ -59,6 +62,7 @@ describe("POS route context", () => {
         expect(getPosReturnPath("/reports")).toBe("/reports");
         expect(getPosReturnPath("/whatsapp")).toBe("/whatsapp");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
+        expect(getPosReturnPath("/printer")).toBe("/printer");
         expect(getPosReturnPath("https://example.com")).toBe("/");
         expect(getPosReturnPath("/login")).toBe("/");
         expect(getPosReturnPath("//evil.example")).toBe("/");
@@ -75,6 +79,7 @@ describe("POS route context", () => {
       "kots",
       "customers",
             "reports",
+            "printer",
             "appearance",
         ]);
     const tablesDestination = posWorkspaceDestinations.find(
@@ -105,6 +110,7 @@ describe("POS route context", () => {
         expect(isPosMoreDestinationActive("/customers")).toBe(true);
         expect(isPosMoreDestinationActive("/reports")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
+        expect(isPosMoreDestinationActive("/printer")).toBe(true);
     });
 
     test("hides Tables from POS navigation when Table Management is disabled", () => {

@@ -46,6 +46,7 @@ import {
     getProducts,
     getSale,
     getSales,
+    getStoreProductOfferings,
     updatePosSettings,
     updatePosDraftSale,
     updateDraftSale,
@@ -79,8 +80,10 @@ import type {
 } from "@repo/types";
 import {
   catalogDefaultSellingPortion,
+  inactiveProductCodesWithoutActiveOffering,
   isSameSoldAmount,
   normalizePhoneNumber,
+  overlayActiveStoreProductOfferings,
 } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -168,6 +171,7 @@ import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
+import CommercialAccessDenied from "@/components/commercial-access-denied";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import type {
   PosComposerHandoff,
@@ -191,6 +195,7 @@ import {
   readCheckoutBillingAdjustmentsOpen,
   writeCheckoutBillingAdjustmentsOpen,
 } from "@/lib/checkout-billing-adjustments-preferences";
+import { isCommercialAccessDeniedMessage } from "@/lib/commercial-access";
 import {
   formatCurrency,
   formatDateTime,
@@ -939,6 +944,11 @@ const BillingPage = ({
       isDeviceMode ? getPosProducts() : getProducts(organizationId),
         enabled: Boolean(organizationId),
     });
+    const storeOfferingsQuery = useQuery({
+        queryKey: catalogKeys.storeProductOfferings(organizationId, selectedStoreId),
+        queryFn: () => getStoreProductOfferings(organizationId, selectedStoreId),
+        enabled: !isDeviceMode && Boolean(organizationId && selectedStoreId),
+    });
 
     const posSettingsQuery = useQuery({
         queryKey: ["pos", "settings", session?.device.id],
@@ -1099,21 +1109,40 @@ const BillingPage = ({
         : [],
         [categoriesQuery.data],
     );
-    const products = useMemo(
+    const catalogProducts = useMemo(
     () =>
       productsQuery.data?.status === "success"
         ? (productsQuery.data.data?.products ?? [])
         : [],
         [productsQuery.data],
     );
-    const inactiveProductCodes = useMemo(
+    const storeOfferings = useMemo(
         () =>
-            productsQuery.data?.status === "success"
-        ? ((productsQuery.data.data?.inactiveProductCodes ??
-            []) as InactiveProductCode[])
+            storeOfferingsQuery.data?.status === "success"
+                ? (storeOfferingsQuery.data.data?.offerings ?? [])
                 : [],
-        [productsQuery.data],
+        [storeOfferingsQuery.data],
     );
+    const products = useMemo(() => {
+        if (isDeviceMode) {
+            return catalogProducts;
+        }
+        if (!selectedStoreId) {
+            return catalogProducts;
+        }
+        return overlayActiveStoreProductOfferings(catalogProducts, storeOfferings);
+    }, [catalogProducts, isDeviceMode, selectedStoreId, storeOfferings]);
+    const inactiveProductCodes = useMemo(() => {
+        if (isDeviceMode) {
+            return productsQuery.data?.status === "success"
+                ? ((productsQuery.data.data?.inactiveProductCodes ?? []) as InactiveProductCode[])
+                : [];
+        }
+        if (!selectedStoreId) {
+            return [];
+        }
+        return inactiveProductCodesWithoutActiveOffering(catalogProducts, storeOfferings);
+    }, [catalogProducts, isDeviceMode, productsQuery.data, selectedStoreId, storeOfferings]);
     const barcodeScanningEnabled =
         posSettingsQuery.data?.status === "success" &&
     posSettingsQuery.data.data?.organizationCatalogSettings
@@ -2729,7 +2758,7 @@ const BillingPage = ({
               "WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS",
             );
                     } else if (!posPrinter.connected) {
-                        toast.error("Connect the 80mm USB printer before printing");
+                        toast.error("Connect the receipt printer before printing");
                     } else {
             void posPrinter
               .printSale(sale, receiptContext)
@@ -3287,6 +3316,22 @@ const BillingPage = ({
             <div className="flex min-h-[50vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
             </div>
+        );
+    }
+
+    const commercialAccessMessage =
+        isDeviceMode && customersQuery.data?.status === "error"
+            ? customersQuery.data.message
+            : isDeviceMode && salesQuery.error instanceof Error
+              ? salesQuery.error.message
+              : null;
+
+    if (isDeviceMode && isCommercialAccessDeniedMessage(commercialAccessMessage)) {
+        return (
+            <CommercialAccessDenied
+                featureName="Billing"
+                message={commercialAccessMessage ?? undefined}
+            />
         );
     }
 

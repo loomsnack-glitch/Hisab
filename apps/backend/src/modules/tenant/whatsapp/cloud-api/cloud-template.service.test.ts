@@ -1,17 +1,28 @@
-import { describe, expect, test } from "bun:test";
-import {
+import { describe, expect, mock, test } from "bun:test";
+
+const organizationId = "11111111-1111-4111-8111-111111111111";
+const userId = "33333333-3333-4333-8333-333333333333";
+const accountId = "44444444-4444-4444-8444-444444444444";
+const businessAccountId = "55555555-5555-4555-8555-555555555555";
+const storeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+mock.module("@/modules/tenant/organization/organization.repository", () => ({
+  getOrganizationByIdForUser: async () => ({ id: organizationId }),
+  getStoresByOrganizationId: async () => [{ id: storeId, organizationId, name: "Adajan" }],
+  getStoreById: async () => ({ id: storeId, organizationId, name: "Adajan" }),
+}));
+
+await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
+  (module) => module.ensureFeatureEntitlementMock(),
+);
+const {
   archiveCloudTemplateBindingForStore,
   listCloudTemplatesForAccount,
   rollbackCloudTemplateBindingForStore,
   setCloudTemplateDefaultForSubmission,
   submitCloudTemplateForAccount,
   syncCloudTemplatesForAccount,
-} from "./cloud-template.service";
-
-const organizationId = "11111111-1111-4111-8111-111111111111";
-const userId = "33333333-3333-4333-8333-333333333333";
-const accountId = "44444444-4444-4444-8444-444444444444";
-const businessAccountId = "55555555-5555-4555-8555-555555555555";
+} = await import("./cloud-template.service");
 
 const accountSnapshot = {
   id: accountId,

@@ -3,11 +3,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createComboProduct, getComboProduct, updateComboProduct } from "@repo/services";
-import { ProductStatusSchema, type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO } from "@repo/types";
+import { type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@repo/ui/components/dialog";
-import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Boxes, Pencil, Plus, PlusCircle, Trash2, X } from "lucide-react";
@@ -31,7 +31,6 @@ const comboFormSchema = z.object({
     name: z.string().trim().min(1, "Name is required"),
     price: z.coerce.number().min(0, "Price must be 0 or more"),
     discount: z.coerce.number().min(0).default(0),
-    status: ProductStatusSchema,
     choiceGroups: z.array(z.object({
         name: z.string().trim().min(1, "Group name is required"),
         minSelections: whole,
@@ -62,7 +61,6 @@ const defaultValues: FormInput = {
     name: "",
     price: 0,
     discount: 0,
-    status: "active",
     choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
 
@@ -76,7 +74,6 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     const watchedGroups = form.watch("choiceGroups");
     const categoryOptions = useMemo(() => categories.map((item) => ({ label: item.name, value: item.id })), [categories]);
     const optionProducts = useMemo(() => products.filter((item) => item.productType === "single" && item.status === "active"), [products]);
-    const statusOptions = ProductStatusSchema.options.map((value) => ({ label: value[0].toUpperCase() + value.slice(1), value }));
     const detailsQuery = useQuery({
         queryKey: [...catalogKeys.products(organizationId), "combo", product?.id],
         queryFn: () => getComboProduct(organizationId, product!.id),
@@ -93,7 +90,11 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             : categories[0]?.id ?? "";
         const details = detailsQuery.data?.status === "success" ? detailsQuery.data.data : null;
         if (!product) {
-            form.reset({ ...defaultValues, categoryId, choiceGroups: [{ ...defaultValues.choiceGroups[0], options: [] }] });
+            form.reset({
+                ...defaultValues,
+                categoryId,
+                choiceGroups: [{ ...defaultValues.choiceGroups[0], options: [] }],
+            });
             return;
         }
         form.reset({
@@ -101,7 +102,6 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             name: product.name,
             price: Number(product.price),
             discount: Number(product.discount),
-            status: product.status,
             choiceGroups: details?.choiceGroups.map((group) => ({
                 name: group.name,
                 minSelections: group.minSelections,
@@ -112,9 +112,9 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     }, [open, product, detailsQuery.data, detailsQuery.isPending, isEdit, categories, defaultCategoryId, optionProducts, form]);
 
     const mutation = useMutation({
-        mutationFn: (data: CreateComboProductJSON) => product
+        mutationFn: (data: CreateComboProductJSON | Parameters<typeof updateComboProduct>[2]) => product
             ? updateComboProduct(organizationId, product.id, data)
-            : createComboProduct(organizationId, data),
+            : createComboProduct(organizationId, data as CreateComboProductJSON),
         onSuccess: (response) => {
             if (response.status !== "success") { toast.error(response.message); return; }
             toast.success(response.message);
@@ -139,19 +139,32 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             })),
         });
     };
-    const onSubmit: SubmitHandler<FormInput> = (values) => mutation.mutate({
-        categoryId: values.categoryId,
-        name: values.name.trim(),
-        price: Number(values.price),
-        discount: Number(values.discount ?? 0),
-        status: values.status,
-        choiceGroups: values.choiceGroups.map((group) => ({
-            name: group.name.trim(),
-            minSelections: Number(group.minSelections),
-            maxSelections: Number(group.maxSelections),
-            options: group.options.map((option) => ({ productId: option.productId, maxQuantity: Number(option.maxQuantity), priceAdjustment: Number(option.priceAdjustment) })),
-        })),
-    });
+    const onSubmit: SubmitHandler<FormInput> = (values) => {
+        const shared = {
+            categoryId: values.categoryId,
+            name: values.name.trim(),
+            choiceGroups: values.choiceGroups.map((group) => ({
+                name: group.name.trim(),
+                minSelections: Number(group.minSelections),
+                maxSelections: Number(group.maxSelections),
+                options: group.options.map((option) => ({
+                    productId: option.productId,
+                    maxQuantity: Number(option.maxQuantity),
+                    priceAdjustment: Number(option.priceAdjustment),
+                })),
+            })),
+        };
+        mutation.mutate(
+            isEdit
+                ? shared
+                : {
+                    ...shared,
+                    price: Number(values.price),
+                    discount: Number(values.discount ?? 0),
+                    status: "inactive" as const,
+                },
+        );
+    };
 
     return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
         <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
@@ -173,10 +186,22 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="Select category" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
                     <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} placeholder="Burger Combo" /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
-                    <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
-                    <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
+                    {!isEdit ? (
+                        <>
+                            <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
+                            <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
+                        </>
+                    ) : null}
                 </div>
-                {isEdit && <Field className="min-w-0"><FieldLabel>Status</FieldLabel><FieldContent><ReactSelect options={statusOptions} value={statusOptions.find((item) => item.value === form.watch("status")) ?? null} onChange={(item) => form.setValue("status", item?.value ?? "active")} /></FieldContent></Field>}
+                {!isEdit ? (
+                    <FieldDescription>
+                        This initial selling price applies as an active Offering at every current Store. Each Store can change it later.
+                    </FieldDescription>
+                ) : (
+                    <FieldDescription>
+                        Selling price, discount, and menu status are configured in each Store workspace.
+                    </FieldDescription>
+                )}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {

@@ -1,18 +1,30 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+    createStoreVendorAvailabilityRepo,
+    createStoreVendorItemOfferingRepo,
     createVendorItemRepo,
     createVendorRepo,
     freshFarmsVendor,
     getOrganizationByIdForUser,
+    getStoreById,
+    getStoreVendorAvailabilitiesByStoreId,
+    getStoreVendorAvailabilitiesByVendorId,
+    getStoreVendorAvailabilityById,
+    getStoreVendorAvailabilityByStoreAndVendor,
+    getStoreVendorItemOfferingById,
+    getStoreVendorItemOfferingsByStoreId,
+    getStoresByOrganizationId,
     getUnitById,
     getVendorById,
     getVendorItemById,
     getVendorItemsByOrganizationId,
+    getVendorItemsByVendorId,
     getVendorsByOrganizationId,
     inactiveCrateUnit,
     inactiveUnitId,
     inactiveVendorId,
     kilogramUnit,
+    lockStoreVendorAvailabilityTopology,
     millersTomatoItem,
     millersVendor,
     onionItem,
@@ -20,19 +32,31 @@ import {
     organization,
     organizationId,
     otherOrganizationId,
+    resolveFeatureEntitlement,
+    store,
+    storeId,
+    storeVendorAvailability,
     tomatoItem,
+    tomatoOffering,
     unitId,
+    updateStoreVendorAvailabilityRepo,
+    updateStoreVendorItemOfferingRepo,
     updateVendorItemRepo,
     updateVendorRepo,
     userId,
     vendorId,
     vendorItemId,
     vendorsService,
+    vesuStore,
+    vesuStoreId,
+    vesuTomatoOffering,
 } from "./vendors.service.test-harness";
 
 describe("Organization Vendor service", () => {
     beforeEach(() => {
         getOrganizationByIdForUser.mockClear();
+        getStoresByOrganizationId.mockClear();
+        resolveFeatureEntitlement.mockClear();
         getVendorsByOrganizationId.mockClear();
         getVendorById.mockClear();
         getUnitById.mockClear();
@@ -42,8 +66,31 @@ describe("Organization Vendor service", () => {
         updateVendorRepo.mockClear();
         createVendorItemRepo.mockClear();
         updateVendorItemRepo.mockClear();
+        lockStoreVendorAvailabilityTopology.mockClear();
+        createStoreVendorAvailabilityRepo.mockClear();
+        createStoreVendorItemOfferingRepo.mockClear();
+        getStoreVendorAvailabilitiesByStoreId.mockClear();
+        getStoreVendorAvailabilitiesByVendorId.mockClear();
+        getStoreVendorAvailabilityById.mockClear();
+        getStoreVendorAvailabilityByStoreAndVendor.mockClear();
+        getStoreVendorItemOfferingsByStoreId.mockClear();
+        getStoreVendorItemOfferingById.mockClear();
+        getVendorItemsByVendorId.mockClear();
+        updateStoreVendorAvailabilityRepo.mockClear();
+        updateStoreVendorItemOfferingRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store, vesuStore]);
+        getStoreById.mockImplementation(async (_organizationId: string, id: string) => {
+            if (id === store.id) return store;
+            if (id === vesuStore.id) return vesuStore;
+            return null;
+        });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         getVendorsByOrganizationId.mockResolvedValue([freshFarmsVendor, millersVendor]);
         getVendorById.mockResolvedValue(freshFarmsVendor);
         getUnitById.mockResolvedValue(kilogramUnit);
@@ -62,6 +109,29 @@ describe("Organization Vendor service", () => {
             createdBy: freshFarmsVendor.createdBy,
             createdAt: freshFarmsVendor.createdAt,
             updatedAt: freshFarmsVendor.updatedAt,
+        }));
+        createStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...storeVendorAvailability,
+            ...data,
+        }));
+        createStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...tomatoOffering,
+            ...data,
+        }));
+        getStoreVendorAvailabilitiesByStoreId.mockResolvedValue([storeVendorAvailability]);
+        getStoreVendorAvailabilitiesByVendorId.mockResolvedValue([storeVendorAvailability]);
+        getStoreVendorAvailabilityById.mockResolvedValue(storeVendorAvailability);
+        getStoreVendorAvailabilityByStoreAndVendor.mockResolvedValue(null);
+        getStoreVendorItemOfferingsByStoreId.mockResolvedValue([tomatoOffering]);
+        getStoreVendorItemOfferingById.mockResolvedValue(tomatoOffering);
+        getVendorItemsByVendorId.mockResolvedValue([tomatoItem, onionItem]);
+        updateStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...storeVendorAvailability,
+            ...data,
+        }));
+        updateStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...tomatoOffering,
+            ...data,
         }));
     });
 
@@ -85,7 +155,7 @@ describe("Organization Vendor service", () => {
         expect(getVendorsByOrganizationId).not.toHaveBeenCalled();
     });
 
-    test("creates a Vendor as active by default", async () => {
+    test("creates a Vendor as active by default with an active Availability at every current Store", async () => {
         const response = await vendorsService.createVendor(userId, organizationId, {
             name: "Fresh Farms",
         });
@@ -94,6 +164,10 @@ describe("Organization Vendor service", () => {
         expect(response.code).toBe(201);
         expect(response.data?.vendor.status).toBe("active");
         expect(response.data?.vendor.organizationId).toBe(organizationId);
+        expect(getStoresByOrganizationId).toHaveBeenCalledWith(
+            organizationId,
+            expect.anything(),
+        );
         expect(createVendorRepo).toHaveBeenCalledWith(
             expect.objectContaining({
                 organizationId,
@@ -102,6 +176,24 @@ describe("Organization Vendor service", () => {
                 status: "active",
                 createdBy: userId,
             }),
+            expect.anything(),
+        );
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledTimes(2);
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId,
+                organizationId,
+                status: "active",
+            }),
+            expect.anything(),
+        );
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: vesuStoreId,
+                organizationId,
+                status: "active",
+            }),
+            expect.anything(),
         );
     });
 
@@ -119,7 +211,9 @@ describe("Organization Vendor service", () => {
                 description: "Daily produce supplier",
                 status: "inactive",
             }),
+            expect.anything(),
         );
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledTimes(2);
     });
 
     test("stores a blank description as null", async () => {
@@ -133,6 +227,7 @@ describe("Organization Vendor service", () => {
             expect.objectContaining({
                 description: null,
             }),
+            expect.anything(),
         );
     });
 
@@ -194,10 +289,11 @@ describe("Organization Vendor service", () => {
         expect(updateVendorRepo).not.toHaveBeenCalled();
     });
 });
-
 describe("Organization Vendor Item service", () => {
     beforeEach(() => {
         getOrganizationByIdForUser.mockClear();
+        getStoresByOrganizationId.mockClear();
+        resolveFeatureEntitlement.mockClear();
         getVendorsByOrganizationId.mockClear();
         getVendorById.mockClear();
         getUnitById.mockClear();
@@ -209,6 +305,17 @@ describe("Organization Vendor Item service", () => {
         updateVendorItemRepo.mockClear();
 
         getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store, vesuStore]);
+        getStoreById.mockImplementation(async (_organizationId: string, id: string) => {
+            if (id === store.id) return store;
+            if (id === vesuStore.id) return vesuStore;
+            return null;
+        });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         getVendorsByOrganizationId.mockResolvedValue([freshFarmsVendor, millersVendor]);
         getVendorById.mockResolvedValue(freshFarmsVendor);
         getUnitById.mockResolvedValue(kilogramUnit);
@@ -229,6 +336,12 @@ describe("Organization Vendor Item service", () => {
             createdAt: tomatoItem.createdAt,
             updatedAt: tomatoItem.updatedAt,
         }));
+        createStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...tomatoOffering,
+            ...data,
+        }));
+        getStoreVendorAvailabilitiesByVendorId.mockResolvedValue([storeVendorAvailability]);
+        getVendorItemsByVendorId.mockResolvedValue([tomatoItem, onionItem]);
     });
 
     test("lists Organization Vendor Items for a member", async () => {
@@ -274,6 +387,15 @@ describe("Organization Vendor Item service", () => {
                 status: "active",
                 createdBy: userId,
             }),
+            expect.anything(),
+        );
+        expect(createStoreVendorItemOfferingRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId,
+                vendorItemId: expect.any(String),
+                defaultPurchasePrice: 40.5,
+            }),
+            expect.anything(),
         );
     });
 
@@ -302,6 +424,7 @@ describe("Organization Vendor Item service", () => {
                 vendorId: inactiveVendorId,
                 name: "Tomato",
             }),
+            expect.anything(),
         );
     });
 
@@ -453,5 +576,236 @@ describe("Organization Vendor Item service", () => {
         expect(response.status).toBe("error");
         expect(response.code).toBe(404);
         expect(updateVendorItemRepo).not.toHaveBeenCalled();
+    });
+});
+describe("Store Vendor Availability service", () => {
+    beforeEach(() => {
+        getOrganizationByIdForUser.mockResolvedValue(organization);
+        getStoresByOrganizationId.mockResolvedValue([store, vesuStore]);
+        getStoreById.mockImplementation(async (_organizationId: string, id: string) => {
+            if (id === store.id) return store;
+            if (id === vesuStore.id) return vesuStore;
+            return null;
+        });
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
+        getVendorById.mockResolvedValue(freshFarmsVendor);
+        getVendorItemById.mockResolvedValue(tomatoItem);
+        getVendorItemsByVendorId.mockResolvedValue([tomatoItem, onionItem]);
+        createStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...storeVendorAvailability,
+            ...data,
+        }));
+        createStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...tomatoOffering,
+            ...data,
+        }));
+        getStoreVendorAvailabilitiesByStoreId.mockResolvedValue([storeVendorAvailability]);
+        getStoreVendorAvailabilityById.mockResolvedValue(storeVendorAvailability);
+        getStoreVendorAvailabilityByStoreAndVendor.mockResolvedValue(null);
+        getStoreVendorItemOfferingsByStoreId.mockResolvedValue([tomatoOffering, vesuTomatoOffering]);
+        getStoreVendorItemOfferingById.mockResolvedValue(tomatoOffering);
+        updateStoreVendorItemOfferingRepo.mockImplementation(async (data) => ({
+            ...tomatoOffering,
+            ...data,
+        }));
+        updateStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...storeVendorAvailability,
+            ...data,
+        }));
+        createVendorRepo.mockClear();
+        createStoreVendorAvailabilityRepo.mockClear();
+        createStoreVendorItemOfferingRepo.mockClear();
+        lockStoreVendorAvailabilityTopology.mockClear();
+        getStoreVendorAvailabilitiesByStoreId.mockClear();
+        getStoreVendorAvailabilitiesByStoreId.mockResolvedValue([storeVendorAvailability]);
+        getStoreVendorItemOfferingsByStoreId.mockClear();
+        getStoreVendorItemOfferingsByStoreId.mockResolvedValue([tomatoOffering, vesuTomatoOffering]);
+        updateVendorItemRepo.mockClear();
+        updateStoreVendorAvailabilityRepo.mockClear();
+        getVendorsByOrganizationId.mockResolvedValue([freshFarmsVendor, millersVendor]);
+    });
+
+    test("creating a Store seeds inactive Availabilities and Item Offerings for every existing Vendor", async () => {
+        await vendorsService.seedInactiveAvailabilitiesForNewStore({} as never, {
+            organizationId,
+            storeId: vesuStoreId,
+            createdBy: userId,
+        });
+
+        expect(getVendorsByOrganizationId).toHaveBeenCalledWith(organizationId, expect.anything());
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledTimes(2);
+        expect(createStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: vesuStoreId,
+                vendorId,
+                status: "inactive",
+            }),
+            expect.anything(),
+        );
+        expect(createStoreVendorItemOfferingRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                storeId: vesuStoreId,
+                vendorId,
+                vendorItemId,
+                defaultPurchasePrice: 40.5,
+            }),
+            expect.anything(),
+        );
+        expect(createVendorRepo).not.toHaveBeenCalled();
+    });
+
+    test("does not create a private Vendor from the Store availability seam", async () => {
+        expect("createStoreVendor" in vendorsService).toBe(false);
+        expect("createStoreVendorItem" in vendorsService).toBe(false);
+        expect("assignStoreVendorAvailability" in vendorsService).toBe(false);
+        expect("unassignStoreVendorAvailability" in vendorsService).toBe(false);
+        expect("deleteStoreVendorAvailability" in vendorsService).toBe(false);
+    });
+
+    test("deactivating a Store Vendor Availability leaves it listed and retains Store Item Offering prices", async () => {
+        const response = await vendorsService.updateStoreVendorAvailability(
+            userId,
+            organizationId,
+            storeId,
+            storeVendorAvailability.id,
+            { status: "inactive" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.availability.status).toBe("inactive");
+        expect(response.data?.availability.id).toBe(storeVendorAvailability.id);
+        expect(updateStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: storeVendorAvailability.id,
+                storeId,
+                status: "inactive",
+                updatedBy: userId,
+            }),
+        );
+        expect(createStoreVendorItemOfferingRepo).not.toHaveBeenCalled();
+        expect(createVendorRepo).not.toHaveBeenCalled();
+    });
+
+    test("reactivating a Store Vendor Availability restores purchasing eligibility without rewriting prices", async () => {
+        getStoreVendorAvailabilityById.mockResolvedValue({
+            ...storeVendorAvailability,
+            status: "inactive",
+        });
+        updateStoreVendorAvailabilityRepo.mockImplementation(async (data) => ({
+            ...storeVendorAvailability,
+            ...data,
+            status: data.status,
+        }));
+
+        const response = await vendorsService.updateStoreVendorAvailability(
+            userId,
+            organizationId,
+            storeId,
+            storeVendorAvailability.id,
+            { status: "active" },
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.availability.status).toBe("active");
+        expect(updateStoreVendorAvailabilityRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: "active",
+            }),
+        );
+        expect(createStoreVendorItemOfferingRepo).not.toHaveBeenCalled();
+    });
+
+    test("rejects updating Store Vendor Availability for a missing Availability", async () => {
+        getStoreVendorAvailabilityById.mockResolvedValue(null);
+
+        const response = await vendorsService.updateStoreVendorAvailability(
+            userId,
+            organizationId,
+            storeId,
+            storeVendorAvailability.id,
+            { status: "inactive" },
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(updateStoreVendorAvailabilityRepo).not.toHaveBeenCalled();
+    });
+
+    test("a Store can change its Vendor Item default purchase price independently", async () => {
+        const response = await vendorsService.updateStoreVendorItemOffering(
+            userId,
+            organizationId,
+            storeId,
+            tomatoOffering.id,
+            { defaultPurchasePrice: 38 },
+        );
+
+        expect(response.status).toBe("success");
+        expect(updateStoreVendorItemOfferingRepo).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: tomatoOffering.id,
+                storeId,
+                defaultPurchasePrice: 38,
+            }),
+        );
+        expect(response.data?.offering.defaultPurchasePrice).toBe(38);
+        expect(updateVendorItemRepo).not.toHaveBeenCalled();
+    });
+
+    test("lists Store Vendor Availabilities and Offerings for a Store in the Organization", async () => {
+        const availabilityResponse = await vendorsService.getStoreVendorAvailabilities(
+            userId,
+            organizationId,
+            storeId,
+        );
+        const offeringResponse = await vendorsService.getStoreVendorItemOfferings(
+            userId,
+            organizationId,
+            storeId,
+        );
+
+        expect(availabilityResponse.status).toBe("success");
+        expect(availabilityResponse.data?.availabilities[0]?.vendor.name).toBe("Fresh Farms");
+        expect(offeringResponse.status).toBe("success");
+        expect(offeringResponse.data?.offerings.some((offering) => offering.defaultPurchasePrice === 40.5)).toBe(true);
+    });
+
+    test("rejects Store Vendor Availability for a Store outside the Organization", async () => {
+        getStoreById.mockResolvedValue(null);
+
+        const response = await vendorsService.getStoreVendorAvailabilities(
+            userId,
+            organizationId,
+            vesuStoreId,
+        );
+
+        expect(response.status).toBe("error");
+        expect(response.code).toBe(404);
+        expect(getStoreVendorAvailabilitiesByStoreId).not.toHaveBeenCalled();
+    });
+
+    test("lists inactive Store Vendor Availabilities so a Store Vendor never disappears", async () => {
+        getStoreVendorAvailabilitiesByStoreId.mockResolvedValue([
+            { ...storeVendorAvailability, status: "inactive" },
+        ]);
+
+        const response = await vendorsService.getStoreVendorAvailabilities(
+            userId,
+            organizationId,
+            storeId,
+        );
+
+        expect(response.status).toBe("success");
+        expect(response.data?.availabilities).toEqual([
+            expect.objectContaining({
+                vendorId,
+                status: "inactive",
+                vendor: expect.objectContaining({ name: "Fresh Farms" }),
+            }),
+        ]);
     });
 });

@@ -150,7 +150,7 @@ const UpsertVendorItemDialog = ({
         onSuccess: (response) => {
             if (response.status === "success") {
                 toast.success(response.message);
-                queryClient.invalidateQueries({ queryKey: vendorKeys.items(organizationId) });
+                queryClient.invalidateQueries({ queryKey: vendorKeys.all });
                 setOpen(false);
                 form.reset(defaultValues);
                 return;

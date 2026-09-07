@@ -26,8 +26,17 @@ import type {
     ProductAddOnAttachmentResponseDTOSchema,
     ProductDTOSchema,
     ProductResponseDTOSchema,
+    StoreProductOfferingDTOSchema,
+    StoreProductOfferingOverrideSummarySchema,
+    StoreProductOfferingResponseDTOSchema,
+    StoreAddOnOfferingDTOSchema,
+    StoreAddOnOfferingOverrideSummarySchema,
+    StoreAddOnOfferingResponseDTOSchema,
+    StoreCategoryPresentationDTOSchema,
+    StoreCategoryPresentationResponseDTOSchema,
     ReuseInternalProductCodeSchema,
     ReorderCategoriesSchema,
+    ReorderStoreCategoryPresentationsSchema,
     ReorderProductsSchema,
     UpdateAddOnSchema,
     UpdateBundleProductSchema,
@@ -37,11 +46,37 @@ import type {
     UpdateProductAddOnAttachmentSchema,
     UpdateProductLabelProfileSchema,
     UpdateProductSchema,
+    UpdateStoreCategoryPresentationSchema,
+    UpdateStoreProductOfferingSchema,
+    UpdateStoreAddOnOfferingSchema,
+    PreviewCatalogCommercialOperationSchema,
+    ApplyCatalogCommercialOperationSchema,
+    CatalogCommercialOperationChangeSchema,
+    CatalogCommercialOperationAuditDTOSchema,
+    CatalogCommercialItemTypeSchema,
+    CatalogCommercialOperationTypeSchema,
+    CatalogCommercialOperationPreviewResponseSchema,
+    CatalogCommercialOperationApplyResponseSchema,
+    CatalogCommercialOperationAuditsListResponseSchema,
 } from "./catalog.schema";
 
 export type CategoryDTO = z.infer<typeof CategoryDTOSchema>;
 export type ProductDTO = z.infer<typeof ProductDTOSchema>;
 export type ProductResponseDTO = z.infer<typeof ProductResponseDTOSchema>;
+export type StoreProductOfferingDTO = z.infer<typeof StoreProductOfferingDTOSchema>;
+export type StoreProductOfferingOverrideSummary = z.infer<
+    typeof StoreProductOfferingOverrideSummarySchema
+>;
+export type StoreProductOfferingResponseDTO = z.infer<typeof StoreProductOfferingResponseDTOSchema>;
+export type StoreAddOnOfferingDTO = z.infer<typeof StoreAddOnOfferingDTOSchema>;
+export type StoreAddOnOfferingOverrideSummary = z.infer<
+    typeof StoreAddOnOfferingOverrideSummarySchema
+>;
+export type StoreAddOnOfferingResponseDTO = z.infer<typeof StoreAddOnOfferingResponseDTOSchema>;
+export type StoreCategoryPresentationDTO = z.infer<typeof StoreCategoryPresentationDTOSchema>;
+export type StoreCategoryPresentationResponseDTO = z.infer<
+    typeof StoreCategoryPresentationResponseDTOSchema
+>;
 export type BundleProductComponentDTO = z.infer<typeof BundleProductComponentDTOSchema>;
 export type BundleProductComponentAddOnDTO = z.infer<typeof BundleProductComponentAddOnDTOSchema>;
 export type BundleProductComponentResponseDTO = z.infer<typeof BundleProductComponentResponseDTOSchema>;
@@ -302,4 +337,155 @@ export type ProductAddOnAttachmentsListResponse = {
 
 export type ProductAddOnAttachmentResponse = {
     attachment: ProductAddOnAttachmentResponseDTO;
+};
+
+export type CreateStoreProductOfferingREPO = Pick<
+    StoreProductOfferingDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "productId"
+    | "priceOverride"
+    | "discountOverride"
+    | "status"
+    | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateStoreProductOfferingJSON = z.infer<typeof UpdateStoreProductOfferingSchema>;
+export type UpdateStoreProductOfferingSVC = UpdateStoreProductOfferingJSON;
+export type UpdateStoreProductOfferingREPO = Pick<
+    StoreProductOfferingDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "priceOverride"
+    | "discountOverride"
+    | "status"
+    | "updatedBy"
+>;
+
+export type StoreProductOfferingsListResponse = {
+    offerings: StoreProductOfferingResponseDTO[];
+};
+
+export type StoreProductOfferingResponse = {
+    offering: StoreProductOfferingResponseDTO;
+};
+
+export type StoreProductOfferingOverrideSummaryResponse = {
+    summary: StoreProductOfferingOverrideSummary;
+};
+
+export type CreateStoreAddOnOfferingREPO = Pick<
+    StoreAddOnOfferingDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "addOnId"
+    | "priceOverride"
+    | "discountOverride"
+    | "status"
+    | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateStoreAddOnOfferingJSON = z.infer<typeof UpdateStoreAddOnOfferingSchema>;
+export type UpdateStoreAddOnOfferingSVC = UpdateStoreAddOnOfferingJSON;
+export type UpdateStoreAddOnOfferingREPO = Pick<
+    StoreAddOnOfferingDTO,
+    | "id"
+    | "organizationId"
+    | "storeId"
+    | "priceOverride"
+    | "discountOverride"
+    | "status"
+    | "updatedBy"
+>;
+
+export type StoreAddOnOfferingsListResponse = {
+    offerings: StoreAddOnOfferingResponseDTO[];
+};
+
+export type StoreAddOnOfferingResponse = {
+    offering: StoreAddOnOfferingResponseDTO;
+};
+
+export type StoreAddOnOfferingOverrideSummaryResponse = {
+    summary: StoreAddOnOfferingOverrideSummary;
+};
+
+export type CreateStoreCategoryPresentationREPO = Pick<
+    StoreCategoryPresentationDTO,
+    "id" | "organizationId" | "storeId" | "categoryId" | "visible" | "sortOrder" | "createdBy"
+> & {
+    updatedBy?: string | null;
+};
+
+export type UpdateStoreCategoryPresentationJSON = z.infer<
+    typeof UpdateStoreCategoryPresentationSchema
+>;
+export type UpdateStoreCategoryPresentationSVC = UpdateStoreCategoryPresentationJSON;
+export type UpdateStoreCategoryPresentationREPO = Pick<
+    StoreCategoryPresentationDTO,
+    "id" | "organizationId" | "storeId" | "visible" | "sortOrder" | "updatedBy"
+>;
+
+export type ReorderStoreCategoryPresentationsJSON = z.infer<
+    typeof ReorderStoreCategoryPresentationsSchema
+>;
+
+export type StoreCategoryPresentationsListResponse = {
+    presentations: StoreCategoryPresentationResponseDTO[];
+};
+
+export type StoreCategoryPresentationResponse = {
+    presentation: StoreCategoryPresentationResponseDTO;
+};
+
+export type CatalogCommercialItemType = z.infer<typeof CatalogCommercialItemTypeSchema>;
+export type CatalogCommercialOperationType = z.infer<
+    typeof CatalogCommercialOperationTypeSchema
+>;
+export type CatalogCommercialOperationChange = z.infer<
+    typeof CatalogCommercialOperationChangeSchema
+>;
+export type CatalogCommercialOperationAuditDTO = z.infer<
+    typeof CatalogCommercialOperationAuditDTOSchema
+>;
+
+export type PreviewCatalogCommercialOperationJSON = z.infer<
+    typeof PreviewCatalogCommercialOperationSchema
+>;
+export type PreviewCatalogCommercialOperationSVC = PreviewCatalogCommercialOperationJSON;
+export type ApplyCatalogCommercialOperationJSON = z.infer<
+    typeof ApplyCatalogCommercialOperationSchema
+>;
+export type ApplyCatalogCommercialOperationSVC = ApplyCatalogCommercialOperationJSON;
+
+export type CatalogCommercialOperationPreviewResponse = {
+    preview: z.infer<typeof CatalogCommercialOperationPreviewResponseSchema>;
+};
+
+export type CatalogCommercialOperationApplyResponse = {
+    result: z.infer<typeof CatalogCommercialOperationApplyResponseSchema>;
+};
+
+export type CatalogCommercialOperationAuditsListResponse = z.infer<
+    typeof CatalogCommercialOperationAuditsListResponseSchema
+>;
+
+export type CreateCatalogCommercialOperationAuditREPO = {
+    id: string;
+    organizationId: string;
+    itemType: CatalogCommercialItemType;
+    operation: CatalogCommercialOperationType;
+    storeIds: string[];
+    itemIds: string[];
+    actorId: string;
+    details: {
+        changes: CatalogCommercialOperationChange[];
+    };
 };

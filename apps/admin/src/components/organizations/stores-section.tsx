@@ -13,6 +13,7 @@ import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
 import { formatDateTime } from "@/lib/format";
 import { getStoreDetailPath } from "@/lib/store-routes";
+import { getStoreWorkspacePath } from "@/lib/store-workspace-routes";
 
 type StoresSectionProps = {
     organizationId: string;
@@ -140,7 +141,15 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                                                     {store.address ?? "Address not added yet"}
                                                 </p>
                                             </div>
-                                            <div className="flex shrink-0 items-center gap-1">
+                                            <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 rounded-full px-3 text-xs"
+                                                    render={<Link to={getStoreWorkspacePath(organizationId, store.id)} />}
+                                                >
+                                                    Open workspace
+                                                </Button>
                                                 <StoreWhatsAppDialog organizationId={organizationId} storeId={store.id} storeName={store.name} />
                                                 <EditStoreDialog
                                                     organizationId={organizationId}

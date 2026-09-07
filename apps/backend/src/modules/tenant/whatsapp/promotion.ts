@@ -10,6 +10,7 @@ import {
   type WhatsAppPromotionResponseDTO,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
+import { requireStoreFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import { redis } from "@/config/redis";
 import * as repository from "./whatsapp.repository";
 import * as messageTemplate from "./message-template";
@@ -441,6 +442,8 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.NOT_FOUND,
     };
+  const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
+  if (entitlementError) return entitlementError;
   const account = await repository.getAccount(organizationId, storeId);
   if (!account)
     return {
