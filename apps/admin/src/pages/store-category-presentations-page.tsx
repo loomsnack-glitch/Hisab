@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
+import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
@@ -179,29 +180,25 @@ const StoreCategoryPresentationsPage = () => {
 
     return (
         <div className="space-y-6" data-admin-workspace="store" data-testid="store-categories-page">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <p className="text-sm font-medium text-primary">Store workspace</p>
-                    <h1 className="font-display text-3xl font-semibold tracking-tight">Categories</h1>
-                    <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                        Choose which shared Categories appear in {store.name}&apos;s POS browse menu and set their local order. Hiding a Category does not change Product sellability, scanning, or Organization classification.
-                    </p>
-                </div>
-                {presentations.length > 1 ? (
+            {/* Store Catalog Navigation Tabs */}
+            <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
+
+            {presentations.length > 1 && (
+                <div className="flex items-center justify-end">
                     <ReorderListDialog
                         title="Reorder store categories"
-                        description="Set the browse order for this Store's POS category menu."
+                        description="Set the browse order for this Store's POS category menu. Hiding a Category does not change Product sellability."
                         items={reorderItems}
                         onSave={saveCategoryOrder}
                         trigger={
-                            <Button variant="outline" className="rounded-full">
+                            <Button variant="outline" className="rounded-full h-9 px-4 text-xs font-medium cursor-pointer">
                                 <ListOrdered className="size-4" />
-                                Reorder
+                                Reorder categories
                             </Button>
                         }
                     />
-                ) : null}
-            </div>
+                </div>
+            )}
 
             {presentations.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">

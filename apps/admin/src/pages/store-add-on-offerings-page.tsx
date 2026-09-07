@@ -14,10 +14,12 @@ import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Pencil, Puzzle, RefreshCw, Search, X } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@repo/ui/lib/utils";
 
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertStoreAddOnOfferingDialog from "@/components/catalog/upsert-store-add-on-offering-dialog";
+import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
@@ -164,14 +166,9 @@ const StoreAddOnOfferingsPage = () => {
     }
 
     return (
-        <div className="space-y-5" data-admin-workspace="store">
-            <div>
-                <p className="text-sm font-medium text-primary">Store workspace</p>
-                <h1 className="font-display text-3xl font-semibold tracking-tight">Add-ons</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Every Organization Add-on is listed here. {store.name} controls effective price, discount, and local menu status. Values can inherit Organization defaults or use explicit Store overrides.
-                </p>
-            </div>
+        <div className="space-y-6" data-admin-workspace="store">
+            {/* Store Catalog Navigation Tabs */}
+            <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
             <div className="relative max-w-md w-full group/search">
                 <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
@@ -234,7 +231,7 @@ const StoreAddOnOfferingsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))]">
+                <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
                     {filteredOfferings.map((offering) => {
                         const addOn = offering.addOn;
                         const globallyPublished = addOn.status === "active";
@@ -242,82 +239,96 @@ const StoreAddOnOfferingsPage = () => {
                         return (
                             <Card
                                 key={offering.id}
-                                className="group rounded-2xl border border-border/60 bg-card/70 p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card hover:shadow-md min-w-0"
+                                className="group relative flex flex-col justify-between rounded-2xl border border-border/60 bg-card/70 p-3.5 sm:p-4 shadow-2xs transition-all duration-200 hover:border-primary/30 hover:bg-card/95 hover:shadow-md min-w-0"
                             >
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-muted/25">
-                                        <Puzzle className="size-6 text-muted-foreground" />
+                                {/* Top section: Icon, Name & Organization Defaults */}
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-primary/10 text-primary">
+                                        <Puzzle className="size-5 sm:size-6" />
                                     </div>
-                                    <div className="min-w-0 flex-1 space-y-2">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <p className="font-medium truncate">{addOn.name}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Org default ₹{addOn.price}
-                                                    {addOn.discount > 0 ? ` · −₹${addOn.discount}` : ""}
-                                                </p>
-                                            </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-1.5">
+                                            <h4 className="font-semibold text-sm sm:text-base text-foreground line-clamp-2 break-words leading-snug">
+                                                {addOn.name}
+                                            </h4>
                                             <UpsertStoreAddOnOfferingDialog
                                                 organizationId={organizationId}
                                                 storeId={storeId}
                                                 offering={offering}
                                                 trigger={
-                                                    <Button variant="outline" size="sm" className="rounded-full shrink-0">
-                                                        <Pencil className="size-3" />
-                                                        Edit
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors shrink-0"
+                                                        title="Override price or discount"
+                                                        aria-label="Override price or discount"
+                                                    >
+                                                        <Pencil className="size-3.5" />
                                                     </Button>
                                                 }
                                             />
                                         </div>
+                                        <p className="text-xs text-muted-foreground pt-0.5">
+                                            Org default ₹{addOn.price}
+                                            {addOn.discount > 0 ? ` · −₹${addOn.discount}` : ""}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Bottom section: Effective Price, Status & Toggle Button */}
+                                <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
+                                    <div className="flex flex-col items-start min-w-0">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                                            Effective price
+                                        </span>
                                         <ProductPriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
                                             size="sm"
                                             align="left"
+                                            singleTone="foreground"
                                         />
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                                             <ProductStatusBadge status={offering.status} />
-                                            <span className="text-xs text-muted-foreground">
+                                            <span className="text-[10px] text-muted-foreground truncate">
                                                 {offering.isPriceInherited && offering.isDiscountInherited
                                                     ? "Inherited pricing"
                                                     : "Store override"}
                                             </span>
                                             {!globallyPublished ? (
-                                                <span className="text-xs text-amber-700 dark:text-amber-300">
-                                                    Globally paused
+                                                <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                                    (Paused in Org)
                                                 </span>
                                             ) : null}
                                         </div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-full h-8 text-xs"
-                                                disabled={statusMutation.isPending || offering.status === "active"}
-                                                onClick={() =>
-                                                    statusMutation.mutate({
-                                                        offeringId: offering.id,
-                                                        status: "active",
-                                                    })
-                                                }
-                                            >
-                                                Enable locally
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-full h-8 text-xs"
-                                                disabled={statusMutation.isPending || offering.status === "inactive"}
-                                                onClick={() =>
-                                                    statusMutation.mutate({
-                                                        offeringId: offering.id,
-                                                        status: "inactive",
-                                                    })
-                                                }
-                                            >
-                                                Disable locally
-                                            </Button>
-                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className={cn(
+                                                "rounded-full h-8 px-3 text-xs font-medium transition-all cursor-pointer",
+                                                offering.status === "active"
+                                                    ? "border-border/60 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 text-muted-foreground"
+                                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20",
+                                            )}
+                                            disabled={statusMutation.isPending}
+                                            onClick={() =>
+                                                statusMutation.mutate({
+                                                    offeringId: offering.id,
+                                                    status: offering.status === "active" ? "inactive" : "active",
+                                                })
+                                            }
+                                        >
+                                            {statusMutation.isPending && statusMutation.variables?.offeringId === offering.id ? (
+                                                <Spinner className="size-3" />
+                                            ) : offering.status === "active" ? (
+                                                "Disable"
+                                            ) : (
+                                                "Enable"
+                                            )}
+                                        </Button>
                                     </div>
                                 </div>
                             </Card>

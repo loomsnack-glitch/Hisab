@@ -136,13 +136,11 @@ const DashboardLayout = () => {
                 {isPickerPage ? null : (
                     <aside
                         className={cn(
-                            "sidebar-shell relative z-30 hidden shrink-0 overflow-visible lg:block",
+                            "sidebar-shell sticky top-0 h-screen z-30 hidden shrink-0 overflow-visible lg:block self-start",
                             isSidebarCollapsed ? "w-[68px]" : "w-[220px]",
                         )}
                     >
-                        <div className="sticky top-0 h-screen overflow-visible">
-                            <AppSidebar {...sidebarProps} />
-                        </div>
+                        <AppSidebar {...sidebarProps} />
                     </aside>
                 )}
 

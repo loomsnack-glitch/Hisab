@@ -16,7 +16,7 @@ import {
     DialogHeader,
     DialogTrigger,
 } from "@repo/ui/components/dialog";
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Pencil, Puzzle } from "lucide-react";
@@ -187,7 +187,6 @@ const UpsertStoreAddOnOfferingDialog = ({
                 <DialogHeader
                     icon={<Puzzle className="size-5" />}
                     title="Edit Store add-on"
-                    subtitle="Set local overrides or return to Organization defaults. Menu status is Store-specific."
                 />
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field>
@@ -291,9 +290,6 @@ const UpsertStoreAddOnOfferingDialog = ({
                             )}
                         />
                     </div>
-                    <FieldDescription>
-                        Saving a new price or discount creates a Store override. Use the reset actions to inherit Organization defaults again.
-                    </FieldDescription>
                     <Controller
                         control={form.control}
                         name="status"

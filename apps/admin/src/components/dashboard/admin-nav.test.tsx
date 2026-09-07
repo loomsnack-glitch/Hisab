@@ -22,8 +22,6 @@ describe("Admin mobile navigation", () => {
         expect(mainIds).toEqual([
             "stores",
             "products",
-            "add-ons",
-            "categories",
             "units",
             "billing",
             "tables",
@@ -174,7 +172,7 @@ describe("Admin mobile navigation", () => {
         expect(vendors?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/vendors`);
         expect(vendors?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/vendors`)).toBe(true);
         expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(false);
-        expect(storeDestinationIds).toEqual(["products", "add-ons", "categories", "vendors"]);
+        expect(storeDestinationIds).toEqual(["products", "vendors"]);
     });
 
     test("renders the primary tabs and organization avatar on the More tab", () => {

@@ -5,13 +5,11 @@ import {
     BarChart3,
     Contact,
     Package2,
-    Puzzle,
     ReceiptText,
     Ruler,
     Settings2,
     ShoppingBag,
     Store,
-    Tags,
     Truck,
     Users,
     Wallet,
@@ -19,7 +17,7 @@ import {
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { isStoresNavActive } from "@/lib/store-routes";
-import { getStoreAddOnsPath, getStoreCategoriesPath, getStoreProductsPath, getStoreVendorsPath } from "@/lib/store-workspace-routes";
+import { getStoreProductsPath, getStoreVendorsPath } from "@/lib/store-workspace-routes";
 
 export type AdminNavIcon = LucideIcon | typeof WhatsAppIcon;
 
@@ -93,40 +91,10 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
                 : `/organizations/${organizationId}/products`,
         isActive: (pathname, storeId) =>
             storeId
-                ? pathname.includes(`/workspaces/${storeId}/products`)
+                ? pathname.includes(`/workspaces/${storeId}/products`) ||
+                  pathname.includes(`/workspaces/${storeId}/categories`) ||
+                  pathname.includes(`/workspaces/${storeId}/add-ons`)
                 : /\/organizations\/[^/]+\/products(\/|$)/.test(pathname) &&
-                  !pathname.includes("/workspaces/"),
-    },
-    {
-        id: "add-ons",
-        label: "Add-ons",
-        icon: Puzzle,
-        requiresOrganization: true,
-        group: "catalog",
-        getPath: (organizationId, storeId) =>
-            storeId
-                ? getStoreAddOnsPath(organizationId, storeId)
-                : `/organizations/${organizationId}/products/add-ons`,
-        isActive: (pathname, storeId) =>
-            storeId
-                ? pathname.includes(`/workspaces/${storeId}/add-ons`)
-                : /\/organizations\/[^/]+\/products\/add-ons(\/|$)/.test(pathname) &&
-                  !pathname.includes("/workspaces/"),
-    },
-    {
-        id: "categories",
-        label: "Categories",
-        icon: Tags,
-        requiresOrganization: true,
-        group: "catalog",
-        getPath: (organizationId, storeId) =>
-            storeId
-                ? getStoreCategoriesPath(organizationId, storeId)
-                : `/organizations/${organizationId}/products/categories`,
-        isActive: (pathname, storeId) =>
-            storeId
-                ? pathname.includes(`/workspaces/${storeId}/categories`)
-                : /\/organizations\/[^/]+\/products\/categories(\/|$)/.test(pathname) &&
                   !pathname.includes("/workspaces/"),
     },
     {
@@ -248,7 +216,7 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
 
 export const adminPrimaryMobileNavIds = ["stores", "products", "billing"] as const;
 
-const storeWorkspaceDestinationIds = new Set(["products", "add-ons", "categories", "vendors"]);
+const storeWorkspaceDestinationIds = new Set(["products", "vendors"]);
 
 const resolveDestinations = ({
     organizationId = "",

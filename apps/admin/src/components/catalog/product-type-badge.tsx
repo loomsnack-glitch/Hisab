@@ -14,7 +14,7 @@ const ProductTypeBadge = ({ productType }: ProductTypeBadgeProps) => {
     return (
         <Badge
             variant="outline"
-            className="rounded-full border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+            className="rounded-full border-primary/30 bg-primary/10 text-primary"
         >
             {productType === "combo" ? (
                 <>
