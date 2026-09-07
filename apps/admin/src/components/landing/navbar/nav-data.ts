@@ -6,22 +6,14 @@ export interface NavItemConfig {
 export const NAV_ITEMS: NavItemConfig[] = [
   {
     label: "Product",
-    href: "#product",
-  },
-  {
-    label: "Solutions",
-    href: "#solutions",
-  },
-  {
-    label: "Features",
-    href: "#features",
+    href: "#workspace",
   },
   {
     label: "Pricing",
     href: "#pricing",
   },
   {
-    label: "Resources",
+    label: "Support",
     href: "#support",
   },
 ];

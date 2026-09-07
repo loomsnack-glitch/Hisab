@@ -36,7 +36,7 @@ export const CtaButton = ({
     >
       <Link
         to={href}
-        className={`group relative flex items-center justify-center gap-2 overflow-hidden rounded-xl font-medium tracking-tight text-white transition-shadow duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C73FE] focus-visible:ring-offset-2 ${sizeClasses} ${className}`}
+        className={`group relative flex items-center justify-center gap-2 whitespace-nowrap overflow-hidden rounded-xl font-medium tracking-tight text-white transition-shadow duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C73FE] focus-visible:ring-offset-2 ${sizeClasses} ${className}`}
         style={{
           background: "linear-gradient(135deg, #0C73FE 0%, #1754E8 50%, #0F3FCB 100%)",
           boxShadow: isHovered

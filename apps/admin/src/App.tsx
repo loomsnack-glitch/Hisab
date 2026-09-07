@@ -36,7 +36,6 @@ import MoneyAccountsPage from "@/pages/money-accounts-page";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
-import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
 import OrganizationSettingsPage from "@/pages/organization-settings-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
@@ -113,7 +112,7 @@ const App = () => {
                 ) : (
                     <>
                         <Routes>
-                            <Route path="/" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LandingPage />} />
+                            <Route path="/" element={<LandingPage />} />
                             <Route path="/login" element={authenticatedUser ? <Navigate to="/organizations" replace /> : <LoginPage />} />
                             <Route
                                 path="/register"

@@ -1,4 +1,7 @@
+import React from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Link } from "react-router-dom";
+import { useAuthUser } from "@/store/auth.store";
 import type { NavItemConfig } from "./nav-data";
 import CtaButton from "./cta-button";
 
@@ -15,6 +18,20 @@ export const MobileMenu = ({
   items,
   activeHref,
 }: MobileMenuProps) => {
+  const authUser = useAuthUser();
+
+  // Prevent background scrolling when mobile menu is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -26,7 +43,10 @@ export const MobileMenu = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="fixed inset-0 top-[72px] z-40 bg-black/40 backdrop-blur-md md:hidden"
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-md md:hidden pointer-events-auto cursor-pointer"
+            style={{
+              top: "calc(env(safe-area-inset-top, 0px) + 64px)",
+            }}
             aria-hidden="true"
           />
 
@@ -40,7 +60,12 @@ export const MobileMenu = ({
               stiffness: 380,
               damping: 30,
             }}
-            className="fixed inset-x-4 top-[76px] z-50 max-h-[calc(100dvh-96px)] overflow-y-auto rounded-3xl border border-black/[0.08] bg-white/95 p-6 shadow-[0_25px_60px_rgba(0,0,0,0.18)] backdrop-blur-2xl md:hidden dark:border-white/[0.12] dark:bg-zinc-950/95 dark:shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
+            className="fixed inset-x-4 z-50 overflow-y-auto rounded-3xl border border-black/[0.08] bg-white/95 p-6 shadow-[0_25px_60px_rgba(0,0,0,0.18)] backdrop-blur-2xl md:hidden pointer-events-auto dark:border-white/[0.12] dark:bg-zinc-950/95 dark:shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
+            style={{
+              top: "calc(env(safe-area-inset-top, 0px) + 68px)",
+              maxHeight: "calc(100dvh - env(safe-area-inset-top, 0px) - 84px)",
+              paddingBottom: "max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem))",
+            }}
             role="dialog"
             aria-modal="true"
             aria-label="Mobile Navigation Menu"
@@ -85,9 +110,24 @@ export const MobileMenu = ({
 
             {/* Mobile CTAs */}
             <div className="mt-6 flex flex-col gap-3 pt-4 border-t border-black/[0.06] dark:border-white/[0.08]">
-              <CtaButton size="mobile" href="/register">
-                Get Started
-              </CtaButton>
+              {authUser ? (
+                <CtaButton size="mobile" href="/organizations">
+                  Dashboard
+                </CtaButton>
+              ) : (
+                <>
+                  <CtaButton size="mobile" href="/register">
+                    Get Started
+                  </CtaButton>
+                  <Link
+                    to="/login"
+                    onClick={onClose}
+                    className="flex min-h-[46px] items-center justify-center rounded-xl border border-black/10 dark:border-white/10 text-sm font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors"
+                  >
+                    Login
+                  </Link>
+                </>
+              )}
             </div>
           </motion.div>
         </>
