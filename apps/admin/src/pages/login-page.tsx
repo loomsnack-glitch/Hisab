@@ -17,32 +17,57 @@ import AuthShell from "@/components/auth/auth-shell";
 import OtpField from "@/components/auth/otp-field";
 import PhoneNumberField from "@/components/auth/phone-number-field";
 import { getPosLoginUrl } from "@/lib/pos-origin";
-import { authKeys } from "@/lib/query-keys";
+import { authKeys, organizationKeys } from "@/lib/query-keys";
 import { useAuthActions } from "@/store/auth.store";
 
 const defaultValues: LoginFormJSON = {
     requestType: "otp-info",
     phone: "",
     password: "",
+    otp: "",
 };
 
-const LoginPage = () => {
+type LoginPageProps = {
+    login?: typeof userLogin;
+    initialPhone?: string;
+    initialMethod?: "password" | "otp";
+    initialRequestType?: "user-info" | "otp-info" | "otp-verification";
+    initialOtp?: string;
+};
+
+const LoginPage = ({
+    login = userLogin,
+    initialPhone = "",
+    initialMethod = "otp",
+    initialRequestType = "otp-info",
+    initialOtp = "",
+}: LoginPageProps) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { setUser } = useAuthActions();
-    const [method, setMethod] = useState<"password" | "otp">("otp");
+    const [method, setMethod] = useState<"password" | "otp">(initialMethod);
     const [cooldown, setCooldown] = useState(0);
 
     const form = useForm<LoginFormJSON>({
         resolver: zodResolver(LoginFormSchema),
-        defaultValues,
+        defaultValues: {
+            ...defaultValues,
+            requestType: initialRequestType,
+            phone: initialPhone,
+            otp: initialOtp,
+        },
     });
     const requestType = useWatch({ control: form.control, name: "requestType" });
     const otp = useWatch({ control: form.control, name: "otp" });
 
     const loginMutation = useMutation({
-        mutationFn: userLogin,
+        mutationFn: login,
         onSuccess: (response, variables) => {
+            if (response.status === "error") {
+                toast.error(response.message ?? "Login failed");
+                return;
+            }
+
             if (response.status === "success" && response.data?.nextRequestType === "otp-verification") {
                 form.setValue("requestType", "otp-verification");
                 form.setValue("otp", "");
@@ -54,6 +79,7 @@ const LoginPage = () => {
             if (response.status === "success" && response.data?.user) {
                 setUser(response.data.user);
                 queryClient.setQueryData(authKeys.me, response);
+                queryClient.invalidateQueries({ queryKey: organizationKeys.all });
                 toast.success(response.message);
                 navigate("/", { replace: true });
                 return;
@@ -83,7 +109,21 @@ const LoginPage = () => {
         return () => window.clearTimeout(timer);
     }, [form]);
 
+    const handleVerifyOtp: SubmitHandler<LoginFormJSON> = (values) => {
+        if (loginMutation.isPending) return;
+        loginMutation.mutate({
+            phone: values.phone,
+            otp: values.otp,
+            requestType: "otp-verification",
+        });
+    };
+
     const submitForm: SubmitHandler<LoginFormJSON> = (values) => {
+        if (values.requestType === "otp-verification" || requestType === "otp-verification") {
+            handleVerifyOtp(values);
+            return;
+        }
+
         if (method === "otp") {
             startOtpFlow();
             return;
@@ -117,7 +157,7 @@ const LoginPage = () => {
                 title="Enter code"
                 subtitle={`We sent a 6-digit code to WhatsApp at ${formatPhoneDisplay(form.getValues("phone"))}.`}
             >
-                <form className="auth-tab-enter space-y-5 pt-2" onSubmit={form.handleSubmit(submitForm)}>
+                <form className="auth-tab-enter space-y-5 pt-2" onSubmit={form.handleSubmit(handleVerifyOtp)}>
                     <OtpField key="otp-verification" control={form.control} name="otp" />
 
                     <Button
