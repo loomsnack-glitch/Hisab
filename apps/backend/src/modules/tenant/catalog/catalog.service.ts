@@ -4747,8 +4747,8 @@ const resolveStoreCommercialOfferingUpdate = (
     discountOverride = offeringData.discountOverride;
   }
 
-  const effectivePrice = priceOverride ?? defaults.price;
-  const effectiveDiscount = discountOverride ?? defaults.discount;
+  const effectivePrice = Number(priceOverride ?? defaults.price);
+  const effectiveDiscount = Number(discountOverride ?? defaults.discount ?? 0);
 
   if (effectiveDiscount > effectivePrice) {
     return {

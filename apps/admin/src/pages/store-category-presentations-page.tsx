@@ -184,16 +184,18 @@ const StoreCategoryPresentationsPage = () => {
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
             {presentations.length > 1 && (
-                <div className="flex items-center justify-end">
+                <div className="flex justify-end">
                     <ReorderListDialog
-                        title="Reorder store categories"
-                        description="Set the browse order for this Store's POS category menu. Hiding a Category does not change Product sellability."
+                        title="Rearrange categories"
                         items={reorderItems}
                         onSave={saveCategoryOrder}
                         trigger={
-                            <Button variant="outline" className="rounded-full h-9 px-4 text-xs font-medium cursor-pointer">
-                                <ListOrdered className="size-4" />
-                                Reorder categories
+                            <Button
+                                variant="outline"
+                                className="h-9 w-full rounded-full px-4 text-xs font-medium sm:w-auto"
+                            >
+                                <ListOrdered className="size-3.5" />
+                                Rearrange
                             </Button>
                         }
                     />
@@ -226,46 +228,52 @@ const StoreCategoryPresentationsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid gap-4">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                     {presentations.map((presentation) => (
-                        <Card key={presentation.id} className="border-border/60 bg-card/80 shadow-md">
-                            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                                        <Tags className="size-5" />
+                        <Card
+                            key={presentation.id}
+                            className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
+                        >
+                            <div className="flex items-start justify-between gap-2.5">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                        <Tags className="size-4" />
                                     </div>
-                                    <div className="space-y-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className="font-display text-lg font-semibold">{presentation.category.name}</h2>
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <h2 className="font-display text-sm font-semibold text-foreground">
+                                                {presentation.category.name}
+                                            </h2>
                                             <CategoryStatusBadge status={presentation.category.status} />
                                             {!presentation.visible ? (
-                                                <Badge variant="outline" className="rounded-full text-xs">
+                                                <Badge variant="outline" className="rounded-full text-[11px] px-2 py-0">
                                                     Hidden in POS menu
                                                 </Badge>
                                             ) : null}
                                         </div>
-                                        <p className="text-sm text-muted-foreground">
-                                            Organization order {presentation.category.sortOrder + 1} · Store order {presentation.sortOrder + 1}
-                                        </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 px-4 py-3">
-                                    <Label htmlFor={`category-visible-${presentation.id}`} className="text-sm">
-                                        Visible in POS menu
-                                    </Label>
-                                    <Switch
-                                        id={`category-visible-${presentation.id}`}
-                                        checked={presentation.visible}
-                                        disabled={visibilityMutation.isPending}
-                                        onCheckedChange={(checked) =>
-                                            visibilityMutation.mutate({
-                                                presentationId: presentation.id,
-                                                visible: checked,
-                                            })
-                                        }
-                                    />
-                                </div>
-                            </CardContent>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-2.5">
+                                <Label
+                                    htmlFor={`category-visible-${presentation.id}`}
+                                    className="text-xs font-medium text-muted-foreground"
+                                >
+                                    Visible in POS menu
+                                </Label>
+                                <Switch
+                                    id={`category-visible-${presentation.id}`}
+                                    checked={presentation.visible}
+                                    disabled={visibilityMutation.isPending}
+                                    onCheckedChange={(checked) =>
+                                        visibilityMutation.mutate({
+                                            presentationId: presentation.id,
+                                            visible: checked,
+                                        })
+                                    }
+                                />
+                            </div>
                         </Card>
                     ))}
                 </div>

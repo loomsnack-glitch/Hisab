@@ -6,6 +6,7 @@ import { updateStoreProductOffering } from "@repo/services";
 import {
     ProductStatusSchema,
     type StoreProductOfferingResponseDTO,
+    type UpdateStoreProductOfferingJSON,
 } from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
@@ -99,13 +100,42 @@ const UpsertStoreProductOfferingDialog = ({
         });
     }, [form, offering, open]);
 
+    const buildUpdatePayload = (
+        values: z.output<typeof offeringFormSchema>,
+    ): UpdateStoreProductOfferingJSON => {
+        const orgPrice = Number(offering.product.price);
+        const orgDiscount = Number(offering.product.discount ?? 0);
+        const payload: UpdateStoreProductOfferingJSON = {
+            status: values.status,
+        };
+
+        if (values.price === orgPrice) {
+            if (!offering.isPriceInherited) {
+                payload.clearPriceOverride = true;
+            }
+        } else {
+            payload.priceOverride = values.price;
+        }
+
+        if (values.discount === orgDiscount) {
+            if (!offering.isDiscountInherited) {
+                payload.clearDiscountOverride = true;
+            }
+        } else {
+            payload.discountOverride = values.discount;
+        }
+
+        return payload;
+    };
+
     const mutation = useMutation({
         mutationFn: async (data: z.output<typeof offeringFormSchema>) =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
-                priceOverride: data.price,
-                discountOverride: data.discount,
-                status: data.status,
-            }),
+            updateStoreProductOffering(
+                organizationId,
+                storeId,
+                offering.id,
+                buildUpdatePayload(data),
+            ),
         onSuccess: (response) => {
             if (response.status !== "success") {
                 toast.error(response.message);
@@ -118,49 +148,7 @@ const UpsertStoreProductOfferingDialog = ({
             setOpen(false);
         },
         onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to save Store Product Offering");
-        },
-    });
-
-    const clearPriceOverrideMutation = useMutation({
-        mutationFn: async () =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
-                clearPriceOverride: true,
-            }),
-        onSuccess: (response) => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            toast.success("Price now inherits the Organization default");
-            queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
-            });
-            setOpen(false);
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to clear the price override");
-        },
-    });
-
-    const clearDiscountOverrideMutation = useMutation({
-        mutationFn: async () =>
-            updateStoreProductOffering(organizationId, storeId, offering.id, {
-                clearDiscountOverride: true,
-            }),
-        onSuccess: (response) => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            toast.success("Discount now inherits the Organization default");
-            queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
-            });
-            setOpen(false);
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to clear the discount override");
+            toast.error(error.message ?? "Unable to save store price");
         },
     });
 
@@ -170,6 +158,26 @@ const UpsertStoreProductOfferingDialog = ({
 
     const orgDefaultPrice = offering.product.price;
     const orgDefaultDiscount = offering.product.discount;
+    const watchedPrice = form.watch("price");
+    const watchedDiscount = form.watch("discount") ?? "";
+    const priceDiffersFromDefault = Number(watchedPrice) !== Number(orgDefaultPrice);
+    const discountDiffersFromDefault =
+        Number(watchedDiscount || 0) !== Number(orgDefaultDiscount ?? 0);
+
+    const applyDefaultPrice = () => {
+        form.setValue("price", String(orgDefaultPrice), {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+    };
+
+    const applyDefaultDiscount = () => {
+        const defaultDiscount = Number(orgDefaultDiscount ?? 0);
+        form.setValue("discount", defaultDiscount > 0 ? String(defaultDiscount) : "", {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+    };
 
     return (
         <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
@@ -183,63 +191,51 @@ const UpsertStoreProductOfferingDialog = ({
                     )
                 }
             />
-            <DialogContent className="max-w-lg">
+            <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Package2 className="size-5" />}
-                    title="Edit Store price"
+                    title="Edit price"
+                    subtitle={offering.product.name}
                 />
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                    <Field>
-                        <FieldLabel>Catalog Product</FieldLabel>
-                        <FieldContent>
-                            <div className="flex h-11 items-center rounded-xl border border-border/60 bg-muted/20 px-3 text-sm">
-                                {offering.product.name}
-                            </div>
-                        </FieldContent>
-                    </Field>
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                        <p className="text-xs font-medium text-muted-foreground">Organization defaults</p>
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Organization</span>
                         <ProductPriceDisplay
                             price={orgDefaultPrice}
                             discount={orgDefaultDiscount}
                             size="sm"
-                            align="left"
+                            align="right"
+                            compact
                             singleTone="foreground"
                         />
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
+
+                    <div className="grid gap-3 sm:grid-cols-2">
                         <Controller
                             control={form.control}
                             name="price"
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel required>
-                                        Effective price (₹)
-                                        <span className="ml-1 font-normal text-muted-foreground">
-                                            {offering.isPriceInherited ? "· inherited" : "· overridden"}
-                                        </span>
-                                    </FieldLabel>
+                                    <FieldLabel required>Price ₹</FieldLabel>
                                     <FieldContent>
                                         <Input
                                             type="text"
                                             inputMode="decimal"
-                                            className="h-11 rounded-xl"
+                                            className="h-10 rounded-xl"
                                             value={field.value}
                                             onChange={(event) =>
                                                 field.onChange(sanitizeDecimalInput(event.target.value))
                                             }
                                             onBlur={field.onBlur}
                                         />
-                                        {!offering.isPriceInherited ? (
+                                        {priceDiffersFromDefault ? (
                                             <Button
                                                 type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="mt-1 h-auto px-0 text-xs"
-                                                disabled={clearPriceOverrideMutation.isPending}
-                                                onClick={() => clearPriceOverrideMutation.mutate()}
+                                                variant="link"
+                                                className="h-auto px-0 text-xs text-muted-foreground"
+                                                onClick={applyDefaultPrice}
                                             >
-                                                Use Organization default price
+                                                Use default
                                             </Button>
                                         ) : null}
                                         <FieldError errors={[fieldState.error]} />
@@ -252,33 +248,26 @@ const UpsertStoreProductOfferingDialog = ({
                             name="discount"
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel>
-                                        Effective discount (₹)
-                                        <span className="ml-1 font-normal text-muted-foreground">
-                                            {offering.isDiscountInherited ? "· inherited" : "· overridden"}
-                                        </span>
-                                    </FieldLabel>
+                                    <FieldLabel>Discount ₹</FieldLabel>
                                     <FieldContent>
                                         <Input
                                             type="text"
                                             inputMode="decimal"
-                                            className="h-11 rounded-xl"
+                                            className="h-10 rounded-xl"
                                             value={field.value ?? ""}
                                             onChange={(event) =>
                                                 field.onChange(sanitizeDecimalInput(event.target.value))
                                             }
                                             onBlur={field.onBlur}
                                         />
-                                        {!offering.isDiscountInherited ? (
+                                        {discountDiffersFromDefault ? (
                                             <Button
                                                 type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="mt-1 h-auto px-0 text-xs"
-                                                disabled={clearDiscountOverrideMutation.isPending}
-                                                onClick={() => clearDiscountOverrideMutation.mutate()}
+                                                variant="link"
+                                                className="h-auto px-0 text-xs text-muted-foreground"
+                                                onClick={applyDefaultDiscount}
                                             >
-                                                Use Organization default discount
+                                                Use default
                                             </Button>
                                         ) : null}
                                         <FieldError errors={[fieldState.error]} />
@@ -287,21 +276,23 @@ const UpsertStoreProductOfferingDialog = ({
                             )}
                         />
                     </div>
+
                     <Controller
                         control={form.control}
                         name="status"
                         render={({ field, fieldState }) => (
                             <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel required>Store menu status</FieldLabel>
+                                <FieldLabel required>Status</FieldLabel>
                                 <FieldContent>
                                     <ReactSelect
                                         options={statusOptions}
+                                        placeholder=""
                                         value={
                                             statusOptions.find((option) => option.value === field.value) ?? null
                                         }
                                         onChange={(option) => field.onChange(option?.value ?? "active")}
                                         classNames={{
-                                            control: () => "!min-h-11 rounded-xl",
+                                            control: () => "!min-h-10 rounded-xl",
                                         }}
                                     />
                                     <FieldError errors={[fieldState.error]} />
@@ -309,12 +300,13 @@ const UpsertStoreProductOfferingDialog = ({
                             </Field>
                         )}
                     />
+
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={mutation.isPending}>
-                            Save
+                        <Button type="submit" className="rounded-xl" disabled={mutation.isPending}>
+                            {mutation.isPending ? "Saving..." : "Save"}
                         </Button>
                     </DialogFooter>
                 </form>

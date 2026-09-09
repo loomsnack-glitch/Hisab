@@ -413,7 +413,7 @@ const StoreProductOfferingsPage = () => {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    aria-label={`Edit Store price for ${product.name}`}
+                                                    aria-label={`Edit price for ${product.name}`}
                                                     className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
                                                 >
                                                     <Pencil className="size-3.5" />

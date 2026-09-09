@@ -1,23 +1,25 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
     getOrganizationDetails,
     getStore,
     getStoreAddOnOfferings,
-    updateStoreAddOnOffering,
 } from "@repo/services";
+import {
+    getStoreProductOfferingAvailability,
+    isStoreProductOfferingPriceInherited,
+} from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Pencil, Puzzle, RefreshCw, Search, X } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@repo/ui/lib/utils";
 
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import ProductStatusBadge from "@/components/catalog/product-status-badge";
+import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
 import UpsertStoreAddOnOfferingDialog from "@/components/catalog/upsert-store-add-on-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
@@ -28,7 +30,6 @@ const EMPTY_OFFERINGS: never[] = [];
 
 const StoreAddOnOfferingsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
-    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
 
     const organizationQuery = useQuery({
@@ -62,29 +63,6 @@ const StoreAddOnOfferingsPage = () => {
         const query = searchQuery.toLowerCase().trim();
         return offerings.filter((offering) => offering.addOn.name.toLowerCase().includes(query));
     }, [offerings, searchQuery]);
-
-    const statusMutation = useMutation({
-        mutationFn: ({
-            offeringId,
-            status,
-        }: {
-            offeringId: string;
-            status: "active" | "inactive";
-        }) => updateStoreAddOnOffering(organizationId, storeId, offeringId, { status }),
-        onSuccess: (response) => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            toast.success(response.message);
-            queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeAddOnOfferings(organizationId, storeId),
-            });
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to update this add-on");
-        },
-    });
 
     if (organizationQuery.isPending || storeQuery.isPending || offeringsQuery.isPending) {
         return (
@@ -234,101 +212,75 @@ const StoreAddOnOfferingsPage = () => {
                 <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
                     {filteredOfferings.map((offering) => {
                         const addOn = offering.addOn;
-                        const globallyPublished = addOn.status === "active";
+                        const availability = getStoreProductOfferingAvailability({
+                            status: offering.status,
+                            product: { status: addOn.status },
+                        });
+                        const priceInherited = isStoreProductOfferingPriceInherited(offering);
 
                         return (
                             <Card
                                 key={offering.id}
-                                className="group relative flex flex-col justify-between rounded-2xl border border-border/60 bg-card/70 p-3.5 sm:p-4 shadow-2xs transition-all duration-200 hover:border-primary/30 hover:bg-card/95 hover:shadow-md min-w-0"
+                                className={cn(
+                                    "group relative flex flex-col justify-between rounded-2xl border p-3.5 sm:p-4 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
+                                    availability === "sellable"
+                                        ? "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95"
+                                        : "border-border/50 bg-muted/20 opacity-[0.82] hover:opacity-100",
+                                )}
                             >
-                                {/* Top section: Icon, Name & Organization Defaults */}
                                 <div className="flex items-start gap-3 min-w-0">
-                                    <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-primary/10 text-primary">
-                                        <Puzzle className="size-5 sm:size-6" />
+                                    <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-primary/10 text-primary ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
+                                        <Puzzle className="size-6 text-primary" />
                                     </div>
+
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-1.5">
-                                            <h4 className="font-semibold text-sm sm:text-base text-foreground line-clamp-2 break-words leading-snug">
-                                                {addOn.name}
-                                            </h4>
-                                            <UpsertStoreAddOnOfferingDialog
-                                                organizationId={organizationId}
-                                                storeId={storeId}
-                                                offering={offering}
-                                                trigger={
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors shrink-0"
-                                                        title="Override price or discount"
-                                                        aria-label="Override price or discount"
-                                                    >
-                                                        <Pencil className="size-3.5" />
-                                                    </Button>
-                                                }
+                                        <h4 className="font-semibold text-sm sm:text-[15px] text-foreground line-clamp-2 break-words leading-snug">
+                                            {addOn.name}
+                                        </h4>
+                                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                                            <StoreOfferingAvailabilityBadge
+                                                offering={{
+                                                    status: offering.status,
+                                                    product: { status: addOn.status },
+                                                }}
                                             />
                                         </div>
-                                        <p className="text-xs text-muted-foreground pt-0.5">
-                                            Org default ₹{addOn.price}
-                                            {addOn.discount > 0 ? ` · −₹${addOn.discount}` : ""}
-                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Bottom section: Effective Price, Status & Toggle Button */}
-                                <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
-                                    <div className="flex flex-col items-start min-w-0">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                                            Effective price
-                                        </span>
+                                <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
+                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
                                         <ProductPriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
                                             size="sm"
                                             align="left"
                                             singleTone="foreground"
+                                            compact
                                         />
-                                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                            <ProductStatusBadge status={offering.status} />
-                                            <span className="text-[10px] text-muted-foreground truncate">
-                                                {offering.isPriceInherited && offering.isDiscountInherited
-                                                    ? "Inherited pricing"
-                                                    : "Store override"}
-                                            </span>
-                                            {!globallyPublished ? (
-                                                <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                                    (Paused in Org)
-                                                </span>
-                                            ) : null}
-                                        </div>
+                                        {!priceInherited ? (
+                                            <p className="text-[11px] font-medium text-muted-foreground/80">
+                                                Store price
+                                            </p>
+                                        ) : null}
                                     </div>
 
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className={cn(
-                                                "rounded-full h-8 px-3 text-xs font-medium transition-all cursor-pointer",
-                                                offering.status === "active"
-                                                    ? "border-border/60 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 text-muted-foreground"
-                                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20",
-                                            )}
-                                            disabled={statusMutation.isPending}
-                                            onClick={() =>
-                                                statusMutation.mutate({
-                                                    offeringId: offering.id,
-                                                    status: offering.status === "active" ? "inactive" : "active",
-                                                })
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                        <UpsertStoreAddOnOfferingDialog
+                                            organizationId={organizationId}
+                                            storeId={storeId}
+                                            offering={offering}
+                                            trigger={
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    aria-label={`Edit price for ${addOn.name}`}
+                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
+                                                >
+                                                    <Pencil className="size-3.5" />
+                                                </Button>
                                             }
-                                        >
-                                            {statusMutation.isPending && statusMutation.variables?.offeringId === offering.id ? (
-                                                <Spinner className="size-3" />
-                                            ) : offering.status === "active" ? (
-                                                "Disable"
-                                            ) : (
-                                                "Enable"
-                                            )}
-                                        </Button>
+                                        />
                                     </div>
                                 </div>
                             </Card>

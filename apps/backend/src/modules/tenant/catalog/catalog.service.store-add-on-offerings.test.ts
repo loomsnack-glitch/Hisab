@@ -125,6 +125,33 @@ describe("Store Add-On Offerings", () => {
     );
   });
 
+  test("accepts inherited commercial values when organization defaults are numeric strings", async () => {
+    getAddOnById.mockResolvedValue({
+      ...addOn,
+      price: "10",
+      discount: "5",
+    });
+    getStoreAddOnOfferingById.mockResolvedValue({
+      ...storeAddOnOffering,
+      priceOverride: null,
+      discountOverride: null,
+      effectivePrice: 10,
+      effectiveDiscount: 5,
+      isPriceInherited: true,
+      isDiscountInherited: true,
+    });
+
+    const response = await catalogService.updateStoreAddOnOffering(
+      userId,
+      organizationId,
+      store.id,
+      addOnOfferingId,
+      { status: "active" },
+    );
+
+    expect(response.status).toBe("success");
+  });
+
   test("clears a price override to restore Organization inheritance", async () => {
     getStoreAddOnOfferingById.mockResolvedValue({
       ...storeAddOnOffering,

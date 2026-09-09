@@ -383,8 +383,8 @@ const UpsertProductDialog = ({
     selectedUnitLabel &&
     Number.isFinite(sellingQuantityNumber) &&
     sellingQuantityNumber > 0
-      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} (₹)`
-      : "Price for this quantity (₹)";
+      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} ₹`
+      : "Price for this quantity ₹";
 
   const selectedFilePreview = useMemo(() => {
     if (!selectedFile) {
@@ -845,7 +845,7 @@ const UpsertProductDialog = ({
                         <Field data-invalid={fieldState.invalid}>
                           <FieldLabel required>
                             {isEditMode
-                              ? "Organization default price (₹)"
+                              ? "Organization default price ₹"
                               : priceFieldLabel}
                           </FieldLabel>
                           <FieldContent>
@@ -872,7 +872,7 @@ const UpsertProductDialog = ({
                       name="discount"
                       render={({ field, fieldState }) => (
                         <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel>Discount</FieldLabel>
+                          <FieldLabel>Discount ₹</FieldLabel>
                           <FieldContent>
                             <Input
                               type="text"

@@ -165,7 +165,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
 
                     <div className="grid grid-cols-2 gap-3">
                         <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Price</FieldLabel>
+                            <FieldLabel required>Price ₹</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
@@ -182,7 +182,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                         </Field>
 
                         <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Discount</FieldLabel>
+                            <FieldLabel>Discount ₹</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"

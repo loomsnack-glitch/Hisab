@@ -240,13 +240,17 @@ const AddOnsPage = () => {
                                         <ProductStatusBadge status={addOn.status} />
                                     </div>
 
-                                    <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
-                                        <ProductPriceDisplay
-                                            price={addOn.price}
-                                            discount={addOn.discount}
-                                            size="sm"
-                                            align="left"
-                                        />
+                                    <div className="mt-3 flex items-end justify-between gap-2 border-t border-border/40 pt-2.5">
+                                        <div className="flex min-w-0 flex-col items-start gap-0.5">
+                                            <ProductPriceDisplay
+                                                price={addOn.price}
+                                                discount={addOn.discount}
+                                                size="sm"
+                                                align="left"
+                                                singleTone="foreground"
+                                                compact
+                                            />
+                                        </div>
 
                                         <div className="flex items-center gap-1.5">
                                             <UpsertAddOnDialog

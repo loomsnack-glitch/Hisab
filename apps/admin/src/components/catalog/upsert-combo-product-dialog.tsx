@@ -200,8 +200,8 @@ const UpsertComboProductDialog = ({
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
                     <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
-                    <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
-                    <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel required>Base price ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel>Discount ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
                 </div>
                 <div className="space-y-3">
                     <div className="flex items-center justify-between"><p className="font-medium">Choice groups</p><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
@@ -241,7 +241,7 @@ const UpsertComboProductDialog = ({
                                         <div className="hidden min-w-0 grid-cols-[minmax(0,1fr)_7rem_8rem_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                                             <span>Product</span>
                                             <span>Max qty</span>
-                                            <span>Price +/-</span>
+                                            <span>Price +/- ₹</span>
                                             <span className="sr-only">Remove</span>
                                         </div>
                                         {group?.options?.map((option, optionIndex) => {
@@ -254,7 +254,7 @@ const UpsertComboProductDialog = ({
                                                 </div>
                                             </div>
                                             <Field className="min-w-0"><FieldLabel className="md:sr-only">Max qty</FieldLabel><FieldContent><Input type="number" min="1" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.maxQuantity`)} /></FieldContent></Field>
-                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
+                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Price +/- ₹</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
                                             <Button
                                                 type="button"
                                                 variant="ghost"

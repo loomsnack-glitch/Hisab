@@ -216,7 +216,7 @@ describe("Store Products page", () => {
         expect(markup).toContain("Mains");
         expect(markup).toContain("Inactive");
         expect(markup).toContain("Inactive in org");
-        expect(markup).toContain("Edit Store price for Burger");
+        expect(markup).toContain("Edit price for Burger");
         expect(markup).toContain("Mark inactive Burger");
         expect(markup).toContain("Mark active Seasonal Wrap");
         expect(markup).toContain("Store price");
