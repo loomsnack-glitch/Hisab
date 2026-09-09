@@ -35,7 +35,6 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui/components/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 import {
@@ -49,7 +48,6 @@ import {
     Filter,
     FolderSync,
     Layers3,
-    LayoutGrid,
     Link2,
     ListChecks,
     ListOrdered,
@@ -58,7 +56,6 @@ import {
     PlusCircle,
     RefreshCw,
     Search,
-    Table as TableIcon,
     X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -88,7 +85,6 @@ const ProductsListPage = () => {
     const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
-    const [viewMode, setViewMode] = useState<"card" | "table">("card");
     const [statusFilters, setStatusFilters] = useState<string[]>([]);
     const [addOnsFilters, setAddOnsFilters] = useState<string[]>([]);
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
@@ -235,6 +231,19 @@ const ProductsListPage = () => {
 
     const clearSelection = () => {
         setSelectedProductIds(new Set());
+    };
+
+    const exitSelectMode = () => {
+        setIsSelectMode(false);
+        setSelectedProductIds(new Set());
+    };
+
+    const handleClearChecklist = () => {
+        if (selectedProductIds.size > 0) {
+            clearSelection();
+            return;
+        }
+        exitSelectMode();
     };
 
     const handleBulkChangeCategory = async (newCategoryId: string, categoryName: string) => {
@@ -778,50 +787,7 @@ const ProductsListPage = () => {
                         </Button>
                     )}
 
-                    {/* View Switcher */}
-                    <div className="flex items-center rounded-full border border-border/60 bg-card/50 p-0.5 shadow-2xs shrink-0">
-                        <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex" />}>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                        "h-8 w-8 rounded-full transition-all cursor-pointer",
-                                        viewMode === "card"
-                                            ? "bg-primary text-primary-foreground shadow-xs"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                                    )}
-                                    onClick={() => setViewMode("card")}
-                                    aria-label="Card view"
-                                >
-                                    <LayoutGrid className="size-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Card view</TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex" />}>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                        "h-8 w-8 rounded-full transition-all cursor-pointer",
-                                        viewMode === "table"
-                                            ? "bg-primary text-primary-foreground shadow-xs"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                                    )}
-                                    onClick={() => setViewMode("table")}
-                                    aria-label="Table view"
-                                >
-                                    <TableIcon className="size-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Table view</TooltipContent>
-                        </Tooltip>
-                    </div>
-
-                    {/* Checklist Mode Toggle (Outside the view switcher) */}
+                    {/* Checklist Mode Toggle */}
                     <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex" />}>
                             <Button
@@ -955,13 +921,19 @@ const ProductsListPage = () => {
                 </div>
             )}
 
-            {/* Contextual Bulk Action Bar */}
-            {selectedProductIds.size > 0 && (
+            {/* Checklist bulk action bar */}
+            {isSelectMode && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="flex items-center gap-2 font-medium text-foreground">
                         <CheckCircle2 className="size-4 text-primary" />
                         <span>
-                            <strong className="font-semibold">{selectedProductIds.size}</strong> product{selectedProductIds.size === 1 ? "" : "s"} selected
+                            {selectedProductIds.size > 0 ? (
+                                <>
+                                    <strong className="font-semibold">{selectedProductIds.size}</strong> product{selectedProductIds.size === 1 ? "" : "s"} selected
+                                </>
+                            ) : (
+                                "Select products"
+                            )}
                         </span>
                     </div>
 
@@ -974,7 +946,7 @@ const ProductsListPage = () => {
                                         variant="outline"
                                         size="sm"
                                         className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                        disabled={isBulkUpdating}
+                                        disabled={isBulkUpdating || selectedProductIds.size === 0}
                                     >
                                         <FolderSync className="size-3.5" />
                                         Change category
@@ -1013,7 +985,7 @@ const ProductsListPage = () => {
                                         variant="outline"
                                         size="sm"
                                         className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                        disabled={isBulkUpdating || addOns.length === 0}
+                                        disabled={isBulkUpdating || addOns.length === 0 || selectedProductIds.size === 0}
                                     >
                                         <Link2 className="size-3.5" />
                                         Add-ons
@@ -1094,18 +1066,17 @@ const ProductsListPage = () => {
                             variant="ghost"
                             size="sm"
                             className="rounded-full h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                            onClick={clearSelection}
+                            onClick={handleClearChecklist}
                             disabled={isBulkUpdating}
                         >
                             <X className="size-3.5 mr-1" />
-                            Clear
+                            {selectedProductIds.size > 0 ? "Clear" : "Exit"}
                         </Button>
                     </div>
                 </div>
             )}
 
-            {/* Card View: Select All Header */}
-            {viewMode === "card" && filteredProducts.length > 0 && (
+            {filteredProducts.length > 0 && (
                 <div className="flex items-center justify-between px-1 py-0.5">
                     {isSelectMode ? (
                         <label className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer select-none animate-in fade-in duration-150">
@@ -1126,7 +1097,6 @@ const ProductsListPage = () => {
                 </div>
             )}
 
-            {/* Product List Content: Card View vs Table View */}
             {categories.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
@@ -1193,117 +1163,7 @@ const ProductsListPage = () => {
                         </Empty>
                     </CardContent>
                 </Card>
-            ) : viewMode === "table" ? (
-                /* Table View */
-                <div className="rounded-2xl border border-border/60 bg-card/40 overflow-hidden shadow-2xs">
-                    <Table className="min-w-full text-sm">
-                        <TableHeader className="border-b border-border/50 bg-card/90 backdrop-blur-md">
-                            <TableRow className="border-0 hover:bg-transparent">
-                                {isSelectMode && (
-                                    <TableHead className="w-12 pl-4 pr-0 h-11 animate-in fade-in duration-150">
-                                        <Checkbox
-                                            checked={isAllSelected}
-                                            indeterminate={isSomeSelected}
-                                            onCheckedChange={toggleSelectAll}
-                                            aria-label="Select all products in table"
-                                        />
-                                    </TableHead>
-                                )}
-                                <TableHead className={cn("h-11 font-semibold text-foreground/90", !isSelectMode && "pl-4")}>Product</TableHead>
-                                <TableHead className="h-11 font-semibold text-foreground/90">Category</TableHead>
-                                <TableHead className="h-11 font-semibold text-foreground/90">Price</TableHead>
-                                <TableHead className="h-11 font-semibold text-foreground/90">Status</TableHead>
-                                <TableHead className="text-right pr-4 h-11 font-semibold text-foreground/90">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody className="divide-y divide-border/40">
-                            {filteredProducts.map((product) => {
-                                const isSelected = selectedProductIds.has(product.id);
-                                const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
-
-                                return (
-                                    <TableRow
-                                        key={product.id}
-                                        data-state={isSelected && isSelectMode ? "selected" : undefined}
-                                        className={cn(
-                                            "transition-colors duration-150 hover:bg-muted/30 border-0",
-                                            isSelected && isSelectMode && "bg-primary/[0.06] hover:bg-primary/[0.09]",
-                                        )}
-                                    >
-                                        {isSelectMode && (
-                                            <TableCell className="pl-4 pr-0 py-3 animate-in fade-in duration-150">
-                                                <Checkbox
-                                                    checked={isSelected}
-                                                    onCheckedChange={() => toggleSelectProduct(product.id)}
-                                                    aria-label={`Select ${product.name}`}
-                                                />
-                                            </TableCell>
-                                        )}
-                                        <TableCell className={cn("py-3", !isSelectMode && "pl-4")}>
-                                            <div className="flex items-center gap-3">
-                                                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-muted/20">
-                                                    {product.imageSignedUrl ? (
-                                                        <img
-                                                            src={product.imageSignedUrl}
-                                                            alt={product.name}
-                                                            className="h-full w-full object-cover"
-                                                            loading="lazy"
-                                                        />
-                                                    ) : (
-                                                        <Package2 className="size-4 text-muted-foreground/50" />
-                                                    )}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <Tooltip>
-                                                        <TooltipTrigger render={<div className="min-w-0" />}>
-                                                            <span className="font-medium text-foreground block line-clamp-2 break-words max-w-sm">
-                                                                {product.name}
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" className="max-w-xs text-xs">{product.name}</TooltipContent>
-                                                    </Tooltip>
-                                                    {product.productType !== "single" ? (
-                                                        <div className="flex items-center gap-1.5 pt-0.5">
-                                                            <ProductTypeBadge productType={product.productType} />
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="py-3 font-medium text-muted-foreground">
-                                            {categoryName}
-                                        </TableCell>
-                                        <TableCell className="py-3">
-                                            <div className="flex flex-col items-start gap-0.5">
-                                                <ProductPriceDisplay
-                                                    price={product.price}
-                                                    discount={product.discount}
-                                                    size="xs"
-                                                    align="left"
-                                                    singleTone="foreground"
-                                                    compact
-                                                />
-                                                <span className="text-[10px] text-muted-foreground">
-                                                    {catalogSellingQuantityLabel(product)}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="py-3">
-                                            <ProductStatusBadge status={product.status} />
-                                        </TableCell>
-                                        <TableCell className="py-3 pr-4 text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                {renderCardActions(product)}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                        </TableBody>
-                    </Table>
-                </div>
             ) : (
-                /* Card View */
                 <div
                     key={selectedCategoryFilter}
                     className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
@@ -1315,9 +1175,25 @@ const ProductsListPage = () => {
                         return (
                             <Card
                                 key={product.id}
+                                role={isSelectMode ? "button" : undefined}
+                                tabIndex={isSelectMode ? 0 : undefined}
+                                aria-pressed={isSelectMode ? isSelected : undefined}
+                                aria-label={isSelectMode ? `${isSelected ? "Deselect" : "Select"} ${product.name}` : undefined}
+                                onClick={isSelectMode ? () => toggleSelectProduct(product.id) : undefined}
+                                onKeyDown={
+                                    isSelectMode
+                                        ? (event) => {
+                                            if (event.key === "Enter" || event.key === " ") {
+                                                event.preventDefault();
+                                                toggleSelectProduct(product.id);
+                                            }
+                                        }
+                                        : undefined
+                                }
                                 className={cn(
                                     "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
                                     product.status === "inactive" && "opacity-[0.82] hover:opacity-100",
+                                    isSelectMode && "cursor-pointer touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                                     isSelected
                                         ? "border-primary/60 bg-primary/[0.08] ring-1 ring-primary/30 shadow-primary/5"
                                         : product.status === "inactive"
@@ -1325,18 +1201,20 @@ const ProductsListPage = () => {
                                             : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
                                 )}
                             >
-                                {/* Top section: Checkbox, Thumbnail, Full Title + Meta */}
                                 <div className="flex items-start gap-3 min-w-0">
-                                    {/* Selection Checkbox */}
-                                    {isSelectMode && (
-                                        <div className="flex items-center justify-center shrink-0 pt-1 animate-in fade-in zoom-in-75 duration-150">
-                                            <Checkbox
-                                                checked={isSelected}
-                                                onCheckedChange={() => toggleSelectProduct(product.id)}
-                                                aria-label={`Select ${product.name}`}
-                                            />
+                                    {isSelectMode ? (
+                                        <div
+                                            className={cn(
+                                                "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors mt-0.5",
+                                                isSelected
+                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                    : "border-border/70 bg-background/80 text-transparent",
+                                            )}
+                                            aria-hidden="true"
+                                        >
+                                            <Check className="size-3 stroke-[3]" />
                                         </div>
-                                    )}
+                                    ) : null}
 
                                     {/* Thumbnail */}
                                     <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
@@ -1375,8 +1253,12 @@ const ProductsListPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Bottom section: Price on left, Actions on right */}
-                                <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
+                                <div
+                                    className={cn(
+                                        "flex items-end gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0",
+                                        isSelectMode ? "justify-start" : "justify-between",
+                                    )}
+                                >
                                     <div className="flex flex-col items-start gap-0.5 min-w-0">
                                         <ProductPriceDisplay
                                             price={product.price}
@@ -1391,9 +1273,11 @@ const ProductsListPage = () => {
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center gap-0.5 shrink-0">
-                                        {renderCardActions(product)}
-                                    </div>
+                                    {!isSelectMode ? (
+                                        <div className="flex items-center gap-0.5 shrink-0">
+                                            {renderCardActions(product)}
+                                        </div>
+                                    ) : null}
                                 </div>
                             </Card>
                         );
