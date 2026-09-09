@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,10 +12,11 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Switch } from "@repo/ui/components/switch";
-import { ListOrdered, RefreshCw, Tags } from "lucide-react";
+import { ListOrdered, RefreshCw, Search, Tags, X } from "lucide-react";
 import { toast } from "sonner";
 
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
@@ -28,6 +29,7 @@ import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
 const StoreCategoryPresentationsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
     const queryClient = useQueryClient();
+    const [searchQuery, setSearchQuery] = useState("");
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -65,6 +67,16 @@ const StoreCategoryPresentationsPage = () => {
             })),
         [presentations],
     );
+
+    const filteredPresentations = useMemo(() => {
+        if (!searchQuery.trim()) {
+            return presentations;
+        }
+        const query = searchQuery.toLowerCase().trim();
+        return presentations.filter((presentation) =>
+            presentation.category.name.toLowerCase().includes(query),
+        );
+    }, [presentations, searchQuery]);
 
     const visibilityMutation = useMutation({
         mutationFn: ({
@@ -183,25 +195,6 @@ const StoreCategoryPresentationsPage = () => {
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
-            {presentations.length > 1 && (
-                <div className="flex justify-end">
-                    <ReorderListDialog
-                        title="Rearrange categories"
-                        items={reorderItems}
-                        onSave={saveCategoryOrder}
-                        trigger={
-                            <Button
-                                variant="outline"
-                                className="h-9 w-full rounded-full px-4 text-xs font-medium sm:w-auto"
-                            >
-                                <ListOrdered className="size-3.5" />
-                                Rearrange
-                            </Button>
-                        }
-                    />
-                </div>
-            )}
-
             {presentations.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
@@ -228,8 +221,63 @@ const StoreCategoryPresentationsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
+                <>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="relative flex-1 max-w-md w-full group/search">
+                            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                            <Input
+                                type="text"
+                                placeholder="Search categories..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                                    aria-label="Clear search"
+                                >
+                                    <X className="size-3.5" />
+                                </button>
+                            )}
+                        </div>
+                        {presentations.length > 1 ? (
+                            <ReorderListDialog
+                                title="Rearrange categories"
+                                items={reorderItems}
+                                onSave={saveCategoryOrder}
+                                trigger={
+                                    <Button
+                                        variant="outline"
+                                        className="h-10 w-full rounded-full px-4 text-xs font-medium sm:w-auto"
+                                    >
+                                        <ListOrdered className="size-3.5" />
+                                        Rearrange
+                                    </Button>
+                                }
+                            />
+                        ) : null}
+                    </div>
+
+                    {filteredPresentations.length === 0 ? (
+                        <Card className="border-border/60 bg-card/80 shadow-md">
+                            <CardContent className="pt-6">
+                                <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
+                                    <EmptyHeader>
+                                        <EmptyMedia variant="icon">
+                                            <Tags />
+                                        </EmptyMedia>
+                                        <EmptyTitle>No categories found</EmptyTitle>
+                                        <EmptyDescription>Try adjusting your search query.</EmptyDescription>
+                                    </EmptyHeader>
+                                </Empty>
+                            </CardContent>
+                        </Card>
+                    ) : (
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                    {presentations.map((presentation) => (
+                    {filteredPresentations.map((presentation) => (
                         <Card
                             key={presentation.id}
                             className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
@@ -277,6 +325,8 @@ const StoreCategoryPresentationsPage = () => {
                         </Card>
                     ))}
                 </div>
+                    )}
+                </>
             )}
         </div>
     );

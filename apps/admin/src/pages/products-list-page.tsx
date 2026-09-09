@@ -2,35 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import {
-    createProductAddOnAttachment,
-    getAddOns,
     getCategories,
     getProducts,
     reorderProducts,
-    updateProduct,
 } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogMedia,
-    AlertDialogTitle,
-} from "@repo/ui/components/alert-dialog";
 import { Card, CardContent } from "@repo/ui/components/card";
-import { Checkbox } from "@repo/ui/components/checkbox";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
@@ -42,15 +19,9 @@ import {
     Barcode,
     Boxes,
     Check,
-    CheckCircle2,
-    ChevronDown,
-    Eye,
-    EyeOff,
     Filter,
-    FolderSync,
     Layers3,
     Link2,
-    ListChecks,
     ListOrdered,
     Package2,
     Pencil,
@@ -58,10 +29,8 @@ import {
     PlusCircle,
     RefreshCw,
     Search,
-    SquareMousePointer,
     X,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import ToggleProductStatusButton from "@/components/catalog/toggle-product-status-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
@@ -71,12 +40,6 @@ import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import {
-    bulkCatalogProductStatusChangedMessage,
-    markCatalogProductStatusLabel,
-    markCatalogProductStatusProgress,
-} from "@/lib/catalog-product-status-copy";
-import { updateCatalogProductStatus } from "@/lib/update-catalog-product-status";
 import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
@@ -183,18 +146,6 @@ const ProductsListPage = () => {
     const [addComboDialogOpen, setAddComboDialogOpen] = useState(false);
     const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
     const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
-    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
-    const [isSelectMode, setIsSelectMode] = useState(false);
-    const [isBulkUpdating, setIsBulkUpdating] = useState(false);
-    const [bulkActionConfirm, setBulkActionConfirm] = useState<
-        | { type: "activate"; count: number }
-        | { type: "deactivate"; count: number }
-        | { type: "category"; count: number; categoryId: string; categoryName: string }
-        | { type: "attach_addon"; count: number; addOnId: string; addOnName: string }
-        | null
-    >(null);
-    const [bulkSelectionCap, setBulkSelectionCap] = useState<number>(1);
-
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
         queryFn: () => getCategories(organizationId),
@@ -207,15 +158,8 @@ const ProductsListPage = () => {
         enabled: Boolean(organizationId),
     });
 
-    const addOnsQuery = useQuery({
-        queryKey: catalogKeys.addOns(organizationId),
-        queryFn: () => getAddOns(organizationId),
-        enabled: Boolean(organizationId),
-    });
-
     const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
     const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
-    const addOns = addOnsQuery.data?.status === "success" ? addOnsQuery.data.data?.addOns ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),
@@ -286,13 +230,6 @@ const ProductsListPage = () => {
         setAddComboDialogOpen(true);
     };
 
-    const handleMobileSelectProducts = () => {
-        setMobileActionsOpen(false);
-        if (!isSelectMode) {
-            setIsSelectMode(true);
-        }
-    };
-
     const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
     // Auto-scroll the active category pill into center view whenever selectedCategoryFilter changes
@@ -339,237 +276,6 @@ const ProductsListPage = () => {
         return products.filter((product) => product.categoryId === reorderCategoryId);
     }, [products, reorderCategoryId]);
 
-    const isAllSelected = useMemo(() => {
-        if (filteredProducts.length === 0) return false;
-        return filteredProducts.every((product) => selectedProductIds.has(product.id));
-    }, [filteredProducts, selectedProductIds]);
-
-    const isSomeSelected = useMemo(() => {
-        if (filteredProducts.length === 0) return false;
-        const count = filteredProducts.filter((product) => selectedProductIds.has(product.id)).length;
-        return count > 0 && count < filteredProducts.length;
-    }, [filteredProducts, selectedProductIds]);
-
-    const selectedActiveCount = useMemo(() => {
-        return products.filter((p) => selectedProductIds.has(p.id) && p.status === "active").length;
-    }, [products, selectedProductIds]);
-
-    const selectedInactiveCount = useMemo(() => {
-        return products.filter((p) => selectedProductIds.has(p.id) && p.status === "inactive").length;
-    }, [products, selectedProductIds]);
-
-    const toggleSelectAll = () => {
-        if (isAllSelected) {
-            setSelectedProductIds((prev) => {
-                const next = new Set(prev);
-                filteredProducts.forEach((p) => next.delete(p.id));
-                return next;
-            });
-        } else {
-            setSelectedProductIds((prev) => {
-                const next = new Set(prev);
-                filteredProducts.forEach((p) => next.add(p.id));
-                return next;
-            });
-        }
-    };
-
-    const toggleSelectProduct = (productId: string) => {
-        setSelectedProductIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(productId)) {
-                next.delete(productId);
-            } else {
-                next.add(productId);
-            }
-            return next;
-        });
-    };
-
-    const toggleSelectMode = () => {
-        setIsSelectMode((prev) => {
-            const next = !prev;
-            if (!next) {
-                setSelectedProductIds(new Set());
-            }
-            return next;
-        });
-    };
-
-    const clearSelection = () => {
-        setSelectedProductIds(new Set());
-    };
-
-    const exitSelectMode = () => {
-        setIsSelectMode(false);
-        setSelectedProductIds(new Set());
-    };
-
-    const handleClearChecklist = () => {
-        if (selectedProductIds.size > 0) {
-            clearSelection();
-            return;
-        }
-        exitSelectMode();
-    };
-
-    const handleBulkChangeCategory = async (newCategoryId: string, categoryName: string) => {
-        if (selectedProductIds.size === 0) return;
-        setIsBulkUpdating(true);
-        const targetIds = Array.from(selectedProductIds);
-        let successCount = 0;
-        const failedIds: string[] = [];
-
-        await Promise.all(
-            targetIds.map(async (productId) => {
-                const res = await updateProduct(organizationId, productId, { categoryId: newCategoryId });
-                if (res.status === "success") {
-                    successCount++;
-                } else {
-                    failedIds.push(productId);
-                }
-            })
-        );
-
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.categories(organizationId) });
-        setIsBulkUpdating(false);
-
-        if (failedIds.length === 0) {
-            toast.success(`${successCount} product${successCount === 1 ? "" : "s"} moved to ${categoryName}`);
-            setSelectedProductIds(new Set());
-        } else {
-            toast.error(`${successCount} of ${targetIds.length} products updated. ${failedIds.length} could not be updated.`);
-            setSelectedProductIds(new Set(failedIds));
-        }
-    };
-
-    const handleBulkActivate = async () => {
-        if (selectedProductIds.size === 0) return;
-        const targetProducts = products.filter(
-            (p) => selectedProductIds.has(p.id) && p.status === "inactive",
-        );
-        if (targetProducts.length === 0) return;
-
-        setIsBulkUpdating(true);
-        let successCount = 0;
-        const failedIds: string[] = [];
-
-        await Promise.all(
-            targetProducts.map(async (product) => {
-                const res = await updateCatalogProductStatus(organizationId, product, "active");
-                if (res.status === "success") {
-                    successCount++;
-                } else {
-                    failedIds.push(product.id);
-                }
-            })
-        );
-
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.storeProductOfferingOverrideSummary(organizationId) });
-        setIsBulkUpdating(false);
-
-        if (failedIds.length === 0) {
-            toast.success(bulkCatalogProductStatusChangedMessage(successCount, "active"));
-            setSelectedProductIds(new Set());
-        } else {
-            toast.error(`${successCount} of ${targetProducts.length} products updated. ${failedIds.length} could not be updated.`);
-            setSelectedProductIds(new Set(failedIds));
-        }
-    };
-
-    const handleBulkDeactivate = async () => {
-        if (selectedProductIds.size === 0) return;
-        const targetProducts = products.filter(
-            (p) => selectedProductIds.has(p.id) && p.status === "active",
-        );
-        if (targetProducts.length === 0) return;
-
-        setIsBulkUpdating(true);
-        let successCount = 0;
-        const failedIds: string[] = [];
-
-        await Promise.all(
-            targetProducts.map(async (product) => {
-                const res = await updateCatalogProductStatus(organizationId, product, "inactive");
-                if (res.status === "success") {
-                    successCount++;
-                } else {
-                    failedIds.push(product.id);
-                }
-            })
-        );
-
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.storeProductOfferingOverrideSummary(organizationId) });
-        setIsBulkUpdating(false);
-
-        if (failedIds.length === 0) {
-            toast.success(bulkCatalogProductStatusChangedMessage(successCount, "inactive"));
-            setSelectedProductIds(new Set());
-        } else {
-            toast.error(`${successCount} of ${targetProducts.length} products updated. ${failedIds.length} could not be updated.`);
-            setSelectedProductIds(new Set(failedIds));
-        }
-    };
-
-    const handleBulkAttachAddOn = async (addOnId: string, addOnName: string, selectionCap: number) => {
-        if (selectedProductIds.size === 0) return;
-        setIsBulkUpdating(true);
-        const singleProducts = products.filter(
-            (p) => selectedProductIds.has(p.id) && p.productType === "single"
-        );
-
-        if (singleProducts.length === 0) {
-            toast.error("Add-ons can only be attached to standard (single) products.");
-            setIsBulkUpdating(false);
-            setBulkActionConfirm(null);
-            return;
-        }
-
-        let successCount = 0;
-        let alreadyAttachedCount = 0;
-        const failedIds: string[] = [];
-
-        await Promise.all(
-            singleProducts.map(async (product) => {
-                const res = await createProductAddOnAttachment(organizationId, product.id, {
-                    addOnId,
-                    selectionCap,
-                });
-                if (res.status === "success") {
-                    successCount++;
-                } else if (
-                    res.message?.toLowerCase().includes("already") ||
-                    res.message?.toLowerCase().includes("conflict")
-                ) {
-                    alreadyAttachedCount++;
-                } else {
-                    failedIds.push(product.id);
-                }
-            })
-        );
-
-        await queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-        setIsBulkUpdating(false);
-        setBulkActionConfirm(null);
-
-        if (successCount > 0) {
-            toast.success(
-                `"${addOnName}" attached to ${successCount} product${successCount === 1 ? "" : "s"}${
-                    alreadyAttachedCount > 0 ? ` (${alreadyAttachedCount} already attached)` : ""
-                }`
-            );
-            setSelectedProductIds(new Set());
-        } else if (alreadyAttachedCount > 0) {
-            toast.info(`Selected product${singleProducts.length === 1 ? "" : "s"} already had "${addOnName}" attached.`);
-            setSelectedProductIds(new Set());
-        } else {
-            toast.error(`Could not attach "${addOnName}" to selected products.`);
-        }
-    };
-
     const productOrderItems = useMemo(
         () => reorderCategoryProducts.map((product) => ({
             id: product.id,
@@ -603,6 +309,47 @@ const ProductsListPage = () => {
         : reorderCategoryProducts.length < 2
             ? "This category needs at least two products to rearrange."
             : null;
+
+    const productRearrangeButtonClassName =
+        "rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer";
+
+    const renderProductRearrangeControl = (className?: string) =>
+        productReorderDisabledReason ? (
+            <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                            productRearrangeButtonClassName,
+                            "text-muted-foreground/60 cursor-not-allowed",
+                            className,
+                        )}
+                        disabled
+                    >
+                        <ListOrdered className="size-3.5" />
+                        Rearrange
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>{productReorderDisabledReason}</TooltipContent>
+            </Tooltip>
+        ) : (
+            <ReorderListDialog
+                title="Rearrange products"
+                items={productOrderItems}
+                onSave={saveProductOrder}
+                trigger={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(productRearrangeButtonClassName, className)}
+                    >
+                        <ListOrdered className="size-3.5" />
+                        Rearrange
+                    </Button>
+                }
+            />
+        );
 
     if (categoriesQuery.isPending || productsQuery.isPending) {
         return (
@@ -938,27 +685,7 @@ const ProductsListPage = () => {
                         Add Combo
                     </Button>
 
-                    <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex" />}>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className={cn(
-                                    "rounded-full border-border/60 h-10 w-10 transition-all cursor-pointer",
-                                    isSelectMode
-                                        ? "bg-primary text-primary-foreground border-primary shadow-xs shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground"
-                                        : "bg-card/50 text-foreground/90 hover:bg-card hover:border-border/80",
-                                )}
-                                onClick={toggleSelectMode}
-                                aria-label={isSelectMode ? "Exit select mode" : "Select mode"}
-                            >
-                                <SquareMousePointer className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            {isSelectMode ? "Exit select mode" : "Select products"}
-                        </TooltipContent>
-                    </Tooltip>
+                    {renderProductRearrangeControl()}
                 </div>
             </div>
 
@@ -998,210 +725,8 @@ const ProductsListPage = () => {
                 </div>
             )}
 
-            {/* Checklist bulk action bar */}
-            {isSelectMode && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="flex items-center gap-2 font-medium text-foreground">
-                        <CheckCircle2 className="size-4 text-primary" />
-                        <span>
-                            {selectedProductIds.size > 0 ? (
-                                <>
-                                    <strong className="font-semibold">{selectedProductIds.size}</strong> product{selectedProductIds.size === 1 ? "" : "s"} selected
-                                </>
-                            ) : (
-                                "Select products"
-                            )}
-                        </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Change Category Dropdown */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                        disabled={isBulkUpdating || selectedProductIds.size === 0}
-                                    >
-                                        <FolderSync className="size-3.5" />
-                                        Change category
-                                        <ChevronDown className="size-3 text-muted-foreground" />
-                                    </Button>
-                                }
-                            />
-                            <DropdownMenuContent align="end" className="w-48 max-h-60 overflow-y-auto">
-                                <DropdownMenuGroup>
-                                    <DropdownMenuLabel>Move to category</DropdownMenuLabel>
-                                    {categories.map((cat) => (
-                                        <DropdownMenuItem
-                                            key={cat.id}
-                                            onClick={() =>
-                                                setBulkActionConfirm({
-                                                    type: "category",
-                                                    count: selectedProductIds.size,
-                                                    categoryId: cat.id,
-                                                    categoryName: cat.name,
-                                                })
-                                            }
-                                            className="cursor-pointer text-xs"
-                                        >
-                                            {cat.name}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuGroup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* Attach Add-on Dropdown */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                        disabled={isBulkUpdating || addOns.length === 0 || selectedProductIds.size === 0}
-                                    >
-                                        <Link2 className="size-3.5" />
-                                        Add-ons
-                                        <ChevronDown className="size-3 text-muted-foreground" />
-                                    </Button>
-                                }
-                            />
-                            <DropdownMenuContent align="end" className="w-56 max-h-64 overflow-y-auto">
-                                <DropdownMenuGroup>
-                                    <DropdownMenuLabel>Attach add-on to selected</DropdownMenuLabel>
-                                    {addOns.map((addOn) => (
-                                        <DropdownMenuItem
-                                            key={addOn.id}
-                                            onClick={() => {
-                                                const singleCount = products.filter(
-                                                    (p) => selectedProductIds.has(p.id) && p.productType === "single"
-                                                ).length;
-                                                setBulkSelectionCap(1);
-                                                setBulkActionConfirm({
-                                                    type: "attach_addon",
-                                                    count: singleCount,
-                                                    addOnId: addOn.id,
-                                                    addOnName: addOn.name,
-                                                });
-                                            }}
-                                            className="cursor-pointer text-xs flex items-center justify-between"
-                                        >
-                                            <span className="truncate">{addOn.name}</span>
-                                            {addOn.status === "inactive" ? (
-                                                <span className="text-[10px] text-muted-foreground ml-1.5">(inactive)</span>
-                                            ) : null}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuGroup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {productReorderDisabledReason ? (
-                            <Tooltip>
-                                <TooltipTrigger render={<span className="inline-flex" />}>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 text-muted-foreground/60 cursor-not-allowed"
-                                        disabled
-                                    >
-                                        <ListOrdered className="size-3.5" />
-                                        Rearrange
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>{productReorderDisabledReason}</TooltipContent>
-                            </Tooltip>
-                        ) : (
-                            <ReorderListDialog
-                                title="Rearrange products"
-                                items={productOrderItems}
-                                onSave={saveProductOrder}
-                                trigger={
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                        disabled={isBulkUpdating}
-                                    >
-                                        <ListOrdered className="size-3.5" />
-                                        Rearrange
-                                    </Button>
-                                }
-                            />
-                        )}
-
-                        {/* Activate (shown only when inactive products are selected) */}
-                        {selectedInactiveCount > 0 && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                onClick={() =>
-                                    setBulkActionConfirm({
-                                        type: "activate",
-                                        count: selectedInactiveCount,
-                                    })
-                                }
-                                disabled={isBulkUpdating}
-                            >
-                                {isBulkUpdating ? <Spinner className="size-3" /> : <Eye className="size-3.5 text-emerald-500" />}
-                                {markCatalogProductStatusLabel("active")}
-                            </Button>
-                        )}
-
-                        {/* Mark inactive (shown only when active products are selected) */}
-                        {selectedActiveCount > 0 && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
-                                onClick={() =>
-                                    setBulkActionConfirm({
-                                        type: "deactivate",
-                                        count: selectedActiveCount,
-                                    })
-                                }
-                                disabled={isBulkUpdating}
-                            >
-                                {isBulkUpdating ? <Spinner className="size-3" /> : <EyeOff className="size-3.5 text-muted-foreground" />}
-                                {markCatalogProductStatusLabel("inactive")}
-                            </Button>
-                        )}
-
-                        {/* Clear */}
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-full h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                            onClick={handleClearChecklist}
-                            disabled={isBulkUpdating}
-                        >
-                            <X className="size-3.5 mr-1" />
-                            {selectedProductIds.size > 0 ? "Clear" : "Exit"}
-                        </Button>
-                    </div>
-                </div>
-            )}
-
             {filteredProducts.length > 0 && (
                 <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
-                    {/* {isSelectMode ? (
-                        <label className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer select-none animate-in fade-in duration-150">
-                            <Checkbox
-                                checked={isAllSelected}
-                                indeterminate={isSomeSelected}
-                                onCheckedChange={toggleSelectAll}
-                                aria-label="Select all products"
-                            />
-                            <span>Select all ({filteredProducts.length})</span>
-                        </label>
-                    ) : (
-                        <div />
-                    )} */}
                     <span className="text-xs text-muted-foreground/70">
                         Showing {filteredProducts.length} product{filteredProducts.length === 1 ? "" : "s"}
                     </span>
@@ -1280,53 +805,20 @@ const ProductsListPage = () => {
                     className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
                 >
                     {filteredProducts.map((product) => {
-                        const isSelected = selectedProductIds.has(product.id);
                         const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
 
                         return (
                             <Card
                                 key={product.id}
-                                role={isSelectMode ? "button" : undefined}
-                                tabIndex={isSelectMode ? 0 : undefined}
-                                aria-pressed={isSelectMode ? isSelected : undefined}
-                                aria-label={isSelectMode ? `${isSelected ? "Deselect" : "Select"} ${product.name}` : undefined}
-                                onClick={isSelectMode ? () => toggleSelectProduct(product.id) : undefined}
-                                onKeyDown={
-                                    isSelectMode
-                                        ? (event) => {
-                                            if (event.key === "Enter" || event.key === " ") {
-                                                event.preventDefault();
-                                                toggleSelectProduct(product.id);
-                                            }
-                                        }
-                                        : undefined
-                                }
                                 className={cn(
                                     "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
                                     product.status === "inactive" && "opacity-[0.82] hover:opacity-100",
-                                    isSelectMode && "cursor-pointer touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                                    isSelected
-                                        ? "border-primary/60 bg-primary/[0.08] ring-1 ring-primary/30 shadow-primary/5"
-                                        : product.status === "inactive"
-                                            ? "border-border/50 bg-muted/20"
-                                            : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
+                                    product.status === "inactive"
+                                        ? "border-border/50 bg-muted/20"
+                                        : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
                                 )}
                             >
                                 <div className="flex items-start gap-3 min-w-0">
-                                    {isSelectMode ? (
-                                        <div
-                                            className={cn(
-                                                "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors mt-0.5",
-                                                isSelected
-                                                    ? "border-primary bg-primary text-primary-foreground"
-                                                    : "border-border/70 bg-background/80 text-transparent",
-                                            )}
-                                            aria-hidden="true"
-                                        >
-                                            <Check className="size-3 stroke-[3]" />
-                                        </div>
-                                    ) : null}
-
                                     {/* Thumbnail */}
                                     <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
                                         {product.imageSignedUrl ? (
@@ -1364,12 +856,7 @@ const ProductsListPage = () => {
                                     </div>
                                 </div>
 
-                                <div
-                                    className={cn(
-                                        "flex items-end gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0",
-                                        isSelectMode ? "justify-start" : "justify-between",
-                                    )}
-                                >
+                                <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
                                     <div className="flex flex-col items-start gap-0.5 min-w-0">
                                         <ProductPriceDisplay
                                             price={product.price}
@@ -1384,178 +871,15 @@ const ProductsListPage = () => {
                                         </span>
                                     </div>
 
-                                    {!isSelectMode ? (
-                                        <div className="flex items-center gap-0.5 shrink-0">
-                                            {renderCardActions(product)}
-                                        </div>
-                                    ) : null}
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                        {renderCardActions(product)}
+                                    </div>
                                 </div>
                             </Card>
                         );
                     })}
                 </div>
             )}
-
-            {/* Bulk Action Confirmation Alert Dialog */}
-            <AlertDialog
-                open={bulkActionConfirm !== null}
-                onOpenChange={(open) => {
-                    if (!open && !isBulkUpdating) {
-                        setBulkActionConfirm(null);
-                    }
-                }}
-            >
-                <AlertDialogContent>
-                    {bulkActionConfirm?.type === "activate" && (
-                        <>
-                            <AlertDialogHeader>
-                                <AlertDialogMedia className="bg-emerald-500/15 text-emerald-500">
-                                    <Eye />
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                    {markCatalogProductStatusLabel("active")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Selected product{bulkActionConfirm.count === 1 ? "" : "s"} will be marked active at the organization level. Stores inheriting organization defaults will offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={isBulkUpdating} className="rounded-xl">
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    className="rounded-xl shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-                                    isLoading={isBulkUpdating}
-                                    loadingText={markCatalogProductStatusProgress("active")}
-                                    onClick={async () => {
-                                        await handleBulkActivate();
-                                        setBulkActionConfirm(null);
-                                    }}
-                                >
-                                    {markCatalogProductStatusLabel("active")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </>
-                    )}
-
-                    {bulkActionConfirm?.type === "deactivate" && (
-                        <>
-                            <AlertDialogHeader>
-                                <AlertDialogMedia className="bg-muted/80 text-muted-foreground">
-                                    <EyeOff />
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                    {markCatalogProductStatusLabel("inactive")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Selected product{bulkActionConfirm.count === 1 ? "" : "s"} will be marked inactive at the organization level. Stores inheriting organization defaults will no longer offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={isBulkUpdating} className="rounded-xl">
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    className="rounded-xl shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                                    isLoading={isBulkUpdating}
-                                    loadingText={markCatalogProductStatusProgress("inactive")}
-                                    onClick={async () => {
-                                        await handleBulkDeactivate();
-                                        setBulkActionConfirm(null);
-                                    }}
-                                >
-                                    {markCatalogProductStatusLabel("inactive")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </>
-                    )}
-
-                    {bulkActionConfirm?.type === "category" && (
-                        <>
-                            <AlertDialogHeader>
-                                <AlertDialogMedia className="bg-primary/10 text-primary">
-                                    <FolderSync />
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                    Move {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"} to "{bulkActionConfirm.categoryName}"?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Are you sure you want to change the category of {bulkActionConfirm.count} selected product{bulkActionConfirm.count === 1 ? "" : "s"} to "{bulkActionConfirm.categoryName}"?
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={isBulkUpdating} className="rounded-xl">
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    className="rounded-xl shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                                    isLoading={isBulkUpdating}
-                                    loadingText="Moving..."
-                                    onClick={async () => {
-                                        await handleBulkChangeCategory(
-                                            bulkActionConfirm.categoryId,
-                                            bulkActionConfirm.categoryName,
-                                        );
-                                        setBulkActionConfirm(null);
-                                    }}
-                                >
-                                    Move products
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </>
-                    )}
-
-                    {bulkActionConfirm?.type === "attach_addon" && (
-                        <>
-                            <AlertDialogHeader>
-                                <AlertDialogMedia className="bg-primary/10 text-primary">
-                                    <Link2 />
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                    Attach "{bulkActionConfirm.addOnName}" to {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Are you sure you want to link "{bulkActionConfirm.addOnName}" as an available add-on to {bulkActionConfirm.count} selected product{bulkActionConfirm.count === 1 ? "" : "s"}?
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <div className="px-6 py-2 space-y-1.5">
-                                <label className="text-xs font-medium text-foreground block">
-                                    Max selection cap per item
-                                </label>
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    value={bulkSelectionCap}
-                                    onChange={(e) => setBulkSelectionCap(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="h-9 w-24 text-sm rounded-lg"
-                                />
-                                <p className="text-[11px] text-muted-foreground">
-                                    Maximum quantity of this add-on a customer can select per product.
-                                </p>
-                            </div>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={isBulkUpdating} className="rounded-xl">
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    className="rounded-xl shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                                    isLoading={isBulkUpdating}
-                                    loadingText="Attaching..."
-                                    onClick={async () => {
-                                        await handleBulkAttachAddOn(
-                                            bulkActionConfirm.addOnId,
-                                            bulkActionConfirm.addOnName,
-                                            bulkSelectionCap,
-                                        );
-                                    }}
-                                >
-                                    Attach add-on
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </>
-                    )}
-                </AlertDialogContent>
-            </AlertDialog>
 
             <UpsertProductDialog
                 organizationId={organizationId}
@@ -1605,16 +929,36 @@ const ProductsListPage = () => {
                             </span>
                             Add combo
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleMobileSelectProducts}
-                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95"
-                        >
-                            <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
-                                <SquareMousePointer className="size-5" />
-                            </span>
-                            Select products
-                        </button>
+                        {productReorderDisabledReason ? (
+                            <button
+                                type="button"
+                                disabled
+                                className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-muted-foreground/60 shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                    <ListOrdered className="size-5" />
+                                </span>
+                                Rearrange
+                            </button>
+                        ) : (
+                            <ReorderListDialog
+                                title="Rearrange products"
+                                items={productOrderItems}
+                                onSave={saveProductOrder}
+                                trigger={
+                                    <button
+                                        type="button"
+                                        onClick={() => setMobileActionsOpen(false)}
+                                        className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95"
+                                    >
+                                        <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                            <ListOrdered className="size-5" />
+                                        </span>
+                                        Rearrange
+                                    </button>
+                                }
+                            />
+                        )}
                     </div>
                 </SheetContent>
             </Sheet>

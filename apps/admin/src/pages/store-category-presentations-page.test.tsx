@@ -12,6 +12,6 @@ describe("Store Category Presentations page", () => {
         );
         expect(pageSource).toContain('data-testid="store-categories-page"');
         expect(pageSource).toContain("Visible in POS menu");
-        expect(pageSource).toContain("Hiding a Category does not change Product sellability");
+        expect(pageSource).toContain("Search categories...");
     });
 });

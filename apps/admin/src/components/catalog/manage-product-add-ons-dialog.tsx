@@ -20,7 +20,6 @@ import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -189,9 +188,6 @@ const ManageProductAddOnsDialog = ({
                             <DialogTitle className="font-display text-xl font-semibold">
                                 Add-ons for {product.name}
                             </DialogTitle>
-                            <DialogDescription className="text-xs mt-0.5">
-                                Attach organization add-ons and set the selection cap for this product.
-                            </DialogDescription>
                         </div>
                     </div>
                 </DialogHeader>
