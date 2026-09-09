@@ -20,8 +20,7 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
-import { cn } from "@repo/ui/lib/utils";
-import { LayoutGrid, Pencil, PlusCircle, Puzzle, RefreshCw, Search, Table as TableIcon, Trash2, X } from "lucide-react";
+import { Pencil, PlusCircle, Puzzle, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
@@ -29,7 +28,6 @@ import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertAddOnDialog from "@/components/catalog/upsert-add-on-dialog";
 import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
-import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
 
 const DeleteAddOnButton = ({
     organizationId,
@@ -99,8 +97,7 @@ const DeleteAddOnButton = ({
 
 const AddOnsPage = () => {
     const { organizationId = "" } = useParams();
-    const [mobileViewMode, setMobileViewMode] = useState<"card" | "table">("card");
-    const [mobileSearchQuery, setMobileSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
 
     const addOnsQuery = useQuery({
         queryKey: catalogKeys.addOns(organizationId),
@@ -111,76 +108,10 @@ const AddOnsPage = () => {
     const addOns = addOnsQuery.data?.status === "success" ? addOnsQuery.data.data?.addOns ?? [] : [];
 
     const filteredAddOns = useMemo(() => {
-        if (!mobileSearchQuery.trim()) return addOns;
-        const query = mobileSearchQuery.toLowerCase().trim();
+        if (!searchQuery.trim()) return addOns;
+        const query = searchQuery.toLowerCase().trim();
         return addOns.filter((addOn) => addOn.name.toLowerCase().includes(query));
-    }, [addOns, mobileSearchQuery]);
-
-    const columns = useMemo<ColumnDef<typeof addOns[number]>[]>(() => [
-        {
-            id: "name",
-            header: "Add-on",
-            accessor: (addOn) => (
-                <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Puzzle className="size-3.5" />
-                    </div>
-                    <span className="font-medium text-foreground">{addOn.name}</span>
-                </div>
-            ),
-            sortable: true,
-            getSortValue: (addOn) => addOn.name,
-        },
-        {
-            id: "price",
-            header: "Organization default",
-            accessor: (addOn) => (
-                <ProductPriceDisplay
-                    price={addOn.price}
-                    discount={addOn.discount}
-                    size="sm"
-                    align="left"
-                />
-            ),
-            sortable: true,
-            getSortValue: (addOn) => addOn.price,
-        },
-        {
-            id: "status",
-            header: "Global publication",
-            accessor: (addOn) => <ProductStatusBadge status={addOn.status} />,
-            sortable: true,
-            getSortValue: (addOn) => addOn.status,
-            filterOptions: [
-                { label: "Active", value: "active" },
-                { label: "Inactive", value: "inactive" },
-            ],
-            getFilterValue: (addOn) => addOn.status,
-        },
-        {
-            id: "updatedAt",
-            header: "Updated",
-            accessor: (addOn) => formatDateTime(addOn.updatedAt),
-            sortable: true,
-            getSortValue: (addOn) => String(addOn.updatedAt),
-        },
-    ], []);
-
-    const renderActions = (addOn: typeof addOns[number]) => (
-        <>
-            <UpsertAddOnDialog
-                organizationId={organizationId}
-                addOn={addOn}
-                trigger={
-                    <Button variant="outline" size="sm" className="rounded-full">
-                        <Pencil className="size-3" />
-                        Edit
-                    </Button>
-                }
-            />
-            <DeleteAddOnButton organizationId={organizationId} addOn={addOn} />
-        </>
-    );
+    }, [addOns, searchQuery]);
 
     if (addOnsQuery.isPending) {
         return (
@@ -243,171 +174,103 @@ const AddOnsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <>
-                    {/* Desktop View: Pure Table (Unchanged) */}
-                    <div className="hidden sm:block">
-                        <PremiumTable
-                            data={addOns}
-                            columns={columns}
-                            actions={renderActions}
-                            rowIdKey="id"
-                            defaultPageSize={15}
-                            searchPlaceholder="Search add-ons..."
-                            searchKeys={[
-                                (addOn) => addOn.name,
-                            ]}
-                            infoText={`${addOns.length} add-on${addOns.length === 1 ? "" : "s"}`}
-                            toolbarActions={
-                                <UpsertAddOnDialog
-                                    organizationId={organizationId}
-                                    trigger={
-                                        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
-                                            <PlusCircle className="size-3.5" />
-                                            Add add-on
-                                        </Button>
-                                    }
-                                />
+                <div className="space-y-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
+                            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                            <Input
+                                type="text"
+                                placeholder="Search add-ons..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                                    aria-label="Clear search"
+                                >
+                                    <X className="size-3.5" />
+                                </button>
+                            )}
+                        </div>
+
+                        <UpsertAddOnDialog
+                            organizationId={organizationId}
+                            trigger={
+                                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20">
+                                    <PlusCircle className="size-3.5" />
+                                    Add add-on
+                                </Button>
                             }
                         />
                     </div>
 
-                    {/* Mobile View: Defaults to Card View with View Mode Toggle */}
-                    <div className="block sm:hidden space-y-3">
-                        {/* Mobile Search & Controls Header */}
-                        <div className="flex flex-col gap-2.5">
-                            <div className="flex items-center gap-2">
-                                <div className="relative flex-1 group/search">
-                                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
-                                    <Input
-                                        type="text"
-                                        placeholder="Search add-ons..."
-                                        value={mobileSearchQuery}
-                                        onChange={(e) => setMobileSearchQuery(e.target.value)}
-                                        className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
-                                    />
-                                    {mobileSearchQuery && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setMobileSearchQuery("")}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                                            aria-label="Clear search"
-                                        >
-                                            <X className="size-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* View Mode Toggle Buttons (Mobile Only) */}
-                                <div className="flex items-center p-1 rounded-full border border-border/60 bg-card/80 shrink-0">
-                                    <Button
-                                        variant={mobileViewMode === "card" ? "default" : "ghost"}
-                                        size="icon"
-                                        className={cn(
-                                            "h-7 w-7 rounded-full transition-all",
-                                            mobileViewMode === "card" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground"
-                                        )}
-                                        onClick={() => setMobileViewMode("card")}
-                                        aria-label="Card view"
-                                    >
-                                        <LayoutGrid className="size-3.5" />
-                                    </Button>
-                                    <Button
-                                        variant={mobileViewMode === "table" ? "default" : "ghost"}
-                                        size="icon"
-                                        className={cn(
-                                            "h-7 w-7 rounded-full transition-all",
-                                            mobileViewMode === "table" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground"
-                                        )}
-                                        onClick={() => setMobileViewMode("table")}
-                                        aria-label="Table view"
-                                    >
-                                        <TableIcon className="size-3.5" />
-                                    </Button>
-                                </div>
-
-                                <UpsertAddOnDialog
-                                    organizationId={organizationId}
-                                    trigger={
-                                        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-3 shrink-0">
-                                            <PlusCircle className="size-3.5" />
-                                            Add
-                                        </Button>
-                                    }
-                                />
-                            </div>
+                    {filteredAddOns.length > 0 && (
+                        <div className="flex items-center px-1 py-0.5">
+                            <span className="text-xs text-muted-foreground/70">
+                                Showing {filteredAddOns.length} add-on{filteredAddOns.length === 1 ? "" : "s"}
+                            </span>
                         </div>
+                    )}
 
-                        {/* Mobile Content Display */}
-                        {mobileViewMode === "card" ? (
-                            filteredAddOns.length === 0 ? (
-                                <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
-                                    No add-ons match your search.
+                    {filteredAddOns.length === 0 ? (
+                        <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
+                            No add-ons match your search.
+                        </Card>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {filteredAddOns.map((addOn) => (
+                                <Card
+                                    key={addOn.id}
+                                    className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
+                                >
+                                    <div className="flex items-center justify-between gap-2.5">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                                <Puzzle className="size-4" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-display text-sm font-semibold text-foreground truncate">
+                                                    {addOn.name}
+                                                </h4>
+                                                <p className="text-[11px] text-muted-foreground/70">
+                                                    Updated {formatDateTime(addOn.updatedAt)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <ProductStatusBadge status={addOn.status} />
+                                    </div>
+
+                                    <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
+                                        <ProductPriceDisplay
+                                            price={addOn.price}
+                                            discount={addOn.discount}
+                                            size="sm"
+                                            align="left"
+                                        />
+
+                                        <div className="flex items-center gap-1.5">
+                                            <UpsertAddOnDialog
+                                                organizationId={organizationId}
+                                                addOn={addOn}
+                                                trigger={
+                                                    <Button variant="outline" size="sm" className="rounded-full h-8 text-xs px-3">
+                                                        <Pencil className="size-3" />
+                                                        Edit
+                                                    </Button>
+                                                }
+                                            />
+                                            <DeleteAddOnButton organizationId={organizationId} addOn={addOn} />
+                                        </div>
+                                    </div>
                                 </Card>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-2.5">
-                                    {filteredAddOns.map((addOn) => (
-                                        <Card
-                                            key={addOn.id}
-                                            className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
-                                        >
-                                            <div className="flex items-center justify-between gap-2.5">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                                        <Puzzle className="size-4" />
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <h4 className="font-display text-sm font-semibold text-foreground truncate">
-                                                            {addOn.name}
-                                                        </h4>
-                                                        <p className="text-[11px] text-muted-foreground/70">
-                                                            Updated {formatDateTime(addOn.updatedAt)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <ProductStatusBadge status={addOn.status} />
-                                            </div>
-
-                                            <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
-                                                <ProductPriceDisplay
-                                                    price={addOn.price}
-                                                    discount={addOn.discount}
-                                                    size="sm"
-                                                    align="left"
-                                                />
-
-                                                <div className="flex items-center gap-1.5">
-                                                    <UpsertAddOnDialog
-                                                        organizationId={organizationId}
-                                                        addOn={addOn}
-                                                        trigger={
-                                                            <Button variant="outline" size="sm" className="rounded-full h-8 text-xs px-3">
-                                                                <Pencil className="size-3" />
-                                                                Edit
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <DeleteAddOnButton organizationId={organizationId} addOn={addOn} />
-                                                </div>
-                                            </div>
-                                        </Card>
-                                    ))}
-                                </div>
-                            )
-                        ) : (
-                            <PremiumTable
-                                data={addOns}
-                                columns={columns}
-                                actions={renderActions}
-                                rowIdKey="id"
-                                defaultPageSize={10}
-                                searchPlaceholder="Search add-ons..."
-                                searchKeys={[
-                                    (addOn) => addOn.name,
-                                ]}
-                            />
-                        )}
-                    </div>
-                </>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );
