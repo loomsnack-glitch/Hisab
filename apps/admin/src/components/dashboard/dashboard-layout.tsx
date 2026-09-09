@@ -11,9 +11,8 @@ import { toast } from "sonner";
 import AdminAccountMenu from "@/components/dashboard/admin-account-menu";
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
-import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import { getAuthenticatedHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
+import { getSidebarHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
 import { isFullWidthDashboardPath } from "@/lib/full-width-dashboard-path";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
@@ -156,7 +155,7 @@ const DashboardLayout = () => {
                     <header className="sticky top-0 z-20 flex min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                             <Link
-                                to={isPickerPage ? "/organizations" : getAuthenticatedHomePath(organizations)}
+                                to={isPickerPage ? "/organizations" : getSidebarHomePath(organizations, organizationId, location.pathname)}
                                 className={cn(
                                     "flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90",
                                     !isPickerPage && "lg:hidden",
@@ -164,11 +163,6 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
-                            {isPickerPage ? null : (
-                                <div className="lg:hidden">
-                                    <AdminWorkspaceSwitcherFromRoute />
-                                </div>
-                            )}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">

@@ -1,3 +1,5 @@
+import { getStoreProductsPath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
+
 type OrgRef = { id: string };
 
 export const STARRED_ORG_KEY = "hisab_starred_org_id";
@@ -45,6 +47,24 @@ export function resolveDefaultOrgId(organizations: OrgRef[]): string | null {
 export function getAuthenticatedHomePath(organizations: OrgRef[]): string {
     const orgId = resolveDefaultOrgId(organizations);
     return orgId ? getOrganizationWorkspacePath(orgId) : "/organizations";
+}
+
+/** Sidebar brand home: current store/org workspace when in context, else starred org or picker. */
+export function getSidebarHomePath(
+    organizations: OrgRef[],
+    currentOrganizationId?: string | null,
+    pathname?: string | null,
+): string {
+    const storeWorkspace = pathname ? parseStoreWorkspacePath(pathname) : null;
+    if (storeWorkspace) {
+        return getStoreProductsPath(storeWorkspace.organizationId, storeWorkspace.storeId);
+    }
+
+    if (currentOrganizationId) {
+        return getOrganizationWorkspacePath(currentOrganizationId);
+    }
+
+    return getAuthenticatedHomePath(organizations);
 }
 
 export function isOrganizationPickerPath(pathname: string): boolean {

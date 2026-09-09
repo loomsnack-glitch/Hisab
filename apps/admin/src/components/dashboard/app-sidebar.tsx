@@ -11,7 +11,7 @@ import { Button } from "@repo/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 
-import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
+import { getSidebarHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
@@ -77,7 +77,7 @@ const AppSidebar = ({
     );
 
     const effectiveOrgId = organizationId || resolveDefaultOrgId(organizations) || "";
-    const homePath = getAuthenticatedHomePath(organizations);
+    const homePath = getSidebarHomePath(organizations, organizationId, location.pathname);
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";

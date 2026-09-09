@@ -27,6 +27,7 @@ type AdminWorkspaceSwitcherPanelProps = {
     stores: WorkspaceStoreRef[];
     selectedStoreId?: string | null;
     onAddStore?: () => void;
+    onNavigate?: () => void;
 };
 
 export const AdminWorkspaceSwitcherPanel = ({
@@ -35,6 +36,7 @@ export const AdminWorkspaceSwitcherPanel = ({
     stores,
     selectedStoreId = null,
     onAddStore,
+    onNavigate,
 }: AdminWorkspaceSwitcherPanelProps) => {
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const organizationWorkspacePath = getOrganizationWorkspacePath(organizationId);
@@ -60,6 +62,7 @@ export const AdminWorkspaceSwitcherPanel = ({
 
             <Link
                 to={organizationWorkspacePath}
+                onClick={onNavigate}
                 aria-current={selectedStore ? undefined : "page"}
                 className={cn(
                     "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
@@ -83,6 +86,7 @@ export const AdminWorkspaceSwitcherPanel = ({
                         <Link
                             key={store.id}
                             to={getStoreWorkspacePath(organizationId, store.id)}
+                            onClick={onNavigate}
                             aria-current={active ? "page" : undefined}
                             className={cn(
                                 "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
@@ -112,7 +116,7 @@ export const AdminWorkspaceSwitcherPanel = ({
 
 type AdminWorkspaceSwitcherProps = Omit<AdminWorkspaceSwitcherPanelProps, "onAddStore"> & {
     collapsed?: boolean;
-    variant?: "header" | "sidebar";
+    variant?: "header" | "sidebar" | "sheet";
 };
 
 export const AdminWorkspaceSwitcher = ({
@@ -122,6 +126,7 @@ export const AdminWorkspaceSwitcher = ({
     selectedStoreId = null,
     collapsed = false,
     variant = "header",
+    onNavigate,
 }: AdminWorkspaceSwitcherProps) => {
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [createStoreOpen, setCreateStoreOpen] = useState(false);
@@ -138,6 +143,11 @@ export const AdminWorkspaceSwitcher = ({
         setCreateStoreOpen(true);
     };
 
+    const handlePanelNavigate = () => {
+        setPopoverOpen(false);
+        onNavigate?.();
+    };
+
     const panel = (
         <AdminWorkspaceSwitcherPanel
             organizationId={organizationId}
@@ -145,6 +155,7 @@ export const AdminWorkspaceSwitcher = ({
             stores={stores}
             selectedStoreId={selectedStoreId}
             onAddStore={openCreateStore}
+            onNavigate={handlePanelNavigate}
         />
     );
 
@@ -156,6 +167,43 @@ export const AdminWorkspaceSwitcher = ({
             trigger={null}
         />
     );
+
+    if (variant === "sheet") {
+        return (
+            <>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger
+                        render={
+                            <button
+                                type="button"
+                                aria-label={triggerLabel}
+                                aria-expanded={popoverOpen}
+                                className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 text-left font-medium transition-colors hover:bg-muted/50"
+                            >
+                                <WorkspaceIcon className="size-4 shrink-0 text-primary" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        {workspaceKindLabel}
+                                    </span>
+                                    <span className="block truncate font-semibold leading-tight">{workspaceName}</span>
+                                </span>
+                                <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                            </button>
+                        }
+                    />
+                    <PopoverContent
+                        align="start"
+                        side="top"
+                        sideOffset={8}
+                        className="w-(--anchor-width) rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-[120]"
+                    >
+                        {panel}
+                    </PopoverContent>
+                </Popover>
+                {createStoreDialog}
+            </>
+        );
+    }
 
     if (variant === "sidebar") {
         const trigger = (
@@ -237,12 +285,14 @@ export default AdminWorkspaceSwitcher;
 
 type AdminWorkspaceSwitcherFromRouteProps = {
     collapsed?: boolean;
-    variant?: "header" | "sidebar";
+    variant?: "header" | "sidebar" | "sheet";
+    onNavigate?: () => void;
 };
 
 export const AdminWorkspaceSwitcherFromRoute = ({
     collapsed = false,
     variant = "header",
+    onNavigate,
 }: AdminWorkspaceSwitcherFromRouteProps) => {
     const { organizationId = "" } = useParams();
     const location = useLocation();
@@ -269,6 +319,7 @@ export const AdminWorkspaceSwitcherFromRoute = ({
             selectedStoreId={workspace?.storeId ?? null}
             collapsed={collapsed}
             variant={variant}
+            onNavigate={onNavigate}
         />
     );
 };

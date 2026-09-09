@@ -10,6 +10,7 @@ Object.assign(globalThis, {
 const {
     clearStarredOrgId,
     getAuthenticatedHomePath,
+    getSidebarHomePath,
     isOrganizationPickerPath,
     persistStarredOrgId,
     readStarredOrgId,
@@ -42,6 +43,23 @@ describe("default organization path", () => {
 
         expect(resolveDefaultOrgId([panini])).toBeNull();
         expect(getAuthenticatedHomePath([panini])).toBe("/organizations");
+    });
+
+    test("sidebar home prefers the current organization over the picker", () => {
+        expect(getSidebarHomePath([panini, adajan])).toBe("/organizations");
+        expect(getSidebarHomePath([panini, adajan], panini.id)).toBe(
+            "/organizations/org-panini/products",
+        );
+    });
+
+    test("sidebar home stays in the current store workspace", () => {
+        const organizationId = "d7f01334-b691-48e2-8bed-c531fb484dc5";
+        const storeId = "a9350bec-7b83-4181-8c9f-1b23958abc23";
+        const storePath = `/organizations/${organizationId}/workspaces/${storeId}/devices`;
+
+        expect(getSidebarHomePath([panini], organizationId, storePath)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/products`,
+        );
     });
 
     test("treats only the organizations list route as the picker", () => {

@@ -45,6 +45,8 @@ describe("Admin account menu", () => {
         );
 
         expect(trigger).toContain('aria-label="Panini House"');
+        expect(trigger).toContain("DJ");
+        expect(trigger).not.toContain("PH");
         expect(panel).toContain("Panini House");
         expect(panel).toContain('href="/organizations"');
         expect(panel).toContain("Organizations");

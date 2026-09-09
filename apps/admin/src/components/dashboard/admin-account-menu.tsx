@@ -11,7 +11,6 @@ import { Building2, LogOut, MonitorSmartphone, Phone, User } from "lucide-react"
 import { cn } from "@repo/ui/lib/utils";
 
 import { getPosLoginUrl } from "@/lib/pos-origin";
-import { getOrgBgColor, getOrgInitials } from "@/lib/organization-avatar";
 
 type AccountUser = {
     firstName?: string;
@@ -116,9 +115,7 @@ export const AdminAccountMenuPanel = ({
 export const AdminAccountMenu = ({ user, organization = null, onLogout }: AdminAccountMenuProps) => {
     const fullName = getUserFullName(user);
     const triggerLabel = organization?.name || fullName;
-    const initials = organization
-        ? getOrgInitials(organization.name)
-        : getUserInitials(user.firstName, user.lastName);
+    const initials = getUserInitials(user.firstName, user.lastName);
 
     return (
         <Popover>
@@ -130,9 +127,7 @@ export const AdminAccountMenu = ({ user, organization = null, onLogout }: AdminA
                         aria-label={triggerLabel}
                     >
                         <Avatar size="sm" className="h-8 w-8">
-                            <AvatarFallback
-                                className={cn("text-[10px] font-bold", organization && getOrgBgColor(organization.id))}
-                            >
+                            <AvatarFallback className="text-[10px] font-bold">
                                 {initials}
                             </AvatarFallback>
                         </Avatar>

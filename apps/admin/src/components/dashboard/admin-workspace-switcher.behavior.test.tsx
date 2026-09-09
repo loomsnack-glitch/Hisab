@@ -105,15 +105,17 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain("Adajan");
     });
 
-    test("pins the switcher to the sidebar footer instead of the desktop header", () => {
+    test("pins the switcher to the sidebar footer and mobile bottom sheet instead of the header", () => {
         const sidebarSource = readFileSync(join(import.meta.dir, "app-sidebar.tsx"), "utf8");
         const switcherSource = readFileSync(join(import.meta.dir, "admin-workspace-switcher.tsx"), "utf8");
         const layoutSource = readFileSync(join(import.meta.dir, "dashboard-layout.tsx"), "utf8");
+        const mobileNavSource = readFileSync(join(import.meta.dir, "admin-mobile-bottom-nav.tsx"), "utf8");
 
         expect(sidebarSource).toContain('variant="sidebar"');
         expect(sidebarSource).toContain("AdminWorkspaceSwitcherFromRoute");
         expect(switcherSource).toContain("CreateStoreDialog");
-        expect(layoutSource).toContain("<div className=\"lg:hidden\">");
-        expect(layoutSource).toContain("AdminWorkspaceSwitcherFromRoute");
+        expect(layoutSource).not.toContain("AdminWorkspaceSwitcherFromRoute");
+        expect(mobileNavSource).toContain('variant="sheet"');
+        expect(mobileNavSource).toContain("AdminWorkspaceSwitcherFromRoute");
     });
 });
