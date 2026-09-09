@@ -55,6 +55,7 @@ import type {
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { normalizePhoneNumber, overlayActiveStoreProductOfferings, inactiveProductCodesWithoutActiveOffering } from "@repo/types";
+import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
@@ -2395,7 +2396,7 @@ const BillingPage = ({
                 <Button
                     variant="ghost"
                     className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    render={<Link to={`/organizations/${organizationId}/stores`} />}
+                    render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
                 >
                     <ArrowLeft className="size-4" />
                     Back to organization
@@ -2410,7 +2411,7 @@ const BillingPage = ({
                     </p>
                     <Button
                         className="mt-4 rounded-full"
-                        render={<Link to={`/organizations/${organizationId}/stores`} />}
+                        render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
                     >
                         Go to store setup
                     </Button>

@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getOrganizationDetails } from "@repo/services";
-import { Building2, Check, ChevronsUpDown, Store } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Plus, Store } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import {
     Popover,
@@ -13,6 +14,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import { getStoreWorkspacePath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 
 type WorkspaceStoreRef = {
     id: string;
@@ -24,6 +26,7 @@ type AdminWorkspaceSwitcherPanelProps = {
     organizationName: string;
     stores: WorkspaceStoreRef[];
     selectedStoreId?: string | null;
+    onAddStore?: () => void;
 };
 
 export const AdminWorkspaceSwitcherPanel = ({
@@ -31,6 +34,7 @@ export const AdminWorkspaceSwitcherPanel = ({
     organizationName,
     stores,
     selectedStoreId = null,
+    onAddStore,
 }: AdminWorkspaceSwitcherPanelProps) => {
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const organizationWorkspacePath = getOrganizationWorkspacePath(organizationId);
@@ -69,38 +73,44 @@ export const AdminWorkspaceSwitcherPanel = ({
                 {selectedStore ? null : <Check className="size-4 shrink-0" />}
             </Link>
 
-            {stores.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                    <p className="px-2.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Store workspaces
-                    </p>
-                    {stores.map((store) => {
-                        const active = store.id === selectedStoreId;
-                        return (
-                            <Link
-                                key={store.id}
-                                to={getStoreWorkspacePath(organizationId, store.id)}
-                                aria-current={active ? "page" : undefined}
-                                className={cn(
-                                    "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
-                                    active
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                                )}
-                            >
-                                <Store className="size-4" />
-                                <span className="min-w-0 flex-1 truncate">{store.name}</span>
-                                {active ? <Check className="size-4 shrink-0" /> : null}
-                            </Link>
-                        );
-                    })}
-                </div>
-            ) : null}
+            <div className="flex flex-col gap-1">
+                <p className="px-2.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Store workspaces
+                </p>
+                {stores.map((store) => {
+                    const active = store.id === selectedStoreId;
+                    return (
+                        <Link
+                            key={store.id}
+                            to={getStoreWorkspacePath(organizationId, store.id)}
+                            aria-current={active ? "page" : undefined}
+                            className={cn(
+                                "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
+                                active
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                            )}
+                        >
+                            <Store className="size-4" />
+                            <span className="min-w-0 flex-1 truncate">{store.name}</span>
+                            {active ? <Check className="size-4 shrink-0" /> : null}
+                        </Link>
+                    );
+                })}
+                <button
+                    type="button"
+                    onClick={onAddStore}
+                    className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                >
+                    <Plus className="size-4" />
+                    <span className="min-w-0 flex-1 truncate">Add store</span>
+                </button>
+            </div>
         </div>
     );
 };
 
-type AdminWorkspaceSwitcherProps = AdminWorkspaceSwitcherPanelProps & {
+type AdminWorkspaceSwitcherProps = Omit<AdminWorkspaceSwitcherPanelProps, "onAddStore"> & {
     collapsed?: boolean;
     variant?: "header" | "sidebar";
 };
@@ -113,6 +123,8 @@ export const AdminWorkspaceSwitcher = ({
     collapsed = false,
     variant = "header",
 }: AdminWorkspaceSwitcherProps) => {
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [createStoreOpen, setCreateStoreOpen] = useState(false);
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const triggerLabel = selectedStore
         ? `${selectedStore.name} store workspace`
@@ -120,6 +132,30 @@ export const AdminWorkspaceSwitcher = ({
     const workspaceKindLabel = selectedStore ? "Store workspace" : "Organization workspace";
     const workspaceName = selectedStore ? selectedStore.name : organizationName;
     const WorkspaceIcon = selectedStore ? Store : Building2;
+
+    const openCreateStore = () => {
+        setPopoverOpen(false);
+        setCreateStoreOpen(true);
+    };
+
+    const panel = (
+        <AdminWorkspaceSwitcherPanel
+            organizationId={organizationId}
+            organizationName={organizationName}
+            stores={stores}
+            selectedStoreId={selectedStoreId}
+            onAddStore={openCreateStore}
+        />
+    );
+
+    const createStoreDialog = (
+        <CreateStoreDialog
+            organizationId={organizationId}
+            open={createStoreOpen}
+            onOpenChange={setCreateStoreOpen}
+            trigger={null}
+        />
+    );
 
     if (variant === "sidebar") {
         const trigger = (
@@ -152,52 +188,48 @@ export const AdminWorkspaceSwitcher = ({
         );
 
         return (
-            <Popover>
-                <PopoverTrigger render={trigger} />
-                <PopoverContent
-                    align="start"
-                    side={collapsed ? "right" : "top"}
-                    sideOffset={8}
-                    className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
-                >
-                    <AdminWorkspaceSwitcherPanel
-                        organizationId={organizationId}
-                        organizationName={organizationName}
-                        stores={stores}
-                        selectedStoreId={selectedStoreId}
-                    />
-                </PopoverContent>
-            </Popover>
+            <>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger render={trigger} />
+                    <PopoverContent
+                        align="start"
+                        side={collapsed ? "right" : "top"}
+                        sideOffset={8}
+                        className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
+                    >
+                        {panel}
+                    </PopoverContent>
+                </Popover>
+                {createStoreDialog}
+            </>
         );
     }
 
     return (
-        <Popover>
-            <PopoverTrigger
-                render={
-                    <Button
-                        variant="outline"
-                        className="h-9 max-w-[16rem] gap-2 rounded-xl border-border/70 bg-background/80 px-3 text-left font-medium"
-                        aria-label={triggerLabel}
-                    >
-                        <WorkspaceIcon className="size-4 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
-                        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
-                    </Button>
-                }
-            />
-            <PopoverContent
-                align="start"
-                className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
-            >
-                <AdminWorkspaceSwitcherPanel
-                    organizationId={organizationId}
-                    organizationName={organizationName}
-                    stores={stores}
-                    selectedStoreId={selectedStoreId}
+        <>
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <PopoverTrigger
+                    render={
+                        <Button
+                            variant="outline"
+                            className="h-9 max-w-[16rem] gap-2 rounded-xl border-border/70 bg-background/80 px-3 text-left font-medium"
+                            aria-label={triggerLabel}
+                        >
+                            <WorkspaceIcon className="size-4 shrink-0 text-primary" />
+                            <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+                            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        </Button>
+                    }
                 />
-            </PopoverContent>
-        </Popover>
+                <PopoverContent
+                    align="start"
+                    className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
+                >
+                    {panel}
+                </PopoverContent>
+            </Popover>
+            {createStoreDialog}
+        </>
     );
 };
 

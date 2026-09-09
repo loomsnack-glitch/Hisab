@@ -23,14 +23,24 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type CreateStoreDialogProps = {
     organizationId: string;
-    trigger?: React.ReactElement;
+    trigger?: React.ReactElement | null;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 };
 
 const defaultValues: CreateStoreJSON = { name: "", address: "" };
 
-const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) => {
-    const [open, setOpen] = useState(false);
+const CreateStoreDialog = ({ organizationId, trigger, open, onOpenChange }: CreateStoreDialogProps) => {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
     const queryClient = useQueryClient();
+    const isControlled = open !== undefined;
+    const dialogOpen = isControlled ? open : uncontrolledOpen;
+    const setDialogOpen = (nextOpen: boolean) => {
+        if (!isControlled) {
+            setUncontrolledOpen(nextOpen);
+        }
+        onOpenChange?.(nextOpen);
+    };
 
     const form = useForm<CreateStoreJSON>({
         resolver: zodResolver(CreateStoreSchema),
@@ -47,7 +57,7 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
                 toast.success(response.message);
                 queryClient.invalidateQueries({ queryKey: organizationKeys.detail(organizationId) });
                 form.reset(defaultValues);
-                setOpen(false);
+                setDialogOpen(false);
                 return;
             }
 
@@ -82,11 +92,11 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen) {
             interceptClose(() => {
-                setOpen(false);
+                setDialogOpen(false);
                 form.reset(defaultValues);
             });
         } else {
-            setOpen(true);
+            setDialogOpen(true);
         }
     };
 
@@ -95,17 +105,19 @@ const CreateStoreDialog = ({ organizationId, trigger }: CreateStoreDialogProps) 
     };
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
-            <DialogTrigger
-                render={
-                    trigger ?? (
-                        <Button variant="outline" className="rounded-full">
-                            <Plus className="size-4" />
-                            Add store
-                        </Button>
-                    )
-                }
-            />
+        <Dialog open={dialogOpen} onOpenChange={handleOpenChange} disablePointerDismissal>
+            {trigger === null ? null : (
+                <DialogTrigger
+                    render={
+                        trigger ?? (
+                            <Button variant="outline" className="rounded-full">
+                                <Plus className="size-4" />
+                                Add store
+                            </Button>
+                        )
+                    }
+                />
+            )}
             <DialogContent className="relative overflow-hidden sm:max-w-md border-border/80 shadow-2xl backdrop-blur-md">
                 <DialogHeader
                     icon={<Store className="size-5 transition-transform duration-300" />}

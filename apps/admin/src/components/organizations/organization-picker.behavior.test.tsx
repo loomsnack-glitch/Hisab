@@ -61,8 +61,8 @@ describe("Organization picker", () => {
         expect(markup).toContain("Choose an organization");
         expect(markup).toContain("Panini House");
         expect(markup).toContain("Adajan");
-        expect(markup).toContain(`href="/organizations/${panini.id}/stores"`);
-        expect(markup).toContain(`href="/organizations/${adajan.id}/stores"`);
+        expect(markup).toContain(`href="/organizations/${panini.id}/products"`);
+        expect(markup).toContain(`href="/organizations/${adajan.id}/products"`);
         expect(markup).toContain('aria-label="Add organization"');
         expect(markup).toContain("Manage organizations");
         expect(markup).toContain('title="Default organization"');
@@ -72,7 +72,7 @@ describe("Organization picker", () => {
         const markup = renderPicker({ isManaging: true });
 
         expect(markup).toContain("Done");
-        expect(markup).not.toContain(`href="/organizations/${panini.id}/stores"`);
+        expect(markup).not.toContain(`href="/organizations/${panini.id}/products"`);
         expect(markup).toContain("Edit Panini House");
     });
 });

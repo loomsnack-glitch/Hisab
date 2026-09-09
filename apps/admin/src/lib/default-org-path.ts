@@ -41,10 +41,10 @@ export function resolveDefaultOrgId(organizations: OrgRef[]): string | null {
     return null;
 }
 
-/** Authenticated landing path: starred org stores, or the picker when none is starred. */
+/** Authenticated landing path: starred Organization workspace, or the picker when none is starred. */
 export function getAuthenticatedHomePath(organizations: OrgRef[]): string {
     const orgId = resolveDefaultOrgId(organizations);
-    return orgId ? `/organizations/${orgId}/stores` : "/organizations";
+    return orgId ? getOrganizationWorkspacePath(orgId) : "/organizations";
 }
 
 export function isOrganizationPickerPath(pathname: string): boolean {
@@ -52,5 +52,5 @@ export function isOrganizationPickerPath(pathname: string): boolean {
 }
 
 export function getOrganizationWorkspacePath(organizationId: string): string {
-    return `/organizations/${organizationId}/stores`;
+    return `/organizations/${organizationId}/products`;
 }

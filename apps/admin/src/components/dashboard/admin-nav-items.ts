@@ -1,27 +1,34 @@
 import type { LucideIcon } from "lucide-react";
 import {
     Armchair,
+    BadgeCheck,
     Banknote,
     BarChart3,
     Contact,
+    MonitorSmartphone,
     Package2,
     ReceiptText,
     Ruler,
     Settings2,
     ShoppingBag,
-    Store,
     Truck,
     Users,
     Wallet,
 } from "lucide-react";
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
-import { isStoresNavActive } from "@/lib/store-routes";
-import { getStoreProductsPath, getStoreVendorsPath } from "@/lib/store-workspace-routes";
+import {
+    getStoreDevicesPath,
+    getStoreLicensePath,
+    getStoreProductsPath,
+    getStoreSettingsPath,
+    getStoreVendorsPath,
+} from "@/lib/store-workspace-routes";
 
 export type AdminNavIcon = LucideIcon | typeof WhatsAppIcon;
 
 export type AdminNavGroup =
+    | "store"
     | "organization"
     | "catalog"
     | "sales"
@@ -30,6 +37,7 @@ export type AdminNavGroup =
     | "integrations";
 
 export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
+    store: "Store",
     organization: "Organization",
     catalog: "Catalog",
     sales: "Sales & Service",
@@ -39,6 +47,7 @@ export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
 };
 
 export const adminNavGroupOrder: AdminNavGroup[] = [
+    "store",
     "organization",
     "catalog",
     "sales",
@@ -61,6 +70,7 @@ export type AdminNavDestination = {
 type AdminNavDestinationDef = Omit<AdminNavDestination, "path" | "isActive"> & {
     getPath: (organizationId: string, storeId?: string) => string;
     isActive: (pathname: string, storeId?: string) => boolean;
+    storeWorkspaceOnly?: boolean;
 };
 
 export type VisibleAdminNavArgs = {
@@ -71,13 +81,37 @@ export type VisibleAdminNavArgs = {
 
 const adminDestinationDefs: AdminNavDestinationDef[] = [
     {
-        id: "stores",
-        label: "Stores",
-        icon: Store,
+        id: "devices",
+        label: "Devices",
+        icon: MonitorSmartphone,
         requiresOrganization: true,
-        group: "organization",
-        getPath: (organizationId) => `/organizations/${organizationId}/stores`,
-        isActive: isStoresNavActive,
+        group: "store",
+        storeWorkspaceOnly: true,
+        getPath: (organizationId, storeId) => getStoreDevicesPath(organizationId, storeId ?? ""),
+        isActive: (pathname, storeId) =>
+            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/devices`),
+    },
+    {
+        id: "settings",
+        label: "Settings",
+        icon: Settings2,
+        requiresOrganization: true,
+        group: "store",
+        storeWorkspaceOnly: true,
+        getPath: (organizationId, storeId) => getStoreSettingsPath(organizationId, storeId ?? ""),
+        isActive: (pathname, storeId) =>
+            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/settings`),
+    },
+    {
+        id: "license",
+        label: "License",
+        icon: BadgeCheck,
+        requiresOrganization: true,
+        group: "store",
+        storeWorkspaceOnly: true,
+        getPath: (organizationId, storeId) => getStoreLicensePath(organizationId, storeId ?? ""),
+        isActive: (pathname, storeId) =>
+            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/license`),
     },
     {
         id: "products",
@@ -214,9 +248,9 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
     },
 ];
 
-export const adminPrimaryMobileNavIds = ["stores", "products", "billing"] as const;
+export const adminPrimaryMobileNavIds = ["products", "billing"] as const;
 
-const storeWorkspaceDestinationIds = new Set(["products", "vendors"]);
+const storeWorkspaceDestinationIds = new Set(["devices", "settings", "license", "products", "vendors"]);
 
 const resolveDestinations = ({
     organizationId = "",
@@ -224,7 +258,11 @@ const resolveDestinations = ({
     hasOrganization,
 }: VisibleAdminNavArgs): AdminNavDestination[] =>
     adminDestinationDefs
-        .filter((destination) => !storeId || storeWorkspaceDestinationIds.has(destination.id))
+        .filter((destination) =>
+            storeId
+                ? storeWorkspaceDestinationIds.has(destination.id)
+                : !destination.storeWorkspaceOnly,
+        )
         .filter((destination) => !destination.requiresOrganization || (hasOrganization && Boolean(organizationId)))
         .map((destination) => ({
             id: destination.id,

@@ -27,7 +27,7 @@ describe("Authenticated home redirect", () => {
         persistStarredOrgId(portronics.id);
 
         expect(resolveAuthenticatedHomeRedirect(false, organizations)).toBe(
-            `/organizations/${portronics.id}/stores`,
+            `/organizations/${portronics.id}/products`,
         );
     });
 

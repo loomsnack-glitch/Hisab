@@ -10,7 +10,6 @@ import BillingPage from "@/pages/billing-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import RegisterPage from "@/pages/register-page";
-import StoresPage from "@/pages/stores-page";
 import {
     StoreDetailIndexRedirect,
     StoreDetailShell,
@@ -46,11 +45,15 @@ import StoreAddOnOfferingsPage from "@/pages/store-add-on-offerings-page";
 import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
 import StoreCategoryPresentationsPage from "@/pages/store-category-presentations-page";
 import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-page";
+import StoreWorkspaceDevicesPage from "@/pages/store-workspace-devices-page";
+import StoreWorkspaceSettingsPage from "@/pages/store-workspace-settings-page";
+import StoreWorkspaceLicensePage from "@/pages/store-workspace-license-page";
 import { authKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
+import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 
 const SPLASH_DURATION_MS = 2200;
 
@@ -63,6 +66,11 @@ const WhatsAppStoreInboxRedirect = () => {
 const WhatsAppInboxWorkspaceRedirect = () => {
     const { organizationId = "" } = useParams();
     return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history`} replace />;
+};
+
+const OrganizationWorkspaceRedirect = () => {
+    const { organizationId = "" } = useParams();
+    return <Navigate to={getOrganizationWorkspacePath(organizationId)} replace />;
 };
 
 const App = () => {
@@ -134,13 +142,16 @@ const App = () => {
                                 <Route path="/appearance" element={<AppearancePage />} />
                                 <Route path="/settings" element={<Navigate to="/appearance" replace />} />
                                 <Route path="/organizations" element={<OrganizationsPage />} />
-                                <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
-                                <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                                <Route path="/organizations/:organizationId" element={<OrganizationWorkspaceRedirect />} />
+                                <Route path="/organizations/:organizationId/stores" element={<OrganizationWorkspaceRedirect />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId" element={<StoreWorkspacePage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/products" element={<StoreProductOfferingsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/add-ons" element={<StoreAddOnOfferingsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/categories" element={<StoreCategoryPresentationsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/vendors" element={<StoreVendorAvailabilitiesPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/devices" element={<StoreWorkspaceDevicesPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/settings" element={<StoreWorkspaceSettingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/license" element={<StoreWorkspaceLicensePage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />

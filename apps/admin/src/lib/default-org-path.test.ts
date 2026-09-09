@@ -33,7 +33,7 @@ describe("default organization path", () => {
         expect(readStarredOrgId()).toBe(adajan.id);
         expect(resolveDefaultOrgId([panini, adajan])).toBe(adajan.id);
         expect(getAuthenticatedHomePath([panini, adajan])).toBe(
-            "/organizations/org-adajan/stores",
+            "/organizations/org-adajan/products",
         );
     });
 
@@ -46,7 +46,7 @@ describe("default organization path", () => {
 
     test("treats only the organizations list route as the picker", () => {
         expect(isOrganizationPickerPath("/organizations")).toBe(true);
-        expect(isOrganizationPickerPath("/organizations/org-panini/stores")).toBe(false);
+        expect(isOrganizationPickerPath("/organizations/org-panini/products")).toBe(false);
         expect(isOrganizationPickerPath("/appearance")).toBe(false);
     });
 

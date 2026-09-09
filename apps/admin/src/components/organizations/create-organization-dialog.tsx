@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
+import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { slugifyBusinessName } from "@/lib/organization-username";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
@@ -108,7 +109,7 @@ const CreateOrganizationDialog = ({
         setUsernameEdited(false);
         setOpen(false);
         if (response.data?.organization.id) {
-          navigate(`/organizations/${response.data.organization.id}/stores`);
+          navigate(getOrganizationWorkspacePath(response.data.organization.id));
         }
         return;
       }
