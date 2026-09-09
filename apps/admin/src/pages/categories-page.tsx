@@ -14,7 +14,6 @@ import DeleteCategoryButton from "@/components/catalog/delete-category-button";
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
 import UpsertCategoryDialog from "@/components/catalog/upsert-category-dialog";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
-import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 
 const CategoriesPage = () => {
@@ -168,14 +167,13 @@ const CategoriesPage = () => {
 
                         <div className="flex flex-wrap items-center gap-2">
                             <ReorderListDialog
-                                title="Reorder categories"
-                                description="Choose the order categories appear in the catalog and POS."
+                                title="Rearrange categories"
                                 items={categoryOrderItems}
                                 onSave={saveCategoryOrder}
                                 trigger={
                                     <Button variant="outline" className="rounded-full h-10 px-4 text-xs sm:text-sm font-medium">
                                         <ListOrdered className="size-3.5" />
-                                        Reorder
+                                        Rearrange
                                     </Button>
                                 }
                             />
@@ -221,9 +219,6 @@ const CategoriesPage = () => {
                                                     <h4 className="font-display text-sm font-semibold text-foreground truncate">
                                                         {category.name}
                                                     </h4>
-                                                    <p className="text-[11px] text-muted-foreground/70">
-                                                        Created {formatDateTime(category.createdAt)}
-                                                    </p>
                                                 </div>
                                             </div>
                                             <CategoryStatusBadge status={category.status} />

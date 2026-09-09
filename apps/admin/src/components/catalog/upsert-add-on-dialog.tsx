@@ -151,27 +151,25 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
             <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Puzzle className="size-5" />}
-                    title={isEditMode ? "Edit Organization add-on" : "Create Organization add-on"}
-                    subtitle={isEditMode ? "Manage shared definition, Organization defaults, and global publication." : "New add-ons start unpublished. Publish when ready for Stores to sell."}
+                    title={isEditMode ? "Edit Add-On" : "Create Add-On"}
                 />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Add-on name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="e.g. Extra Cheese" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
                     <div className="grid grid-cols-2 gap-3">
                         <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Organization default price</FieldLabel>
+                            <FieldLabel required>Price</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
                                     inputMode="decimal"
-                                    placeholder="0.00"
                                     value={form.watch("price")}
                                     onChange={(event) => {
                                         form.setValue("price", sanitizeDecimalInput(event.target.value), {
@@ -184,12 +182,11 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                         </Field>
 
                         <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Organization default discount</FieldLabel>
+                            <FieldLabel>Discount</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
                                     inputMode="decimal"
-                                    placeholder="0.00"
                                     value={form.watch("discount") ?? ""}
                                     onChange={(event) => {
                                         form.setValue("discount", sanitizeDecimalInput(event.target.value), {
@@ -208,7 +205,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                             name="status"
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel required>Global publication</FieldLabel>
+                                    <FieldLabel required>Status</FieldLabel>
                                     <FieldContent>
                                         <ReactSelect
                                             options={statusSelectOptions}

@@ -584,7 +584,7 @@ const ProductsListPage = () => {
         if (!reorderCategoryId) {
             return {
                 status: "error" as const,
-                message: "Select a category before reordering",
+                message: "Select a category before rearranging",
             };
         }
 
@@ -599,9 +599,9 @@ const ProductsListPage = () => {
     };
 
     const productReorderDisabledReason = selectedCategoryFilter === "all"
-        ? "Select a category to reorder."
+        ? "Select a category to rearrange."
         : reorderCategoryProducts.length < 2
-            ? "This category needs at least two products to reorder."
+            ? "This category needs at least two products to rearrange."
             : null;
 
     if (categoriesQuery.isPending || productsQuery.isPending) {
@@ -1110,15 +1110,14 @@ const ProductsListPage = () => {
                                         disabled
                                     >
                                         <ListOrdered className="size-3.5" />
-                                        Reorder
+                                        Rearrange
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>{productReorderDisabledReason}</TooltipContent>
                             </Tooltip>
                         ) : (
                             <ReorderListDialog
-                                title="Reorder products"
-                                description="Reorder every product in the selected category."
+                                title="Rearrange products"
                                 items={productOrderItems}
                                 onSave={saveProductOrder}
                                 trigger={
@@ -1129,7 +1128,7 @@ const ProductsListPage = () => {
                                         disabled={isBulkUpdating}
                                     >
                                         <ListOrdered className="size-3.5" />
-                                        Reorder
+                                        Rearrange
                                     </Button>
                                 }
                             />

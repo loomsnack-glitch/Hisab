@@ -26,7 +26,6 @@ import { toast } from "sonner";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertAddOnDialog from "@/components/catalog/upsert-add-on-dialog";
-import { formatDateTime } from "@/lib/format";
 import { catalogKeys } from "@/lib/query-keys";
 
 const DeleteAddOnButton = ({
@@ -236,9 +235,6 @@ const AddOnsPage = () => {
                                                 <h4 className="font-display text-sm font-semibold text-foreground truncate">
                                                     {addOn.name}
                                                 </h4>
-                                                <p className="text-[11px] text-muted-foreground/70">
-                                                    Updated {formatDateTime(addOn.updatedAt)}
-                                                </p>
                                             </div>
                                         </div>
                                         <ProductStatusBadge status={addOn.status} />
