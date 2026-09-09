@@ -205,8 +205,8 @@ const UpsertComboProductDialog = ({
                 </div>
             ) : <form className="min-w-0 space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="Select category" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
-                    <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} placeholder="Burger Combo" /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
+                    <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
                     {!isEdit ? (
                         <>
                             <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
@@ -214,22 +214,18 @@ const UpsertComboProductDialog = ({
                         </>
                     ) : null}
                 </div>
-                {!isEdit ? (
-                    <FieldDescription>
-                        This initial selling price applies as an active Offering at every current Store. Each Store can change it later.
-                    </FieldDescription>
-                ) : (
+                {isEdit ? (
                     <FieldDescription>
                         Selling price, discount, and menu status are configured in each Store workspace.
                     </FieldDescription>
-                )}
+                ) : null}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
+                    <div className="flex items-center justify-between"><p className="font-medium">Choice groups</p><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {
                         const group = watchedGroups[groupIndex];
                         return <div key={field.id} className="min-w-0 space-y-3 rounded-xl border border-border/60 p-3">
                             <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] md:items-end">
-                                <Field className="col-span-2 min-w-0 md:col-span-1"><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} placeholder="e.g. Drinks, sides, or toppings" /></FieldContent></Field>
+                                <Field className="col-span-2 min-w-0 md:col-span-1"><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} /></FieldContent></Field>
                                 <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:contents">
                                     <Field className="min-w-0"><FieldLabel>Minimum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.minSelections`)} /></FieldContent></Field>
                                     <Field className="min-w-0"><FieldLabel>Maximum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.maxSelections`)} /></FieldContent></Field>

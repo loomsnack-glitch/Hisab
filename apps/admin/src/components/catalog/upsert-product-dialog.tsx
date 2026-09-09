@@ -59,7 +59,7 @@ import {
   compressCatalogImage,
   formatCatalogImageSize,
 } from "@repo/ui/lib/compress-catalog-image";
-import { Plus, UploadCloud, Pencil, ImageOff, Package2, Loader2, Info } from "lucide-react";
+import { Plus, UploadCloud, Pencil, ImageOff, Package2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { catalogKeys, organizationKeys, unitKeys } from "@/lib/query-keys";
@@ -754,7 +754,7 @@ const UpsertProductDialog = ({
                                 onChange={(option) =>
                                   field.onChange(option?.value ?? "")
                                 }
-                                placeholder="Select category"
+                                placeholder=""
                                 classNames={{
                                   control: () =>
                                     "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
@@ -773,7 +773,6 @@ const UpsertProductDialog = ({
                         <FieldContent>
                           <Input
                             className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
-                            placeholder="e.g. Cheese Burger"
                             {...form.register("name")}
                           />
                           <FieldError errors={[form.formState.errors.name]} />
@@ -782,7 +781,62 @@ const UpsertProductDialog = ({
                     </div>
                   </div>
 
-                  {/* Pricing (Price & Discount) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Controller
+                      control={form.control}
+                      name="unitId"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>Unit</FieldLabel>
+                          <FieldContent>
+                            <ReactSelect
+                              options={unitOptions}
+                              placeholder=""
+                              value={
+                                unitOptions.find(
+                                  (option) => option.value === field.value,
+                                ) ?? null
+                              }
+                              onChange={(option) =>
+                                field.onChange(option?.value ?? "")
+                              }
+                              classNames={{
+                                control: () =>
+                                  "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
+                              }}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+
+                    <Controller
+                      control={form.control}
+                      name="defaultSellingQuantity"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>Selling size</FieldLabel>
+                          <FieldContent>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
+                              value={field.value}
+                              onChange={(event) =>
+                                field.onChange(
+                                  sanitizeTwoDecimalInput(event.target.value),
+                                )
+                              }
+                              onBlur={field.onBlur}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Controller
                       control={form.control}
@@ -799,7 +853,6 @@ const UpsertProductDialog = ({
                               type="text"
                               inputMode="decimal"
                               className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
-                              placeholder="0.00"
                               value={field.value}
                               onChange={(event) =>
                                 field.onChange(
@@ -819,20 +872,12 @@ const UpsertProductDialog = ({
                       name="discount"
                       render={({ field, fieldState }) => (
                         <Field data-invalid={fieldState.invalid}>
-                          <FieldLabel>
-                            Organization default discount (₹){" "}
-                            {!isEditMode && (
-                              <span className="font-normal text-muted-foreground text-[11px]">
-                                (optional)
-                              </span>
-                            )}
-                          </FieldLabel>
+                          <FieldLabel>Discount</FieldLabel>
                           <FieldContent>
                             <Input
                               type="text"
                               inputMode="decimal"
                               className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
-                              placeholder="0.00"
                               value={field.value ?? ""}
                               onChange={(event) =>
                                 field.onChange(
@@ -848,108 +893,23 @@ const UpsertProductDialog = ({
                     />
                   </div>
 
-                  {/* Selling Unit & Quantity */}
-                  <div className="rounded-xl border border-border/60 bg-muted/15 p-3 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-foreground/85">
-                        Selling Unit & Quantity
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        Portion per order item
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Controller
-                        control={form.control}
-                        name="unitId"
-                        render={({ field, fieldState }) => (
-                          <Field data-invalid={fieldState.invalid}>
-                            <FieldLabel required>Unit</FieldLabel>
-                            <FieldContent>
-                              <ReactSelect
-                                options={unitOptions}
-                                placeholder="Select unit"
-                                value={
-                                  unitOptions.find(
-                                    (option) => option.value === field.value,
-                                  ) ?? null
-                                }
-                                onChange={(option) =>
-                                  field.onChange(option?.value ?? "")
-                                }
-                                classNames={{
-                                  control: () =>
-                                    "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
-                                }}
-                              />
-                              <FieldError errors={[fieldState.error]} />
-                            </FieldContent>
-                          </Field>
-                        )}
-                      />
-
-                      <Controller
-                        control={form.control}
-                        name="defaultSellingQuantity"
-                        render={({ field, fieldState }) => (
-                          <Field data-invalid={fieldState.invalid}>
-                            <FieldLabel required>Selling size</FieldLabel>
-                            <FieldContent>
-                              <Input
-                                type="text"
-                                inputMode="decimal"
-                                className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
-                                placeholder="1"
-                                value={field.value}
-                                onChange={(event) =>
-                                  field.onChange(
-                                    sanitizeTwoDecimalInput(event.target.value),
-                                  )
-                                }
-                                onBlur={field.onBlur}
-                              />
-                              <FieldError errors={[fieldState.error]} />
-                            </FieldContent>
-                          </Field>
-                        )}
-                      />
-                    </div>
-
-                    <Controller
-                      control={form.control}
-                      name="allowCustomSellingQuantity"
-                      render={({ field }) => (
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/50 px-3 py-2 transition-colors hover:bg-background/80"
-                          onClick={() => field.onChange(!field.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              field.onChange(!field.value);
-                            }
-                          }}
-                        >
-                          <div className="space-y-0.5">
-                            <span className="text-xs font-medium text-foreground block">
-                              Allow custom selling size
-                            </span>
-                            <span className="text-[10px] text-muted-foreground block">
-                              Allows cashiers to modify quantity during billing
-                            </span>
-                          </div>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label="Allow custom selling size"
-                          />
-                        </div>
-                      )}
-                    />
-                  </div>
+                  <Controller
+                    control={form.control}
+                    name="allowCustomSellingQuantity"
+                    render={({ field }) => (
+                      <Field
+                        orientation="horizontal"
+                        className="justify-between"
+                      >
+                        <FieldLabel>Allow custom selling size</FieldLabel>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          aria-label="Allow custom selling size"
+                        />
+                      </Field>
+                    )}
+                  />
                 </div>
 
                 {/* Right Column: Visual, Media & Availability (5 cols on md+) */}
@@ -1037,19 +997,6 @@ const UpsertProductDialog = ({
                     )}
                   </div>
 
-                  {/* Availability info callout in create mode */}
-                  {!isEditMode && (
-                    <div className="flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                      <Info className="size-4 text-primary shrink-0 mt-0.5" />
-                      <div className="leading-snug">
-                        <span className="font-semibold text-foreground block mb-0.5">
-                          Product availability
-                        </span>
-                        New products begin unpublished at Organization level. Turn on per store when ready.
-                      </div>
-                    </div>
-                  )}
-
                   {/* Barcode / Product Code (if enabled) */}
                   {barcodeScanningEnabled ? (
                     <Field data-invalid={!!form.formState.errors.productCode}>
@@ -1062,7 +1009,6 @@ const UpsertProductDialog = ({
                       <FieldContent>
                         <Input
                           className="h-10 rounded-xl font-mono text-sm"
-                          placeholder="Scan or type manufacturer code"
                           autoComplete="off"
                           {...form.register("productCode")}
                         />
@@ -1142,7 +1088,6 @@ const UpsertProductDialog = ({
                               netWeight: event.target.value,
                             }))
                           }
-                          placeholder="e.g. 200 g"
                         />
                       </label>
                       <label className="block space-y-1.5 text-sm font-medium">
@@ -1155,7 +1100,6 @@ const UpsertProductDialog = ({
                               unitSellingPriceText: event.target.value,
                             }))
                           }
-                          placeholder="e.g. ₹10 per piece"
                         />
                       </label>
                       <label className="block space-y-1.5 text-sm font-medium">
@@ -1168,7 +1112,6 @@ const UpsertProductDialog = ({
                               mrp: sanitizeDecimalInput(event.target.value),
                             }))
                           }
-                          placeholder="Packaging MRP, not Billing price"
                         />
                       </label>
                       <label className="block space-y-1.5 text-sm font-medium">
@@ -1183,7 +1126,6 @@ const UpsertProductDialog = ({
                               shelfLifeDays: event.target.value.replace(/\D/g, ""),
                             }))
                           }
-                          placeholder="Whole days"
                         />
                       </label>
                     </div>
@@ -1214,7 +1156,6 @@ const UpsertProductDialog = ({
                       {normalizeNutritionRows(labelProfileForm.nutrition).map((row, index) => (
                         <div key={index} className="grid gap-2 sm:grid-cols-4">
                           <Input
-                            placeholder="Name"
                             value={row.name}
                             onChange={(event) =>
                               setLabelProfileForm((current) => ({
@@ -1229,7 +1170,6 @@ const UpsertProductDialog = ({
                             }
                           />
                           <Input
-                            placeholder="Quantity"
                             value={row.quantity}
                             onChange={(event) =>
                               setLabelProfileForm((current) => ({
@@ -1244,7 +1184,6 @@ const UpsertProductDialog = ({
                             }
                           />
                           <Input
-                            placeholder="Unit"
                             value={row.unit}
                             onChange={(event) =>
                               setLabelProfileForm((current) => ({
@@ -1364,7 +1303,6 @@ const UpsertProductDialog = ({
             className="font-mono"
             inputMode="numeric"
             maxLength={13}
-            placeholder="04XXXXXXXXXXX"
             value={releasedInternalCode}
             onChange={(event) => setReleasedInternalCode(event.target.value)}
           />

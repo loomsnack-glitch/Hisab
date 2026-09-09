@@ -4,7 +4,6 @@ import type { CategoryDTO, ProductResponseDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@repo/ui/components/command";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui/components/dialog";
-import { cn } from "@repo/ui/lib/utils";
 
 type ComboProductPickerDialogProps = {
     categories: CategoryDTO[];
@@ -60,12 +59,12 @@ const ComboProductPickerDialog = ({ categories, products, values, onChange }: Co
                         role="combobox"
                         aria-haspopup="dialog"
                         aria-expanded={open}
-                        aria-label={values.length > 0 ? `${values.length} products selected` : "Select products"}
+                        aria-label={values.length > 0 ? `${values.length} products selected` : "Select products for combo group"}
                         className="h-9 w-full min-w-0 justify-between rounded-lg px-3 font-normal"
                     >
-                        <span className={cn("truncate", values.length === 0 && "text-muted-foreground")}>
+                        <span className="truncate">
                             {values.length === 0
-                                ? "Select products"
+                                ? ""
                                 : values.length === 1
                                   ? selectedProducts[0]?.name ?? "1 product selected"
                                   : `${values.length} products selected`}
@@ -80,7 +79,7 @@ const ComboProductPickerDialog = ({ categories, products, values, onChange }: Co
                     <DialogDescription className="sr-only">Search and select an active product grouped by category.</DialogDescription>
                 </DialogHeader>
                 <Command className="!h-auto min-h-0 flex-1 rounded-none">
-                    <CommandInput placeholder="Search products or categories..." />
+                    <CommandInput />
                     <CommandList className="!max-h-none min-h-0 flex-1 p-2">
                         <CommandEmpty>No matching products found.</CommandEmpty>
                         {productGroups.map((group) => (
