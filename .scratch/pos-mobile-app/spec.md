@@ -1104,7 +1104,7 @@ KOT is a later restaurant capability for Stores with the KOT System enabled. It 
 
 ## Multi-phase implementation roadmap
 
-Implementation is divided into multiple capability phases. Each phase contains small vertical subphases. A phase may begin only after its dependencies are satisfied; a subphase must have a clear external behavior, focused tests, and a reviewable scope. These are planning units only; implementation has not started.
+Implementation is divided into multiple capability phases. Each phase contains small vertical subphases. A phase may begin only after its dependencies are satisfied; a subphase must have a clear external behavior, focused tests, and a reviewable scope. The previous app-level slices exist with follow-ups, but the full redesign implementation has not started.
 
 ### UI.md alignment rules
 
@@ -1141,6 +1141,43 @@ Before calling the redesigned mobile app usable, the implementation team must re
 - Confirm the native prerequisites separately: encrypted MMKV/Keystore behavior, camera permission/scanning, Android share sheet, Bluetooth printer transport, and the supported Android device matrix.
 
 These are entry and release conditions for the rebuild, not reasons to expand Version 1 with offline billing, a new payment provider, or unrelated administration features.
+
+### Full mobile redesign decision
+
+The approved direction is a full redesign of the mobile POS experience. This means the app shell, navigation, visual language, screen layouts, interaction patterns, content hierarchy, and non-happy states will be redesigned as one coherent system using `UI.md`. It is not limited to changing colors or polishing the existing screens.
+
+The redesign preserves the approved business behavior and service boundaries unless a separate product decision is recorded. Existing mobile code is treated as an implementation reference and source of known behavior, not as a visual constraint. The web POS is treated as the behavior reference where the mobile app must match existing billing, Draft, Customer, Payment, receipt, Tables, or KOT behavior.
+
+No Phase 1 implementation starts until the planning gate below is complete and accepted. This prevents the new UI from being built on top of the current crash, unverified order path, unclear data states, or inconsistent navigation.
+
+### Pre-Phase 1 full-redesign planning gate
+
+This is a planning and review phase only. It produces the blueprint for the full redesign; it does not install dependencies, edit app screens, run a native build, start an emulator/device, or change backend contracts.
+
+| Planning slice | Work to complete | Required artifact / decision |
+| --- | --- | --- |
+| R0.1 Current-app audit | Inventory every current mobile screen, route, hook, service call, placeholder, crash path, and unfinished state. Compare the mobile behavior with the existing web POS. | Current-state map showing keep, redesign, merge, remove, or defer for each screen. |
+| R0.2 `UI.md` extraction | Break the reference into reusable patterns: shell, header, bottom navigation, search, category filter, Product card, Cart bar, line item, summary card, payment method, status badge, modal, toast, empty state, and settings row. | Component inventory with reference section, purpose, variants, states, and mobile adaptation notes. |
+| R0.3 Information architecture | Define the complete route tree and navigation rules for POS Unlock, Sale, Cart, Payment, Sale Complete, Bills, Sale Details, Customers, Customer Details, Reports, Settings, Printer, Tables, and Kitchen. | Approved route map, tab behavior, back behavior, modal behavior, unsaved-Cart guard, and post-Sale destinations. |
+| R0.4 Screen-by-screen UX specification | Specify the user goal, layout regions, primary action, secondary actions, form fields, content priority, loading/empty/error/retry states, and accessibility labels for every approved screen. | Screen specification pack linked to each `UI.md` section and the existing product requirements. |
+| R0.5 Visual system | Define Ganatri colors, typography, spacing, elevation, radius, icon rules, dark mode, display sizes, touch targets, status colors, and component variants. | Token and component decision sheet with examples for English, Gujarati, and Hindi text expansion. |
+| R0.6 Data and behavior mapping | Map every displayed value and action to the existing POS service/type boundary. Identify server-authoritative values, optimistic/local values, cache ownership, invalidation, pagination, and capability gates. | UI-to-API matrix with unresolved contract gaps and explicit mock/placeholder prohibitions. |
+| R0.7 Reliability and security design | Define startup/session states, logout cleanup, request loading, uncertain network result, retry, idempotency, Draft preservation, duplicate prevention, and sensitive-data handling. | State diagrams and failure/recovery matrix, including the known startup crash and failed-order scenarios. |
+| R0.8 Content, localization, and accessibility | Write app-owned labels, validation, errors, empty states, payment statuses, receipt actions, and help text. Check Gujarati/Hindi expansion, contrast, focus order, screen-reader labels, and touch size. | Translation key plan and accessibility checklist; business-entered names remain unchanged. |
+| R0.9 Device and responsive adaptation | Define how the UI behaves on the Store Device, low/mid-range phones, larger phones, keyboard/camera permissions, safe areas, rotation policy, and slow network. | Device behavior matrix; native verification is scheduled later and not run during this planning gate. |
+| R0.10 Validation and implementation backlog | Turn the approved blueprint into vertical implementation slices, focused tests, review checkpoints, and release evidence. | Ordered Phase 1–8 backlog, dependency graph, acceptance matrix, risk register, and explicit human approval gate. |
+
+#### Full-redesign planning gate acceptance
+
+The planning gate is complete only when:
+
+- Every screen in the approved scope has a documented destination, user goal, data source, primary action, and full state model.
+- Every meaningful `UI.md` pattern is either adopted, adapted for mobile, or explicitly rejected with a reason.
+- Every displayed business value has a real data owner; fake demo values are not accepted as placeholders for connected flows.
+- The core route is unambiguous: Unlock → New Sale → Cart Review → Payment → Sale Complete → New Sale/Bills.
+- Retail and restaurant capability gates are documented for Tables, service modes, and Kitchen/KOT.
+- Crash, order-placement, entitlement, typecheck, native, and printer risks are assigned to a later phase or closed with evidence.
+- The user approves the blueprint before Phase 1 implementation begins.
 
 ### Cross-cutting workstreams
 
@@ -1213,7 +1250,9 @@ Phase exit: approved scope, shared API audit, native dependency feasibility, and
 
 The completed Phase 0 audit is recorded in [`phase-0.md`](./phase-0.md). It is the implementation reference for confirmed repository findings and named follow-ups. The scoped Draft commit idempotency follow-up and Phase 1.1 POS application boundary have now been implemented; the remaining mobile foundation work, native dependency installation, and printer selection remain separate work.
 
-#### Phase 0 findings that affect implementation
+#### Historical Phase 0 findings that affect implementation
+
+The following findings preserve the original Phase 0 audit as historical evidence from before the app-level slices were implemented. The current-app audit in R0.1 is the source of truth when these findings differ from the current code or status.
 
 - The existing shared service layer covers the approved Device authentication, Catalog, Customer, Draft Sale, Sale, Payment, Bills, Reports, Table, KOT, and focused WhatsApp invoice capabilities. Mobile screens should consume these services through a mobile-facing query/mutation boundary.
 - Direct new-Sale checkout already carries a server-persisted `requestId` and can replay a confirmed Sale after a retry.
@@ -1549,9 +1588,11 @@ Phase exit: focused tests, real-device workflows, security/recovery review, and 
 - Confirm printer validation results.
 - Confirm excluded features remain out of the mobile app.
 
-## Recommended first implementation ticket
+## Recommended first implementation ticket after redesign approval
 
 **POS Device Unlock + Session Bootstrap + New Sale Shell**
+
+This ticket is intentionally not started during the current planning gate. It becomes the first implementation slice only after R0.1–R0.10 are reviewed and accepted.
 
 Acceptance conditions:
 
@@ -1580,6 +1621,7 @@ The implementation handoff for each phase must include: changed screen/state lis
 
 ## Comments
 
+- Full mobile redesign direction approved on 2026-09-10; the R0.1–R0.10 planning gate must be accepted before Phase 1 redesign implementation begins.
 - Product direction agreed: support both general retail and restaurant Stores in one mobile POS app.
 - Tables and KOT follow the shared counter-billing workflow in the release sequence.
 - Version 1 is online-first; offline billing and synchronization are deferred.
