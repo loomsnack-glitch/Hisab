@@ -56,6 +56,7 @@ import {
     PlusCircle,
     RefreshCw,
     Search,
+    SquareMousePointer,
     X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -165,12 +166,15 @@ const ProductsListPage = () => {
         });
     }, [products, selectedCategoryFilter, statusFilters, addOnsFilters, searchQuery, categoryMap]);
 
-    const selectedCategoryProducts = useMemo(
-        () => selectedCategoryFilter === "all"
-            ? []
-            : products.filter((product) => product.categoryId === selectedCategoryFilter),
-        [products, selectedCategoryFilter],
-    );
+    const reorderCategoryId = selectedCategoryFilter !== "all" ? selectedCategoryFilter : null;
+
+    const reorderCategoryProducts = useMemo(() => {
+        if (!reorderCategoryId) {
+            return [];
+        }
+
+        return products.filter((product) => product.categoryId === reorderCategoryId);
+    }, [products, reorderCategoryId]);
 
     const isAllSelected = useMemo(() => {
         if (filteredProducts.length === 0) return false;
@@ -404,21 +408,25 @@ const ProductsListPage = () => {
     };
 
     const productOrderItems = useMemo(
-        () => selectedCategoryProducts.map((product) => ({
+        () => reorderCategoryProducts.map((product) => ({
             id: product.id,
             name: product.name,
             description: categoryMap.get(product.categoryId)?.name,
             leading: <Package2 className="size-4 shrink-0 text-primary" />,
         })),
-        [categoryMap, selectedCategoryProducts],
+        [categoryMap, reorderCategoryProducts],
     );
 
     const saveProductOrder = async (productIds: string[]) => {
-        if (selectedCategoryFilter === "all") {
-            return { status: "error" as const, message: "Select a category before reordering products" };
+        if (!reorderCategoryId) {
+            return {
+                status: "error" as const,
+                message: "Select a category before reordering",
+            };
         }
+
         const response = await reorderProducts(organizationId, {
-            categoryId: selectedCategoryFilter,
+            categoryId: reorderCategoryId,
             productIds,
         });
         if (response.status === "success") {
@@ -428,8 +436,8 @@ const ProductsListPage = () => {
     };
 
     const productReorderDisabledReason = selectedCategoryFilter === "all"
-        ? "Select a category to reorder its products."
-        : selectedCategoryProducts.length < 2
+        ? "Select a category to reorder."
+        : reorderCategoryProducts.length < 2
             ? "This category needs at least two products to reorder."
             : null;
 
@@ -787,26 +795,6 @@ const ProductsListPage = () => {
                         </Button>
                     )}
 
-                    {/* Checklist Mode Toggle */}
-                    <Tooltip>
-                        <TooltipTrigger render={<span className="inline-flex" />}>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className={cn(
-                                    "h-9 w-9 rounded-full border-border/60 transition-all cursor-pointer shrink-0",
-                                    isSelectMode
-                                        ? "bg-primary text-primary-foreground border-primary shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
-                                        : "bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80",
-                                )}
-                                onClick={toggleSelectMode}
-                                aria-label={isSelectMode ? "Exit checklist mode" : "Checklist mode"}
-                            >
-                                <ListChecks className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{isSelectMode ? "Exit checklist mode" : "Checklist mode"}</TooltipContent>
-                    </Tooltip>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -842,46 +830,27 @@ const ProductsListPage = () => {
                         }
                     />
 
-                    {productReorderDisabledReason ? (
-                        <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex" />}>
-                                <ReorderListDialog
-                                    title="Reorder products"
-                                    description="Choose the order products appear inside the selected category."
-                                    items={productOrderItems}
-                                    onSave={saveProductOrder}
-                                    trigger={
-                                        <Button
-                                            variant="outline"
-                                            className="rounded-full border-border/60 bg-card/50 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-muted-foreground/60 transition-all"
-                                            disabled
-                                        >
-                                            <ListOrdered className="size-4" />
-                                            Reorder
-                                        </Button>
-                                    }
-                                />
-                            </TooltipTrigger>
-                            <TooltipContent>{productReorderDisabledReason}</TooltipContent>
-                        </Tooltip>
-                    ) : (
-                        <ReorderListDialog
-                            title="Reorder products"
-                            description="Choose the order products appear inside the selected category."
-                            items={productOrderItems}
-                            onSave={saveProductOrder}
-                            trigger={
-                                <Button
-                                    variant="outline"
-                                    className="rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer"
-                                    disabled={selectedCategoryFilter === "all" || selectedCategoryProducts.length < 2}
-                                >
-                                    <ListOrdered className="size-4" />
-                                    Reorder
-                                </Button>
-                            }
-                        />
-                    )}
+                    <Tooltip>
+                        <TooltipTrigger render={<span className="inline-flex" />}>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className={cn(
+                                    "rounded-full border-border/60 h-10 w-10 transition-all cursor-pointer",
+                                    isSelectMode
+                                        ? "bg-primary text-primary-foreground border-primary shadow-xs shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground"
+                                        : "bg-card/50 text-foreground/90 hover:bg-card hover:border-border/80",
+                                )}
+                                onClick={toggleSelectMode}
+                                aria-label={isSelectMode ? "Exit select mode" : "Select mode"}
+                            >
+                                <SquareMousePointer className="size-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            {isSelectMode ? "Exit select mode" : "Select products"}
+                        </TooltipContent>
+                    </Tooltip>
                 </div>
             </div>
 
@@ -1023,6 +992,41 @@ const ProductsListPage = () => {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
+                        {productReorderDisabledReason ? (
+                            <Tooltip>
+                                <TooltipTrigger render={<span className="inline-flex" />}>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 text-muted-foreground/60 cursor-not-allowed"
+                                        disabled
+                                    >
+                                        <ListOrdered className="size-3.5" />
+                                        Reorder
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{productReorderDisabledReason}</TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <ReorderListDialog
+                                title="Reorder products"
+                                description="Reorder every product in the selected category."
+                                items={productOrderItems}
+                                onSave={saveProductOrder}
+                                trigger={
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full h-8 px-3 text-xs bg-card/80 border-border/70 hover:bg-card text-foreground cursor-pointer"
+                                        disabled={isBulkUpdating}
+                                    >
+                                        <ListOrdered className="size-3.5" />
+                                        Reorder
+                                    </Button>
+                                }
+                            />
+                        )}
+
                         {/* Activate (shown only when inactive products are selected) */}
                         {selectedInactiveCount > 0 && (
                             <Button
@@ -1078,7 +1082,7 @@ const ProductsListPage = () => {
 
             {filteredProducts.length > 0 && (
                 <div className="flex items-center justify-between px-1 py-0.5">
-                    {isSelectMode ? (
+                    {/* {isSelectMode ? (
                         <label className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer select-none animate-in fade-in duration-150">
                             <Checkbox
                                 checked={isAllSelected}
@@ -1090,7 +1094,7 @@ const ProductsListPage = () => {
                         </label>
                     ) : (
                         <div />
-                    )}
+                    )} */}
                     <span className="text-xs text-muted-foreground/70">
                         Showing {filteredProducts.length} product{filteredProducts.length === 1 ? "" : "s"}
                     </span>

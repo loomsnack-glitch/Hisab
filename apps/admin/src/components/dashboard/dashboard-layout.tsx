@@ -111,6 +111,8 @@ const DashboardLayout = () => {
     };
 
     const isWhatsAppMessageHistory = location.pathname.includes("/whatsapp/message-history");
+    const isBillingPage = location.pathname.includes("/billing");
+    const usesMobileShellScroll = !isWhatsAppMessageHistory && !isBillingPage;
     const isFullWidthPage = isFullWidthDashboardPath(location.pathname);
     const accountOrganization = organizationId && selectedOrganization
         ? { id: organizationId, name: selectedOrganization.name }
@@ -134,7 +136,11 @@ const DashboardLayout = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_30%)]" />
             </div>
 
-            <div className={cn("flex min-h-screen", isWhatsAppMessageHistory && "h-full min-h-0")}>
+            <div className={cn(
+                "flex min-h-screen",
+                isWhatsAppMessageHistory && "h-full min-h-0",
+                usesMobileShellScroll && "max-lg:h-[100dvh] max-lg:min-h-0 max-lg:overflow-hidden",
+            )}>
                 {isPickerPage ? null : (
                     <aside
                         className={cn(
@@ -189,7 +195,8 @@ const DashboardLayout = () => {
                     <main className={cn(
                         "flex-1 min-w-0 w-full",
                         isWhatsAppMessageHistory && "min-h-0 overflow-hidden",
-                        isPickerPage || location.pathname.includes("/billing")
+                        usesMobileShellScroll && "max-lg:min-h-0 max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:touch-pan-y",
+                        isPickerPage || isBillingPage
                             ? "p-0"
                             : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
                         !isPickerPage && "max-lg:pb-[var(--pos-mobile-nav-height)]",
