@@ -1104,7 +1104,92 @@ KOT is a later restaurant capability for Stores with the KOT System enabled. It 
 
 ## Multi-phase implementation roadmap
 
-Implementation is divided into multiple capability phases. Each phase contains small vertical subphases. A phase may begin only after its dependencies are satisfied; a subphase must have a clear external behavior, focused tests, a reviewable scope, and a real Android verification point where applicable. These are planning units only; implementation has not started.
+Implementation is divided into multiple capability phases. Each phase contains small vertical subphases. A phase may begin only after its dependencies are satisfied; a subphase must have a clear external behavior, focused tests, and a reviewable scope. These are planning units only; implementation has not started.
+
+### UI.md alignment rules
+
+The root [`UI.md`](../../UI.md) is the visual and interaction reference for rebuilding the mobile POS. It is a reference implementation, not a source of new product scope. The mobile app must use the existing Ganatri service contracts, Store capabilities, and approved payment rules even where the reference contains static demo content or richer concepts.
+
+The rebuild should carry forward these visual principles from `UI.md`:
+
+- A clean Ganatri-branded light surface with blue primary actions, clear hierarchy, compact cards, and large touch targets.
+- A persistent POS shell with Store/Device context, connection/session status, and Sale, Bills, Customers, Reports, and Settings navigation.
+- A fast New Sale surface with search, barcode entry, category filters, Recent/Pinned convenience items, product cards, and a persistent Cart action.
+- A deliberate step sequence of New Sale → Cart Review → Payment & Settlement → Sale Complete, with the primary action and recovery action obvious on every screen.
+- Consistent loading, empty, error, retry, disabled, success, and session-expired states instead of static placeholders.
+
+The following `UI.md` content is intentionally excluded from this mobile scope unless a separate product/API decision is approved: invented stock quantities, GST/tax and round-off fields, coupons, loyalty points, shift closing/cash reconciliation, a full Khata/credit workflow, dynamic UPI QR processing, card-terminal integration, fake printer telemetry, automatic-save claims, remembered device secrets, WhatsApp Inbox, and external demo images. Static names such as “VyaparPOS” or “A-One General Store” must become Ganatri and live Store data. WhatsApp remains an invoice-delivery action only when configured.
+
+### Roadmap review outcome
+
+The existing roadmap correctly protects the Product → Cart → Payment flow, but a successful mobile rebuild needs more than implementing the named screens. The work is therefore tracked at three levels:
+
+1. Product behavior: what a cashier or Store operator can do and what remains excluded.
+2. Vertical phase slices: the order in which those behaviors are delivered through the mobile app.
+3. Cross-cutting workstreams: the shared quality, data, security, design, and release work that must be applied to every slice.
+
+The phase records describe what has already been implemented at the app-code level. They do not by themselves prove that the current runtime, live backend data, native Android build, physical device, or printer works. The UI rebuild must close those evidence gaps rather than treating existing screen code as release-ready.
+
+### Rebuild baseline and preconditions
+
+Before calling the redesigned mobile app usable, the implementation team must re-establish a clean baseline:
+
+- Reproduce and close the startup/logout infinite-update failure, then add a regression test for stable session and selector state.
+- Re-run the complete order path against the configured backend and seeded Store data. Resolve any invalid Product identifiers and billing-access/entitlement failures before judging the Payment UI.
+- Resolve the known mobile typecheck/import blockers, including any missing shared asset required by the mobile bundle.
+- Confirm that the active Store, Device, Catalog, pricing, Customer, Draft, Payment, and receipt data are live or explicitly represented by a tested empty state. No static `UI.md` demo data may be used as a production fallback.
+- Confirm the native prerequisites separately: encrypted MMKV/Keystore behavior, camera permission/scanning, Android share sheet, Bluetooth printer transport, and the supported Android device matrix.
+
+These are entry and release conditions for the rebuild, not reasons to expand Version 1 with offline billing, a new payment provider, or unrelated administration features.
+
+### Cross-cutting workstreams
+
+These workstreams run through every phase. Each phase handoff must state which workstreams were completed, which are pending, and whether the pending item blocks release.
+
+| Workstream | Applies to | Required outcome |
+| --- | --- | --- |
+| W1. Product and UX | Every screen and flow | Maintain the approved cashier-first scope, define the user's goal and primary action, remove unnecessary steps, and document every deferred reference feature. |
+| W2. Design system | Every visual component | Keep one Ganatri token vocabulary for color, type, spacing, radius, elevation, icons, touch targets, dark mode, and compact/large display sizes. No screen-specific styling fork without a documented reason. |
+| W3. Information architecture | Shell, navigation, modal, and deep-link behavior | Keep the core flow reachable in one obvious path; make Bills, Customers, Reports, Settings, Tables, and Kitchen capability-aware; define back behavior, unsaved-Cart guards, and post-Sale destinations. |
+| W4. API and data contracts | Catalog, Cart, Draft, Payment, Bills, Reports, Customers, Tables, KOT | Map every UI field to a real service/type, keep server totals/status/prices authoritative, handle pagination and invalidation, and record contract gaps before UI work hides them. |
+| W5. State and reliability | Boot, session, Cart, Draft, Payment, network requests | Use stable selectors and query keys, Store/Device-scoped cache, explicit mutation states, idempotency keys, uncertain-result handling, and safe recovery without duplicate Sales or lost Drafts. |
+| W6. Security and privacy | Unlock, storage, logs, sharing, receipts | Protect tokens and secrets with the approved storage boundary, never display or log reusable credentials, clear session-scoped data on logout/revocation, and avoid leaking Customer data through previews or logs. |
+| W7. Localization and accessibility | All user-facing content | Cover English, Gujarati, and Hindi for labels, validation, errors, empty states, payment states, and receipt actions; verify text expansion, screen-reader labels, contrast, focus order, and minimum touch targets. |
+| W8. Performance and observability | Startup, Catalog, Cart, Payment, release | Define budgets for startup, first Catalog display, search response, and screen transitions; capture actionable crash/network/mutation diagnostics without sensitive data; measure slow paths on a low/mid-range device. |
+| W9. Test strategy | Every phase | Add focused unit/component/contract tests for visible behavior, state transitions, and recovery; keep a traceable acceptance matrix from approved requirement to test and device check. |
+| W10. Environment and release operations | Backend, mobile environment, Android release | Document API base URL, Store/Device setup, migration state, entitlement prerequisites, build profiles, signing, versioning, rollout/rollback, and the exact person responsible for each external gate. |
+
+### Expanded phase packet
+
+Every phase is complete only when it produces all of the following, in addition to its feature-specific exit condition:
+
+- A short UX packet: screen map, user goal, primary/secondary actions, navigation transitions, copy, and all non-happy states from the matching `UI.md` section.
+- A data packet: service/type mapping, query/mutation ownership, cache and invalidation rules, Store/Device scope, and server-authoritative fields.
+- An implementation packet: reusable components, screen changes, state transitions, permissions, and capability gates.
+- A verification packet: focused tests, localization/accessibility review, `git diff --check`, known failures, and the exact deferred Android/device check.
+- A handoff packet: screenshots or recorded UI review where useful, changed files, remaining risks, and the next phase's dependency status.
+
+The implementation team must not mark a phase complete solely because TypeScript compiles or a static screen renders. A phase must demonstrate the relevant behavior with live service boundaries or a deliberate, tested empty/error state.
+
+### UI rebuild delivery contract
+
+Each phase must rebuild only its own vertical slice of the mobile UI. For every screen or state, the implementation notes must identify the user goal, primary action, secondary/recovery action, data source, and behavior when the request is loading, empty, unauthorized, expired, offline/uncertain, or rejected. The phase review then checks the result against the matching named section in `UI.md`, while preserving the server as the authority for prices, totals, Sale status, and payment status.
+
+### Phase-to-UI delivery map
+
+| Phase | `UI.md` reference | Mobile rebuild deliverables | Phase acceptance focus |
+| --- | --- | --- | --- |
+| Phase 0 | Design System; all named screen sections | Convert the reference into a screen/state inventory, token map, component inventory, copy inventory, and scope-exclusion list. Map each reference action to an existing service or mark it deferred. | No screen depends on fake data or an unapproved API concept; open contract and native risks are recorded before implementation. |
+| Phase 1 | POS Unlock/Login; shell and bottom navigation patterns | Build the Ganatri visual foundation, POS Unlock, secure session bootstrap, Store/Device header, language selector, navigation shell, and New Sale entry state. | Valid Device login reaches New Sale; invalid/expired/retry states are understandable; no secret is displayed or persisted as convenience data. |
+| Phase 2 | New Sale & Product Catalog; Search & Barcode; Category Snap Filter; Product Catalog Grid; Persistent Cart Bar | Replace the mobile catalog placeholder with real Products/Categories, search, barcode scanning, Recent/Pinned items, product cards, quantity actions, and configuration flows for combos/add-ons/weighted items where supported. | A cashier can find and add every supported Product using live Store data, with manual search always available when scanning is unavailable. |
+| Phase 3 | Cart & Draft Sale; Customer Assignment; Cart Line Items; Order Options & Discounts; Payment Summary | Rebuild Cart Review with customer assignment, line-item editing, configurations, notes, approved discounts, local Cart persistence, explicit Save Draft, and resume/delete behavior. | Cart survives recoverable failures, Draft status is explicit, and displayed totals never imply client authority. |
+| Phase 4 | Payment & Tender; Method Selection; Cash/UPI/Card/Split panels; Sale Complete & Receipt | Rebuild settlement entry, payment rows, quick cash tender, Paid/Partial/Due display, idempotent completion, confirmed receipt, share/print actions, and safe retry behavior. | One Sale is confirmed exactly once; uncertain results do not invite unsafe duplicate submission; receipt actions cannot change the Sale. |
+| Phase 5 | Bills & Orders; Customers & Khata Ledger (approved subset); Reports; Settings & Hardware | Rebuild Bills/history/drafts, Sale Details, Customer Directory, simple Reports, language/theme/display settings, Store/Device information, and printer entry point. | Operational workspaces use live data and supported filters; deferred Khata, fake hardware status, and unsupported report metrics are absent. |
+| Phase 6 | Settings & Hardware; receipt/print actions in Sale Complete and Sale Details | Add the application printer boundary, supported Bluetooth printer setup, test/reconnect/failure states, and English receipt rendering. | The selected physical Android device prints a supported English receipt; printer failure is recoverable and never reverses a confirmed Sale. |
+| Phase 7 | Existing Tables/KOT destination patterns, adapted to the same shell | Add capability-gated Dine-In/Pick-Up, Tables, Table order context, and KOT/kitchen workflows without exposing them to retail Stores. | Restaurant behavior is available only when enabled; Table and KOT state remains distinct from Sale/payment completion. |
+| Phase 8 | Every `UI.md` section and every shared state | Run a visual/state consistency pass, remove remaining placeholders, verify localization expansion, accessibility, error recovery, and release documentation. | The complete approved Android workflow is usable on the target matrix and all excluded reference features remain excluded. |
+
+The UI map does not change the phase dependencies below. It makes the rebuild order explicit: foundation first, then the cashier-critical vertical flow, then supporting workspaces, hardware, restaurant operations, and release hardening.
 
 | Phase | Capability | Subphases | Phase exit condition |
 | --- | --- | --- | --- |
@@ -1480,7 +1565,7 @@ Acceptance conditions:
 
 ## Verification gates
 
-Every phase should pass its focused tests and a real-device smoke check before the next phase starts. The final release gate must cover:
+During phase work, use read-only review plus focused unit/type/service-contract validation only. Do not run build, Android/emulator, or device-start commands while any planned POS mobile phase remains incomplete. After all implementation phases are complete, the user-run Android and physical-device gates become the release evidence. The final release gate must cover:
 
 - Authorized Device Unlock and session recovery.
 - Retail Sale from Product selection through Payment and receipt.
@@ -1490,6 +1575,8 @@ Every phase should pass its focused tests and a real-device smoke check before t
 - English, Gujarati, and Hindi interface coverage.
 - English Bluetooth printing success, retry, reconnect, and printer failure without Sale rollback.
 - Restaurant feature visibility for Stores with and without Tables/KOT enabled.
+
+The implementation handoff for each phase must include: changed screen/state list, matching `UI.md` sections reviewed, focused validation results, known limitations, and the next phase's unblocked dependencies. A phase is not complete because the screen renders; it is complete only when its behavior, recovery states, live data mapping, and scope boundaries are verified.
 
 ## Comments
 
