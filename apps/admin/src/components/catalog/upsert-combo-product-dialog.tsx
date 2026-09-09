@@ -7,7 +7,7 @@ import { type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO 
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@repo/ui/components/dialog";
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Boxes, Pencil, Plus, PlusCircle, Trash2, X } from "lucide-react";
@@ -159,9 +159,11 @@ const UpsertComboProductDialog = ({
         });
     };
     const onSubmit: SubmitHandler<FormInput> = (values) => {
-        const shared = {
+        mutation.mutate({
             categoryId: values.categoryId,
             name: values.name.trim(),
+            price: Number(values.price),
+            discount: Number(values.discount ?? 0),
             choiceGroups: values.choiceGroups.map((group) => ({
                 name: group.name.trim(),
                 minSelections: Number(group.minSelections),
@@ -172,17 +174,8 @@ const UpsertComboProductDialog = ({
                     priceAdjustment: Number(option.priceAdjustment),
                 })),
             })),
-        };
-        mutation.mutate(
-            isEdit
-                ? shared
-                : {
-                    ...shared,
-                    price: Number(values.price),
-                    discount: Number(values.discount ?? 0),
-                    status: "inactive" as const,
-                },
-        );
+            ...(isEdit ? {} : { status: "inactive" as const }),
+        });
     };
 
     return <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
@@ -207,18 +200,9 @@ const UpsertComboProductDialog = ({
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
                     <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
-                    {!isEdit ? (
-                        <>
-                            <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
-                            <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
-                        </>
-                    ) : null}
+                    <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
                 </div>
-                {isEdit ? (
-                    <FieldDescription>
-                        Selling price, discount, and menu status are configured in each Store workspace.
-                    </FieldDescription>
-                ) : null}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between"><p className="font-medium">Choice groups</p><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {

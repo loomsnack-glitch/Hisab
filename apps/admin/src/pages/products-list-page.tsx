@@ -76,6 +76,7 @@ import {
     markCatalogProductStatusLabel,
     markCatalogProductStatusProgress,
 } from "@/lib/catalog-product-status-copy";
+import { updateCatalogProductStatus } from "@/lib/update-catalog-product-status";
 import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
@@ -445,22 +446,22 @@ const ProductsListPage = () => {
 
     const handleBulkActivate = async () => {
         if (selectedProductIds.size === 0) return;
-        const targetIds = products
-            .filter((p) => selectedProductIds.has(p.id) && p.status === "inactive")
-            .map((p) => p.id);
-        if (targetIds.length === 0) return;
+        const targetProducts = products.filter(
+            (p) => selectedProductIds.has(p.id) && p.status === "inactive",
+        );
+        if (targetProducts.length === 0) return;
 
         setIsBulkUpdating(true);
         let successCount = 0;
         const failedIds: string[] = [];
 
         await Promise.all(
-            targetIds.map(async (productId) => {
-                const res = await updateProduct(organizationId, productId, { status: "active" });
+            targetProducts.map(async (product) => {
+                const res = await updateCatalogProductStatus(organizationId, product, "active");
                 if (res.status === "success") {
                     successCount++;
                 } else {
-                    failedIds.push(productId);
+                    failedIds.push(product.id);
                 }
             })
         );
@@ -473,29 +474,29 @@ const ProductsListPage = () => {
             toast.success(bulkCatalogProductStatusChangedMessage(successCount, "active"));
             setSelectedProductIds(new Set());
         } else {
-            toast.error(`${successCount} of ${targetIds.length} products updated. ${failedIds.length} could not be updated.`);
+            toast.error(`${successCount} of ${targetProducts.length} products updated. ${failedIds.length} could not be updated.`);
             setSelectedProductIds(new Set(failedIds));
         }
     };
 
     const handleBulkDeactivate = async () => {
         if (selectedProductIds.size === 0) return;
-        const targetIds = products
-            .filter((p) => selectedProductIds.has(p.id) && p.status === "active")
-            .map((p) => p.id);
-        if (targetIds.length === 0) return;
+        const targetProducts = products.filter(
+            (p) => selectedProductIds.has(p.id) && p.status === "active",
+        );
+        if (targetProducts.length === 0) return;
 
         setIsBulkUpdating(true);
         let successCount = 0;
         const failedIds: string[] = [];
 
         await Promise.all(
-            targetIds.map(async (productId) => {
-                const res = await updateProduct(organizationId, productId, { status: "inactive" });
+            targetProducts.map(async (product) => {
+                const res = await updateCatalogProductStatus(organizationId, product, "inactive");
                 if (res.status === "success") {
                     successCount++;
                 } else {
-                    failedIds.push(productId);
+                    failedIds.push(product.id);
                 }
             })
         );
@@ -508,7 +509,7 @@ const ProductsListPage = () => {
             toast.success(bulkCatalogProductStatusChangedMessage(successCount, "inactive"));
             setSelectedProductIds(new Set());
         } else {
-            toast.error(`${successCount} of ${targetIds.length} products updated. ${failedIds.length} could not be updated.`);
+            toast.error(`${successCount} of ${targetProducts.length} products updated. ${failedIds.length} could not be updated.`);
             setSelectedProductIds(new Set(failedIds));
         }
     };

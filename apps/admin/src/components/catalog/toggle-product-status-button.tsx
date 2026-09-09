@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateProduct } from "@repo/services";
 import type { ProductResponseDTO } from "@repo/types";
 import {
     AlertDialog,
@@ -27,6 +26,7 @@ import {
     markCatalogProductStatusTitle,
 } from "@/lib/catalog-product-status-copy";
 import { catalogKeys } from "@/lib/query-keys";
+import { updateCatalogProductStatus } from "@/lib/update-catalog-product-status";
 
 type ToggleProductStatusButtonProps = {
     organizationId: string;
@@ -47,7 +47,7 @@ const ToggleProductStatusButton = ({
 
     const mutation = useMutation({
         mutationFn: () =>
-            updateProduct(organizationId, product.id, { status: nextStatus }),
+            updateCatalogProductStatus(organizationId, product, nextStatus),
         onSuccess: (response) => {
             if (response.status === "success") {
                 toast.success(catalogProductStatusChangedMessage(product.name, nextStatus));
