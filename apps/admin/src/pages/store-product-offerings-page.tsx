@@ -231,11 +231,11 @@ const StoreProductOfferingsPage = () => {
     }
 
     return (
-        <div className="space-y-6" data-admin-workspace="store">
+        <div className="space-y-3" data-admin-workspace="store">
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative flex-1 max-w-md w-full group/search">
                     <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                     <Input
@@ -259,7 +259,7 @@ const StoreProductOfferingsPage = () => {
             </div>
 
             {categories.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                <div className="flex items-center gap-1.5 overflow-x-auto py-0 scrollbar-none">
                     <Button
                         ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}

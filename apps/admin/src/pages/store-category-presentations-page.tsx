@@ -179,7 +179,7 @@ const StoreCategoryPresentationsPage = () => {
     }
 
     return (
-        <div className="space-y-6" data-admin-workspace="store" data-testid="store-categories-page">
+        <div className="space-y-3" data-admin-workspace="store" data-testid="store-categories-page">
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 

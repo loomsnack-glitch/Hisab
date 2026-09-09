@@ -21,7 +21,9 @@ type Props = {
     products: ProductResponseDTO[];
     product?: ProductResponseDTO;
     defaultCategoryId?: string;
-    trigger?: React.ReactElement;
+    trigger?: React.ReactElement | null;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 };
 
 const whole = z.coerce.number().int().min(0).max(100);
@@ -64,8 +66,25 @@ const defaultValues: FormInput = {
     choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
 
-const UpsertComboProductDialog = ({ organizationId, categories, products, product, defaultCategoryId, trigger }: Props) => {
-    const [open, setOpen] = useState(false);
+const UpsertComboProductDialog = ({
+    organizationId,
+    categories,
+    products,
+    product,
+    defaultCategoryId,
+    trigger,
+    open,
+    onOpenChange,
+}: Props) => {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+    const isControlled = open !== undefined;
+    const dialogOpen = isControlled ? open : uncontrolledOpen;
+    const setDialogOpen = (nextOpen: boolean) => {
+        if (!isControlled) {
+            setUncontrolledOpen(nextOpen);
+        }
+        onOpenChange?.(nextOpen);
+    };
     const queryClient = useQueryClient();
     const isEdit = Boolean(product);
     const ActionIcon = isEdit ? Pencil : PlusCircle;
@@ -77,13 +96,13 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     const detailsQuery = useQuery({
         queryKey: [...catalogKeys.products(organizationId), "combo", product?.id],
         queryFn: () => getComboProduct(organizationId, product!.id),
-        enabled: open && isEdit,
+        enabled: dialogOpen && isEdit,
     });
     const isLoadingDetails = isEdit && detailsQuery.isPending;
     const detailsLoadFailed = isEdit && (detailsQuery.isError || detailsQuery.data?.status === "error");
 
     useEffect(() => {
-        if (!open) return;
+        if (!dialogOpen) return;
         if (isEdit && detailsQuery.isPending) return;
         const categoryId = defaultCategoryId && categories.some((item) => item.id === defaultCategoryId)
             ? defaultCategoryId
@@ -109,7 +128,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                 options: group.options.map((option) => ({ productId: option.optionProductId, maxQuantity: option.maxQuantity, priceAdjustment: Number(option.priceAdjustment) })),
             })) ?? defaultValues.choiceGroups,
         });
-    }, [open, product, detailsQuery.data, detailsQuery.isPending, isEdit, categories, defaultCategoryId, optionProducts, form]);
+    }, [dialogOpen, product, detailsQuery.data, detailsQuery.isPending, isEdit, categories, defaultCategoryId, optionProducts, form]);
 
     const mutation = useMutation({
         mutationFn: (data: CreateComboProductJSON | Parameters<typeof updateComboProduct>[2]) => product
@@ -119,7 +138,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             if (response.status !== "success") { toast.error(response.message); return; }
             toast.success(response.message);
             queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-            setOpen(false);
+            setDialogOpen(false);
         },
         onError: (error: { message?: string }) => toast.error(error.message ?? "Unable to save Combo"),
     });
@@ -166,8 +185,10 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
         );
     };
 
-    return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
+    return <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
+        {trigger !== null ? (
+            <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
+        ) : null}
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] lg:!max-w-[50vw] max-h-[90dvh] overflow-x-hidden overflow-y-auto">
             <DialogHeader
                 icon={<Boxes className="size-5" />}
@@ -278,7 +299,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                         </div>;
                     })}
                 </div>
-                <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={mutation.isPending || optionProducts.length === 0}>{mutation.isPending ? "Saving..." : isEdit ? "Save Combo" : "Create Combo"}</Button></DialogFooter>
+                <DialogFooter><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={mutation.isPending || optionProducts.length === 0}>{mutation.isPending ? "Saving..." : isEdit ? "Save Combo" : "Create Combo"}</Button></DialogFooter>
             </form>}
         </DialogContent>
     </Dialog>;

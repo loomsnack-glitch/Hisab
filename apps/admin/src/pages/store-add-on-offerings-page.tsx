@@ -166,7 +166,7 @@ const StoreAddOnOfferingsPage = () => {
     }
 
     return (
-        <div className="space-y-6" data-admin-workspace="store">
+        <div className="space-y-3" data-admin-workspace="store">
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 

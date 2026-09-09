@@ -62,7 +62,7 @@ const ProductsPage = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-3">
             {/* Tab Navigation */}
             <div className="border-b border-border/60 pb-px">
                 <nav className="flex items-center gap-1 overflow-x-auto scrollbar-none" aria-label="Product catalog navigation tabs">

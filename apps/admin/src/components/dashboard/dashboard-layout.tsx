@@ -192,7 +192,7 @@ const DashboardLayout = () => {
                         usesMobileShellScroll && "max-lg:min-h-0 max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:touch-pan-y",
                         isPickerPage || isBillingPage
                             ? "p-0"
-                            : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
+                            : "px-3.5 pt-3 pb-4 sm:px-6 lg:px-8 lg:pb-8",
                         !isPickerPage && "max-lg:pb-[var(--pos-mobile-nav-height)]",
                     )}>
                         <div className={cn(

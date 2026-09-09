@@ -54,6 +54,7 @@ import {
     ListOrdered,
     Package2,
     Pencil,
+    Plus,
     PlusCircle,
     RefreshCw,
     Search,
@@ -176,6 +177,9 @@ const ProductsListPage = () => {
     const [statusFilters, setStatusFilters] = useState<string[]>([]);
     const [addOnsFilters, setAddOnsFilters] = useState<string[]>([]);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+    const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
+    const [addComboDialogOpen, setAddComboDialogOpen] = useState(false);
     const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
     const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
@@ -269,6 +273,23 @@ const ProductsListPage = () => {
         setStatusFilters(draftStatusFilters);
         setAddOnsFilters(draftAddOnsFilters);
         setMobileFiltersOpen(false);
+    };
+
+    const handleMobileAddProduct = () => {
+        setMobileActionsOpen(false);
+        setAddProductDialogOpen(true);
+    };
+
+    const handleMobileAddCombo = () => {
+        setMobileActionsOpen(false);
+        setAddComboDialogOpen(true);
+    };
+
+    const handleMobileSelectProducts = () => {
+        setMobileActionsOpen(false);
+        if (!isSelectMode) {
+            setIsSelectMode(true);
+        }
     };
 
     const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -747,11 +768,11 @@ const ProductsListPage = () => {
     );
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-3">
 
             {/* Search, Filters, View Switcher & Actions bar */}
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2 flex-1 w-full">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         variant="outline"
@@ -772,7 +793,7 @@ const ProductsListPage = () => {
                         ) : null}
                     </Button>
 
-                    <div className="relative flex-1 min-w-0 sm:min-w-[220px] sm:max-w-sm group/search">
+                    <div className="relative min-w-0 flex-1 sm:max-w-sm sm:flex-none group/search">
                         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                         <Input
                             type="text"
@@ -792,6 +813,15 @@ const ProductsListPage = () => {
                             </button>
                         )}
                     </div>
+
+                    <Button
+                        type="button"
+                        onClick={() => setMobileActionsOpen(true)}
+                        aria-label="Product actions"
+                        className="h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:hidden"
+                    >
+                        <Plus className="size-4" />
+                    </Button>
 
                     {/* Status Filter Popover (PremiumTable pattern) */}
                     <Popover>
@@ -885,38 +915,27 @@ const ProductsListPage = () => {
 
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                    <UpsertProductDialog
-                        organizationId={organizationId}
-                        categories={categories}
-                        defaultCategoryId={defaultCategoryIdForNewProduct}
-                        trigger={
-                            <Button
-                                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20 transition-all cursor-pointer"
-                                disabled={categories.length === 0}
-                            >
-                                <PlusCircle className="size-4" />
-                                Add product
-                            </Button>
-                        }
-                    />
+                <div className="hidden sm:flex flex-wrap items-center gap-2">
+                    <Button
+                        type="button"
+                        className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20 transition-all cursor-pointer"
+                        disabled={categories.length === 0}
+                        onClick={() => setAddProductDialogOpen(true)}
+                    >
+                        <PlusCircle className="size-4" />
+                        Add product
+                    </Button>
 
-                    <UpsertComboProductDialog
-                        organizationId={organizationId}
-                        categories={categories}
-                        products={products}
-                        defaultCategoryId={defaultCategoryIdForNewProduct}
-                        trigger={
-                            <Button
-                                variant="outline"
-                                className="rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer"
-                                disabled={categories.length === 0}
-                            >
-                                <Boxes className="size-4" />
-                                Add Combo
-                            </Button>
-                        }
-                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer"
+                        disabled={categories.length === 0}
+                        onClick={() => setAddComboDialogOpen(true)}
+                    >
+                        <Boxes className="size-4" />
+                        Add Combo
+                    </Button>
 
                     <Tooltip>
                         <TooltipTrigger render={<span className="inline-flex" />}>
@@ -944,7 +963,7 @@ const ProductsListPage = () => {
 
             {/* Category filter pills - Horizontally scrollable on mobile */}
             {categories.length > 0 && (
-                <div className="flex items-center gap-2 overflow-x-auto py-1 pb-1.5 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+                <div className="flex items-center gap-2 overflow-x-auto py-0 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
                     <Button
                         ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}
@@ -1169,7 +1188,7 @@ const ProductsListPage = () => {
             )}
 
             {filteredProducts.length > 0 && (
-                <div className="flex items-center justify-between px-1 py-0.5">
+                <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
                     {/* {isSelectMode ? (
                         <label className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer select-none animate-in fade-in duration-150">
                             <Checkbox
@@ -1537,6 +1556,68 @@ const ProductsListPage = () => {
                     )}
                 </AlertDialogContent>
             </AlertDialog>
+
+            <UpsertProductDialog
+                organizationId={organizationId}
+                categories={categories}
+                defaultCategoryId={defaultCategoryIdForNewProduct}
+                open={addProductDialogOpen}
+                onOpenChange={setAddProductDialogOpen}
+                trigger={null}
+            />
+
+            <UpsertComboProductDialog
+                organizationId={organizationId}
+                categories={categories}
+                products={products}
+                defaultCategoryId={defaultCategoryIdForNewProduct}
+                open={addComboDialogOpen}
+                onOpenChange={setAddComboDialogOpen}
+                trigger={null}
+            />
+
+            <Sheet open={mobileActionsOpen} onOpenChange={setMobileActionsOpen}>
+                <SheetContent
+                    side="bottom"
+                    showCloseButton={false}
+                    className="gap-0 overflow-visible border-0 bg-transparent px-4 pt-2 shadow-none data-[side=bottom]:bottom-[var(--pos-mobile-nav-height,0px)] data-[side=bottom]:border-0 data-[side=bottom]:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:hidden"
+                >
+                    <div className="space-y-2 pb-2">
+                        <button
+                            type="button"
+                            disabled={categories.length === 0}
+                            onClick={handleMobileAddProduct}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                <PlusCircle className="size-5" />
+                            </span>
+                            Add product
+                        </button>
+                        <button
+                            type="button"
+                            disabled={categories.length === 0}
+                            onClick={handleMobileAddCombo}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                <Boxes className="size-5" />
+                            </span>
+                            Add combo
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleMobileSelectProducts}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95"
+                        >
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                <SquareMousePointer className="size-5" />
+                            </span>
+                            Select products
+                        </button>
+                    </div>
+                </SheetContent>
+            </Sheet>
 
             <Sheet open={mobileFiltersOpen} onOpenChange={handleMobileFiltersOpenChange}>
                 <SheetContent

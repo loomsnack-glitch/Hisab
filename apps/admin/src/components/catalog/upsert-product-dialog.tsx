@@ -70,7 +70,9 @@ type UpsertProductDialogProps = {
   categories: CategoryDTO[];
   product?: ProductResponseDTO;
   defaultCategoryId?: string;
-  trigger?: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 const decimalAmountPattern = /^\d+(\.\d*)?$/;
@@ -225,8 +227,18 @@ const UpsertProductDialog = ({
   product,
   defaultCategoryId,
   trigger,
+  open,
+  onOpenChange,
 }: UpsertProductDialogProps) => {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = open !== undefined;
+  const dialogOpen = isControlled ? open : uncontrolledOpen;
+  const setDialogOpen = (nextOpen: boolean) => {
+    if (!isControlled) {
+      setUncontrolledOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const imageCompressionRequestRef = useRef(0);
@@ -287,7 +299,7 @@ const UpsertProductDialog = ({
   };
 
   useEffect(() => {
-    if (open) {
+    if (dialogOpen) {
       if (product) {
         form.reset(productFormValues(product));
         setLabelProfileForm({
@@ -332,7 +344,7 @@ const UpsertProductDialog = ({
       setReleasedInternalCode("");
       setLabelProfileForm(emptyLabelProfileForm);
     }
-  }, [categories, defaultCategoryId, form, open, pieceUnitId, product]);
+  }, [categories, defaultCategoryId, dialogOpen, form, pieceUnitId, product]);
 
   const categoryOptions = useMemo(
     () =>
@@ -546,7 +558,7 @@ const UpsertProductDialog = ({
         });
         setCodeChangeConfirmationOpen(false);
         setPendingPayload(null);
-        setOpen(false);
+        setDialogOpen(false);
         return;
       }
 
@@ -590,7 +602,7 @@ const UpsertProductDialog = ({
       });
       setReuseCodeConfirmationOpen(false);
       setReleasedInternalCode("");
-      setOpen(false);
+      setDialogOpen(false);
     },
     onError: (error: { message?: string }) => {
       toast.error(error.message ?? "Failed to manage Internal Product Code");
@@ -686,25 +698,27 @@ const UpsertProductDialog = ({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogTrigger
-          render={
-            trigger ?? (
-              <Button
-                variant={isEditMode ? "outline" : "default"}
-                className="rounded-full"
-                disabled={!hasCategories}
-              >
-                {isEditMode ? (
-                  <Pencil className="size-4" />
-                ) : (
-                  <Plus className="size-4" />
-                )}
-                {isEditMode ? "Edit product" : "Add product"}
-              </Button>
-            )
-          }
-        />
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
+        {trigger !== null ? (
+          <DialogTrigger
+            render={
+              trigger ?? (
+                <Button
+                  variant={isEditMode ? "outline" : "default"}
+                  className="rounded-full"
+                  disabled={!hasCategories}
+                >
+                  {isEditMode ? (
+                    <Pencil className="size-4" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}
+                  {isEditMode ? "Edit product" : "Add product"}
+                </Button>
+              )
+            }
+          />
+        ) : null}
         <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl">
           <DialogHeader
             className="shrink-0 px-5 pt-4 pb-2 border-b border-border/40"
@@ -1272,7 +1286,7 @@ const UpsertProductDialog = ({
                 type="button"
                 variant="outline"
                 className="rounded-full h-9 px-4 text-sm font-medium"
-                onClick={() => setOpen(false)}
+                onClick={() => setDialogOpen(false)}
               >
                 Cancel
               </Button>
