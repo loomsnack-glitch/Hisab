@@ -37,6 +37,34 @@ export const overlayActiveStoreProductOfferings = <T extends CatalogProductForSt
   });
 };
 
+export type StoreProductOfferingAvailability =
+  | "sellable"
+  | "inactive"
+  | "inactive_in_org";
+
+export const getStoreProductOfferingAvailability = (
+  offering: Pick<StoreProductOfferingResponseDTO, "status"> & {
+    product: Pick<ProductResponseDTO, "status">;
+  },
+): StoreProductOfferingAvailability => {
+  if (offering.product.status !== "active") {
+    return "inactive_in_org";
+  }
+
+  if (offering.status !== "active") {
+    return "inactive";
+  }
+
+  return "sellable";
+};
+
+export const isStoreProductOfferingPriceInherited = (
+  offering: Pick<
+    StoreProductOfferingResponseDTO,
+    "isPriceInherited" | "isDiscountInherited"
+  >,
+): boolean => offering.isPriceInherited && offering.isDiscountInherited;
+
 export const inactiveProductCodesWithoutActiveOffering = (
   products: CatalogProductForStoreBilling[],
   offerings: OfferingForStoreBilling[],

@@ -9,6 +9,8 @@ type ProductPriceDisplayProps = {
     align?: "left" | "center" | "right";
     /** Color for the price when there is no discount */
     singleTone?: "foreground" | "primary";
+    /** One-line sale price + struck original + percent, without a savings sentence */
+    compact?: boolean;
     className?: string;
 };
 
@@ -51,6 +53,7 @@ const ProductPriceDisplay = ({
     size = "md",
     align = "center",
     singleTone = "primary",
+    compact = false,
     className,
 }: ProductPriceDisplayProps) => {
     const originalPrice = Number(price ?? 0);
@@ -79,6 +82,34 @@ const ProductPriceDisplay = ({
             >
                 {formatCurrency(originalPrice)}
             </p>
+        );
+    }
+
+    if (compact) {
+        return (
+            <div className={cn("flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5", alignClass, className)}>
+                <span
+                    className={cn(
+                        styles.discounted,
+                        "text-foreground tabular-nums tracking-tight leading-none",
+                    )}
+                >
+                    {formatCurrency(finalPrice)}
+                </span>
+                <span
+                    className={cn(
+                        styles.original,
+                        "font-medium text-muted-foreground/70 line-through decoration-muted-foreground/40 tabular-nums",
+                    )}
+                >
+                    {formatCurrency(originalPrice)}
+                </span>
+                {discountPercentage ? (
+                    <span className="rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-semibold leading-none text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                        −{discountPercentage}
+                    </span>
+                ) : null}
+            </div>
         );
     }
 

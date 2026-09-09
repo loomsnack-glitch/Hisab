@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  getStoreProductOfferingAvailability,
   inactiveProductCodesWithoutActiveOffering,
+  isStoreProductOfferingPriceInherited,
   overlayActiveStoreProductOfferings,
 } from "./store-product-offering-catalog";
 
@@ -48,6 +50,48 @@ describe("Store Product Offering catalog overlay", () => {
         status: "active",
       },
     ]);
+  });
+
+  test("an Offering is sellable only when both the Catalog Product and local statuses are active", () => {
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "active",
+        product: { status: "active" },
+      }),
+    ).toBe("sellable");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "inactive",
+        product: { status: "active" },
+      }),
+    ).toBe("inactive");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "active",
+        product: { status: "inactive" },
+      }),
+    ).toBe("inactive_in_org");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "inactive",
+        product: { status: "inactive" },
+      }),
+    ).toBe("inactive_in_org");
+  });
+
+  test("price is inherited only when both price and discount still follow Organization defaults", () => {
+    expect(
+      isStoreProductOfferingPriceInherited({
+        isPriceInherited: true,
+        isDiscountInherited: true,
+      }),
+    ).toBe(true);
+    expect(
+      isStoreProductOfferingPriceInherited({
+        isPriceInherited: false,
+        isDiscountInherited: true,
+      }),
+    ).toBe(false);
   });
 
   test("coded Catalog Products without an active Offering stay available only for scan recovery", () => {

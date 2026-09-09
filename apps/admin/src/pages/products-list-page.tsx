@@ -71,6 +71,11 @@ import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import {
+    bulkCatalogProductStatusChangedMessage,
+    markCatalogProductStatusLabel,
+    markCatalogProductStatusProgress,
+} from "@/lib/catalog-product-status-copy";
 import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
@@ -290,7 +295,7 @@ const ProductsListPage = () => {
         setIsBulkUpdating(false);
 
         if (failedIds.length === 0) {
-            toast.success(`${successCount} product${successCount === 1 ? "" : "s"} activated`);
+            toast.success(bulkCatalogProductStatusChangedMessage(successCount, "active"));
             setSelectedProductIds(new Set());
         } else {
             toast.error(`${successCount} of ${targetIds.length} products updated. ${failedIds.length} could not be updated.`);
@@ -325,7 +330,7 @@ const ProductsListPage = () => {
         setIsBulkUpdating(false);
 
         if (failedIds.length === 0) {
-            toast.success(`${successCount} product${successCount === 1 ? "" : "s"} deactivated`);
+            toast.success(bulkCatalogProductStatusChangedMessage(successCount, "inactive"));
             setSelectedProductIds(new Set());
         } else {
             toast.error(`${successCount} of ${targetIds.length} products updated. ${failedIds.length} could not be updated.`);
@@ -1061,11 +1066,11 @@ const ProductsListPage = () => {
                                 disabled={isBulkUpdating}
                             >
                                 {isBulkUpdating ? <Spinner className="size-3" /> : <Eye className="size-3.5 text-emerald-500" />}
-                                Activate
+                                {markCatalogProductStatusLabel("active")}
                             </Button>
                         )}
 
-                        {/* Deactivate (shown only when active products are selected) */}
+                        {/* Mark inactive (shown only when active products are selected) */}
                         {selectedActiveCount > 0 && (
                             <Button
                                 variant="outline"
@@ -1080,7 +1085,7 @@ const ProductsListPage = () => {
                                 disabled={isBulkUpdating}
                             >
                                 {isBulkUpdating ? <Spinner className="size-3" /> : <EyeOff className="size-3.5 text-muted-foreground" />}
-                                Deactivate
+                                {markCatalogProductStatusLabel("inactive")}
                             </Button>
                         )}
 
@@ -1269,13 +1274,14 @@ const ProductsListPage = () => {
                                             {categoryName}
                                         </TableCell>
                                         <TableCell className="py-3">
-                                            <div className="flex flex-col items-start">
+                                            <div className="flex flex-col items-start gap-0.5">
                                                 <ProductPriceDisplay
                                                     price={product.price}
                                                     discount={product.discount}
                                                     size="xs"
                                                     align="left"
                                                     singleTone="foreground"
+                                                    compact
                                                 />
                                                 <span className="text-[10px] text-muted-foreground">
                                                     {catalogSellingQuantityLabel(product)}
@@ -1311,9 +1317,12 @@ const ProductsListPage = () => {
                                 key={product.id}
                                 className={cn(
                                     "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
+                                    product.status === "inactive" && "opacity-[0.82] hover:opacity-100",
                                     isSelected
                                         ? "border-primary/60 bg-primary/[0.08] ring-1 ring-primary/30 shadow-primary/5"
-                                        : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
+                                        : product.status === "inactive"
+                                            ? "border-border/50 bg-muted/20"
+                                            : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
                                 )}
                             >
                                 {/* Top section: Checkbox, Thumbnail, Full Title + Meta */}
@@ -1359,23 +1368,23 @@ const ProductsListPage = () => {
                                                 {categoryName}
                                             </span>
                                             <ProductTypeBadge productType={product.productType} />
-                                            <ProductStatusBadge status={product.status} />
+                                            {product.status === "inactive" ? (
+                                                <ProductStatusBadge status={product.status} />
+                                            ) : null}
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Bottom section: Price on left, Actions on right */}
-                                <div className="flex items-center justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
-                                    <div className="flex flex-col items-start min-w-0">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/75">
-                                            Org default
-                                        </span>
+                                <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
+                                    <div className="flex flex-col items-start gap-0.5 min-w-0">
                                         <ProductPriceDisplay
                                             price={product.price}
                                             discount={product.discount}
                                             size="sm"
                                             align="left"
                                             singleTone="foreground"
+                                            compact
                                         />
                                         <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground/80">
                                             {catalogSellingQuantityLabel(product)}
@@ -1409,10 +1418,10 @@ const ProductsListPage = () => {
                                     <Eye />
                                 </AlertDialogMedia>
                                 <AlertDialogTitle>
-                                    Activate {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
+                                    {markCatalogProductStatusLabel("active")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Are you sure you want to activate {bulkActionConfirm.count} selected product{bulkActionConfirm.count === 1 ? "" : "s"}? Stores inheriting organization defaults will offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
+                                    Selected product{bulkActionConfirm.count === 1 ? "" : "s"} will be marked active at the organization level. Stores inheriting organization defaults will offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -1422,13 +1431,13 @@ const ProductsListPage = () => {
                                 <AlertDialogAction
                                     className="rounded-xl shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                                     isLoading={isBulkUpdating}
-                                    loadingText="Activating..."
+                                    loadingText={markCatalogProductStatusProgress("active")}
                                     onClick={async () => {
                                         await handleBulkActivate();
                                         setBulkActionConfirm(null);
                                     }}
                                 >
-                                    Activate {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
+                                    {markCatalogProductStatusLabel("active")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
                                 </AlertDialogAction>
                             </AlertDialogFooter>
                         </>
@@ -1441,10 +1450,10 @@ const ProductsListPage = () => {
                                     <EyeOff />
                                 </AlertDialogMedia>
                                 <AlertDialogTitle>
-                                    Deactivate {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
+                                    {markCatalogProductStatusLabel("inactive")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Are you sure you want to deactivate {bulkActionConfirm.count} selected product{bulkActionConfirm.count === 1 ? "" : "s"}? Stores inheriting organization defaults will no longer offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
+                                    Selected product{bulkActionConfirm.count === 1 ? "" : "s"} will be marked inactive at the organization level. Stores inheriting organization defaults will no longer offer {bulkActionConfirm.count === 1 ? "it" : "them"} to customers.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -1454,13 +1463,13 @@ const ProductsListPage = () => {
                                 <AlertDialogAction
                                     className="rounded-xl shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
                                     isLoading={isBulkUpdating}
-                                    loadingText="Deactivating..."
+                                    loadingText={markCatalogProductStatusProgress("inactive")}
                                     onClick={async () => {
                                         await handleBulkDeactivate();
                                         setBulkActionConfirm(null);
                                     }}
                                 >
-                                    Deactivate {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
+                                    {markCatalogProductStatusLabel("inactive")} {bulkActionConfirm.count} product{bulkActionConfirm.count === 1 ? "" : "s"}
                                 </AlertDialogAction>
                             </AlertDialogFooter>
                         </>

@@ -19,6 +19,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+    catalogProductStatusChangedMessage,
+    markCatalogProductStatusAriaLabel,
+    markCatalogProductStatusLabel,
+    markCatalogProductStatusProgress,
+    markCatalogProductStatusTitle,
+} from "@/lib/catalog-product-status-copy";
 import { catalogKeys } from "@/lib/query-keys";
 
 type ToggleProductStatusButtonProps = {
@@ -43,11 +50,7 @@ const ToggleProductStatusButton = ({
             updateProduct(organizationId, product.id, { status: nextStatus }),
         onSuccess: (response) => {
             if (response.status === "success") {
-                toast.success(
-                    nextStatus === "active"
-                        ? `${product.name} activated`
-                        : `${product.name} deactivated`,
-                );
+                toast.success(catalogProductStatusChangedMessage(product.name, nextStatus));
                 queryClient.invalidateQueries({
                     queryKey: catalogKeys.products(organizationId),
                 });
@@ -63,7 +66,7 @@ const ToggleProductStatusButton = ({
         onError: (error: { message?: string }) => {
             toast.error(
                 error.message ??
-                    `Failed to ${isActive ? "deactivate" : "activate"} product`,
+                    `Could not ${markCatalogProductStatusLabel(nextStatus).toLowerCase()}`,
             );
         },
     });
@@ -72,7 +75,7 @@ const ToggleProductStatusButton = ({
         <Button
             variant="ghost"
             size="icon"
-            aria-label={isActive ? `Deactivate ${product.name}` : `Activate ${product.name}`}
+            aria-label={markCatalogProductStatusAriaLabel(product.name, nextStatus)}
             className={`h-8 w-8 rounded-lg cursor-pointer touch-manipulation focus-visible:ring-2 ${
                 isActive
                     ? "text-muted-foreground hover:bg-muted/80 hover:text-foreground focus-visible:ring-primary/40"
@@ -94,7 +97,7 @@ const ToggleProductStatusButton = ({
                     <AlertDialogTrigger render={trigger ?? defaultButton} />
                 </TooltipTrigger>
                 <TooltipContent>
-                    {isActive ? "Deactivate product" : "Activate product"}
+                    {markCatalogProductStatusLabel(nextStatus)}
                 </TooltipContent>
             </Tooltip>
             <AlertDialogContent>
@@ -109,14 +112,12 @@ const ToggleProductStatusButton = ({
                         {isActive ? <EyeOff /> : <Eye />}
                     </AlertDialogMedia>
                     <AlertDialogTitle>
-                        {isActive
-                            ? `Deactivate ${product.name}?`
-                            : `Activate ${product.name}?`}
+                        {markCatalogProductStatusTitle(product.name, nextStatus)}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                         {isActive
-                            ? `"${product.name}" will be deactivated at the organization level. Stores inheriting organization defaults will no longer offer it to customers.`
-                            : `"${product.name}" will be activated at the organization level. Stores inheriting organization defaults will offer it to customers.`}
+                            ? `"${product.name}" will be marked inactive at the organization level. Stores inheriting organization defaults will no longer offer it to customers.`
+                            : `"${product.name}" will be marked active at the organization level. Stores inheriting organization defaults will offer it to customers.`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -128,10 +129,10 @@ const ToggleProductStatusButton = ({
                                 : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                         }`}
                         isLoading={mutation.isPending}
-                        loadingText={isActive ? "Deactivating..." : "Activating..."}
+                        loadingText={markCatalogProductStatusProgress(nextStatus)}
                         onClick={() => mutation.mutate()}
                     >
-                        {isActive ? "Deactivate product" : "Activate product"}
+                        {markCatalogProductStatusLabel(nextStatus)}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

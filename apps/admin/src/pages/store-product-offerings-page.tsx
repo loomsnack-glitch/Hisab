@@ -8,7 +8,11 @@ import {
     getStoreProductOfferings,
     updateStoreProductOffering,
 } from "@repo/services";
-import { catalogSellingQuantityLabel } from "@repo/types";
+import {
+    catalogSellingQuantityLabel,
+    getStoreProductOfferingAvailability,
+    isStoreProductOfferingPriceInherited,
+} from "@repo/types";
 import { Button } from "@repo/ui/components/button";
 import {
     AlertDialog,
@@ -25,15 +29,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { Eye, EyeOff, Package2, Pencil, RefreshCw, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@repo/ui/lib/utils";
 
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import ProductStatusBadge from "@/components/catalog/product-status-badge";
+import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertStoreProductOfferingDialog from "@/components/catalog/upsert-store-product-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
+import {
+    markCatalogProductStatusForStoreLabel,
+    markCatalogProductStatusLabel,
+    markCatalogProductStatusProgress,
+    markCatalogProductStatusTitle,
+} from "@/lib/catalog-product-status-copy";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
@@ -49,6 +60,7 @@ const StoreProductOfferingsPage = () => {
         offeringId: string;
         productName: string;
         nextStatus: "active" | "inactive";
+        catalogInactive: boolean;
     } | null>(null);
 
     const organizationQuery = useQuery({
@@ -329,13 +341,20 @@ const StoreProductOfferingsPage = () => {
                     {filteredOfferings.map((offering) => {
                         const categoryName = categoryMap.get(offering.product.categoryId)?.name ?? "Unknown";
                         const product = offering.product;
+                        const availability = getStoreProductOfferingAvailability(offering);
+                        const isLocallyActive = offering.status === "active";
+                        const priceInherited = isStoreProductOfferingPriceInherited(offering);
 
                         return (
                             <Card
                                 key={offering.id}
-                                className="group relative flex flex-col justify-between rounded-2xl border border-border/60 bg-card/70 p-3.5 sm:p-4 shadow-2xs transition-all duration-200 hover:border-primary/30 hover:bg-card/95 hover:shadow-md min-w-0"
+                                className={cn(
+                                    "group relative flex flex-col justify-between rounded-2xl border p-3.5 sm:p-4 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
+                                    availability === "sellable"
+                                        ? "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95"
+                                        : "border-border/50 bg-muted/20 opacity-[0.82] hover:opacity-100",
+                                )}
                             >
-                                {/* Top section: Thumbnail, Product Name & Badges */}
                                 <div className="flex items-start gap-3 min-w-0">
                                     <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
                                         {product.imageSignedUrl ? (
@@ -359,44 +378,33 @@ const StoreProductOfferingsPage = () => {
                                             {product.productType !== "single" && (
                                                 <ProductTypeBadge productType={product.productType} />
                                             )}
-                                            <ProductStatusBadge status={offering.status} />
+                                            <StoreOfferingAvailabilityBadge offering={offering} />
                                             {product.productType === "single" && product.activeAddOnCount ? (
                                                 <span className="text-[11px] text-muted-foreground/80">
-                                                    • {product.activeAddOnCount} add-on{product.activeAddOnCount === 1 ? "" : "s"}
+                                                    {product.activeAddOnCount} add-on{product.activeAddOnCount === 1 ? "" : "s"}
                                                 </span>
                                             ) : null}
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Bottom section: Effective Price & Action Controls */}
-                                <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
-                                    <div className="flex flex-col items-start min-w-0">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                                            Effective price
-                                        </span>
+                                <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
+                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
                                         <ProductPriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
                                             size="sm"
                                             align="left"
                                             singleTone="foreground"
+                                            compact
                                         />
-                                        <span className="text-[10px] text-muted-foreground truncate max-w-[170px] sm:max-w-[200px]">
-                                            {offering.isPriceInherited && offering.isDiscountInherited
-                                                ? "Inherits Organization defaults"
-                                                : offering.isPriceInherited
-                                                    ? "Discount overridden"
-                                                    : offering.isDiscountInherited
-                                                        ? "Price overridden"
-                                                        : "Price and discount overridden"}
-                                        </span>
-                                        <span className="text-[10px] text-muted-foreground/70">
+                                        <p className="text-[11px] font-medium text-muted-foreground/80">
                                             {catalogSellingQuantityLabel(product)}
-                                        </span>
+                                            {priceInherited ? "" : " · Store price"}
+                                        </p>
                                     </div>
 
-                                    <div className="flex items-center gap-1 shrink-0">
+                                    <div className="flex items-center gap-0.5 shrink-0">
                                         <UpsertStoreProductOfferingDialog
                                             organizationId={organizationId}
                                             storeId={store.id}
@@ -406,38 +414,51 @@ const StoreProductOfferingsPage = () => {
                                                     variant="ghost"
                                                     size="icon"
                                                     aria-label={`Edit Store price for ${product.name}`}
-                                                    className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
+                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
                                                 >
                                                     <Pencil className="size-3.5" />
                                                 </Button>
                                             }
                                         />
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className={cn(
-                                                "rounded-full h-8 px-3 text-xs font-medium transition-all cursor-pointer",
-                                                offering.status === "active"
-                                                    ? "border-border/60 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 text-muted-foreground"
-                                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20",
-                                            )}
-                                            disabled={statusMutation.isPending}
-                                            onClick={() =>
-                                                setConfirmStatusTarget({
-                                                    offeringId: offering.id,
-                                                    productName: product.name,
-                                                    nextStatus: offering.status === "active" ? "inactive" : "active",
-                                                })
-                                            }
-                                        >
-                                            {statusMutation.isPending && statusMutation.variables?.offeringId === offering.id ? (
-                                                <Spinner className="size-3" />
-                                            ) : offering.status === "active" ? (
-                                                "Deactivate"
-                                            ) : (
-                                                "Activate"
-                                            )}
-                                        </Button>
+                                        <Tooltip>
+                                            <TooltipTrigger render={<span className="inline-flex" />}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    aria-label={
+                                                        isLocallyActive
+                                                            ? `${markCatalogProductStatusLabel("inactive")} ${product.name}`
+                                                            : `${markCatalogProductStatusLabel("active")} ${product.name}`
+                                                    }
+                                                    className={cn(
+                                                        "h-8 w-8 rounded-lg cursor-pointer touch-manipulation focus-visible:ring-2",
+                                                        isLocallyActive
+                                                            ? "text-muted-foreground hover:bg-muted/80 hover:text-foreground focus-visible:ring-primary/40"
+                                                            : "text-emerald-500 hover:bg-emerald-500/15 hover:text-emerald-400 focus-visible:ring-emerald-500/40",
+                                                    )}
+                                                    disabled={statusMutation.isPending}
+                                                    onClick={() =>
+                                                        setConfirmStatusTarget({
+                                                            offeringId: offering.id,
+                                                            productName: product.name,
+                                                            nextStatus: isLocallyActive ? "inactive" : "active",
+                                                            catalogInactive: product.status !== "active",
+                                                        })
+                                                    }
+                                                >
+                                                    {statusMutation.isPending && statusMutation.variables?.offeringId === offering.id ? (
+                                                        <Spinner className="size-3.5" />
+                                                    ) : isLocallyActive ? (
+                                                        <EyeOff className="size-3.5" />
+                                                    ) : (
+                                                        <Eye className="size-3.5 text-emerald-400" />
+                                                    )}
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                {markCatalogProductStatusForStoreLabel(isLocallyActive ? "inactive" : "active")}
+                                            </TooltipContent>
+                                        </Tooltip>
                                     </div>
                                 </div>
                             </Card>
@@ -473,14 +494,17 @@ const StoreProductOfferingsPage = () => {
                                     )}
                                 </AlertDialogMedia>
                                 <AlertDialogTitle>
-                                    {confirmStatusTarget.nextStatus === "active"
-                                        ? `Activate ${confirmStatusTarget.productName}?`
-                                        : `Deactivate ${confirmStatusTarget.productName}?`}
+                                    {markCatalogProductStatusTitle(
+                                        confirmStatusTarget.productName,
+                                        confirmStatusTarget.nextStatus,
+                                    )}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
                                     {confirmStatusTarget.nextStatus === "active"
-                                        ? `"${confirmStatusTarget.productName}" will be activated for ${store.name} and will be available for customers.`
-                                        : `"${confirmStatusTarget.productName}" will be deactivated for ${store.name} and will no longer appear in this store's active menu.`}
+                                        ? confirmStatusTarget.catalogInactive
+                                            ? `"${confirmStatusTarget.productName}" will be marked active for ${store.name}, but it stays off the menu until the Organization catalog product is active.`
+                                            : `"${confirmStatusTarget.productName}" will be marked active for ${store.name} and will be available for customers.`
+                                        : `"${confirmStatusTarget.productName}" will be marked inactive for ${store.name} and will no longer appear in this store's active menu.`}
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -495,11 +519,7 @@ const StoreProductOfferingsPage = () => {
                                             : "bg-primary text-primary-foreground hover:bg-primary/90",
                                     )}
                                     isLoading={statusMutation.isPending}
-                                    loadingText={
-                                        confirmStatusTarget.nextStatus === "active"
-                                            ? "Activating..."
-                                            : "Deactivating..."
-                                    }
+                                    loadingText={markCatalogProductStatusProgress(confirmStatusTarget.nextStatus)}
                                     onClick={() =>
                                         statusMutation.mutate({
                                             offeringId: confirmStatusTarget.offeringId,
@@ -507,9 +527,7 @@ const StoreProductOfferingsPage = () => {
                                         })
                                     }
                                 >
-                                    {confirmStatusTarget.nextStatus === "active"
-                                        ? "Activate product"
-                                        : "Deactivate product"}
+                                    {markCatalogProductStatusLabel(confirmStatusTarget.nextStatus)}
                                 </AlertDialogAction>
                             </AlertDialogFooter>
                         </>
