@@ -35,6 +35,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 import {
@@ -81,6 +82,92 @@ import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
 
+const STATUS_FILTER_OPTIONS = [
+    { label: "Active", value: "active" },
+    { label: "Inactive", value: "inactive" },
+] as const;
+
+const ADDONS_FILTER_OPTIONS = [
+    { label: "With add-ons", value: "with_addons" },
+    { label: "No add-ons", value: "without_addons" },
+] as const;
+
+type ProductFilterOptionsProps = {
+    title: string;
+    options: ReadonlyArray<{ label: string; value: string }>;
+    selectedValues: string[];
+    onChange: (value: string) => void;
+    onClear: () => void;
+    variant?: "popover" | "sheet";
+};
+
+const ProductFilterOptions = ({
+    title,
+    options,
+    selectedValues,
+    onChange,
+    onClear,
+    variant = "popover",
+}: ProductFilterOptionsProps) => {
+    const isSheet = variant === "sheet";
+
+    return (
+        <div className={cn("space-y-1", isSheet && "space-y-2")}>
+            <div className={cn("flex items-center justify-between gap-3", isSheet ? "px-1 py-1" : "px-2 py-1")}>
+                <p
+                    className={cn(
+                        "font-bold text-muted-foreground uppercase tracking-wider",
+                        isSheet ? "text-xs" : "text-[10px]",
+                    )}
+                >
+                    {title}
+                </p>
+                {selectedValues.length > 0 ? (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        className={cn(
+                            "shrink-0 font-semibold text-primary hover:underline cursor-pointer",
+                            isSheet ? "text-sm" : "text-[10px]",
+                        )}
+                    >
+                        Clear
+                    </button>
+                ) : (
+                    <span className={cn("invisible shrink-0 font-semibold", isSheet ? "text-sm" : "text-[10px]")}>
+                        Clear
+                    </span>
+                )}
+            </div>
+            {options.map((opt) => {
+                const isChecked = selectedValues.includes(opt.value);
+                return (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onChange(opt.value)}
+                        className={cn(
+                            "flex w-full items-center gap-3 rounded-lg text-left font-medium hover:bg-muted/50 cursor-pointer",
+                            isSheet ? "px-2 py-2.5 text-sm" : "gap-2 px-2 py-1.5 text-xs",
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                "flex items-center justify-center rounded-full border border-muted-foreground/35 transition-colors",
+                                isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent",
+                                isSheet ? "size-5" : "size-4",
+                            )}
+                        >
+                            {isChecked ? <Check className={cn("stroke-[3]", isSheet ? "size-3.5" : "size-3")} /> : null}
+                        </div>
+                        <span className="truncate">{opt.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
 const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
     const queryClient = useQueryClient();
@@ -88,6 +175,9 @@ const ProductsListPage = () => {
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
     const [statusFilters, setStatusFilters] = useState<string[]>([]);
     const [addOnsFilters, setAddOnsFilters] = useState<string[]>([]);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
+    const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [isSelectMode, setIsSelectMode] = useState(false);
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
@@ -129,6 +219,57 @@ const ProductsListPage = () => {
 
     const defaultCategoryIdForNewProduct =
         selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
+
+    const activeFilterCount = statusFilters.length + addOnsFilters.length;
+    const draftFilterCount = draftStatusFilters.length + draftAddOnsFilters.length;
+
+    const toggleStatusFilter = (value: string) => {
+        setStatusFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleAddOnsFilter = (value: string) => {
+        setAddOnsFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleDraftStatusFilter = (value: string) => {
+        setDraftStatusFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleDraftAddOnsFilter = (value: string) => {
+        setDraftAddOnsFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const clearAllFilters = () => {
+        setStatusFilters([]);
+        setAddOnsFilters([]);
+    };
+
+    const clearDraftFilters = () => {
+        setDraftStatusFilters([]);
+        setDraftAddOnsFilters([]);
+    };
+
+    const handleMobileFiltersOpenChange = (open: boolean) => {
+        if (open) {
+            setDraftStatusFilters(statusFilters);
+            setDraftAddOnsFilters(addOnsFilters);
+        }
+        setMobileFiltersOpen(open);
+    };
+
+    const applyMobileFilters = () => {
+        setStatusFilters(draftStatusFilters);
+        setAddOnsFilters(draftAddOnsFilters);
+        setMobileFiltersOpen(false);
+    };
 
     const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -611,7 +752,27 @@ const ProductsListPage = () => {
             {/* Search, Filters, View Switcher & Actions bar */}
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-2 flex-1 w-full">
-                    <div className="relative flex-1 min-w-[180px] sm:min-w-[220px] max-w-sm group/search">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleMobileFiltersOpenChange(true)}
+                        aria-label="Filter products"
+                        className={cn(
+                            "relative h-10 w-10 shrink-0 rounded-full border-border/60 bg-card/60 p-0 shadow-2xs sm:hidden",
+                            activeFilterCount > 0
+                                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                : "text-muted-foreground",
+                        )}
+                    >
+                        <Filter className="size-4" />
+                        {activeFilterCount > 0 ? (
+                            <span className="absolute top-0.5 right-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold leading-none text-primary-foreground ring-2 ring-card">
+                                {activeFilterCount}
+                            </span>
+                        ) : null}
+                    </Button>
+
+                    <div className="relative flex-1 min-w-0 sm:min-w-[220px] sm:max-w-sm group/search">
                         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                         <Input
                             type="text"
@@ -639,7 +800,7 @@ const ProductsListPage = () => {
                                 <Button
                                     variant="outline"
                                     className={cn(
-                                        "h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs flex items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
                                         statusFilters.length > 0
                                             ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                             : "text-muted-foreground"
@@ -661,48 +822,13 @@ const ProductsListPage = () => {
                             }
                         />
                         <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
-                            <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 tracking-wider">
-                                    Filter Status
-                                </p>
-                                {[
-                                    { label: "Active", value: "active" },
-                                    { label: "Inactive", value: "inactive" },
-                                ].map((opt) => {
-                                    const isChecked = statusFilters.includes(opt.value);
-                                    return (
-                                        <button
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => {
-                                                setStatusFilters((prev) =>
-                                                    prev.includes(opt.value)
-                                                        ? prev.filter((v) => v !== opt.value)
-                                                        : [...prev, opt.value]
-                                                );
-                                            }}
-                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left font-medium hover:bg-muted/50 cursor-pointer"
-                                        >
-                                            <div className={cn(
-                                                "flex size-4 items-center justify-center rounded-full border border-muted-foreground/35 transition-colors",
-                                                isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent"
-                                            )}>
-                                                {isChecked && <Check className="size-3 stroke-[3]" />}
-                                            </div>
-                                            <span className="truncate">{opt.label}</span>
-                                        </button>
-                                    );
-                                })}
-                                {statusFilters.length > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setStatusFilters([])}
-                                        className="w-full text-center text-[10px] font-bold text-primary hover:underline pt-1.5 border-t border-border/40 cursor-pointer"
-                                    >
-                                        Clear Filter
-                                    </button>
-                                )}
-                            </div>
+                            <ProductFilterOptions
+                                title="Filter Status"
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={statusFilters}
+                                onChange={toggleStatusFilter}
+                                onClear={() => setStatusFilters([])}
+                            />
                         </PopoverContent>
                     </Popover>
 
@@ -713,7 +839,7 @@ const ProductsListPage = () => {
                                 <Button
                                     variant="outline"
                                     className={cn(
-                                        "h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs flex items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
                                         addOnsFilters.length > 0
                                             ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                             : "text-muted-foreground"
@@ -735,48 +861,13 @@ const ProductsListPage = () => {
                             }
                         />
                         <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
-                            <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 tracking-wider">
-                                    Filter Add-ons
-                                </p>
-                                {[
-                                    { label: "With add-ons", value: "with_addons" },
-                                    { label: "No add-ons", value: "without_addons" },
-                                ].map((opt) => {
-                                    const isChecked = addOnsFilters.includes(opt.value);
-                                    return (
-                                        <button
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => {
-                                                setAddOnsFilters((prev) =>
-                                                    prev.includes(opt.value)
-                                                        ? prev.filter((v) => v !== opt.value)
-                                                        : [...prev, opt.value]
-                                                );
-                                            }}
-                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left font-medium hover:bg-muted/50 cursor-pointer"
-                                        >
-                                            <div className={cn(
-                                                "flex size-4 items-center justify-center rounded-full border border-muted-foreground/35 transition-colors",
-                                                isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent"
-                                            )}>
-                                                {isChecked && <Check className="size-3 stroke-[3]" />}
-                                            </div>
-                                            <span className="truncate">{opt.label}</span>
-                                        </button>
-                                    );
-                                })}
-                                {addOnsFilters.length > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setAddOnsFilters([])}
-                                        className="w-full text-center text-[10px] font-bold text-primary hover:underline pt-1.5 border-t border-border/40 cursor-pointer"
-                                    >
-                                        Clear Filter
-                                    </button>
-                                )}
-                            </div>
+                            <ProductFilterOptions
+                                title="Filter Add-ons"
+                                options={ADDONS_FILTER_OPTIONS}
+                                selectedValues={addOnsFilters}
+                                onChange={toggleAddOnsFilter}
+                                onClear={() => setAddOnsFilters([])}
+                            />
                         </PopoverContent>
                     </Popover>
 
@@ -784,11 +875,8 @@ const ProductsListPage = () => {
                     {(statusFilters.length > 0 || addOnsFilters.length > 0) && (
                         <Button
                             variant="ghost"
-                            onClick={() => {
-                                setStatusFilters([]);
-                                setAddOnsFilters([]);
-                            }}
-                            className="h-9 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive text-xs font-semibold gap-1.5 px-3 shrink-0 cursor-pointer animate-in fade-in slide-in-from-left-2 duration-200"
+                            onClick={clearAllFilters}
+                            className="hidden sm:flex h-9 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive text-xs font-semibold gap-1.5 px-3 shrink-0 cursor-pointer animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                             <X className="size-3.5" />
                             <span>Clear Filters</span>
@@ -1449,6 +1537,61 @@ const ProductsListPage = () => {
                     )}
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Sheet open={mobileFiltersOpen} onOpenChange={handleMobileFiltersOpenChange}>
+                <SheetContent
+                    side="bottom"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4 sm:hidden"
+                >
+                    <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
+                        <div className="flex items-center justify-between gap-3">
+                            <SheetTitle className="text-lg">Filter products</SheetTitle>
+                            {draftFilterCount > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={clearDraftFilters}
+                                    className="shrink-0 text-sm font-semibold text-primary hover:underline"
+                                >
+                                    Clear all
+                                </button>
+                            ) : (
+                                <span className="invisible shrink-0 text-sm font-semibold">Clear all</span>
+                            )}
+                        </div>
+                    </SheetHeader>
+
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 px-6 py-4">
+                        <div className="space-y-6">
+                            <ProductFilterOptions
+                                variant="sheet"
+                                title="Filter Status"
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={draftStatusFilters}
+                                onChange={toggleDraftStatusFilter}
+                                onClear={() => setDraftStatusFilters([])}
+                            />
+                            <ProductFilterOptions
+                                variant="sheet"
+                                title="Filter Add-ons"
+                                options={ADDONS_FILTER_OPTIONS}
+                                selectedValues={draftAddOnsFilters}
+                                onChange={toggleDraftAddOnsFilter}
+                                onClear={() => setDraftAddOnsFilters([])}
+                            />
+                        </div>
+                    </div>
+
+                    <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                        <Button
+                            type="button"
+                            onClick={applyMobileFilters}
+                            className="w-full rounded-xl"
+                        >
+                            Apply filters
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 };
