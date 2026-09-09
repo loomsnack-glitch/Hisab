@@ -14,6 +14,7 @@ import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav
 import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getAuthenticatedHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
+import { isFullWidthDashboardPath } from "@/lib/full-width-dashboard-path";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
 import { getPosLoginUrl } from "@/lib/pos-origin";
@@ -110,6 +111,7 @@ const DashboardLayout = () => {
     };
 
     const isWhatsAppMessageHistory = location.pathname.includes("/whatsapp/message-history");
+    const isFullWidthPage = isFullWidthDashboardPath(location.pathname);
     const accountOrganization = organizationId && selectedOrganization
         ? { id: organizationId, name: selectedOrganization.name }
         : null;
@@ -194,7 +196,7 @@ const DashboardLayout = () => {
                     )}>
                         <div className={cn(
                             "mx-auto w-full min-w-0",
-                            isPickerPage || location.pathname.includes("/billing") ? "max-w-none" : "max-w-7xl",
+                            isPickerPage || isFullWidthPage ? "max-w-none" : "max-w-7xl",
                             isWhatsAppMessageHistory && "h-full min-h-0",
                         )}>
                             <Outlet />

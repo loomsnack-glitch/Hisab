@@ -231,7 +231,7 @@ const StoreAddOnOfferingsPage = () => {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
                     {filteredOfferings.map((offering) => {
                         const addOn = offering.addOn;
                         const globallyPublished = addOn.status === "active";
