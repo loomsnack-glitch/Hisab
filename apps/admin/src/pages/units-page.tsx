@@ -299,7 +299,7 @@ const UnitsPage = () => {
                                 ) : null}
                             </Button>
 
-                            <div className="relative min-w-0 flex-1 sm:max-w-sm sm:flex-none group/search">
+                            <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
                                 <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                                 <Input
                                     type="text"
@@ -480,7 +480,7 @@ const UnitsPage = () => {
                                 <Card
                                     key={unit.id}
                                     className={cn(
-                                        "group relative overflow-hidden rounded-2xl border shadow-2xs transition-all duration-200 min-w-0 hover:-translate-y-0.5 hover:shadow-md",
+                                        "group relative overflow-hidden rounded-2xl border shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
                                         unit.status === "inactive" && "opacity-[0.82] hover:opacity-100",
                                         unit.status === "inactive"
                                             ? "border-border/50 bg-muted/20 hover:border-border/60"

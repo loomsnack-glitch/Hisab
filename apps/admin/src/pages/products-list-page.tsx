@@ -541,7 +541,7 @@ const ProductsListPage = () => {
                         ) : null}
                     </Button>
 
-                    <div className="relative min-w-0 flex-1 sm:max-w-sm sm:flex-none group/search">
+                    <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
                         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                         <Input
                             type="text"
