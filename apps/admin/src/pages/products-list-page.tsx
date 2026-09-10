@@ -118,7 +118,7 @@ const ProductFilterOptions = ({
                     >
                         <div
                             className={cn(
-                                "flex items-center justify-center rounded-full border border-muted-foreground/35 transition-colors",
+                                "flex items-center justify-center rounded-[4px] border border-muted-foreground/35 transition-colors",
                                 isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent",
                                 isSheet ? "size-5" : "size-4",
                             )}
