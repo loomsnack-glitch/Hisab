@@ -19,6 +19,7 @@ import {
     Barcode,
     Boxes,
     Check,
+    CircleCheck,
     Filter,
     Layers3,
     Link2,
@@ -27,6 +28,7 @@ import {
     Pencil,
     Plus,
     PlusCircle,
+    Puzzle,
     RefreshCw,
     Search,
     X,
@@ -58,7 +60,8 @@ const ADDONS_FILTER_OPTIONS = [
 ] as const;
 
 type ProductFilterOptionsProps = {
-    title: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
     options: ReadonlyArray<{ label: string; value: string }>;
     selectedValues: string[];
     onChange: (value: string) => void;
@@ -67,7 +70,8 @@ type ProductFilterOptionsProps = {
 };
 
 const ProductFilterOptions = ({
-    title,
+    label,
+    icon: Icon,
     options,
     selectedValues,
     onChange,
@@ -79,14 +83,24 @@ const ProductFilterOptions = ({
     return (
         <div className={cn("space-y-1", isSheet && "space-y-2")}>
             <div className={cn("flex items-center justify-between gap-3", isSheet ? "px-1 py-1" : "px-2 py-1")}>
-                <p
-                    className={cn(
-                        "font-bold text-muted-foreground uppercase tracking-wider",
-                        isSheet ? "text-xs" : "text-[10px]",
+                <div className="flex min-w-0 items-center gap-2">
+                    {isSheet ? (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Icon className="size-4" />
+                        </span>
+                    ) : (
+                        <Icon className="size-3.5 shrink-0 text-muted-foreground/70" />
                     )}
-                >
-                    {title}
-                </p>
+                    <p
+                        className={cn(
+                            isSheet
+                                ? "text-sm font-semibold text-foreground"
+                                : "text-[10px] font-bold uppercase tracking-wider text-muted-foreground",
+                        )}
+                    >
+                        {label}
+                    </p>
+                </div>
                 {selectedValues.length > 0 ? (
                     <button
                         type="button"
@@ -584,7 +598,7 @@ const ProductsListPage = () => {
                                             : "text-muted-foreground"
                                     )}
                                 >
-                                    <Filter className={cn(
+                                    <CircleCheck className={cn(
                                         "size-3.5 transition-colors",
                                         statusFilters.length > 0
                                             ? "text-primary stroke-[2.5]"
@@ -601,7 +615,8 @@ const ProductsListPage = () => {
                         />
                         <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
                             <ProductFilterOptions
-                                title="Filter Status"
+                                label="Status"
+                                icon={CircleCheck}
                                 options={STATUS_FILTER_OPTIONS}
                                 selectedValues={statusFilters}
                                 onChange={toggleStatusFilter}
@@ -623,7 +638,7 @@ const ProductsListPage = () => {
                                             : "text-muted-foreground"
                                     )}
                                 >
-                                    <Filter className={cn(
+                                    <Puzzle className={cn(
                                         "size-3.5 transition-colors",
                                         addOnsFilters.length > 0
                                             ? "text-primary stroke-[2.5]"
@@ -640,7 +655,8 @@ const ProductsListPage = () => {
                         />
                         <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
                             <ProductFilterOptions
-                                title="Filter Add-ons"
+                                label="Add-ons"
+                                icon={Puzzle}
                                 options={ADDONS_FILTER_OPTIONS}
                                 selectedValues={addOnsFilters}
                                 onChange={toggleAddOnsFilter}
@@ -989,7 +1005,8 @@ const ProductsListPage = () => {
                         <div className="space-y-6">
                             <ProductFilterOptions
                                 variant="sheet"
-                                title="Filter Status"
+                                label="Status"
+                                icon={CircleCheck}
                                 options={STATUS_FILTER_OPTIONS}
                                 selectedValues={draftStatusFilters}
                                 onChange={toggleDraftStatusFilter}
@@ -997,7 +1014,8 @@ const ProductsListPage = () => {
                             />
                             <ProductFilterOptions
                                 variant="sheet"
-                                title="Filter Add-ons"
+                                label="Add-ons"
+                                icon={Puzzle}
                                 options={ADDONS_FILTER_OPTIONS}
                                 selectedValues={draftAddOnsFilters}
                                 onChange={toggleDraftAddOnsFilter}

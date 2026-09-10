@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo
 import { Spinner } from "@repo/ui/components/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
-import { Check, Filter, Pencil, Plus, PlusCircle, RefreshCw, Ruler, Search, X } from "lucide-react";
+import { Check, CircleCheck, Filter, Pencil, Plus, PlusCircle, RefreshCw, Ruler, Search, Tags, X } from "lucide-react";
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertUnitDialog from "@/components/units/upsert-unit-dialog";
@@ -35,7 +35,8 @@ const unitKindLabel: Record<UnitKind, string> = {
 };
 
 type UnitFilterOptionsProps = {
-    title: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
     options: ReadonlyArray<{ label: string; value: string }>;
     selectedValues: string[];
     onChange: (value: string) => void;
@@ -44,7 +45,8 @@ type UnitFilterOptionsProps = {
 };
 
 const UnitFilterOptions = ({
-    title,
+    label,
+    icon: Icon,
     options,
     selectedValues,
     onChange,
@@ -56,14 +58,24 @@ const UnitFilterOptions = ({
     return (
         <div className={cn("space-y-1", isSheet && "space-y-2")}>
             <div className={cn("flex items-center justify-between gap-3", isSheet ? "px-1 py-1" : "px-2 py-1")}>
-                <p
-                    className={cn(
-                        "font-bold text-muted-foreground uppercase tracking-wider",
-                        isSheet ? "text-xs" : "text-[10px]",
+                <div className="flex min-w-0 items-center gap-2">
+                    {isSheet ? (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Icon className="size-4" />
+                        </span>
+                    ) : (
+                        <Icon className="size-3.5 shrink-0 text-muted-foreground/70" />
                     )}
-                >
-                    {title}
-                </p>
+                    <p
+                        className={cn(
+                            isSheet
+                                ? "text-sm font-semibold text-foreground"
+                                : "text-[10px] font-bold uppercase tracking-wider text-muted-foreground",
+                        )}
+                    >
+                        {label}
+                    </p>
+                </div>
                 {selectedValues.length > 0 ? (
                     <button
                         type="button"
@@ -345,7 +357,7 @@ const UnitsPage = () => {
                                                     : "text-muted-foreground",
                                             )}
                                         >
-                                            <Filter className={cn(
+                                            <Tags className={cn(
                                                 "size-3.5 transition-colors",
                                                 kindFilters.length > 0
                                                     ? "text-primary stroke-[2.5]"
@@ -362,7 +374,8 @@ const UnitsPage = () => {
                                 />
                                 <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
                                     <UnitFilterOptions
-                                        title="Filter Source"
+                                        label="Source"
+                                        icon={Tags}
                                         options={SOURCE_FILTER_OPTIONS}
                                         selectedValues={kindFilters}
                                         onChange={toggleKindFilter}
@@ -383,7 +396,7 @@ const UnitsPage = () => {
                                                     : "text-muted-foreground",
                                             )}
                                         >
-                                            <Filter className={cn(
+                                            <CircleCheck className={cn(
                                                 "size-3.5 transition-colors",
                                                 statusFilters.length > 0
                                                     ? "text-primary stroke-[2.5]"
@@ -400,7 +413,8 @@ const UnitsPage = () => {
                                 />
                                 <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
                                     <UnitFilterOptions
-                                        title="Filter Availability"
+                                        label="Availability"
+                                        icon={CircleCheck}
                                         options={STATUS_FILTER_OPTIONS}
                                         selectedValues={statusFilters}
                                         onChange={toggleStatusFilter}
@@ -592,7 +606,8 @@ const UnitsPage = () => {
                                 <div className="space-y-6">
                                     <UnitFilterOptions
                                         variant="sheet"
-                                        title="Filter Source"
+                                        label="Source"
+                                        icon={Tags}
                                         options={SOURCE_FILTER_OPTIONS}
                                         selectedValues={draftKindFilters}
                                         onChange={toggleDraftKindFilter}
@@ -600,7 +615,8 @@ const UnitsPage = () => {
                                     />
                                     <UnitFilterOptions
                                         variant="sheet"
-                                        title="Filter Availability"
+                                        label="Availability"
+                                        icon={CircleCheck}
                                         options={STATUS_FILTER_OPTIONS}
                                         selectedValues={draftStatusFilters}
                                         onChange={toggleDraftStatusFilter}

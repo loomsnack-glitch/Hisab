@@ -61,7 +61,6 @@ import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
 import {
     DataTableFilterTrigger,
-    DataTableFilterValue,
 } from "@repo/ui/components/data-table-filter-trigger";
 import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
 import {
@@ -109,8 +108,11 @@ import {
     Utensils,
     User,
     X,
+    ArrowUpDown,
     Boxes,
     SlidersHorizontal,
+    Store,
+    Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -2830,6 +2832,7 @@ const BillingPage = ({
                                 {!isDeviceMode && organizationStores.length > 0 ? (
                                     <DataTableSortFilter
                                         title="Store"
+                                        icon={Store}
                                         value={selectedStoreId}
                                         onValueChange={setStore}
                                         options={organizationStores.map((store) => ({
@@ -2840,6 +2843,7 @@ const BillingPage = ({
                                 ) : null}
                                 <DataTableFacetedFilter
                                     title="Payment"
+                                    icon={Wallet}
                                     options={salesPaymentMethodFilterOptions}
                                     selectedValues={paymentMethodSelection}
                                     onSelectedValuesChange={(values) =>
@@ -2850,6 +2854,7 @@ const BillingPage = ({
                                 />
                                 <DataTableSortFilter
                                     title="Sort"
+                                    icon={ArrowUpDown}
                                     value={sortBy}
                                     onValueChange={(value) => setSortBy(value as SaleSort)}
                                     options={salesSortOptions}
@@ -2874,22 +2879,18 @@ const BillingPage = ({
                                         <PopoverTrigger
                                             render={
                                                 <DataTableFilterTrigger
+                                                    active
                                                     className={cn(
                                                         appliedDateFilter === "date"
                                                             ? "rounded-md"
                                                             : "rounded-full",
                                                     )}
                                                 >
-                                                    <Calendar />
+                                                    <Calendar className="text-primary stroke-[2.5]" />
                                                     <span>Date</span>
-                                                    <DataTableFilterValue>
-                                                        <Badge
-                                                            variant="secondary"
-                                                            className="max-w-[12rem] truncate rounded-md px-1.5 font-normal"
-                                                        >
-                                                            {appliedSalesDateLabel}
-                                                        </Badge>
-                                                    </DataTableFilterValue>
+                                                    <span className="max-w-[9rem] truncate text-[10px] font-bold text-primary">
+                                                        {appliedSalesDateLabel}
+                                                    </span>
                                                 </DataTableFilterTrigger>
                                             }
                                         />
