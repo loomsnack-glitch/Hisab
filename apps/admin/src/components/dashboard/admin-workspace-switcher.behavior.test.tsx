@@ -58,6 +58,28 @@ describe("Admin workspace switcher", () => {
         expect(markup).not.toContain(`href="${getStoreDetailPath(organizationId, adajanId)}"`);
     });
 
+    test("scrolls long store lists instead of overflowing the workspace menu", () => {
+        const manyStores = Array.from({ length: 20 }, (_, index) => ({
+            id: `store-${index}`,
+            name: `Store ${index + 1}`,
+        }));
+        const markup = renderToStaticMarkup(
+            <MemoryRouter>
+                <AdminWorkspaceSwitcherPanel
+                    organizationId={organizationId}
+                    organizationName="Panini House"
+                    stores={manyStores}
+                    selectedStoreId={null}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(markup).toContain("overflow-y-auto");
+        expect(markup).toContain("max-h-[min(28rem,calc(100dvh-6rem))]");
+        expect(markup).toContain("Store 20");
+        expect(markup).toContain("Add store");
+    });
+
     test("keeps Add store available when the Organization has no Stores yet", () => {
         const markup = renderToStaticMarkup(
             <MemoryRouter>

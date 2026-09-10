@@ -74,3 +74,24 @@ export function isOrganizationPickerPath(pathname: string): boolean {
 export function getOrganizationWorkspacePath(organizationId: string): string {
     return `/organizations/${organizationId}/products`;
 }
+
+export function getOrganizationAppearancePath(organizationId: string): string {
+    return `/organizations/${organizationId}/appearance`;
+}
+
+/** Legacy `/appearance` entry: recent org, then starred org, then the picker. */
+export function getAppearanceRedirectPath(organizations: OrgRef[]): string {
+    if (typeof window !== "undefined") {
+        const recentOrgId = window.localStorage.getItem("hisab_recent_org_id") ?? "";
+        if (recentOrgId && organizations.some((org) => org.id === recentOrgId)) {
+            return getOrganizationAppearancePath(recentOrgId);
+        }
+    }
+
+    const starredOrgId = resolveDefaultOrgId(organizations);
+    if (starredOrgId) {
+        return getOrganizationAppearancePath(starredOrgId);
+    }
+
+    return "/organizations";
+}

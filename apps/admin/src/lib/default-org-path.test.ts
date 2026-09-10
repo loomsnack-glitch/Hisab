@@ -9,7 +9,9 @@ Object.assign(globalThis, {
 
 const {
     clearStarredOrgId,
+    getAppearanceRedirectPath,
     getAuthenticatedHomePath,
+    getOrganizationAppearancePath,
     getSidebarHomePath,
     isOrganizationPickerPath,
     persistStarredOrgId,
@@ -66,6 +68,21 @@ describe("default organization path", () => {
         expect(isOrganizationPickerPath("/organizations")).toBe(true);
         expect(isOrganizationPickerPath("/organizations/org-panini/products")).toBe(false);
         expect(isOrganizationPickerPath("/appearance")).toBe(false);
+        expect(isOrganizationPickerPath("/organizations/org-panini/appearance")).toBe(false);
+    });
+
+    test("builds organization-scoped appearance paths and redirects legacy routes", () => {
+        expect(getOrganizationAppearancePath(panini.id)).toBe("/organizations/org-panini/appearance");
+
+        testWindow.localStorage.setItem("hisab_recent_org_id", panini.id);
+        expect(getAppearanceRedirectPath([panini, adajan])).toBe("/organizations/org-panini/appearance");
+
+        testWindow.localStorage.clear();
+        persistStarredOrgId(adajan.id);
+        expect(getAppearanceRedirectPath([panini, adajan])).toBe("/organizations/org-adajan/appearance");
+
+        clearStarredOrgId();
+        expect(getAppearanceRedirectPath([panini, adajan])).toBe("/organizations");
     });
 
     test("clears the starred organization preference on logout", () => {

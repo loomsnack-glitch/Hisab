@@ -24,6 +24,9 @@ export const getStoreSettingsPath = (organizationId: string, storeId: string) =>
 export const getStoreLicensePath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/license`;
 
+export const getStoreAppearancePath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/appearance`;
+
 export const parseStoreWorkspacePath = (
     pathname: string,
 ): { organizationId: string; storeId: string } | null => {

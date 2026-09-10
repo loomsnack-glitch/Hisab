@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { userAuthenticate } from "@repo/services";
+import { getOrganizations, userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import AuthenticatedHomeRedirect from "@/components/dashboard/authenticated-home-redirect";
@@ -48,12 +48,12 @@ import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-p
 import StoreWorkspaceDevicesPage from "@/pages/store-workspace-devices-page";
 import StoreWorkspaceSettingsPage from "@/pages/store-workspace-settings-page";
 import StoreWorkspaceLicensePage from "@/pages/store-workspace-license-page";
-import { authKeys } from "@/lib/query-keys";
+import { authKeys, organizationKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
-import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
+import { getAppearanceRedirectPath, getOrganizationWorkspacePath } from "@/lib/default-org-path";
 
 const SPLASH_DURATION_MS = 2200;
 
@@ -71,6 +71,22 @@ const WhatsAppInboxWorkspaceRedirect = () => {
 const OrganizationWorkspaceRedirect = () => {
     const { organizationId = "" } = useParams();
     return <Navigate to={getOrganizationWorkspacePath(organizationId)} replace />;
+};
+
+const AppearanceRedirect = () => {
+    const organizationsQuery = useQuery({
+        queryKey: organizationKeys.list(),
+        queryFn: getOrganizations,
+    });
+
+    const organizations =
+        organizationsQuery.data?.status === "success" ? organizationsQuery.data.data?.organizations ?? [] : [];
+
+    if (organizationsQuery.isPending) {
+        return <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />;
+    }
+
+    return <Navigate to={getAppearanceRedirectPath(organizations)} replace />;
 };
 
 const App = () => {
@@ -139,8 +155,13 @@ const App = () => {
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >
                                 <Route path="/dashboard" element={<AuthenticatedHomeRedirect />} />
-                                <Route path="/appearance" element={<AppearancePage />} />
-                                <Route path="/settings" element={<Navigate to="/appearance" replace />} />
+                                <Route path="/appearance" element={<AppearanceRedirect />} />
+                                <Route path="/settings" element={<AppearanceRedirect />} />
+                                <Route path="/organizations/:organizationId/appearance" element={<AppearancePage />} />
+                                <Route
+                                    path="/organizations/:organizationId/workspaces/:storeId/appearance"
+                                    element={<AppearancePage />}
+                                />
                                 <Route path="/organizations" element={<OrganizationsPage />} />
                                 <Route path="/organizations/:organizationId" element={<OrganizationWorkspaceRedirect />} />
                                 <Route path="/organizations/:organizationId/stores" element={<OrganizationWorkspaceRedirect />} />

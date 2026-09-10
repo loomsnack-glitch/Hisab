@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
+import { getOrganizationAppearancePath } from "@/lib/default-org-path";
 import {
+    getStoreAppearancePath,
     getStoreDevicesPath,
     getStoreLicensePath,
     getStoreProductsPath,
@@ -47,13 +49,13 @@ export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
 };
 
 export const adminNavGroupOrder: AdminNavGroup[] = [
-    "store",
-    "organization",
     "catalog",
+    "store",
     "sales",
     "reports",
     "finance",
     "integrations",
+    "organization",
 ];
 
 export type AdminNavDestination = {
@@ -241,16 +243,32 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
         id: "appearance",
         label: "Appearance",
         icon: Settings2,
-        requiresOrganization: false,
+        requiresOrganization: true,
         group: "organization",
-        getPath: () => "/appearance",
-        isActive: (pathname) => pathname === "/appearance" || pathname === "/settings",
+        getPath: (organizationId, storeId) =>
+            storeId
+                ? getStoreAppearancePath(organizationId, storeId)
+                : getOrganizationAppearancePath(organizationId),
+        isActive: (pathname, storeId) =>
+            pathname === "/appearance" ||
+            pathname === "/settings" ||
+            (storeId
+                ? pathname.includes(`/workspaces/${storeId}/appearance`)
+                : /\/organizations\/[^/]+\/appearance(\/|$)/.test(pathname) &&
+                  !pathname.includes("/workspaces/")),
     },
 ];
 
 export const adminPrimaryMobileNavIds = ["products", "billing"] as const;
 
-const storeWorkspaceDestinationIds = new Set(["devices", "settings", "license", "products", "vendors"]);
+const storeWorkspaceDestinationIds = new Set([
+    "devices",
+    "settings",
+    "license",
+    "products",
+    "vendors",
+    "appearance",
+]);
 
 const resolveDestinations = ({
     organizationId = "",
@@ -278,8 +296,7 @@ const resolveDestinations = ({
 export const getVisibleAdminWorkspaceDestinations = (args: VisibleAdminNavArgs) =>
     resolveDestinations(args);
 
-export const getVisibleAdminMainDestinations = (args: VisibleAdminNavArgs) =>
-    resolveDestinations(args).filter((destination) => destination.id !== "appearance");
+export const getVisibleAdminMainDestinations = (args: VisibleAdminNavArgs) => resolveDestinations(args);
 
 export type AdminNavGroupedSection = {
     group: AdminNavGroup;
