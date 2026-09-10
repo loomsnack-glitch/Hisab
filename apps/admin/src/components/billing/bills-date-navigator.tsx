@@ -24,6 +24,24 @@ const formatDayMonthYear = (value: Date) =>
 const startOfLocalDay = (value: Date) =>
     new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
+export function getLatestSelectableSalesDate() {
+    return startOfLocalDay(new Date());
+}
+
+export function clampSalesDateToLatest(date: Date) {
+    const latest = getLatestSelectableSalesDate();
+    const normalized = startOfLocalDay(date);
+    return normalized.getTime() > latest.getTime() ? latest : normalized;
+}
+
+export function canShiftSalesDateForward(date: Date) {
+    return startOfLocalDay(date).getTime() < getLatestSelectableSalesDate().getTime();
+}
+
+export function getSalesDatePickerDisabledDays() {
+    return { after: getLatestSelectableSalesDate() };
+}
+
 export function resolveSingleDayDatePreset(date: Date): Extract<BillsDatePreset, "today" | "yesterday" | "custom"> {
     const today = startOfLocalDay(new Date());
     const selected = startOfLocalDay(date);
@@ -85,6 +103,23 @@ function getBillsDateLabel(applied: BillsDateAppliedState) {
     return "Pick dates";
 }
 
+export const billsDatePickerCalendarClassName = "w-full p-0 [--cell-size:2rem]";
+
+export const billsDatePickerCalendarClassNames = {
+    root: "w-full",
+    months: "relative flex w-full flex-col",
+    month: "relative flex w-full flex-col gap-2",
+    nav: "absolute inset-x-0 top-0 z-10 flex h-9 w-full items-center justify-between",
+    month_caption: "flex h-9 w-full items-center justify-center px-9",
+    month_grid: "w-full",
+    weekdays: "flex w-full",
+    weekday: "flex flex-1 items-center justify-center",
+    weeks: "w-full",
+    week: "mt-2 flex w-full",
+    day: "group/day relative flex aspect-square min-w-0 flex-1 basis-0 select-none p-0 text-center",
+    day_button: "mx-0 size-auto h-full w-full min-w-0 max-w-none aspect-square rounded-md",
+};
+
 type BillsDateNavigatorProps = {
     applied: BillsDateAppliedState;
     open: boolean;
@@ -103,6 +138,7 @@ export function BillsDateNavigator({
     const label = getBillsDateLabel(applied);
     const isSingleDay = applied.mode === "date";
     const showChevrons = isSingleDay && Boolean(onShiftDate);
+    const canGoForward = isSingleDay && canShiftSalesDateForward(applied.specificDate);
 
     return (
         <div className="inline-flex max-w-full min-w-0 items-center gap-1">
@@ -157,8 +193,12 @@ export function BillsDateNavigator({
                 <button
                     type="button"
                     aria-label="Next date"
+                    disabled={!canGoForward}
                     onClick={() => onShiftDate?.(1)}
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-2xs transition-colors hover:bg-muted hover:text-foreground"
+                    className={cn(
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-2xs transition-colors hover:bg-muted hover:text-foreground",
+                        !canGoForward && "pointer-events-none opacity-40",
+                    )}
                 >
                     <ChevronRight className="size-4" />
                 </button>

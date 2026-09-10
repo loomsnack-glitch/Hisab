@@ -60,7 +60,15 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { DataTableFacetedFilter } from "@repo/ui/components/data-table-faceted-filter";
 import { DataTableSortFilter } from "@repo/ui/components/data-table-sort-filter";
-import { BillsDateNavigator, resolveSingleDayDatePreset } from "@/components/billing/bills-date-navigator";
+import {
+    BillsDateNavigator,
+    billsDatePickerCalendarClassName,
+    billsDatePickerCalendarClassNames,
+    clampSalesDateToLatest,
+    getLatestSelectableSalesDate,
+    getSalesDatePickerDisabledDays,
+    resolveSingleDayDatePreset,
+} from "@/components/billing/bills-date-navigator";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -646,6 +654,12 @@ const BillingPage = ({
         const next = new Date(salesDatePopoverOpen ? specificDate : appliedSpecificDate);
         next.setDate(next.getDate() + days);
         const nextDate = startOfLocalDay(next);
+        const latestSelectableDate = getLatestSelectableSalesDate();
+
+        if (days > 0 && nextDate.getTime() > latestSelectableDate.getTime()) {
+            return;
+        }
+
         const nextPreset = resolveSingleDayDatePreset(nextDate);
 
         setDateFilter("date");
@@ -674,14 +688,22 @@ const BillingPage = ({
             return;
         }
 
+        const clampedSpecificDate = clampSalesDateToLatest(specificDate);
+        const clampedFromDate = customFromDate ? clampSalesDateToLatest(customFromDate) : null;
+        const clampedToDate = customToDate ? clampSalesDateToLatest(customToDate) : null;
         const resolvedDatePreset =
-            dateFilter === "date" ? resolveSingleDayDatePreset(specificDate) : datePreset;
+            dateFilter === "date"
+                ? resolveSingleDayDatePreset(clampedSpecificDate)
+                : datePreset;
 
         setAppliedDateFilter(dateFilter);
         setAppliedDatePreset(resolvedDatePreset);
-        setAppliedSpecificDate(specificDate);
-        setAppliedCustomFromDate(customFromDate);
-        setAppliedCustomToDate(customToDate);
+        setAppliedSpecificDate(clampedSpecificDate);
+        setAppliedCustomFromDate(clampedFromDate);
+        setAppliedCustomToDate(clampedToDate);
+        setSpecificDate(clampedSpecificDate);
+        setCustomFromDate(clampedFromDate);
+        setCustomToDate(clampedToDate);
         setDatePreset(resolvedDatePreset);
         setSalesDatePopoverOpen(false);
     };
@@ -2957,17 +2979,14 @@ const BillingPage = ({
                                                     {dateFilter === "date" ? (
                                                         <DateCalendar
                                                             mode="single"
-                                                            className="w-full p-0 [--cell-size:2.375rem]"
-                                                            classNames={{
-                                                                root: "w-full",
-                                                                month: "w-full gap-3",
-                                                                day_button:
-                                                                    "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
-                                                            }}
+                                                            className={billsDatePickerCalendarClassName}
+                                                            classNames={billsDatePickerCalendarClassNames}
+                                                            disabled={getSalesDatePickerDisabledDays()}
+                                                            endMonth={getLatestSelectableSalesDate()}
                                                             selected={specificDate}
                                                             onSelect={(date) => {
                                                                 if (date) {
-                                                                    setSpecificDate(date);
+                                                                    setSpecificDate(clampSalesDateToLatest(date));
                                                                     setDatePreset("custom");
                                                                 }
                                                             }}
@@ -2976,21 +2995,24 @@ const BillingPage = ({
                                                     ) : (
                                                         <DateCalendar
                                                             mode="range"
-                                                            className="w-full p-0 [--cell-size:2.375rem]"
-                                                            classNames={{
-                                                                root: "w-full",
-                                                                month: "w-full gap-3",
-                                                                day_button:
-                                                                    "mx-auto size-(--cell-size) min-w-(--cell-size) w-(--cell-size)",
-                                                            }}
+                                                            className={billsDatePickerCalendarClassName}
+                                                            classNames={billsDatePickerCalendarClassNames}
+                                                            disabled={getSalesDatePickerDisabledDays()}
+                                                            endMonth={getLatestSelectableSalesDate()}
                                                             selected={{
                                                                 from: customFromDate ?? undefined,
                                                                 to: customToDate ?? undefined,
                                                             }}
                                                             onSelect={(range) => {
                                                                 setDatePreset("custom");
-                                                                setCustomFromDate(range?.from ?? null);
-                                                                setCustomToDate(range?.to ?? null);
+                                                                setCustomFromDate(
+                                                                    range?.from
+                                                                        ? clampSalesDateToLatest(range.from)
+                                                                        : null,
+                                                                );
+                                                                setCustomToDate(
+                                                                    range?.to ? clampSalesDateToLatest(range.to) : null,
+                                                                );
                                                             }}
                                                             autoFocus
                                                         />
