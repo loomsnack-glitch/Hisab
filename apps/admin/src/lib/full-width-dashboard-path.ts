@@ -1,5 +1,5 @@
 const ORGANIZATION_CATALOG_PATH =
-    /^\/organizations\/[^/]+\/products(?:\/|$)/;
+    /^\/organizations\/[^/]+\/(?:products|units)(?:\/|$)/;
 
 const STORE_CATALOG_PATH =
     /^\/organizations\/[^/]+\/workspaces\/[^/]+\/(?:products|add-ons|categories)(?:\/|$)/;

@@ -19,6 +19,11 @@ describe("isFullWidthDashboardPath", () => {
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/billing",
             ),
         ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/units",
+            ),
+        ).toBe(true);
     });
 
     test("keeps the centered container for other organization routes", () => {
