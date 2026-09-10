@@ -9,44 +9,48 @@ export type FilterOption = {
 }
 
 type FilterOptionsListProps = {
-    title: string
+    title?: string
     options: readonly FilterOption[]
     mode: "single" | "multiple"
     selectedValues: readonly string[]
     onToggle: (value: string) => void
     onClear?: () => void
     getOptionMeta?: (option: FilterOption) => ReactNode
+    hideHeader?: boolean
 }
 
 function FilterOptionsList({
-    title,
+    title = "Options",
     options,
     mode,
     selectedValues,
     onToggle,
     onClear,
     getOptionMeta,
+    hideHeader = false,
 }: FilterOptionsListProps) {
     const canClear = mode === "multiple" && selectedValues.length > 0 && onClear
 
     return (
         <div className="space-y-1">
-            <div className="flex items-center justify-between gap-3 px-2 py-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    {title}
-                </p>
-                {canClear ? (
-                    <button
-                        type="button"
-                        onClick={onClear}
-                        className="shrink-0 text-[10px] font-semibold text-primary hover:underline cursor-pointer"
-                    >
-                        Clear
-                    </button>
-                ) : (
-                    <span className="invisible shrink-0 text-[10px] font-semibold">Clear</span>
-                )}
-            </div>
+            {hideHeader ? null : (
+                <div className="flex items-center justify-between gap-3 px-2 py-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        {title}
+                    </p>
+                    {canClear ? (
+                        <button
+                            type="button"
+                            onClick={onClear}
+                            className="shrink-0 text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                        >
+                            Clear
+                        </button>
+                    ) : (
+                        <span className="invisible shrink-0 text-[10px] font-semibold">Clear</span>
+                    )}
+                </div>
+            )}
             <div className="max-h-[min(60dvh,16rem)] overflow-y-auto overscroll-contain">
                 {options.map((option) => {
                     const isSelected = selectedValues.includes(option.value)
