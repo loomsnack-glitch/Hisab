@@ -1,10 +1,16 @@
 # POS Mobile App — Product and Implementation Planning Baseline
 
-Status: Approved planning baseline
+Status: POS work paused by product direction decision on 2026-09-11; Admin app is the next initiative
 
 ## Purpose
 
 Record the approved first version of the mobile Ganatri POS app and provide a shared baseline for setup, technology discussion, and implementation planning.
+
+## Current execution direction
+
+As of 2026-09-11, POS implementation and the full mobile redesign planning gate are paused. The next product initiative is the Ganatri Admin app. This POS specification, UI reference, implementation records, and known follow-ups are retained for a future resumption; no POS Phase 1 implementation should begin until the POS is explicitly resumed.
+
+The Admin app is only recorded as the next initiative here. Its product scope, route tree, permissions, API boundaries, and implementation plan must be specified separately before Admin implementation begins.
 
 ## Product principles
 
@@ -1622,6 +1628,7 @@ The implementation handoff for each phase must include: changed screen/state lis
 ## Comments
 
 - Full mobile redesign direction approved on 2026-09-10; the R0.1–R0.10 planning gate must be accepted before Phase 1 redesign implementation begins.
+- POS work paused on 2026-09-11 by product direction decision; Ganatri Admin is the next initiative, with its own scope and planning artifact still required.
 - Product direction agreed: support both general retail and restaurant Stores in one mobile POS app.
 - Tables and KOT follow the shared counter-billing workflow in the release sequence.
 - Version 1 is online-first; offline billing and synchronization are deferred.

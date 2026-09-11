@@ -1,10 +1,10 @@
 # POS Mobile App — Planning Status
 
-Status: Full mobile redesign direction approved; R0 planning gate in progress; Phase 1 implementation paused
+Status: POS paused by product direction decision; Ganatri Admin is next; POS redesign retained for later
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
-This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), the Phase 7 execution record is in [phase-7.md](./phase-7.md), and the origin/main compatibility plan is in [merge-origin-main.md](./merge-origin-main.md). The existing Phase 1–7 app-level slices are complete with follow-ups; the R0 full-redesign planning gate is now the next activity, followed by redesign implementation and then Phase 8 release validation.
+This file is the single status tracker for the POS mobile app effort. The detailed product and implementation baseline is in [spec.md](./spec.md), the Phase 0 audit is in [phase-0.md](./phase-0.md), the Phase 1 execution record is in [phase-1.md](./phase-1.md), the Phase 2 execution record is in [phase-2.md](./phase-2.md), the Phase 3 execution record is in [phase-3.md](./phase-3.md), the Phase 4 execution record is in [phase-4.md](./phase-4.md), the Phase 5 execution record is in [phase-5.md](./phase-5.md), the Phase 6 execution record is in [phase-6.md](./phase-6.md), the Phase 7 execution record is in [phase-7.md](./phase-7.md), and the origin/main compatibility plan is in [merge-origin-main.md](./merge-origin-main.md). The existing Phase 1–7 app-level slices and the full redesign plan are retained; POS work is paused, and Ganatri Admin is the next initiative with a separate planning artifact still required.
 
 ## Current scope
 
@@ -19,6 +19,7 @@ This file is the single status tracker for the POS mobile app effort. The detail
 - Local persistence: MMKV only, with encrypted session storage and Android Keystore-backed key handling to be validated during implementation.
 - API approach: reuse existing shared POS services and types before proposing backend changes.
 - UI direction: full mobile-app redesign based on the root [`UI.md`](../../UI.md); no Phase 1 implementation starts before the redesign planning gate is approved.
+- Execution direction: POS is paused as of 2026-09-11; Ganatri Admin is next, and no Admin implementation starts until its own scope and plan are approved.
 
 ## Status meanings
 
@@ -37,22 +38,22 @@ This file is the single status tracker for the POS mobile app effort. The detail
 | Product scope | Approved | Shared retail/restaurant app and feature boundaries are agreed. |
 | Core UX flow | Approved | POS Unlock → New Sale → Cart Review → Payment → Sale Complete. |
 | Supporting screens | Approved | Bills, Customers, Reports, Settings, and conditional Tables. |
-| UI system | Redesign planning approved | Full mobile shell, navigation, screen layouts, states, and components will be rebuilt against `UI.md`; implementation is paused until the planning gate is accepted. |
+| UI system | POS redesign retained, paused | Full mobile shell, navigation, screen layouts, states, and components remain planned against `UI.md`; implementation is paused with the POS effort. |
 | Storage | Approved | MMKV-only; encryption and key handling require implementation validation. |
 | Localization | Approved | `i18next` + `react-i18next`; English, Gujarati, Hindi interface. |
 | Barcode scanning | Approved | Android phone camera for V1; external scanners deferred. |
 | Platform | Approved | Android 8/API 26+; iPhone deferred. |
 | API reuse strategy | Approved | Existing shared services/types first; Draft-commit idempotency is now implemented and focused-tested. |
-| Mobile POS implementation | Existing slices implemented with follow-ups; redesign planning in progress | Existing Phase 1–7 app-level slices remain available as behavior references only. The full visual/interaction redesign has not started; R0 planning is in progress. Native/device/API/share-sheet validation, Product report value support, and printer hardware/native transport remain pending. |
+| Mobile POS implementation | Paused by product direction decision | Existing Phase 1–7 app-level slices and the R0 redesign plan remain available as references. No POS redesign implementation is active. Native/device/API/share-sheet validation, Product report value support, and printer hardware/native transport remain pending. |
 | Printer hardware | Deferred | Model, paper width, and protocol are selected during printer implementation. |
 
 ## Phase roadmap
 
-The Phase 1–7 statuses below refer to the existing app-code implementation slices. They do not mean the full redesign is complete. The new 0R planning gate must finish before those capabilities are reimplemented through the redesigned shell and screens.
+The Phase 1–7 statuses below refer to the existing app-code implementation slices. They do not mean the full redesign is complete. The new 0R planning gate remains paused with the POS effort and must finish before those capabilities are reimplemented through the redesigned shell and screens.
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
-| 0R. Full redesign planning | Produce the approved blueprint for the complete mobile redesign and stabilize the known baseline risks. | R0.1–R0.10 | In progress | Screen map, UI.md pattern inventory, design tokens, data/state mapping, recovery matrix, device matrix, backlog, and approval gate are complete. |
+| 0R. Full redesign planning | Produce the approved blueprint for the complete mobile redesign and stabilize the known baseline risks. | R0.1–R0.10 | Paused | Screen map, UI.md pattern inventory, design tokens, data/state mapping, recovery matrix, device matrix, backlog, and approval gate remain to be completed if POS is resumed. |
 | 0. Planning and validation | Remove product, API, dependency, and device uncertainty. | 0.1–0.4 | Completed with follow-up | Scope and API/dependency findings are documented; exact physical devices and integration/release verification remain follow-ups. |
 | 1. POS foundation | Establish the Android POS shell, session lifecycle, storage, localization, and UI system. | 1.1–1.8 | Completed with follow-ups | Store Device unlock reaches New Sale with Cart access in the implemented shell; native/device validation remains pending. |
 | 2. Catalog and Product selection | Make Products searchable, scannable, configurable, and easy to add. | 2.1–2.5 | Completed with follow-up | Product selection, scanning, shortcuts, and supported configuration are implemented; native/API validation and bundle-detail API remain follow-ups. |
@@ -203,7 +204,8 @@ The existing mobile implementation has completed the Phase 1 foundation and late
 
 ## Current next step
 
-Complete and review the Pre-Phase 1 full-redesign planning gate (R0.1–R0.10).
-Phase 1 implementation is intentionally paused until that blueprint is
-approved. Do not claim printer readiness until its hardware gates are
+POS work is paused by the 2026-09-11 product direction decision. The next
+initiative is Ganatri Admin; create and approve its separate scope and plan
+before implementing it. Preserve the POS redesign plan and do not resume Phase
+1 or claim printer readiness until POS is explicitly resumed and its gates are
 completed.
