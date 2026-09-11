@@ -25,7 +25,42 @@ describe("WhatsApp Cloud provider exchange", () => {
       );
       expect(requestedUrl).toContain("client_id=app-id");
       expect(requestedUrl).toContain("code=authorization-code");
+      expect(new URL(requestedUrl).searchParams.get("redirect_uri")).toBe("");
       expect(requestedUrl).not.toContain("server-token");
+    } finally {
+      process.env.WHATSAPP_CLOUD_GRAPH_VERSION = previous.version;
+      process.env.WHATSAPP_CLOUD_APP_ID = previous.appId;
+      process.env.WHATSAPP_CLOUD_APP_SECRET = previous.appSecret;
+    }
+  });
+
+  test("surfaces a rejected JavaScript SDK exchange without leaking the authorization code", async () => {
+    const previous = {
+      version: process.env.WHATSAPP_CLOUD_GRAPH_VERSION,
+      appId: process.env.WHATSAPP_CLOUD_APP_ID,
+      appSecret: process.env.WHATSAPP_CLOUD_APP_SECRET,
+    };
+    process.env.WHATSAPP_CLOUD_GRAPH_VERSION = "v26.0";
+    process.env.WHATSAPP_CLOUD_APP_ID = "app-id";
+    process.env.WHATSAPP_CLOUD_APP_SECRET = "app-secret";
+    try {
+      const exchange = createCloudAuthorizationCodeExchange(async () => {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: "Missing redirect_uri parameter.",
+              type: "OAuthException",
+              code: 191,
+            },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      });
+      await expect(exchange.exchange("authorization-code")).rejects.toMatchObject({
+        name: "CloudOnboardingExchangeError",
+        code: "exchange_failed",
+        message: "Missing redirect_uri parameter.",
+      });
     } finally {
       process.env.WHATSAPP_CLOUD_GRAPH_VERSION = previous.version;
       process.env.WHATSAPP_CLOUD_APP_ID = previous.appId;

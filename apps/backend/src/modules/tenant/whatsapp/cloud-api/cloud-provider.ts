@@ -47,6 +47,15 @@ const providerToken = (body: unknown): string => {
   return value.trim();
 };
 
+const graphOAuthErrorMessage = (body: unknown): string | null => {
+  if (!body || typeof body !== "object") return null;
+  const message = (body as { error?: { message?: unknown } }).error?.message;
+  if (typeof message !== "string") return null;
+  const trimmed = message.trim();
+  if (!trimmed || trimmed.length > 300 || /EAA[A-Za-z0-9]/.test(trimmed)) return null;
+  return trimmed;
+};
+
 export const createCloudAuthorizationCodeExchange = (
   fetchImpl: CloudProviderFetch = (input, init) => fetch(input, init),
 ): CloudOnboardingTokenExchange => ({
@@ -60,6 +69,7 @@ export const createCloudAuthorizationCodeExchange = (
       requiredConfig("WHATSAPP_CLOUD_APP_SECRET"),
     );
     url.searchParams.set("code", authorizationCode);
+    url.searchParams.set("redirect_uri", "");
 
     let response: Response;
     let body: unknown;
@@ -77,7 +87,7 @@ export const createCloudAuthorizationCodeExchange = (
     if (!response.ok) {
       throw new CloudOnboardingExchangeError(
         "exchange_failed",
-        "WhatsApp Cloud authorization exchange was rejected",
+        graphOAuthErrorMessage(body) ?? "WhatsApp Cloud authorization exchange was rejected",
       );
     }
     try {

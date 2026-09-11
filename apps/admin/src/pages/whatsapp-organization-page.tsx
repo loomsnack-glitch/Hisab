@@ -22,6 +22,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
+import { embeddedSignupLoginOptions, readEmbeddedSignupSession } from "@/lib/whatsapp-embedded-signup";
 import WhatsAppTemplateManager from "@/components/organizations/whatsapp-template-manager";
 import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manager";
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
@@ -34,8 +35,6 @@ type EmbeddedSignupSdk = {
     init: (options: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void;
     login: (callback: (response: { authResponse?: { code?: string } }) => void, options: Record<string, unknown>) => void;
 };
-
-type EmbeddedSignupMessage = { type?: string; event?: string; data?: { phone_number_id?: string; waba_id?: string } };
 
 const getEmbeddedSignupSdk = async (): Promise<EmbeddedSignupSdk> => {
     const appId = import.meta.env.VITE_WHATSAPP_CLOUD_APP_ID?.trim();
@@ -76,11 +75,30 @@ const launchEmbeddedSignup = async (): Promise<{ code: string; wabaId: string; p
         let phoneNumberId = "";
         let settled = false;
         let timeout = 0;
-        const onMessage = (event: MessageEvent<EmbeddedSignupMessage>) => {
-            if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") return;
-            if (event.data?.type !== "WA_EMBEDDED_SIGNUP" || event.data.event !== "FINISH") return;
-            wabaId = event.data.data?.waba_id?.trim() ?? "";
-            phoneNumberId = event.data.data?.phone_number_id?.trim() ?? "";
+        const fail = (error: Error) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            window.removeEventListener("message", onMessage);
+            reject(error);
+        };
+        const onMessage = (event: MessageEvent<unknown>) => {
+            const session = readEmbeddedSignupSession(event.origin, event.data);
+            if (!session) return;
+            if (session.kind === "cancel") {
+                fail(new Error("Meta Embedded Signup was cancelled"));
+                return;
+            }
+            if (session.kind === "error") {
+                fail(new Error(session.message));
+                return;
+            }
+            if (session.kind === "finish_incomplete") {
+                fail(new Error("Meta Embedded Signup finished without a WhatsApp Business account and phone number"));
+                return;
+            }
+            wabaId = session.wabaId;
+            phoneNumberId = session.phoneNumberId;
             finish();
         };
         const finish = () => {
@@ -91,28 +109,20 @@ const launchEmbeddedSignup = async (): Promise<{ code: string; wabaId: string; p
             resolve({ code, wabaId, phoneNumberId });
         };
         timeout = window.setTimeout(() => {
-            if (settled) return;
-            settled = true;
-            window.removeEventListener("message", onMessage);
-            reject(new Error("Meta Embedded Signup timed out or was cancelled"));
+            fail(new Error("Meta Embedded Signup timed out or was cancelled"));
         }, 120_000);
         window.addEventListener("message", onMessage);
         sdk.login(response => {
             code = response.authResponse?.code?.trim() ?? "";
-            if (!code) {
-                window.clearTimeout(timeout);
-                settled = true;
-                window.removeEventListener("message", onMessage);
-                reject(new Error("Meta Embedded Signup was cancelled"));
+            if (code) {
+                finish();
                 return;
             }
-            finish();
-        }, {
-            config_id: configId,
-            response_type: "code",
-            override_default_response_type: true,
-            extras: { setup: {} },
-        });
+            // Empty login responses are not treated as cancel. Embedded Signup
+            // reports completion through the session postMessage, and Finish can
+            // close the popup with status "unknown" before the authorization code
+            // is attached.
+        }, embeddedSignupLoginOptions(configId));
     });
 };
 

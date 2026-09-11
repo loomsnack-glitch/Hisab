@@ -9,7 +9,8 @@ import {
   type CloudOnboardingTokenExchange,
 } from "./cloud-onboarding-exchange";
 import { cloudOnboardingReplayStore, hashCloudOnboardingNonce } from "./cloud-onboarding.repository";
-import { verifyCloudOnboardingResult } from "./cloud-onboarding-result";
+import { verifyCloudOnboardingResult, CloudOnboardingResultError } from "./cloud-onboarding-result";
+import { CloudOnboardingStateError } from "./cloud-onboarding";
 import {
   completeCloudProvisioningStep,
   createCloudProvisioningState,
@@ -112,9 +113,44 @@ const phoneFromProvider = (value: Record<string, unknown>): CloudPhoneRecord => 
 const providerError = (error: unknown): string =>
   error instanceof CloudOnboardingExchangeError
     ? error.code
-    : error instanceof CloudCredentialError
+    : error instanceof CloudOnboardingStateError
       ? error.code
-      : "cloud_provisioning_failed";
+      : error instanceof CloudOnboardingResultError
+        ? error.code
+        : error instanceof CloudCredentialError
+          ? error.code
+          : error instanceof WhatsAppCloudApiError
+            ? error.providerCode ?? "cloud_api_failed"
+            : "cloud_provisioning_failed";
+
+const provisioningFailure = (error: unknown): { message: string; code: number } => {
+  if (error instanceof CloudCredentialError && error.code === "vault_unavailable") {
+    return {
+      message: "WhatsApp Cloud credential storage is not configured",
+      code: STATUS_CODES.SERVICE_UNAVAILABLE,
+    };
+  }
+  if (
+    error instanceof CloudOnboardingExchangeError
+    || error instanceof CloudOnboardingResultError
+    || error instanceof CloudOnboardingStateError
+  ) {
+    return { message: error.message, code: STATUS_CODES.BAD_REQUEST };
+  }
+  if (
+    error instanceof Error
+    && (
+      error.message === "Cloud phone identity was not found in the WABA"
+      || error.message === "Cloud WABA identity did not match onboarding result"
+    )
+  ) {
+    return { message: error.message, code: STATUS_CODES.BAD_REQUEST };
+  }
+  return {
+    message: "WhatsApp Cloud account could not be connected",
+    code: STATUS_CODES.BAD_REQUEST,
+  };
+};
 
 type ManualCloudAccountInput = {
   wabaId: string;
@@ -335,17 +371,17 @@ export const completeCloudAccountProvisioning = async (
       const failed = failCloudProvisioning(state, providerError(error), "Cloud account provisioning could not be completed");
       await deps.updateProvisioningAttempt({ organizationId, attemptId: attempt.id, state: failed }).catch(() => undefined);
     }
-    const code = providerError(error);
-    const serviceCode =
-      code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST;
+    const failed = provisioningFailure(error);
+    console.error(
+      "[whatsapp] cloud onboarding complete",
+      providerError(error),
+      error instanceof Error ? error.message : String(error),
+    );
     return {
       status: "error",
-      message:
-        code === "vault_unavailable"
-          ? "WhatsApp Cloud credential storage is not configured"
-          : "WhatsApp Cloud account could not be connected",
+      message: failed.message,
       data: null,
-      code: serviceCode,
+      code: failed.code,
     };
   }
 };

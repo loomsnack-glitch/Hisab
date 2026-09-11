@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
 import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
+import { CloudOnboardingExchangeError } from "./cloud-onboarding-exchange";
 import type { CloudProvisioningState } from "./cloud-provisioning";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -346,6 +347,45 @@ describe("Cloud account provisioning service", () => {
       else process.env.WHATSAPP_CLOUD_MANUAL_SETUP_ENABLED = previousFlag;
       if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("returns the provider exchange failure instead of a generic connected-account error", async () => {
+    const state = createCloudOnboardingState({ organizationId, userId, secret });
+    const previousSecret = process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET;
+    process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET = secret;
+    try {
+      const response = await completeCloudAccountProvisioning(
+        userId,
+        organizationId,
+        {
+          state: state.token,
+          code: "authorization-code",
+          wabaId: "1234567890",
+          phoneNumberId: "9876543210",
+        },
+        {
+          exchange: {
+            exchange: async () => {
+              throw new CloudOnboardingExchangeError(
+                "exchange_failed",
+                "WhatsApp Cloud authorization exchange was rejected",
+              );
+            },
+          },
+          consumeReplayStore: { consume: async () => true },
+          getProvisioningAttempt: async () => null,
+        },
+      );
+      expect(response).toMatchObject({
+        status: "error",
+        message: "WhatsApp Cloud authorization exchange was rejected",
+        data: null,
+        code: 400,
+      });
+    } finally {
+      if (previousSecret === undefined) delete process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET;
+      else process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET = previousSecret;
     }
   });
 
