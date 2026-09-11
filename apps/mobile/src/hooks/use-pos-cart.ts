@@ -4,12 +4,14 @@ import type { ProductResponseDTO } from "@repo/types";
 import { usePosCartStore } from "../store/pos-cart.store";
 import type { PosServiceMode, PosTableContext } from "../lib/pos-service-mode-boundary";
 
+const EMPTY_CART_ITEMS: PosCartItem[] = [];
+
 export const usePosCart = () => {
     const session = usePosSessionSnapshot().session;
     const scopeKey = session
         ? `${session.organization.id}:${session.store.id}:${session.device.id}`
         : null;
-    const items = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.items : []));
+    const items = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.items : EMPTY_CART_ITEMS));
     const customer = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.customer : null));
     const discount = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.discount : null));
     const draftSaleId = usePosCartStore((state) => (state.scopeKey === scopeKey ? state.draftSaleId : null));

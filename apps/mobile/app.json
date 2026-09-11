@@ -32,7 +32,7 @@
       },
       "usesCleartextTraffic": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.ganatrimobile"
+      "package": "in.ganatri.pos"
     },
     "web": {
       "favicon": "./assets/favicon.png"

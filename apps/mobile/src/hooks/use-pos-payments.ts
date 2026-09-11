@@ -3,12 +3,14 @@ import { usePosSessionSnapshot } from "../store/pos-session.store";
 import { getPosPaymentSummary, validatePosPaymentRows, type PosPaymentRow } from "../lib/pos-payment-boundary";
 import { usePosPaymentStore } from "../store/pos-payment.store";
 
+const EMPTY_PAYMENT_ROWS: PosPaymentRow[] = [];
+
 export const usePosPayments = (total: number) => {
     const session = usePosSessionSnapshot().session;
     const scopeKey = session
         ? `${session.organization.id}:${session.store.id}:${session.device.id}`
         : null;
-    const rows = usePosPaymentStore((state) => state.scopeKey === scopeKey ? state.rows : []);
+    const rows = usePosPaymentStore((state) => state.scopeKey === scopeKey ? state.rows : EMPTY_PAYMENT_ROWS);
 
     useEffect(() => {
         if (scopeKey) {
