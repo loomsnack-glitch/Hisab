@@ -13,6 +13,7 @@ import { SQL } from "bun";
 import { encryptDeviceSecret } from "@/helpers/deviceSecret.helper";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
 import * as catalogRepository from "@/modules/tenant/catalog/catalog.repository";
+import { seedCommercialCatalogAndRepairGrants } from "./seed-commercial-catalog";
 
 // Load environment variables
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -411,6 +412,8 @@ async function main(): Promise<void> {
 
   await verifyRecords();
   await verifyPOSLogin();
+
+  await seedCommercialCatalogAndRepairGrants();
 
   console.log("\n=== Seeding Summary ===");
   console.log(`Users:        ${counts.users.created} created, ${counts.users.reused} reused`);

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 450" width="100%" height="100%">
+  <defs>
+    <radialGradient id="dev-bg-glow" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#0c73fe" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="#0c73fe" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="transparent" />
+    </radialGradient>
+    <linearGradient id="dev-body-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="60%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="dev-face-grad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#93c5fd" />
+      <stop offset="40%" stop-color="#3b82f6" />
+      <stop offset="80%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="dev-rim-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="transparent" />
+      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Ambient Blue Glow -->
+  <circle cx="180" cy="220" r="140" fill="url(#dev-bg-glow)" />
+
+  <!-- Torso & Shoulders -->
+  <path d="M 30 450 C 40 340, 100 270, 150 255 L 210 255 C 260 270, 320 340, 330 450 Z" fill="url(#dev-body-grad)" />
+
+  <!-- Inner Shirt V-neck -->
+  <path d="M 148 255 L 140 450 L 220 450 L 212 255 C 212 290, 148 290, 148 255 Z" fill="#64748b" opacity="0.8" />
+
+  <!-- Neck -->
+  <path d="M 158 230 C 158 260, 202 260, 202 230 L 202 195 L 158 195 Z" fill="#1d4ed8" opacity="0.8" />
+
+  <!-- Head / Face -->
+  <ellipse cx="180" cy="160" rx="50" ry="62" fill="url(#dev-face-grad)" opacity="0.95" />
+
+  <!-- Hair Shape -->
+  <path d="M 130 145 C 130 95, 170 80, 195 82 C 220 84, 235 98, 235 140 C 235 150, 230 162, 226 168 C 218 138, 210 130, 195 130 C 170 130, 160 152, 140 158 C 132 160, 130 152, 130 145 Z" fill="#0f172a" />
+
+  <!-- Rim light highlights -->
+  <path d="M 30 450 C 40 340, 100 270, 150 255" stroke="url(#dev-rim-grad)" stroke-width="3" fill="none" opacity="0.8" />
+  <path d="M 330 450 C 320 340, 260 270, 210 255" stroke="url(#dev-rim-grad)" stroke-width="3" fill="none" opacity="0.7" />
+
+  <!-- Initials Badge -->
+  <g transform="translate(180, 370)">
+    <circle cx="0" cy="0" r="24" fill="#020617" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.5" />
+    <text x="0" y="7" text-anchor="middle" fill="#38bdf8" font-size="16" font-weight="800" font-family="system-ui, sans-serif" letter-spacing="0.05em">DJ</text>
+  </g>
+</svg>

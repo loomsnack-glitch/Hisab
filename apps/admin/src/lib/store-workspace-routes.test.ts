@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+    getStoreAppearancePath,
+    getStoreCategoriesPath,
+    getStoreDevicesPath,
+    getStoreLicensePath,
     getStoreProductsPath,
+    getStoreSettingsPath,
     getStoreVendorsPath,
     getStoreWorkspacePath,
     isStoreWorkspaceNavActive,
@@ -9,7 +14,6 @@ import {
     parseStoreWorkspacePath,
 } from "./store-workspace-routes";
 import { getOrganizationWorkspacePath } from "./default-org-path";
-import { getStoreDetailPath, getStoreListPath, isStoresNavActive } from "./store-routes";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -26,8 +30,23 @@ describe("store workspace routes", () => {
         expect(getStoreProductsPath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/products`,
         );
+        expect(getStoreCategoriesPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/categories`,
+        );
         expect(getStoreVendorsPath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/vendors`,
+        );
+        expect(getStoreDevicesPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/devices`,
+        );
+        expect(getStoreSettingsPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/settings`,
+        );
+        expect(getStoreLicensePath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/license`,
+        );
+        expect(getStoreAppearancePath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/appearance`,
         );
     });
 
@@ -40,27 +59,31 @@ describe("store workspace routes", () => {
             organizationId,
             storeId,
         });
+        expect(parseStoreWorkspacePath(getStoreDevicesPath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
+        expect(parseStoreWorkspacePath(getStoreSettingsPath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
+        expect(parseStoreWorkspacePath(getStoreLicensePath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
         expect(isStoreWorkspacePath(`/organizations/${organizationId}/workspaces/${storeId}`)).toBe(true);
         expect(isStoreWorkspacePath(getStoreProductsPath(organizationId, storeId))).toBe(true);
         expect(isStoreWorkspaceNavActive(`/organizations/${organizationId}/workspaces/${storeId}`)).toBe(true);
         expect(isStoreWorkspaceNavActive(`/organizations/${organizationId}/workspaces/${otherStoreId}`)).toBe(true);
     });
 
-    test("does not treat Organization store management URLs as a Store workspace", () => {
-        expect(isStoreWorkspacePath(getStoreListPath(organizationId))).toBe(false);
-        expect(isStoreWorkspacePath(getStoreDetailPath(organizationId, storeId))).toBe(false);
-        expect(isStoreWorkspacePath(getStoreDetailPath(organizationId, storeId, "settings"))).toBe(false);
+    test("does not treat Organization workspace URLs as a Store workspace", () => {
         expect(isStoreWorkspacePath(`/organizations/${organizationId}/products`)).toBe(false);
-        expect(parseStoreWorkspacePath(getStoreDetailPath(organizationId, storeId))).toBeNull();
         expect(parseStoreWorkspacePath(`/organizations/${organizationId}/workspaces`)).toBeNull();
     });
 
-    test("keeps Organization workspace and store-detail routes distinct from Store workspace", () => {
-        expect(getOrganizationWorkspacePath(organizationId)).toBe(`/organizations/${organizationId}/stores`);
-        expect(isStoresNavActive(getStoreListPath(organizationId))).toBe(true);
-        expect(isStoresNavActive(getStoreDetailPath(organizationId, storeId))).toBe(true);
-        expect(isStoresNavActive(getStoreWorkspacePath(organizationId, storeId))).toBe(false);
-        expect(isStoreWorkspaceNavActive(getStoreListPath(organizationId))).toBe(false);
-        expect(isStoreWorkspaceNavActive(getStoreDetailPath(organizationId, storeId))).toBe(false);
+    test("keeps Organization and Store workspace routes distinct", () => {
+        expect(getOrganizationWorkspacePath(organizationId)).toBe(`/organizations/${organizationId}/products`);
+        expect(isStoreWorkspaceNavActive(getOrganizationWorkspacePath(organizationId))).toBe(false);
     });
 });

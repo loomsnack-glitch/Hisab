@@ -18,6 +18,8 @@ import type {
     CreateProductAddOnAttachmentREPO,
     CreateProductREPO,
     CreateStoreProductOfferingREPO,
+    CreateStoreCategoryPresentationREPO,
+    CreateStoreAddOnOfferingREPO,
     LabelTemplateDTO,
     ProductLabelProfileDTO,
     ProductLabelProfileREPO,
@@ -25,12 +27,21 @@ import type {
     ProductAddOnAttachmentResponseDTO,
     ProductDTO,
     StoreProductOfferingDTO,
+    StoreCategoryPresentationDTO,
+    StoreAddOnOfferingDTO,
     UpdateAddOnREPO,
     UpdateCategoryREPO,
     UpdateLabelTemplateREPO,
     UpdateProductAddOnAttachmentREPO,
     UpdateProductREPO,
     UpdateStoreProductOfferingREPO,
+    UpdateStoreCategoryPresentationREPO,
+    UpdateStoreAddOnOfferingREPO,
+    CatalogCommercialOperationAuditDTO,
+    CatalogCommercialOperationChange,
+    CatalogCommercialItemType,
+    CatalogCommercialOperationType,
+    CreateCatalogCommercialOperationAuditREPO,
 } from "@repo/types";
 import { SEEDED_LABEL_TEMPLATES } from "@repo/types";
 
@@ -40,6 +51,20 @@ const mapRow = <T>(row: Record<string, unknown>) => snakeToCamel(row) as T;
 // those writes serialized per Organization so concurrent creates cannot leave a
 // missing Store Product Offering.
 const STORE_PRODUCT_OFFERING_TOPOLOGY_LOCK_ID = 410041;
+const STORE_CATEGORY_PRESENTATION_TOPOLOGY_LOCK_ID = 410042;
+const STORE_ADD_ON_OFFERING_TOPOLOGY_LOCK_ID = 410043;
+
+export const lockStoreAddOnOfferingTopology = async (
+    organizationId: string,
+    tx: Bun.TransactionSQL,
+) => {
+    await tx`
+        SELECT pg_advisory_xact_lock(
+            ${STORE_ADD_ON_OFFERING_TOPOLOGY_LOCK_ID},
+            hashtext(${organizationId})
+        )
+    `;
+};
 
 export const lockStoreProductOfferingTopology = async (
     organizationId: string,
@@ -69,11 +94,51 @@ const mapProduct = (row: Record<string, unknown>): ProductDTO => {
 };
 
 const mapStoreProductOffering = (row: Record<string, unknown>): StoreProductOfferingDTO => {
-    const mapped = mapRow<StoreProductOfferingDTO>(row);
+    const mapped = mapRow<{
+        id: string;
+        organizationId: string;
+        storeId: string;
+        productId: string;
+        priceOverride?: number | null;
+        discountOverride?: number | null;
+        status: StoreProductOfferingDTO["status"];
+        createdBy: string;
+        updatedBy?: string | null;
+        createdAt: StoreProductOfferingDTO["createdAt"];
+        updatedAt: StoreProductOfferingDTO["updatedAt"];
+    }>(row);
+
+    const rawPriceOverride = row.price_override ?? mapped.priceOverride;
+    const rawDiscountOverride = row.discount_override ?? mapped.discountOverride;
+    const priceOverride =
+        rawPriceOverride === null || rawPriceOverride === undefined
+            ? null
+            : Number(rawPriceOverride);
+    const discountOverride =
+        rawDiscountOverride === null || rawDiscountOverride === undefined
+            ? null
+            : Number(rawDiscountOverride);
+    const productPrice = Number(row.product_price);
+    const productDiscount = Number(row.product_discount);
+    const effectivePrice = priceOverride ?? productPrice;
+    const effectiveDiscount = discountOverride ?? productDiscount;
+
     return {
-        ...mapped,
-        price: Number(mapped.price),
-        discount: Number(mapped.discount),
+        id: mapped.id,
+        organizationId: mapped.organizationId,
+        storeId: mapped.storeId,
+        productId: mapped.productId,
+        priceOverride,
+        discountOverride,
+        effectivePrice,
+        effectiveDiscount,
+        isPriceInherited: priceOverride === null,
+        isDiscountInherited: discountOverride === null,
+        status: mapped.status,
+        createdBy: mapped.createdBy,
+        updatedBy: mapped.updatedBy,
+        createdAt: mapped.createdAt,
+        updatedAt: mapped.updatedAt,
     };
 };
 
@@ -125,6 +190,13 @@ const mapAttachmentWithAddOn = (row: Record<string, unknown>): ProductAddOnAttac
         addOnUpdatedAt: AddOnDTO["updatedAt"];
     };
 
+    const offeringPrice =
+        row.offering_price != null ? Number(row.offering_price) : Number(mapped.addOnPrice);
+    const offeringDiscount =
+        row.offering_discount != null
+            ? Number(row.offering_discount)
+            : Number(mapped.addOnDiscount);
+
     return {
         id: mapped.id,
         organizationId: mapped.organizationId,
@@ -140,8 +212,8 @@ const mapAttachmentWithAddOn = (row: Record<string, unknown>): ProductAddOnAttac
             id: mapped.addOnId,
             organizationId: mapped.organizationId,
             name: mapped.addOnName,
-            price: Number(mapped.addOnPrice),
-            discount: Number(mapped.addOnDiscount),
+            price: offeringPrice,
+            discount: offeringDiscount,
             status: mapped.addOnStatus,
             createdBy: mapped.addOnCreatedBy,
             updatedBy: mapped.addOnUpdatedBy,
@@ -861,43 +933,7 @@ export const getProductAddOnAttachmentsByProductId = async (
     return results.map((result: Record<string, unknown>) => mapAttachmentWithAddOn(result));
 };
 
-export const getSelectableProductAddOnAttachmentsByOrganizationId = async (
-    organizationId: string,
-): Promise<ProductAddOnAttachmentResponseDTO[]> => {
-    const results = await pg`
-        SELECT
-            a.id,
-            a.organization_id,
-            a.product_id,
-            a.add_on_id,
-            a.selection_cap,
-            a.status,
-            a.created_by,
-            a.updated_by,
-            a.created_at,
-            a.updated_at,
-            ao.name AS add_on_name,
-            ao.price AS add_on_price,
-            ao.discount AS add_on_discount,
-            ao.status AS add_on_status,
-            ao.created_by AS add_on_created_by,
-            ao.updated_by AS add_on_updated_by,
-            ao.created_at AS add_on_created_at,
-            ao.updated_at AS add_on_updated_at
-        FROM product_add_on_attachments a
-        INNER JOIN add_ons ao
-            ON ao.id = a.add_on_id
-           AND ao.organization_id = a.organization_id
-        WHERE a.organization_id = ${organizationId}
-          AND a.status = 'active'
-          AND ao.status = 'active'
-        ORDER BY a.created_at ASC
-    `;
-
-    return results.map((result: Record<string, unknown>) => mapAttachmentWithAddOn(result));
-};
-
-export const getSelectableProductAddOnAttachmentByProductAndAddOn = async (
+export const getActiveProductAddOnAttachmentByProductAndAddOn = async (
     organizationId: string,
     productId: string,
     addOnId: string,
@@ -926,6 +962,115 @@ export const getSelectableProductAddOnAttachmentByProductAndAddOn = async (
         INNER JOIN add_ons ao
             ON ao.id = a.add_on_id
            AND ao.organization_id = a.organization_id
+        WHERE a.organization_id = ${organizationId}
+          AND a.product_id = ${productId}
+          AND a.add_on_id = ${addOnId}
+          AND a.status = 'active'
+          AND ao.status = 'active'
+    `;
+
+    return result ? mapAttachmentWithAddOn(result) : null;
+};
+
+export const getSelectableProductAddOnAttachmentsByStoreId = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ProductAddOnAttachmentResponseDTO[]> => {
+    const results = await pg`
+        SELECT
+            a.id,
+            a.organization_id,
+            a.product_id,
+            a.add_on_id,
+            a.selection_cap,
+            a.status,
+            a.created_by,
+            a.updated_by,
+            a.created_at,
+            a.updated_at,
+            ao.name AS add_on_name,
+            ao.price AS add_on_price,
+            ao.discount AS add_on_discount,
+            ao.status AS add_on_status,
+            ao.created_by AS add_on_created_by,
+            ao.updated_by AS add_on_updated_by,
+            ao.created_at AS add_on_created_at,
+            ao.updated_at AS add_on_updated_at,
+            COALESCE(sao.price_override, ao.price) AS offering_price,
+            COALESCE(sao.discount_override, ao.discount) AS offering_discount
+        FROM product_add_on_attachments a
+        INNER JOIN add_ons ao
+            ON ao.id = a.add_on_id
+           AND ao.organization_id = a.organization_id
+        INNER JOIN store_add_on_offerings sao
+            ON sao.add_on_id = ao.id
+           AND sao.organization_id = ao.organization_id
+           AND sao.store_id = ${storeId}
+           AND sao.status = 'active'
+        INNER JOIN store_product_offerings spo
+            ON spo.product_id = a.product_id
+           AND spo.organization_id = a.organization_id
+           AND spo.store_id = ${storeId}
+           AND spo.status = 'active'
+        INNER JOIN products p
+            ON p.id = a.product_id
+           AND p.organization_id = a.organization_id
+           AND p.status = 'active'
+        WHERE a.organization_id = ${organizationId}
+          AND a.status = 'active'
+          AND ao.status = 'active'
+        ORDER BY a.created_at ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapAttachmentWithAddOn(result));
+};
+
+export const getSelectableProductAddOnAttachmentByProductAndAddOn = async (
+    organizationId: string,
+    storeId: string,
+    productId: string,
+    addOnId: string,
+): Promise<ProductAddOnAttachmentResponseDTO | null> => {
+    const [result] = await pg`
+        SELECT
+            a.id,
+            a.organization_id,
+            a.product_id,
+            a.add_on_id,
+            a.selection_cap,
+            a.status,
+            a.created_by,
+            a.updated_by,
+            a.created_at,
+            a.updated_at,
+            ao.name AS add_on_name,
+            ao.price AS add_on_price,
+            ao.discount AS add_on_discount,
+            ao.status AS add_on_status,
+            ao.created_by AS add_on_created_by,
+            ao.updated_by AS add_on_updated_by,
+            ao.created_at AS add_on_created_at,
+            ao.updated_at AS add_on_updated_at,
+            COALESCE(sao.price_override, ao.price) AS offering_price,
+            COALESCE(sao.discount_override, ao.discount) AS offering_discount
+        FROM product_add_on_attachments a
+        INNER JOIN add_ons ao
+            ON ao.id = a.add_on_id
+           AND ao.organization_id = a.organization_id
+        INNER JOIN store_add_on_offerings sao
+            ON sao.add_on_id = ao.id
+           AND sao.organization_id = ao.organization_id
+           AND sao.store_id = ${storeId}
+           AND sao.status = 'active'
+        INNER JOIN store_product_offerings spo
+            ON spo.product_id = a.product_id
+           AND spo.organization_id = a.organization_id
+           AND spo.store_id = ${storeId}
+           AND spo.status = 'active'
+        INNER JOIN products p
+            ON p.id = a.product_id
+           AND p.organization_id = a.organization_id
+           AND p.status = 'active'
         WHERE a.organization_id = ${organizationId}
           AND a.product_id = ${productId}
           AND a.add_on_id = ${addOnId}
@@ -1582,14 +1727,14 @@ export const upsertProductLabelProfile = async (
 export const createStoreProductOffering = async (
     offeringData: CreateStoreProductOfferingREPO,
     tx?: Bun.TransactionSQL,
-): Promise<StoreProductOfferingDTO | null> => {
+): Promise<{ id: string } | null> => {
     const db = tx || pg;
     const [result] = await db`
         INSERT INTO store_product_offerings ${camelToSnakeSql(offeringData)}
         RETURNING *
     `;
 
-    return result ? mapStoreProductOffering(result) : null;
+    return result ? { id: String(result.id) } : null;
 };
 
 export const getStoreProductOfferingsByStoreId = async (
@@ -1597,7 +1742,7 @@ export const getStoreProductOfferingsByStoreId = async (
     storeId: string,
 ): Promise<StoreProductOfferingDTO[]> => {
     const results = await pg`
-        SELECT o.*
+        SELECT o.*, p.price AS product_price, p.discount AS product_discount
         FROM store_product_offerings o
         INNER JOIN products p
             ON p.id = o.product_id
@@ -1619,11 +1764,14 @@ export const getStoreProductOfferingById = async (
     offeringId: string,
 ): Promise<StoreProductOfferingDTO | null> => {
     const [result] = await pg`
-        SELECT *
-        FROM store_product_offerings
-        WHERE id = ${offeringId}
-          AND organization_id = ${organizationId}
-          AND store_id = ${storeId}
+        SELECT o.*, p.price AS product_price, p.discount AS product_discount
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        WHERE o.id = ${offeringId}
+          AND o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
     `;
 
     return result ? mapStoreProductOffering(result) : null;
@@ -1635,23 +1783,85 @@ export const getStoreProductOfferingByProductAndStore = async (
     productId: string,
 ): Promise<StoreProductOfferingDTO | null> => {
     const [result] = await pg`
-        SELECT *
-        FROM store_product_offerings
-        WHERE organization_id = ${organizationId}
-          AND store_id = ${storeId}
-          AND product_id = ${productId}
+        SELECT o.*, p.price AS product_price, p.discount AS product_discount
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.product_id = ${productId}
     `;
 
     return result ? mapStoreProductOffering(result) : null;
 };
 
+export const getStoreProductOfferingsByProductId = async (
+    organizationId: string,
+    productId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreProductOfferingDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT o.*, p.price AS product_price, p.discount AS product_discount
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.product_id = ${productId}
+        ORDER BY o.store_id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreProductOffering(result));
+};
+
+export const getStoreProductOfferingOverrideSummary = async (
+    organizationId: string,
+): Promise<{
+    totalOfferings: number;
+    fullyInherited: number;
+    priceOverridden: number;
+    discountOverridden: number;
+    bothOverridden: number;
+}> => {
+    const [result] = await pg`
+        SELECT
+            COUNT(*)::int AS total_offerings,
+            COUNT(*) FILTER (
+                WHERE price_override IS NULL AND discount_override IS NULL
+            )::int AS fully_inherited,
+            COUNT(*) FILTER (
+                WHERE price_override IS NOT NULL AND discount_override IS NULL
+            )::int AS price_overridden,
+            COUNT(*) FILTER (
+                WHERE price_override IS NULL AND discount_override IS NOT NULL
+            )::int AS discount_overridden,
+            COUNT(*) FILTER (
+                WHERE price_override IS NOT NULL AND discount_override IS NOT NULL
+            )::int AS both_overridden
+        FROM store_product_offerings
+        WHERE organization_id = ${organizationId}
+    `;
+
+    return {
+        totalOfferings: Number(result?.total_offerings ?? 0),
+        fullyInherited: Number(result?.fully_inherited ?? 0),
+        priceOverridden: Number(result?.price_overridden ?? 0),
+        discountOverridden: Number(result?.discount_overridden ?? 0),
+        bothOverridden: Number(result?.both_overridden ?? 0),
+    };
+};
+
 export const updateStoreProductOffering = async (
     offeringData: UpdateStoreProductOfferingREPO,
-): Promise<StoreProductOfferingDTO | null> => {
-    const [result] = await pg`
+    tx?: Bun.TransactionSQL,
+): Promise<{ id: string } | null> => {
+    const db = tx || pg;
+    const [result] = await db`
         UPDATE store_product_offerings
-        SET price = ${offeringData.price},
-            discount = ${offeringData.discount},
+        SET price_override = ${offeringData.priceOverride},
+            discount_override = ${offeringData.discountOverride},
             status = ${offeringData.status},
             updated_by = ${offeringData.updatedBy},
             updated_at = NOW()
@@ -1661,7 +1871,180 @@ export const updateStoreProductOffering = async (
         RETURNING *
     `;
 
-    return result ? mapStoreProductOffering(result) : null;
+    return result ? { id: String(result.id) } : null;
+};
+
+export const lockStoreCategoryPresentationTopology = async (
+    organizationId: string,
+    tx: Bun.TransactionSQL,
+) => {
+    await tx`
+        SELECT pg_advisory_xact_lock(
+            ${STORE_CATEGORY_PRESENTATION_TOPOLOGY_LOCK_ID},
+            hashtext(${organizationId})
+        )
+    `;
+};
+
+const mapStoreCategoryPresentation = (
+    row: Record<string, unknown>,
+): StoreCategoryPresentationDTO => snakeToCamel(row) as StoreCategoryPresentationDTO;
+
+const mapCategory = (row: Record<string, unknown>): CategoryDTO =>
+    mapRow<CategoryDTO>(row);
+
+export const createStoreCategoryPresentation = async (
+    presentationData: CreateStoreCategoryPresentationREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreCategoryPresentationDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO store_category_presentations ${camelToSnakeSql(presentationData)}
+        RETURNING *
+    `;
+
+    return result ? mapStoreCategoryPresentation(result) : null;
+};
+
+export const getNextStoreCategoryPresentationSortOrder = async (
+    organizationId: string,
+    storeId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<number> => {
+    const db = tx || pg;
+    const [result] = await db`
+        SELECT COALESCE(MAX(sort_order) + 1, 0)::int AS next_sort_order
+        FROM store_category_presentations
+        WHERE organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return Number(result?.next_sort_order ?? 0);
+};
+
+export const getStoreCategoryPresentationsByStoreId = async (
+    organizationId: string,
+    storeId: string,
+): Promise<Array<StoreCategoryPresentationDTO & { category: CategoryDTO }>> => {
+    const results = await pg`
+        SELECT
+            p.*,
+            c.id AS category_row_id,
+            c.organization_id AS category_organization_id,
+            c.name AS category_name,
+            c.sort_order AS category_sort_order,
+            c.status AS category_status,
+            c.created_by AS category_created_by,
+            c.updated_by AS category_updated_by,
+            c.created_at AS category_created_at,
+            c.updated_at AS category_updated_at
+        FROM store_category_presentations p
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.store_id = ${storeId}
+        ORDER BY p.sort_order ASC, c.created_at ASC, c.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => ({
+        ...mapStoreCategoryPresentation(result),
+        category: mapCategory({
+            id: result.category_row_id,
+            organization_id: result.category_organization_id,
+            name: result.category_name,
+            sort_order: result.category_sort_order,
+            status: result.category_status,
+            created_by: result.category_created_by,
+            updated_by: result.category_updated_by,
+            created_at: result.category_created_at,
+            updated_at: result.category_updated_at,
+        }),
+    }));
+};
+
+export const getStoreCategoryPresentationById = async (
+    organizationId: string,
+    storeId: string,
+    presentationId: string,
+): Promise<StoreCategoryPresentationDTO | null> => {
+    const [result] = await pg`
+        SELECT *
+        FROM store_category_presentations
+        WHERE id = ${presentationId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+    `;
+
+    return result ? mapStoreCategoryPresentation(result) : null;
+};
+
+export const getVisibleCategoriesForStore = async (
+    organizationId: string,
+    storeId: string,
+): Promise<CategoryDTO[]> => {
+    const results = await pg`
+        SELECT
+            c.id,
+            c.organization_id,
+            c.name,
+            p.sort_order,
+            c.status,
+            c.created_by,
+            c.updated_by,
+            c.created_at,
+            c.updated_at
+        FROM store_category_presentations p
+        INNER JOIN categories c
+            ON c.id = p.category_id
+           AND c.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.store_id = ${storeId}
+          AND p.visible = TRUE
+          AND c.status = 'active'
+        ORDER BY p.sort_order ASC, c.created_at ASC, c.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapCategory(result));
+};
+
+export const updateStoreCategoryPresentation = async (
+    presentationData: UpdateStoreCategoryPresentationREPO,
+): Promise<StoreCategoryPresentationDTO | null> => {
+    const [result] = await pg`
+        UPDATE store_category_presentations
+        SET visible = ${presentationData.visible},
+            sort_order = ${presentationData.sortOrder},
+            updated_by = ${presentationData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${presentationData.id}
+          AND organization_id = ${presentationData.organizationId}
+          AND store_id = ${presentationData.storeId}
+        RETURNING *
+    `;
+
+    return result ? mapStoreCategoryPresentation(result) : null;
+};
+
+export const reorderStoreCategoryPresentations = async (
+    organizationId: string,
+    storeId: string,
+    categoryIds: string[],
+    userId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<void> => {
+    const db = tx || pg;
+    for (const [sortOrder, categoryId] of categoryIds.entries()) {
+        await db`
+            UPDATE store_category_presentations
+            SET sort_order = ${sortOrder},
+                updated_by = ${userId},
+                updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND store_id = ${storeId}
+              AND category_id = ${categoryId}
+        `;
+    }
 };
 
 export const getActiveStoreCatalogProducts = async (
@@ -1672,8 +2055,8 @@ export const getActiveStoreCatalogProducts = async (
         SELECT
             p.*,
             u.label AS unit_label,
-            o.price AS offering_price,
-            o.discount AS offering_discount
+            COALESCE(o.price_override, p.price) AS offering_price,
+            COALESCE(o.discount_override, p.discount) AS offering_discount
         FROM store_product_offerings o
         INNER JOIN products p
             ON p.id = o.product_id
@@ -1687,6 +2070,7 @@ export const getActiveStoreCatalogProducts = async (
         WHERE o.organization_id = ${organizationId}
           AND o.store_id = ${storeId}
           AND o.status = 'active'
+          AND p.status = 'active'
         ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
@@ -1699,4 +2083,340 @@ export const getActiveStoreCatalogProducts = async (
             status: "active" as const,
         };
     });
+};
+
+const mapStoreAddOnOffering = (row: Record<string, unknown>): StoreAddOnOfferingDTO => {
+    const mapped = mapRow<{
+        id: string;
+        organizationId: string;
+        storeId: string;
+        addOnId: string;
+        priceOverride?: number | null;
+        discountOverride?: number | null;
+        status: StoreAddOnOfferingDTO["status"];
+        createdBy: string;
+        updatedBy?: string | null;
+        createdAt: StoreAddOnOfferingDTO["createdAt"];
+        updatedAt: StoreAddOnOfferingDTO["updatedAt"];
+    }>(row);
+
+    const rawPriceOverride = row.price_override ?? mapped.priceOverride;
+    const rawDiscountOverride = row.discount_override ?? mapped.discountOverride;
+    const priceOverride =
+        rawPriceOverride === null || rawPriceOverride === undefined
+            ? null
+            : Number(rawPriceOverride);
+    const discountOverride =
+        rawDiscountOverride === null || rawDiscountOverride === undefined
+            ? null
+            : Number(rawDiscountOverride);
+    const addOnPrice = Number(row.add_on_price);
+    const addOnDiscount = Number(row.add_on_discount);
+    const effectivePrice = priceOverride ?? addOnPrice;
+    const effectiveDiscount = discountOverride ?? addOnDiscount;
+
+    return {
+        id: mapped.id,
+        organizationId: mapped.organizationId,
+        storeId: mapped.storeId,
+        addOnId: mapped.addOnId,
+        priceOverride,
+        discountOverride,
+        effectivePrice,
+        effectiveDiscount,
+        isPriceInherited: priceOverride === null,
+        isDiscountInherited: discountOverride === null,
+        status: mapped.status,
+        createdBy: mapped.createdBy,
+        updatedBy: mapped.updatedBy,
+        createdAt: mapped.createdAt,
+        updatedAt: mapped.updatedAt,
+    };
+};
+
+export const createStoreAddOnOffering = async (
+    offeringData: CreateStoreAddOnOfferingREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<{ id: string } | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO store_add_on_offerings ${camelToSnakeSql(offeringData)}
+        RETURNING *
+    `;
+
+    return result ? { id: String(result.id) } : null;
+};
+
+export const getStoreAddOnOfferingsByStoreId = async (
+    organizationId: string,
+    storeId: string,
+): Promise<StoreAddOnOfferingDTO[]> => {
+    const results = await pg`
+        SELECT o.*, ao.price AS add_on_price, ao.discount AS add_on_discount
+        FROM store_add_on_offerings o
+        INNER JOIN add_ons ao
+            ON ao.id = o.add_on_id
+           AND ao.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+        ORDER BY ao.created_at ASC, ao.id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreAddOnOffering(result));
+};
+
+export const getStoreAddOnOfferingById = async (
+    organizationId: string,
+    storeId: string,
+    offeringId: string,
+): Promise<StoreAddOnOfferingDTO | null> => {
+    const [result] = await pg`
+        SELECT o.*, ao.price AS add_on_price, ao.discount AS add_on_discount
+        FROM store_add_on_offerings o
+        INNER JOIN add_ons ao
+            ON ao.id = o.add_on_id
+           AND ao.organization_id = o.organization_id
+        WHERE o.id = ${offeringId}
+          AND o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+    `;
+
+    return result ? mapStoreAddOnOffering(result) : null;
+};
+
+export const getStoreAddOnOfferingByAddOnAndStore = async (
+    organizationId: string,
+    storeId: string,
+    addOnId: string,
+): Promise<StoreAddOnOfferingDTO | null> => {
+    const [result] = await pg`
+        SELECT o.*, ao.price AS add_on_price, ao.discount AS add_on_discount
+        FROM store_add_on_offerings o
+        INNER JOIN add_ons ao
+            ON ao.id = o.add_on_id
+           AND ao.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.add_on_id = ${addOnId}
+    `;
+
+    return result ? mapStoreAddOnOffering(result) : null;
+};
+
+export const getStoreAddOnOfferingsByAddOnId = async (
+    organizationId: string,
+    addOnId: string,
+    tx?: Bun.TransactionSQL,
+): Promise<StoreAddOnOfferingDTO[]> => {
+    const db = tx || pg;
+    const results = await db`
+        SELECT o.*, ao.price AS add_on_price, ao.discount AS add_on_discount
+        FROM store_add_on_offerings o
+        INNER JOIN add_ons ao
+            ON ao.id = o.add_on_id
+           AND ao.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.add_on_id = ${addOnId}
+        ORDER BY o.store_id ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapStoreAddOnOffering(result));
+};
+
+export const getStoreAddOnOfferingOverrideSummary = async (
+    organizationId: string,
+): Promise<{
+    totalOfferings: number;
+    fullyInherited: number;
+    priceOverridden: number;
+    discountOverridden: number;
+    bothOverridden: number;
+}> => {
+    const [result] = await pg`
+        SELECT
+            COUNT(*)::int AS total_offerings,
+            COUNT(*) FILTER (
+                WHERE price_override IS NULL AND discount_override IS NULL
+            )::int AS fully_inherited,
+            COUNT(*) FILTER (
+                WHERE price_override IS NOT NULL AND discount_override IS NULL
+            )::int AS price_overridden,
+            COUNT(*) FILTER (
+                WHERE price_override IS NULL AND discount_override IS NOT NULL
+            )::int AS discount_overridden,
+            COUNT(*) FILTER (
+                WHERE price_override IS NOT NULL AND discount_override IS NOT NULL
+            )::int AS both_overridden
+        FROM store_add_on_offerings
+        WHERE organization_id = ${organizationId}
+    `;
+
+    return {
+        totalOfferings: Number(result?.total_offerings ?? 0),
+        fullyInherited: Number(result?.fully_inherited ?? 0),
+        priceOverridden: Number(result?.price_overridden ?? 0),
+        discountOverridden: Number(result?.discount_overridden ?? 0),
+        bothOverridden: Number(result?.both_overridden ?? 0),
+    };
+};
+
+export const updateStoreAddOnOffering = async (
+    offeringData: UpdateStoreAddOnOfferingREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<{ id: string } | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        UPDATE store_add_on_offerings
+        SET price_override = ${offeringData.priceOverride},
+            discount_override = ${offeringData.discountOverride},
+            status = ${offeringData.status},
+            updated_by = ${offeringData.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${offeringData.id}
+          AND organization_id = ${offeringData.organizationId}
+          AND store_id = ${offeringData.storeId}
+        RETURNING *
+    `;
+
+    return result ? { id: String(result.id) } : null;
+};
+
+export const getAddOnsByIds = async (
+    organizationId: string,
+    addOnIds: string[],
+): Promise<AddOnDTO[]> => {
+    if (addOnIds.length === 0) return [];
+
+    const results = await pg`
+        SELECT *
+        FROM add_ons
+        WHERE organization_id = ${organizationId}
+          AND id IN ${pg(addOnIds)}
+    `;
+
+    return results.map((result: Record<string, unknown>) => mapRow<AddOnDTO>(result));
+};
+
+export const getStoreProductOfferingsForStoresAndProducts = async (
+    organizationId: string,
+    storeIds: string[],
+    productIds: string[],
+): Promise<Array<StoreProductOfferingDTO & { productName: string }>> => {
+    if (storeIds.length === 0 || productIds.length === 0) return [];
+
+    const results = await pg`
+        SELECT o.*, p.price AS product_price, p.discount AS product_discount, p.name AS product_name
+        FROM store_product_offerings o
+        INNER JOIN products p
+            ON p.id = o.product_id
+           AND p.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id IN ${pg(storeIds)}
+          AND o.product_id IN ${pg(productIds)}
+        ORDER BY o.store_id ASC, p.name ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => ({
+        ...mapStoreProductOffering(result),
+        productName: String(result.product_name),
+    }));
+};
+
+export const getStoreAddOnOfferingsForStoresAndAddOns = async (
+    organizationId: string,
+    storeIds: string[],
+    addOnIds: string[],
+): Promise<Array<StoreAddOnOfferingDTO & { addOnName: string }>> => {
+    if (storeIds.length === 0 || addOnIds.length === 0) return [];
+
+    const results = await pg`
+        SELECT o.*, ao.price AS add_on_price, ao.discount AS add_on_discount, ao.name AS add_on_name
+        FROM store_add_on_offerings o
+        INNER JOIN add_ons ao
+            ON ao.id = o.add_on_id
+           AND ao.organization_id = o.organization_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id IN ${pg(storeIds)}
+          AND o.add_on_id IN ${pg(addOnIds)}
+        ORDER BY o.store_id ASC, ao.name ASC
+    `;
+
+    return results.map((result: Record<string, unknown>) => ({
+        ...mapStoreAddOnOffering(result),
+        addOnName: String(result.add_on_name),
+    }));
+};
+
+const mapCatalogCommercialOperationAudit = (
+    row: Record<string, unknown>,
+): CatalogCommercialOperationAuditDTO => {
+    const mapped = snakeToCamel(row) as {
+        id: string;
+        organizationId: string;
+        itemType: CatalogCommercialItemType;
+        operation: CatalogCommercialOperationType;
+        storeIds: string[];
+        itemIds: string[];
+        actorId: string;
+        createdAt: CatalogCommercialOperationAuditDTO["createdAt"];
+        details: { changes?: CatalogCommercialOperationChange[] };
+    };
+
+    return {
+        id: mapped.id,
+        organizationId: mapped.organizationId,
+        itemType: mapped.itemType,
+        operation: mapped.operation,
+        storeIds: mapped.storeIds,
+        itemIds: mapped.itemIds,
+        actorId: mapped.actorId,
+        createdAt: mapped.createdAt,
+        changes: Array.isArray(mapped.details?.changes) ? mapped.details.changes : [],
+    };
+};
+
+export const createCatalogCommercialOperationAudit = async (
+    auditData: CreateCatalogCommercialOperationAuditREPO,
+    tx?: Bun.TransactionSQL,
+): Promise<CatalogCommercialOperationAuditDTO | null> => {
+    const db = tx || pg;
+    const [result] = await db`
+        INSERT INTO catalog_commercial_operation_audits (
+            id,
+            organization_id,
+            item_type,
+            operation,
+            store_ids,
+            item_ids,
+            actor_id,
+            details
+        ) VALUES (
+            ${auditData.id},
+            ${auditData.organizationId},
+            ${auditData.itemType},
+            ${auditData.operation},
+            ${auditData.storeIds},
+            ${auditData.itemIds},
+            ${auditData.actorId},
+            ${JSON.stringify(auditData.details)}::jsonb
+        )
+        RETURNING *
+    `;
+
+    return result ? mapCatalogCommercialOperationAudit(result) : null;
+};
+
+export const getCatalogCommercialOperationAudits = async (
+    organizationId: string,
+): Promise<CatalogCommercialOperationAuditDTO[]> => {
+    const results = await pg`
+        SELECT *
+        FROM catalog_commercial_operation_audits
+        WHERE organization_id = ${organizationId}
+        ORDER BY created_at DESC
+    `;
+
+    return results.map((result: Record<string, unknown>) =>
+        mapCatalogCommercialOperationAudit(result),
+    );
 };

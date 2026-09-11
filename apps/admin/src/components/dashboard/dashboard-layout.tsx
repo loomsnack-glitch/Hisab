@@ -11,9 +11,9 @@ import { toast } from "sonner";
 import AdminAccountMenu from "@/components/dashboard/admin-account-menu";
 import AppSidebar, { persistSidebarCollapsed, readSidebarCollapsed } from "@/components/dashboard/app-sidebar";
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
-import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
-import { getAuthenticatedHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
+import { getSidebarHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
+import { isFullWidthDashboardPath } from "@/lib/full-width-dashboard-path";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
 import { getPosLoginUrl } from "@/lib/pos-origin";
@@ -110,6 +110,9 @@ const DashboardLayout = () => {
     };
 
     const isWhatsAppMessageHistory = location.pathname.includes("/whatsapp/message-history");
+    const isBillingPage = location.pathname.includes("/billing");
+    const usesMobileShellScroll = !isWhatsAppMessageHistory && !isBillingPage;
+    const isFullWidthPage = isFullWidthDashboardPath(location.pathname);
     const accountOrganization = organizationId && selectedOrganization
         ? { id: organizationId, name: selectedOrganization.name }
         : null;
@@ -132,17 +135,19 @@ const DashboardLayout = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_30%)]" />
             </div>
 
-            <div className={cn("flex min-h-screen", isWhatsAppMessageHistory && "h-full min-h-0")}>
+            <div className={cn(
+                "flex min-h-screen",
+                isWhatsAppMessageHistory && "h-full min-h-0",
+                usesMobileShellScroll && "max-lg:h-[100dvh] max-lg:min-h-0 max-lg:overflow-hidden",
+            )}>
                 {isPickerPage ? null : (
                     <aside
                         className={cn(
-                            "sidebar-shell relative z-30 hidden shrink-0 overflow-visible lg:block",
+                            "sidebar-shell sticky top-0 h-screen z-30 hidden shrink-0 overflow-visible lg:block self-start",
                             isSidebarCollapsed ? "w-[68px]" : "w-[220px]",
                         )}
                     >
-                        <div className="sticky top-0 h-screen overflow-visible">
-                            <AppSidebar {...sidebarProps} />
-                        </div>
+                        <AppSidebar {...sidebarProps} />
                     </aside>
                 )}
 
@@ -150,7 +155,7 @@ const DashboardLayout = () => {
                     <header className="sticky top-0 z-20 flex min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] shrink-0 items-center justify-between border-b border-border/50 bg-background/90 px-3 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                             <Link
-                                to={isPickerPage ? "/organizations" : getAuthenticatedHomePath(organizations)}
+                                to={isPickerPage ? "/organizations" : getSidebarHomePath(organizations, organizationId, location.pathname)}
                                 className={cn(
                                     "flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90",
                                     !isPickerPage && "lg:hidden",
@@ -158,11 +163,6 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
-                            {isPickerPage ? null : (
-                                <div className="lg:hidden">
-                                    <AdminWorkspaceSwitcherFromRoute />
-                                </div>
-                            )}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -189,14 +189,15 @@ const DashboardLayout = () => {
                     <main className={cn(
                         "flex-1 min-w-0 w-full",
                         isWhatsAppMessageHistory && "min-h-0 overflow-hidden",
-                        isPickerPage || location.pathname.includes("/billing")
+                        usesMobileShellScroll && "max-lg:min-h-0 max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:touch-pan-y",
+                        isPickerPage || isBillingPage
                             ? "p-0"
-                            : "px-3.5 py-4 sm:px-6 lg:px-8 lg:py-8",
+                            : "px-3.5 pt-3 pb-4 sm:px-6 lg:px-8 lg:pb-8",
                         !isPickerPage && "max-lg:pb-[var(--pos-mobile-nav-height)]",
                     )}>
                         <div className={cn(
                             "mx-auto w-full min-w-0",
-                            isPickerPage || location.pathname.includes("/billing") ? "max-w-none" : "max-w-7xl",
+                            isPickerPage || isFullWidthPage ? "max-w-none" : "max-w-7xl",
                             isWhatsAppMessageHistory && "h-full min-h-0",
                         )}>
                             <Outlet />

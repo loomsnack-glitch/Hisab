@@ -7,7 +7,7 @@ type CatalogProductForStoreBilling = Pick<
 
 type OfferingForStoreBilling = Pick<
   StoreProductOfferingResponseDTO,
-  "productId" | "price" | "discount" | "status"
+  "productId" | "effectivePrice" | "effectiveDiscount" | "status"
 >;
 
 export const overlayActiveStoreProductOfferings = <T extends CatalogProductForStoreBilling>(
@@ -29,13 +29,41 @@ export const overlayActiveStoreProductOfferings = <T extends CatalogProductForSt
     return [
       {
         ...product,
-        price: offering.price,
-        discount: offering.discount,
+        price: offering.effectivePrice,
+        discount: offering.effectiveDiscount,
         status: "active" as const,
       },
     ];
   });
 };
+
+export type StoreProductOfferingAvailability =
+  | "sellable"
+  | "inactive"
+  | "inactive_in_org";
+
+export const getStoreProductOfferingAvailability = (
+  offering: Pick<StoreProductOfferingResponseDTO, "status"> & {
+    product: Pick<ProductResponseDTO, "status">;
+  },
+): StoreProductOfferingAvailability => {
+  if (offering.product.status !== "active") {
+    return "inactive_in_org";
+  }
+
+  if (offering.status !== "active") {
+    return "inactive";
+  }
+
+  return "sellable";
+};
+
+export const isStoreProductOfferingPriceInherited = (
+  offering: Pick<
+    StoreProductOfferingResponseDTO,
+    "isPriceInherited" | "isDiscountInherited"
+  >,
+): boolean => offering.isPriceInherited && offering.isDiscountInherited;
 
 export const inactiveProductCodesWithoutActiveOffering = (
   products: CatalogProductForStoreBilling[],

@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, MessageSquareText, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import {
+    assignWhatsAppAccount,
     getWhatsAppAccounts,
     getWhatsAppCloudAccounts,
     manuallyProvisionWhatsAppCloudAccount,
@@ -143,6 +144,7 @@ const WhatsAppOrganizationPage = () => {
     const [manualAccessToken, setManualAccessToken] = useState("");
     const [updateTokenAccountId, setUpdateTokenAccountId] = useState("");
     const [updateAccessToken, setUpdateAccessToken] = useState("");
+    const [linkStoreByAccountId, setLinkStoreByAccountId] = useState<Record<string, string>>({});
     const accountsKey = whatsappKeys.accounts(organizationId);
     const organizationQuery = useQuery({
         queryKey: ["whatsapp-workspace", organizationId, "organization"],
@@ -279,7 +281,22 @@ const WhatsAppOrganizationPage = () => {
             });
         }
     };
-    const isBusy = cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending;
+    const assignStoreMutation = useMutation({
+        mutationFn: ({ storeId, whatsappAccountId }: { storeId: string; whatsappAccountId: string }) =>
+            assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId }),
+        onSuccess: (response, variables) => {
+            if (response.status !== "success") {
+                toast.error(response.message);
+                return;
+            }
+            setLinkStoreByAccountId(current => ({ ...current, [variables.whatsappAccountId]: "" }));
+            toast.success("WhatsApp account linked to Store");
+            refresh(variables.whatsappAccountId);
+            void queryClient.invalidateQueries({ queryKey: whatsappKeys.account(organizationId, variables.storeId) });
+        },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be linked")),
+    });
+    const isBusy = cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending || assignStoreMutation.isPending;
     const selectStore = (storeId: string) => {
         setSearchParams({ storeId });
     };
@@ -395,16 +412,27 @@ const WhatsAppOrganizationPage = () => {
                 {visibleAccounts.length === 0 ? (
                     <Card className="border-dashed border-border/70 bg-muted/10">
                         <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-                            <p className="text-sm text-muted-foreground">No WhatsApp Cloud accounts connected yet.</p>
-                            {manualCloudSetupEnabled ? <Button variant="outline" className="rounded-full" onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
+                            <p className="text-sm text-muted-foreground">No WhatsApp Cloud accounts connected yet. Connect a Meta number here, then link it to a Store.</p>
+                            <div className="flex flex-wrap justify-center gap-2">
+                                <Button className="rounded-full" disabled={isBusy} onClick={() => cloudConnectMutation.mutate()}>
+                                    <Link2 className="size-4" />
+                                    Connect with Meta
+                                </Button>
+                                {manualCloudSetupEnabled ? <Button variant="outline" className="rounded-full" onClick={() => setManualCloudOpen(true)}><Link2 className="size-4" />Add API test account</Button> : null}
+                            </div>
                         </CardContent>
                     </Card>
                 ) : visibleAccounts.map(account => {
                     const cloudSnapshot = cloudAccounts.find(cloudAccount => cloudAccount.id === account.id);
                     const displayedCloudStatus = cloudSnapshot?.status ?? null;
+                    const assignedStores = stores.filter(store => account.assignedStoreIds.includes(store.id));
+                    const unlinkedStores = stores.filter(store => !account.assignedStoreIds.includes(store.id));
+                    const selectedLinkStoreId = linkStoreByAccountId[account.id] ?? "";
+                    const selectedLinkStore = unlinkedStores.find(store => store.id === selectedLinkStoreId);
                     return (
                         <Card key={account.id} className="border-border/60 bg-card/80">
-                            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+                            <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+                                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <p className="font-medium">{account.phoneNumber}</p>
@@ -412,7 +440,9 @@ const WhatsAppOrganizationPage = () => {
                                         <Badge variant="secondary" className="rounded-full">Cloud API</Badge>
                                     </div>
                                     <p className="mt-2 text-sm text-muted-foreground">
-                                        Assigned to {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"}
+                                        {assignedStores.length > 0
+                                            ? `Linked to ${assignedStores.map(store => store.name).join(", ")}`
+                                            : "Not linked to any Store yet"}
                                     </p>
                                 </div>
                                 <div className="flex shrink-0 flex-wrap gap-2">
@@ -440,6 +470,36 @@ const WhatsAppOrganizationPage = () => {
                                             )}
                                     </>
                                 </div>
+                                </div>
+                                {unlinkedStores.length > 0 ? (
+                                    <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center">
+                                        <Select
+                                            value={selectedLinkStoreId}
+                                            onValueChange={value => setLinkStoreByAccountId(current => ({ ...current, [account.id]: value ?? "" }))}
+                                        >
+                                            <SelectTrigger className="h-10 min-w-0 flex-1 rounded-xl bg-background/70" aria-label={`Select a Store to link ${account.phoneNumber}`}>
+                                                <SelectValue placeholder="Select a Store to link">
+                                                    {selectedLinkStore ? <span className="truncate">{selectedLinkStore.name}</span> : null}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent align="start">
+                                                {unlinkedStores.map(store => (
+                                                    <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button
+                                            className="rounded-full"
+                                            disabled={isBusy || !selectedLinkStoreId}
+                                            onClick={() => assignStoreMutation.mutate({ storeId: selectedLinkStoreId, whatsappAccountId: account.id })}
+                                        >
+                                            {assignStoreMutation.isPending && assignStoreMutation.variables?.whatsappAccountId === account.id
+                                                ? <LoaderCircle className="size-4 animate-spin" />
+                                                : <Link2 className="size-4" />}
+                                            Link to Store
+                                        </Button>
+                                    </div>
+                                ) : null}
                             </CardContent>
                         </Card>
                     );

@@ -15,8 +15,10 @@ const adajanId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const vesuId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const productId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const inactiveProductId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const orgInactiveProductId = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
 const offeringId = "ffffffff-ffff-4fff-4fff-ffffffffffff";
 const inactiveOfferingId = "aaaaaaaa-aaaa-4aaa-8aaa-bbbbbbbbbbbb";
+const orgInactiveOfferingId = "cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa";
 const now = new Date("2026-09-06T00:00:00.000Z");
 
 const adajan: StoreWithDevicesDTO = {
@@ -82,11 +84,24 @@ const inactiveProduct: ProductResponseDTO = {
     name: "Seasonal Wrap",
 };
 
+const orgInactiveProduct: ProductResponseDTO = {
+    ...product,
+    id: orgInactiveProductId,
+    name: "Retired Cake",
+    status: "inactive",
+};
+
 const offering: StoreProductOfferingResponseDTO = {
     id: offeringId,
     organizationId,
     storeId: adajanId,
     productId,
+    priceOverride: 25,
+    discountOverride: null,
+    effectivePrice: 135,
+    effectiveDiscount: 5,
+    isPriceInherited: false,
+    isDiscountInherited: true,
     price: 135,
     discount: 5,
     status: "active",
@@ -101,8 +116,32 @@ const inactiveOffering: StoreProductOfferingResponseDTO = {
     ...offering,
     id: inactiveOfferingId,
     productId: inactiveProductId,
+    priceOverride: null,
+    discountOverride: null,
+    effectivePrice: inactiveProduct.price,
+    effectiveDiscount: inactiveProduct.discount,
+    isPriceInherited: true,
+    isDiscountInherited: true,
+    price: inactiveProduct.price,
+    discount: inactiveProduct.discount,
     status: "inactive",
     product: inactiveProduct,
+};
+
+const orgInactiveOffering: StoreProductOfferingResponseDTO = {
+    ...offering,
+    id: orgInactiveOfferingId,
+    productId: orgInactiveProductId,
+    priceOverride: null,
+    discountOverride: null,
+    effectivePrice: orgInactiveProduct.price,
+    effectiveDiscount: orgInactiveProduct.discount,
+    isPriceInherited: true,
+    isDiscountInherited: true,
+    price: orgInactiveProduct.price,
+    discount: orgInactiveProduct.discount,
+    status: "active",
+    product: orgInactiveProduct,
 };
 
 const organizationResponse = {
@@ -137,7 +176,7 @@ const renderProducts = () => {
     queryClient.setQueryData(organizationKeys.store(organizationId, adajanId), storeResponse(adajan));
     queryClient.setQueryData(catalogKeys.storeProductOfferings(organizationId, adajanId), {
         status: "success",
-        data: { offerings: [offering, inactiveOffering] },
+        data: { offerings: [offering, inactiveOffering, orgInactiveOffering] },
         message: "Store Product Offerings fetched successfully",
         code: 200,
     });
@@ -172,12 +211,20 @@ describe("Store Products page", () => {
         expect(markup).toContain("Products");
         expect(markup).toContain("Burger");
         expect(markup).toContain("Seasonal Wrap");
+        expect(markup).toContain("Retired Cake");
         expect(markup).toContain("Search products...");
         expect(markup).toContain("Mains");
-        expect(markup).toContain("inactive");
-        expect(markup).toContain("Edit Store price for Burger");
-        expect(markup).toContain("Deactivate");
-        expect(markup).toContain("Activate");
+        expect(markup).toContain("Inactive");
+        expect(markup).toContain("Inactive in org");
+        expect(markup).toContain("Edit price for Burger");
+        expect(markup).toContain("Mark inactive Burger");
+        expect(markup).toContain("Mark active Seasonal Wrap");
+        expect(markup).toContain("Store price");
+        expect(markup).not.toContain("Effective price");
+        expect(markup).not.toContain("Inherits Organization defaults");
+        expect(markup).not.toContain("Price overridden");
+        expect(markup).not.toContain("Save ");
+        expect(markup).not.toContain("Org default");
         expect(markup).not.toContain("Add product");
         expect(markup).not.toContain("Add Combo");
         expect(markup).not.toContain("Reorder");

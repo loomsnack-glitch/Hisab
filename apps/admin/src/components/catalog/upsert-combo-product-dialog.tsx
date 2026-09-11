@@ -7,7 +7,7 @@ import { type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO 
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@repo/ui/components/dialog";
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Boxes, Pencil, Plus, PlusCircle, Trash2, X } from "lucide-react";
@@ -21,7 +21,9 @@ type Props = {
     products: ProductResponseDTO[];
     product?: ProductResponseDTO;
     defaultCategoryId?: string;
-    trigger?: React.ReactElement;
+    trigger?: React.ReactElement | null;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 };
 
 const whole = z.coerce.number().int().min(0).max(100);
@@ -64,8 +66,25 @@ const defaultValues: FormInput = {
     choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
 
-const UpsertComboProductDialog = ({ organizationId, categories, products, product, defaultCategoryId, trigger }: Props) => {
-    const [open, setOpen] = useState(false);
+const UpsertComboProductDialog = ({
+    organizationId,
+    categories,
+    products,
+    product,
+    defaultCategoryId,
+    trigger,
+    open,
+    onOpenChange,
+}: Props) => {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+    const isControlled = open !== undefined;
+    const dialogOpen = isControlled ? open : uncontrolledOpen;
+    const setDialogOpen = (nextOpen: boolean) => {
+        if (!isControlled) {
+            setUncontrolledOpen(nextOpen);
+        }
+        onOpenChange?.(nextOpen);
+    };
     const queryClient = useQueryClient();
     const isEdit = Boolean(product);
     const ActionIcon = isEdit ? Pencil : PlusCircle;
@@ -77,13 +96,13 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
     const detailsQuery = useQuery({
         queryKey: [...catalogKeys.products(organizationId), "combo", product?.id],
         queryFn: () => getComboProduct(organizationId, product!.id),
-        enabled: open && isEdit,
+        enabled: dialogOpen && isEdit,
     });
     const isLoadingDetails = isEdit && detailsQuery.isPending;
     const detailsLoadFailed = isEdit && (detailsQuery.isError || detailsQuery.data?.status === "error");
 
     useEffect(() => {
-        if (!open) return;
+        if (!dialogOpen) return;
         if (isEdit && detailsQuery.isPending) return;
         const categoryId = defaultCategoryId && categories.some((item) => item.id === defaultCategoryId)
             ? defaultCategoryId
@@ -109,7 +128,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                 options: group.options.map((option) => ({ productId: option.optionProductId, maxQuantity: option.maxQuantity, priceAdjustment: Number(option.priceAdjustment) })),
             })) ?? defaultValues.choiceGroups,
         });
-    }, [open, product, detailsQuery.data, detailsQuery.isPending, isEdit, categories, defaultCategoryId, optionProducts, form]);
+    }, [dialogOpen, product, detailsQuery.data, detailsQuery.isPending, isEdit, categories, defaultCategoryId, optionProducts, form]);
 
     const mutation = useMutation({
         mutationFn: (data: CreateComboProductJSON | Parameters<typeof updateComboProduct>[2]) => product
@@ -119,7 +138,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
             if (response.status !== "success") { toast.error(response.message); return; }
             toast.success(response.message);
             queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
-            setOpen(false);
+            setDialogOpen(false);
         },
         onError: (error: { message?: string }) => toast.error(error.message ?? "Unable to save Combo"),
     });
@@ -140,9 +159,11 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
         });
     };
     const onSubmit: SubmitHandler<FormInput> = (values) => {
-        const shared = {
+        mutation.mutate({
             categoryId: values.categoryId,
             name: values.name.trim(),
+            price: Number(values.price),
+            discount: Number(values.discount ?? 0),
             choiceGroups: values.choiceGroups.map((group) => ({
                 name: group.name.trim(),
                 minSelections: Number(group.minSelections),
@@ -153,21 +174,14 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                     priceAdjustment: Number(option.priceAdjustment),
                 })),
             })),
-        };
-        mutation.mutate(
-            isEdit
-                ? shared
-                : {
-                    ...shared,
-                    price: Number(values.price),
-                    discount: Number(values.discount ?? 0),
-                    status: "active" as const,
-                },
-        );
+            ...(isEdit ? {} : { status: "inactive" as const }),
+        });
     };
 
-    return <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
+    return <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
+        {trigger !== null ? (
+            <DialogTrigger render={trigger ?? <Button variant={isEdit ? "outline" : "default"} className="rounded-full"><ActionIcon className="size-4" />{isEdit ? "Edit Combo" : "Add Combo"}</Button>} />
+        ) : null}
         <DialogContent className="w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] lg:!max-w-[50vw] max-h-[90dvh] overflow-x-hidden overflow-y-auto">
             <DialogHeader
                 icon={<Boxes className="size-5" />}
@@ -184,31 +198,18 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                 </div>
             ) : <form className="min-w-0 space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="Select category" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
-                    <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} placeholder="Burger Combo" /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
-                    {!isEdit ? (
-                        <>
-                            <Field className="min-w-0"><FieldLabel required>Base price</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
-                            <Field className="min-w-0"><FieldLabel>Discount</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
-                        </>
-                    ) : null}
+                    <Field className="min-w-0"><FieldLabel required>Category</FieldLabel><FieldContent><ReactSelect options={categoryOptions} value={categoryOptions.find((item) => item.value === form.watch("categoryId")) ?? null} onChange={(item) => form.setValue("categoryId", item?.value ?? "", { shouldValidate: true })} placeholder="" /></FieldContent><FieldError errors={[form.formState.errors.categoryId]} /></Field>
+                    <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel required>Base price ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
+                    <Field className="min-w-0"><FieldLabel>Discount ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
                 </div>
-                {!isEdit ? (
-                    <FieldDescription>
-                        This initial selling price applies as an active Offering at every current Store. Each Store can change it later.
-                    </FieldDescription>
-                ) : (
-                    <FieldDescription>
-                        Selling price, discount, and menu status are configured in each Store workspace.
-                    </FieldDescription>
-                )}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between"><div><p className="font-medium">Choice groups</p><p className="text-xs text-muted-foreground">Example: Choose 1 burger, then choose up to 2 drinks.</p></div><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
+                    <div className="flex items-center justify-between"><p className="font-medium">Choice groups</p><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>
                     {fields.map((field, groupIndex) => {
                         const group = watchedGroups[groupIndex];
                         return <div key={field.id} className="min-w-0 space-y-3 rounded-xl border border-border/60 p-3">
                             <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] md:items-end">
-                                <Field className="col-span-2 min-w-0 md:col-span-1"><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} placeholder="e.g. Drinks, sides, or toppings" /></FieldContent></Field>
+                                <Field className="col-span-2 min-w-0 md:col-span-1"><FieldLabel>Group name</FieldLabel><FieldContent><Input {...form.register(`choiceGroups.${groupIndex}.name`)} /></FieldContent></Field>
                                 <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:contents">
                                     <Field className="min-w-0"><FieldLabel>Minimum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.minSelections`)} /></FieldContent></Field>
                                     <Field className="min-w-0"><FieldLabel>Maximum</FieldLabel><FieldContent><Input type="number" min="0" {...form.register(`choiceGroups.${groupIndex}.maxSelections`)} /></FieldContent></Field>
@@ -240,7 +241,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                                         <div className="hidden min-w-0 grid-cols-[minmax(0,1fr)_7rem_8rem_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                                             <span>Product</span>
                                             <span>Max qty</span>
-                                            <span>Price +/-</span>
+                                            <span>Price +/- ₹</span>
                                             <span className="sr-only">Remove</span>
                                         </div>
                                         {group?.options?.map((option, optionIndex) => {
@@ -253,7 +254,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                                                 </div>
                                             </div>
                                             <Field className="min-w-0"><FieldLabel className="md:sr-only">Max qty</FieldLabel><FieldContent><Input type="number" min="1" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.maxQuantity`)} /></FieldContent></Field>
-                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Price + / -</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
+                                            <Field className="min-w-0"><FieldLabel className="md:sr-only">Price +/- ₹</FieldLabel><FieldContent><Input type="number" step="0.01" {...form.register(`choiceGroups.${groupIndex}.options.${optionIndex}.priceAdjustment`)} /></FieldContent></Field>
                                             <Button
                                                 type="button"
                                                 variant="ghost"
@@ -278,7 +279,7 @@ const UpsertComboProductDialog = ({ organizationId, categories, products, produc
                         </div>;
                     })}
                 </div>
-                <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={mutation.isPending || optionProducts.length === 0}>{mutation.isPending ? "Saving..." : isEdit ? "Save Combo" : "Create Combo"}</Button></DialogFooter>
+                <DialogFooter><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={mutation.isPending || optionProducts.length === 0}>{mutation.isPending ? "Saving..." : isEdit ? "Save Combo" : "Create Combo"}</Button></DialogFooter>
             </form>}
         </DialogContent>
     </Dialog>;

@@ -35,7 +35,7 @@ import {
     getOrganizationByIdForUser,
     getProductAddOnAttachmentById,
     getProductById,
-    getSelectableProductAddOnAttachmentByProductAndAddOn,
+    getActiveProductAddOnAttachmentByProductAndAddOn,
     now,
     organization,
     organizationId,
@@ -64,7 +64,7 @@ describe("Bundle Product catalog service", () => {
         getBundleProductComponentsByBundleProductId.mockClear();
         getBundleProductComponentAddOnsByComponentIds.mockClear();
         deleteBundleProductComponentsByBundleProductId.mockClear();
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockClear();
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockClear();
         countActiveBundlesByComponentProductId.mockClear();
         countActiveBundlesByComponentAddOnId.mockClear();
         countActiveBundlesByProductAddOnPair.mockClear();
@@ -107,7 +107,7 @@ describe("Bundle Product catalog service", () => {
             }
             return null;
         });
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockImplementation(
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockImplementation(
             async (_organizationId: string, productId: string, addOnId: string) => {
                 if (productId === burgerId && addOnId === cheeseAddOnId) return cheeseAttachment;
                 if (productId === burgerId && addOnId === sauceAddOnId) return sauceAttachment;
@@ -153,6 +153,7 @@ describe("Bundle Product catalog service", () => {
             name: "Burger Combo",
             price: 99,
             discount: 0,
+            status: "active",
             components: [
                 { productId: burgerId, quantity: 1 },
                 { productId: coffeeId, quantity: 1 },
@@ -252,7 +253,7 @@ describe("Bundle Product catalog service", () => {
     });
 
     test("rejects bundle add-ons without an active product attachment", async () => {
-        getSelectableProductAddOnAttachmentByProductAndAddOn.mockResolvedValue(null);
+        getActiveProductAddOnAttachmentByProductAndAddOn.mockResolvedValue(null);
 
         const response = await catalogService.createBundleProduct(userId, organizationId, {
             categoryId,

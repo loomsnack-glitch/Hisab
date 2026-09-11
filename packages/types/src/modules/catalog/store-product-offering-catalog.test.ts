@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  getStoreProductOfferingAvailability,
   inactiveProductCodesWithoutActiveOffering,
+  isStoreProductOfferingPriceInherited,
   overlayActiveStoreProductOfferings,
 } from "./store-product-offering-catalog";
 
@@ -28,14 +30,14 @@ describe("Store Product Offering catalog overlay", () => {
     const products = overlayActiveStoreProductOfferings([burger, cake], [
       {
         productId: burger.id,
-        price: 175,
-        discount: 25,
+        effectivePrice: 175,
+        effectiveDiscount: 25,
         status: "active",
       },
       {
         productId: cake.id,
-        price: 250,
-        discount: 0,
+        effectivePrice: 250,
+        effectiveDiscount: 0,
         status: "inactive",
       },
     ]);
@@ -50,13 +52,55 @@ describe("Store Product Offering catalog overlay", () => {
     ]);
   });
 
+  test("an Offering is sellable only when both the Catalog Product and local statuses are active", () => {
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "active",
+        product: { status: "active" },
+      }),
+    ).toBe("sellable");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "inactive",
+        product: { status: "active" },
+      }),
+    ).toBe("inactive");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "active",
+        product: { status: "inactive" },
+      }),
+    ).toBe("inactive_in_org");
+    expect(
+      getStoreProductOfferingAvailability({
+        status: "inactive",
+        product: { status: "inactive" },
+      }),
+    ).toBe("inactive_in_org");
+  });
+
+  test("price is inherited only when both price and discount still follow Organization defaults", () => {
+    expect(
+      isStoreProductOfferingPriceInherited({
+        isPriceInherited: true,
+        isDiscountInherited: true,
+      }),
+    ).toBe(true);
+    expect(
+      isStoreProductOfferingPriceInherited({
+        isPriceInherited: false,
+        isDiscountInherited: true,
+      }),
+    ).toBe(false);
+  });
+
   test("coded Catalog Products without an active Offering stay available only for scan recovery", () => {
     expect(
       inactiveProductCodesWithoutActiveOffering([burger, cake], [
         {
           productId: burger.id,
-          price: 80,
-          discount: 5,
+          effectivePrice: 80,
+          effectiveDiscount: 5,
           status: "active",
         },
       ]),

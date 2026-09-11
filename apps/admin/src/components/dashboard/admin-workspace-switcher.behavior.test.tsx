@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, createMemoryRouter, RouterProvider } from "react-router-dom";
 
 import { AdminWorkspaceSwitcher, AdminWorkspaceSwitcherPanel } from "@/components/dashboard/admin-workspace-switcher";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
@@ -40,6 +41,7 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, vesuId)}"`);
         expect(markup).toContain("Adajan");
         expect(markup).toContain("Vesu");
+        expect(markup).toContain("Add store");
         expect(markup).not.toContain(`href="${getStoreDetailPath(organizationId, adajanId)}"`);
         expect(markup).not.toContain("Ahmedabad");
     });
@@ -52,20 +54,72 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain(`href="${getOrganizationWorkspacePath(organizationId)}"`);
         expect(markup).toContain("Organization workspace");
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, vesuId)}"`);
+        expect(markup).toContain("Add store");
         expect(markup).not.toContain(`href="${getStoreDetailPath(organizationId, adajanId)}"`);
     });
 
-    test("places the Store workspace control in the sidebar footer", () => {
+    test("scrolls long store lists instead of overflowing the workspace menu", () => {
+        const manyStores = Array.from({ length: 20 }, (_, index) => ({
+            id: `store-${index}`,
+            name: `Store ${index + 1}`,
+        }));
         const markup = renderToStaticMarkup(
             <MemoryRouter>
-                <AdminWorkspaceSwitcher
+                <AdminWorkspaceSwitcherPanel
                     organizationId={organizationId}
                     organizationName="Panini House"
-                    stores={stores}
-                    selectedStoreId={adajanId}
-                    variant="sidebar"
+                    stores={manyStores}
+                    selectedStoreId={null}
                 />
             </MemoryRouter>,
+        );
+
+        expect(markup).toContain("overflow-y-auto");
+        expect(markup).toContain("max-h-[min(28rem,calc(100dvh-6rem))]");
+        expect(markup).toContain("Store 20");
+        expect(markup).toContain("Add store");
+    });
+
+    test("keeps Add store available when the Organization has no Stores yet", () => {
+        const markup = renderToStaticMarkup(
+            <MemoryRouter>
+                <AdminWorkspaceSwitcherPanel
+                    organizationId={organizationId}
+                    organizationName="Panini House"
+                    stores={[]}
+                    selectedStoreId={null}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(markup).toContain("Store workspaces");
+        expect(markup).toContain("Add store");
+        expect(markup).toContain("Organization workspace");
+    });
+
+    test("places the Store workspace control in the sidebar footer", () => {
+        const queryClient = new QueryClient();
+        const router = createMemoryRouter(
+            [
+                {
+                    path: "/",
+                    element: (
+                        <AdminWorkspaceSwitcher
+                            organizationId={organizationId}
+                            organizationName="Panini House"
+                            stores={stores}
+                            selectedStoreId={adajanId}
+                            variant="sidebar"
+                        />
+                    ),
+                },
+            ],
+            { initialEntries: ["/"] },
+        );
+        const markup = renderToStaticMarkup(
+            <QueryClientProvider client={queryClient}>
+                <RouterProvider router={router} />
+            </QueryClientProvider>,
         );
 
         expect(markup).toContain('aria-label="Adajan store workspace"');
@@ -73,13 +127,17 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain("Adajan");
     });
 
-    test("pins the switcher to the sidebar footer instead of the desktop header", () => {
+    test("pins the switcher to the sidebar footer and mobile bottom sheet instead of the header", () => {
         const sidebarSource = readFileSync(join(import.meta.dir, "app-sidebar.tsx"), "utf8");
+        const switcherSource = readFileSync(join(import.meta.dir, "admin-workspace-switcher.tsx"), "utf8");
         const layoutSource = readFileSync(join(import.meta.dir, "dashboard-layout.tsx"), "utf8");
+        const mobileNavSource = readFileSync(join(import.meta.dir, "admin-mobile-bottom-nav.tsx"), "utf8");
 
         expect(sidebarSource).toContain('variant="sidebar"');
         expect(sidebarSource).toContain("AdminWorkspaceSwitcherFromRoute");
-        expect(layoutSource).toContain("<div className=\"lg:hidden\">");
-        expect(layoutSource).toContain("AdminWorkspaceSwitcherFromRoute");
+        expect(switcherSource).toContain("CreateStoreDialog");
+        expect(layoutSource).not.toContain("AdminWorkspaceSwitcherFromRoute");
+        expect(mobileNavSource).toContain('variant="sheet"');
+        expect(mobileNavSource).toContain("AdminWorkspaceSwitcherFromRoute");
     });
 });

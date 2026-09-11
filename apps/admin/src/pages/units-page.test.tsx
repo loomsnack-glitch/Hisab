@@ -75,9 +75,9 @@ describe("Admin Units page", () => {
         expect(markup).toContain("Custom");
         expect(markup).toContain("Add unit");
         expect(markup).toContain("Search units...");
+        expect(markup).toContain("Source");
         expect(markup).toContain("Availability");
-        expect(markup).toContain("active");
-        expect(markup).toContain("inactive");
+        expect(markup).toContain("Inactive");
         expect(markup).toContain("Edit");
         expect(markup).not.toContain("Delete");
     });

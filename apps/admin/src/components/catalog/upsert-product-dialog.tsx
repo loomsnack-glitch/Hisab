@@ -16,6 +16,7 @@ import {
 import {
   CreateProductObjectSchema,
   PIECE_PREDEFINED_UNIT_KEY,
+  ProductStatusSchema,
   canAssignUnitToCatalogProduct,
   defaultSellingQuantitySchema,
   formatSoldAmount,
@@ -69,7 +70,9 @@ type UpsertProductDialogProps = {
   categories: CategoryDTO[];
   product?: ProductResponseDTO;
   defaultCategoryId?: string;
-  trigger?: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 const decimalAmountPattern = /^\d+(\.\d*)?$/;
@@ -130,6 +133,7 @@ const UpsertProductFormSchema = CreateProductObjectSchema.extend({
     .transform((value) => Number(value))
     .pipe(defaultSellingQuantitySchema),
   allowCustomSellingQuantity: z.boolean(),
+  status: ProductStatusSchema,
   productCode: z
     .preprocess(
       (value) =>
@@ -148,7 +152,7 @@ const defaultValues: UpsertProductFormInput = {
   price: "",
   discount: "",
   imagePath: "",
-  status: "active",
+  status: "inactive",
   productCode: "",
   unitId: "",
   defaultSellingQuantity: "1",
@@ -223,8 +227,18 @@ const UpsertProductDialog = ({
   product,
   defaultCategoryId,
   trigger,
+  open,
+  onOpenChange,
 }: UpsertProductDialogProps) => {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = open !== undefined;
+  const dialogOpen = isControlled ? open : uncontrolledOpen;
+  const setDialogOpen = (nextOpen: boolean) => {
+    if (!isControlled) {
+      setUncontrolledOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const imageCompressionRequestRef = useRef(0);
@@ -285,7 +299,7 @@ const UpsertProductDialog = ({
   };
 
   useEffect(() => {
-    if (open) {
+    if (dialogOpen) {
       if (product) {
         form.reset(productFormValues(product));
         setLabelProfileForm({
@@ -330,7 +344,7 @@ const UpsertProductDialog = ({
       setReleasedInternalCode("");
       setLabelProfileForm(emptyLabelProfileForm);
     }
-  }, [categories, defaultCategoryId, form, open, pieceUnitId, product]);
+  }, [categories, defaultCategoryId, dialogOpen, form, pieceUnitId, product]);
 
   const categoryOptions = useMemo(
     () =>
@@ -369,8 +383,8 @@ const UpsertProductDialog = ({
     selectedUnitLabel &&
     Number.isFinite(sellingQuantityNumber) &&
     sellingQuantityNumber > 0
-      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} (₹)`
-      : "Price for this quantity (₹)";
+      ? `Price for ${formatSoldAmount(sellingQuantityNumber)}${selectedUnitLabel} ₹`
+      : "Price for this quantity ₹";
 
   const selectedFilePreview = useMemo(() => {
     if (!selectedFile) {
@@ -498,7 +512,7 @@ const UpsertProductDialog = ({
         return "manufacturer" as const;
       })();
 
-      const payload = {
+      const payloadBase = {
         categoryId: data.categoryId,
         name: data.name.trim(),
         imagePath: nextImagePath,
@@ -509,14 +523,22 @@ const UpsertProductDialog = ({
         allowCustomSellingQuantity: data.allowCustomSellingQuantity,
       };
 
-      const response = product
-        ? await updateProduct(organizationId, product.id, payload)
-        : await createProduct(organizationId, {
-            ...payload,
+      const payload = product
+        ? {
+            ...payloadBase,
             price: Number(data.price),
             discount: Number(data.discount ?? 0),
-            status: "active",
-          });
+            status: product.status,
+          }
+        : {
+            ...payloadBase,
+            price: Number(data.price),
+            discount: Number(data.discount ?? 0),
+          };
+
+      const response = product
+        ? await updateProduct(organizationId, product.id, payload)
+        : await createProduct(organizationId, payload);
 
       if (response.status !== "success" || !response.data?.product.id) {
         return response;
@@ -536,7 +558,7 @@ const UpsertProductDialog = ({
         });
         setCodeChangeConfirmationOpen(false);
         setPendingPayload(null);
-        setOpen(false);
+        setDialogOpen(false);
         return;
       }
 
@@ -580,7 +602,7 @@ const UpsertProductDialog = ({
       });
       setReuseCodeConfirmationOpen(false);
       setReleasedInternalCode("");
-      setOpen(false);
+      setDialogOpen(false);
     },
     onError: (error: { message?: string }) => {
       toast.error(error.message ?? "Failed to manage Internal Product Code");
@@ -638,31 +660,69 @@ const UpsertProductDialog = ({
     !existingProductCode &&
     barcodeScanningEnabled;
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    const requestId = imageCompressionRequestRef.current + 1;
+    imageCompressionRequestRef.current = requestId;
+    setSelectedFile(null);
+    setIsCompressingImage(true);
+    void compressCatalogImage(file)
+      .then((compressed) => {
+        if (imageCompressionRequestRef.current !== requestId) {
+          return;
+        }
+        setSelectedFile(compressed);
+        setRemoveCurrentImage(false);
+      })
+      .catch((error: unknown) => {
+        if (imageCompressionRequestRef.current !== requestId) {
+          return;
+        }
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not optimize that image. Try a JPG, PNG, WebP, or HEIC file.",
+        );
+      })
+      .finally(() => {
+        if (imageCompressionRequestRef.current === requestId) {
+          setIsCompressingImage(false);
+        }
+      });
+  };
+
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogTrigger
-          render={
-            trigger ?? (
-              <Button
-                variant={isEditMode ? "outline" : "default"}
-                className="rounded-full"
-                disabled={!hasCategories}
-              >
-                {isEditMode ? (
-                  <Pencil className="size-4" />
-                ) : (
-                  <Plus className="size-4" />
-                )}
-                {isEditMode ? "Edit product" : "Add product"}
-              </Button>
-            )
-          }
-        />
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-lg">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
+        {trigger !== null ? (
+          <DialogTrigger
+            render={
+              trigger ?? (
+                <Button
+                  variant={isEditMode ? "outline" : "default"}
+                  className="rounded-full"
+                  disabled={!hasCategories}
+                >
+                  {isEditMode ? (
+                    <Pencil className="size-4" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}
+                  {isEditMode ? "Edit product" : "Add product"}
+                </Button>
+              )
+            }
+          />
+        ) : null}
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl">
           <DialogHeader
-            className="shrink-0 px-4 pt-4"
-            icon={<Package2 className="size-5" />}
+            className="shrink-0 px-5 pt-4 pb-2 border-b border-border/40"
+            icon={<Package2 className="size-5 text-primary" />}
             title={isEditMode ? "Edit product" : "Create product"}
           />
 
@@ -670,535 +730,508 @@ const UpsertProductDialog = ({
             className="flex min-h-0 flex-1 flex-col"
             onSubmit={form.handleSubmit(onSubmit)}
           >
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pt-2">
-            <Controller
-              control={form.control}
-              name="categoryId"
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel required>Category</FieldLabel>
-                  <FieldContent>
-                    <ReactSelect
-                      options={categoryOptions}
-                      value={
-                        categoryOptions.find(
-                          (option) => option.value === field.value,
-                        ) ?? null
-                      }
-                      onChange={(option) => field.onChange(option?.value ?? "")}
-                      placeholder="Select a category"
-                      classNames={{
-                        control: () => "!min-h-11 rounded-xl",
-                      }}
-                    />
-                    <FieldError errors={[fieldState.error]} />
-                  </FieldContent>
-                </Field>
-              )}
-            />
-
-            <Field data-invalid={!!form.formState.errors.name}>
-              <FieldLabel required>Product name</FieldLabel>
-              <FieldContent>
-                <Input
-                  className="h-11 rounded-xl"
-                  placeholder=""
-                  {...form.register("name")}
-                />
-                <FieldError errors={[form.formState.errors.name]} />
-              </FieldContent>
-            </Field>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Controller
-                control={form.control}
-                name="unitId"
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Unit</FieldLabel>
-                    <FieldContent>
-                      <ReactSelect
-                        options={unitOptions}
-                        placeholder="Select an active Unit"
-                        value={
-                          unitOptions.find(
-                            (option) => option.value === field.value,
-                          ) ?? null
-                        }
-                        onChange={(option) =>
-                          field.onChange(option?.value ?? "")
-                        }
-                        classNames={{
-                          control: () => "!min-h-11 rounded-xl",
-                        }}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 items-start">
+                {/* Left Column: Essential details (7 cols on md+) */}
+                <div className="space-y-3.5 md:col-span-7">
+                  {/* Category & Product Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className="sm:col-span-5">
+                      <Controller
+                        control={form.control}
+                        name="categoryId"
+                        render={({ field, fieldState }) => (
+                          <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel required>Category</FieldLabel>
+                            <FieldContent>
+                              <ReactSelect
+                                options={categoryOptions}
+                                value={
+                                  categoryOptions.find(
+                                    (option) => option.value === field.value,
+                                  ) ?? null
+                                }
+                                onChange={(option) =>
+                                  field.onChange(option?.value ?? "")
+                                }
+                                placeholder=""
+                                classNames={{
+                                  control: () =>
+                                    "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
+                                }}
+                              />
+                              <FieldError errors={[fieldState.error]} />
+                            </FieldContent>
+                          </Field>
+                        )}
                       />
-                      <FieldError errors={[fieldState.error]} />
-                    </FieldContent>
-                  </Field>
-                )}
-              />
+                    </div>
 
-              <Controller
-                control={form.control}
-                name="defaultSellingQuantity"
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel required>Selling size</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        className="h-11 rounded-xl"
-                        placeholder="1"
-                        value={field.value}
-                        onChange={(event) =>
-                          field.onChange(
-                            sanitizeTwoDecimalInput(event.target.value),
-                          )
-                        }
-                        onBlur={field.onBlur}
-                      />
-                      <FieldError errors={[fieldState.error]} />
-                    </FieldContent>
-                  </Field>
-                )}
-              />
-            </div>
-
-            <Controller
-              control={form.control}
-              name="allowCustomSellingQuantity"
-              render={({ field }) => (
-                <Field>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/30"
-                    onClick={() => field.onChange(!field.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        field.onChange(!field.value);
-                      }
-                    }}
-                  >
-                    <FieldContent>
-                      <FieldLabel className="cursor-pointer">
-                        Allow custom selling size
-                      </FieldLabel>
-                    </FieldContent>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label="Allow custom selling size"
-                    />
-                  </div>
-                </Field>
-              )}
-            />
-
-            {!isEditMode ? (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Controller
-                    control={form.control}
-                    name="price"
-                    render={({ field, fieldState }) => (
-                      <Field data-invalid={fieldState.invalid}>
-                        <FieldLabel required>{priceFieldLabel}</FieldLabel>
+                    <div className="sm:col-span-7">
+                      <Field data-invalid={!!form.formState.errors.name}>
+                        <FieldLabel required>Product name</FieldLabel>
                         <FieldContent>
                           <Input
-                            type="text"
-                            inputMode="decimal"
-                            className="h-11 rounded-xl"
-                            placeholder=""
-                            value={field.value}
-                            onChange={(event) =>
-                              field.onChange(
-                                sanitizeDecimalInput(event.target.value),
-                              )
-                            }
-                            onBlur={field.onBlur}
+                            className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
+                            {...form.register("name")}
                           />
-                          <FieldError errors={[fieldState.error]} />
+                          <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                       </Field>
-                    )}
-                  />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Controller
+                      control={form.control}
+                      name="unitId"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>Unit</FieldLabel>
+                          <FieldContent>
+                            <ReactSelect
+                              options={unitOptions}
+                              placeholder=""
+                              value={
+                                unitOptions.find(
+                                  (option) => option.value === field.value,
+                                ) ?? null
+                              }
+                              onChange={(option) =>
+                                field.onChange(option?.value ?? "")
+                              }
+                              classNames={{
+                                control: () =>
+                                  "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
+                              }}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+
+                    <Controller
+                      control={form.control}
+                      name="defaultSellingQuantity"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>Selling size</FieldLabel>
+                          <FieldContent>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
+                              value={field.value}
+                              onChange={(event) =>
+                                field.onChange(
+                                  sanitizeTwoDecimalInput(event.target.value),
+                                )
+                              }
+                              onBlur={field.onBlur}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Controller
+                      control={form.control}
+                      name="price"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>
+                            {isEditMode
+                              ? "Organization default price ₹"
+                              : priceFieldLabel}
+                          </FieldLabel>
+                          <FieldContent>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
+                              value={field.value}
+                              onChange={(event) =>
+                                field.onChange(
+                                  sanitizeDecimalInput(event.target.value),
+                                )
+                              }
+                              onBlur={field.onBlur}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+
+                    <Controller
+                      control={form.control}
+                      name="discount"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel>Discount ₹</FieldLabel>
+                          <FieldContent>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              className="h-10 rounded-xl border-border/60 bg-background/50 text-sm"
+                              value={field.value ?? ""}
+                              onChange={(event) =>
+                                field.onChange(
+                                  sanitizeDecimalInput(event.target.value),
+                                )
+                              }
+                              onBlur={field.onBlur}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+                  </div>
 
                   <Controller
                     control={form.control}
-                    name="discount"
-                    render={({ field, fieldState }) => (
-                      <Field data-invalid={fieldState.invalid}>
-                        <FieldLabel>
-                          Discount (₹){" "}
-                          <span className="font-normal text-muted-foreground">
-                            (optional)
-                          </span>
-                        </FieldLabel>
-                        <FieldContent>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            className="h-11 rounded-xl"
-                            placeholder=""
-                            value={field.value ?? ""}
-                            onChange={(event) =>
-                              field.onChange(
-                                sanitizeDecimalInput(event.target.value),
-                              )
-                            }
-                            onBlur={field.onBlur}
-                          />
-                          <FieldError errors={[fieldState.error]} />
-                        </FieldContent>
-                      </Field>
-                    )}
-                  />
-                </div>
-                <FieldDescription>
-                  This initial selling price applies as an active Offering at every current Store. Each Store can change it later. A newly created Store inherits Catalog Products as inactive.
-                </FieldDescription>
-              </>
-            ) : (
-              <FieldDescription>
-                Selling price, discount, and menu status are configured in each Store workspace.
-              </FieldDescription>
-            )}
-
-            {barcodeScanningEnabled ? (
-              <Field data-invalid={!!form.formState.errors.productCode}>
-                <FieldLabel>
-                  Product code{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </FieldLabel>
-                <FieldContent>
-                  <Input
-                    className="h-11 rounded-xl font-mono"
-                    placeholder="Scan or type manufacturer code"
-                    autoComplete="off"
-                    {...form.register("productCode")}
-                  />
-                  {codeKindLabel && existingProductCode ? (
-                    <p className="text-xs text-muted-foreground">
-                      {codeKindLabel}
-                    </p>
-                  ) : null}
-                  <FieldError errors={[form.formState.errors.productCode]} />
-                  {canManageInternalCode ? (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={internalCodeMutation.isPending}
-                        onClick={() =>
-                          internalCodeMutation.mutate({ type: "generate" })
-                        }
+                    name="allowCustomSellingQuantity"
+                    render={({ field }) => (
+                      <Field
+                        orientation="horizontal"
+                        className="justify-between"
                       >
-                        Generate store-only code
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={internalCodeMutation.isPending}
-                        onClick={() => setReuseCodeConfirmationOpen(true)}
-                      >
-                        Reuse released code
-                      </Button>
-                    </div>
-                  ) : null}
-                  {canManageInternalCode ? (
-                    <p className="text-xs text-muted-foreground">
-                      Store-only codes are not globally registered identifiers.
-                    </p>
-                  ) : null}
-                </FieldContent>
-              </Field>
-            ) : null}
-
-            {barcodeScanningEnabled ? (
-              <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
-                <div>
-                  <p className="text-sm font-medium">Product Label Profile</p>
-                  <p className="text-xs text-muted-foreground">
-                    Optional packaging facts for label templates. On-pack MRP is
-                    not used in Billing or Sale Item snapshots.
-                  </p>
-                </div>
-                <label className="block space-y-1.5 text-sm font-medium">
-                  Ingredients
-                  <textarea
-                    className="min-h-20 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                    value={labelProfileForm.ingredients}
-                    onChange={(event) =>
-                      setLabelProfileForm((current) => ({
-                        ...current,
-                        ingredients: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-1.5 text-sm font-medium">
-                    Net weight
-                    <Input
-                      value={labelProfileForm.netWeight}
-                      onChange={(event) =>
-                        setLabelProfileForm((current) => ({
-                          ...current,
-                          netWeight: event.target.value,
-                        }))
-                      }
-                      placeholder="e.g. 200 g"
-                    />
-                  </label>
-                  <label className="block space-y-1.5 text-sm font-medium">
-                    Unit selling price text
-                    <Input
-                      value={labelProfileForm.unitSellingPriceText}
-                      onChange={(event) =>
-                        setLabelProfileForm((current) => ({
-                          ...current,
-                          unitSellingPriceText: event.target.value,
-                        }))
-                      }
-                      placeholder="e.g. ₹10 per piece"
-                    />
-                  </label>
-                  <label className="block space-y-1.5 text-sm font-medium">
-                    On-pack MRP
-                    <Input
-                      value={labelProfileForm.mrp}
-                      onChange={(event) =>
-                        setLabelProfileForm((current) => ({
-                          ...current,
-                          mrp: sanitizeDecimalInput(event.target.value),
-                        }))
-                      }
-                      placeholder="Packaging MRP, not Billing price"
-                    />
-                  </label>
-                  <label className="block space-y-1.5 text-sm font-medium">
-                    Shelf life (days)
-                    <Input
-                      type="number"
-                      min={1}
-                      value={labelProfileForm.shelfLifeDays}
-                      onChange={(event) =>
-                        setLabelProfileForm((current) => ({
-                          ...current,
-                          shelfLifeDays: event.target.value.replace(/\D/g, ""),
-                        }))
-                      }
-                      placeholder="Whole days"
-                    />
-                  </label>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">Nutrition rows</p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setLabelProfileForm((current) => ({
-                          ...current,
-                          nutrition: [
-                            ...normalizeNutritionRows(current.nutrition),
-                            { name: "", quantity: "", unit: "" },
-                          ],
-                        }))
-                      }
-                    >
-                      Add row
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Each row needs name, quantity, and unit (for example Energy,
-                    450, kcal).
-                  </p>
-                  {normalizeNutritionRows(labelProfileForm.nutrition).map((row, index) => (
-                    <div key={index} className="grid gap-2 sm:grid-cols-4">
-                      <Input
-                        placeholder="Name"
-                        value={row.name}
-                        onChange={(event) =>
-                          setLabelProfileForm((current) => ({
-                            ...current,
-                            nutrition: normalizeNutritionRows(current.nutrition).map(
-                              (entry, entryIndex) =>
-                              entryIndex === index
-                                ? { ...entry, name: event.target.value }
-                                : entry,
-                            ),
-                          }))
-                        }
-                      />
-                      <Input
-                        placeholder="Quantity"
-                        value={row.quantity}
-                        onChange={(event) =>
-                          setLabelProfileForm((current) => ({
-                            ...current,
-                            nutrition: normalizeNutritionRows(current.nutrition).map(
-                              (entry, entryIndex) =>
-                              entryIndex === index
-                                ? { ...entry, quantity: event.target.value }
-                                : entry,
-                            ),
-                          }))
-                        }
-                      />
-                      <Input
-                        placeholder="Unit"
-                        value={row.unit}
-                        onChange={(event) =>
-                          setLabelProfileForm((current) => ({
-                            ...current,
-                            nutrition: normalizeNutritionRows(current.nutrition).map(
-                              (entry, entryIndex) =>
-                              entryIndex === index
-                                ? { ...entry, unit: event.target.value }
-                                : entry,
-                            ),
-                          }))
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setLabelProfileForm((current) => ({
-                            ...current,
-                            nutrition: normalizeNutritionRows(current.nutrition).filter(
-                              (_, entryIndex) => entryIndex !== index,
-                            ),
-                          }))
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-2">
-              <FieldLabel>Product image</FieldLabel>
-              <div className="space-y-3">
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/30 p-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/5">
-                  {isCompressingImage ? (
-                    <Loader2 className="size-5 animate-spin text-primary" />
-                  ) : (
-                    <UploadCloud className="size-5 text-primary" />
-                  )}
-                  <p className="mt-2 text-sm font-medium text-foreground">
-                    {isCompressingImage
-                      ? "Optimizing image..."
-                      : selectedFile
-                        ? selectedFile.name
-                        : "Click to upload image"}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {selectedFile && !isCompressingImage
-                      ? `Optimized to ${formatCatalogImageSize(selectedFile.size)} for faster loading`
-                      : "JPG, PNG, WebP, or HEIC. We optimize images to 100 KB or less."}
-                  </p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    disabled={isCompressingImage}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      event.target.value = "";
-                      if (!file) {
-                        return;
-                      }
-
-                      const requestId = imageCompressionRequestRef.current + 1;
-                      imageCompressionRequestRef.current = requestId;
-                      setSelectedFile(null);
-                      setIsCompressingImage(true);
-                      void compressCatalogImage(file)
-                        .then((compressed) => {
-                          if (imageCompressionRequestRef.current !== requestId) {
-                            return;
-                          }
-                          setSelectedFile(compressed);
-                          setRemoveCurrentImage(false);
-                        })
-                        .catch((error: unknown) => {
-                          if (imageCompressionRequestRef.current !== requestId) {
-                            return;
-                          }
-                          toast.error(
-                            error instanceof Error
-                              ? error.message
-                              : "Could not optimize that image. Try a JPG, PNG, WebP, or HEIC file.",
-                          );
-                        })
-                        .finally(() => {
-                          if (imageCompressionRequestRef.current === requestId) {
-                            setIsCompressingImage(false);
-                          }
-                        });
-                    }}
-                  />
-                </label>
-
-                {imagePreview ? (
-                  <div className="overflow-hidden rounded-xl border border-border/70 bg-background/80 relative group/preview">
-                    <img
-                      src={imagePreview}
-                      alt="Product preview"
-                      className="h-36 w-full object-cover"
-                    />
-                    {product?.imagePath && !selectedFile && (
-                      <label className="absolute bottom-2 right-2 flex items-center gap-2 rounded-lg bg-background/95 backdrop-blur-sm border border-border/60 px-3 py-1.5 text-xs text-muted-foreground shadow-sm cursor-pointer hover:text-foreground">
-                        <input
-                          type="checkbox"
-                          checked={removeCurrentImage}
-                          onChange={(event) =>
-                            setRemoveCurrentImage(event.target.checked)
-                          }
-                          className="rounded border-border text-primary focus:ring-primary mr-1.5"
+                        <FieldLabel>Allow custom selling size</FieldLabel>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          aria-label="Allow custom selling size"
                         />
-                        Remove current image
+                      </Field>
+                    )}
+                  />
+                </div>
+
+                {/* Right Column: Visual, Media & Availability (5 cols on md+) */}
+                <div className="space-y-3.5 md:col-span-5">
+                  {/* Product Image */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <FieldLabel>Product image</FieldLabel>
+                      {selectedFile && !isCompressingImage && (
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {formatCatalogImageSize(selectedFile.size)}
+                        </span>
+                      )}
+                    </div>
+
+                    {imagePreview ? (
+                      <div className="relative group/preview h-36 sm:h-40 w-full overflow-hidden rounded-xl border border-border/70 bg-background/80">
+                        <img
+                          src={imagePreview}
+                          alt="Product preview"
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent flex items-end justify-between p-2.5">
+                          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-xs backdrop-blur-xs transition hover:bg-background">
+                            <UploadCloud className="size-3.5 text-primary" />
+                            <span>Change</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              disabled={isCompressingImage}
+                              onChange={handleImageUpload}
+                            />
+                          </label>
+
+                          {product?.imagePath && !selectedFile ? (
+                            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-xs transition hover:text-foreground">
+                              <input
+                                type="checkbox"
+                                checked={removeCurrentImage}
+                                onChange={(event) =>
+                                  setRemoveCurrentImage(event.target.checked)
+                                }
+                                className="rounded border-border text-primary focus:ring-primary mr-1"
+                              />
+                              <span>Remove</span>
+                            </label>
+                          ) : selectedFile ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFile(null)}
+                              className="rounded-lg border border-border/70 bg-background/90 px-2.5 py-1 text-xs text-destructive shadow-xs backdrop-blur-xs transition hover:bg-destructive/10"
+                            >
+                              Clear
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex h-36 sm:h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/15 p-3 text-center transition-colors hover:border-primary/50 hover:bg-muted/25">
+                        {isCompressingImage ? (
+                          <Loader2 className="size-5 animate-spin text-primary" />
+                        ) : (
+                          <UploadCloud className="size-5 text-primary" />
+                        )}
+                        <p className="mt-2 text-xs font-semibold text-foreground">
+                          {isCompressingImage
+                            ? "Optimizing image..."
+                            : "Upload product image"}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          Click or drop file here
+                        </p>
+                        <p className="mt-1 text-[10px] text-muted-foreground/70">
+                          JPG, PNG, WebP (auto-optimized ≤100 KB)
+                        </p>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          disabled={isCompressingImage}
+                          onChange={handleImageUpload}
+                        />
                       </label>
                     )}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
-                    <ImageOff className="size-4 shrink-0" />
-                    No image selected
+
+                  {/* Barcode / Product Code (if enabled) */}
+                  {barcodeScanningEnabled ? (
+                    <Field data-invalid={!!form.formState.errors.productCode}>
+                      <FieldLabel>
+                        Product code{" "}
+                        <span className="font-normal text-muted-foreground text-[11px]">
+                          (optional)
+                        </span>
+                      </FieldLabel>
+                      <FieldContent>
+                        <Input
+                          className="h-10 rounded-xl font-mono text-sm"
+                          autoComplete="off"
+                          {...form.register("productCode")}
+                        />
+                        {codeKindLabel && existingProductCode ? (
+                          <p className="text-xs text-muted-foreground">
+                            {codeKindLabel}
+                          </p>
+                        ) : null}
+                        <FieldError errors={[form.formState.errors.productCode]} />
+                        {canManageInternalCode ? (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs"
+                              disabled={internalCodeMutation.isPending}
+                              onClick={() =>
+                                internalCodeMutation.mutate({ type: "generate" })
+                              }
+                            >
+                              Generate store-only code
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-xs"
+                              disabled={internalCodeMutation.isPending}
+                              onClick={() => setReuseCodeConfirmationOpen(true)}
+                            >
+                              Reuse released code
+                            </Button>
+                          </div>
+                        ) : null}
+                        {canManageInternalCode ? (
+                          <p className="text-xs text-muted-foreground">
+                            Store-only codes are not globally registered identifiers.
+                          </p>
+                        ) : null}
+                      </FieldContent>
+                    </Field>
+                  ) : null}
+                </div>
+
+                {/* If barcode scanning enabled & label profile exists, spans 12 cols below */}
+                {barcodeScanningEnabled ? (
+                  <div className="col-span-1 md:col-span-12 space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <div>
+                      <p className="text-sm font-medium">Product Label Profile</p>
+                      <p className="text-xs text-muted-foreground">
+                        Optional packaging facts for label templates. On-pack MRP is
+                        not used in Billing or Sale Item snapshots.
+                      </p>
+                    </div>
+                    <label className="block space-y-1.5 text-sm font-medium">
+                      Ingredients
+                      <textarea
+                        className="min-h-20 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                        value={labelProfileForm.ingredients}
+                        onChange={(event) =>
+                          setLabelProfileForm((current) => ({
+                            ...current,
+                            ingredients: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-1.5 text-sm font-medium">
+                        Net weight
+                        <Input
+                          value={labelProfileForm.netWeight}
+                          onChange={(event) =>
+                            setLabelProfileForm((current) => ({
+                              ...current,
+                              netWeight: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block space-y-1.5 text-sm font-medium">
+                        Unit selling price text
+                        <Input
+                          value={labelProfileForm.unitSellingPriceText}
+                          onChange={(event) =>
+                            setLabelProfileForm((current) => ({
+                              ...current,
+                              unitSellingPriceText: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block space-y-1.5 text-sm font-medium">
+                        On-pack MRP
+                        <Input
+                          value={labelProfileForm.mrp}
+                          onChange={(event) =>
+                            setLabelProfileForm((current) => ({
+                              ...current,
+                              mrp: sanitizeDecimalInput(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block space-y-1.5 text-sm font-medium">
+                        Shelf life (days)
+                        <Input
+                          type="number"
+                          min={1}
+                          value={labelProfileForm.shelfLifeDays}
+                          onChange={(event) =>
+                            setLabelProfileForm((current) => ({
+                              ...current,
+                              shelfLifeDays: event.target.value.replace(/\D/g, ""),
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">Nutrition rows</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setLabelProfileForm((current) => ({
+                              ...current,
+                              nutrition: [
+                                ...normalizeNutritionRows(current.nutrition),
+                                { name: "", quantity: "", unit: "" },
+                              ],
+                            }))
+                          }
+                        >
+                          Add row
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Each row needs name, quantity, and unit (for example Energy,
+                        450, kcal).
+                      </p>
+                      {normalizeNutritionRows(labelProfileForm.nutrition).map((row, index) => (
+                        <div key={index} className="grid gap-2 sm:grid-cols-4">
+                          <Input
+                            value={row.name}
+                            onChange={(event) =>
+                              setLabelProfileForm((current) => ({
+                                ...current,
+                                nutrition: normalizeNutritionRows(current.nutrition).map(
+                                  (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, name: event.target.value }
+                                    : entry,
+                                ),
+                              }))
+                            }
+                          />
+                          <Input
+                            value={row.quantity}
+                            onChange={(event) =>
+                              setLabelProfileForm((current) => ({
+                                ...current,
+                                nutrition: normalizeNutritionRows(current.nutrition).map(
+                                  (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, quantity: event.target.value }
+                                    : entry,
+                                ),
+                              }))
+                            }
+                          />
+                          <Input
+                            value={row.unit}
+                            onChange={(event) =>
+                              setLabelProfileForm((current) => ({
+                                ...current,
+                                nutrition: normalizeNutritionRows(current.nutrition).map(
+                                  (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, unit: event.target.value }
+                                    : entry,
+                                ),
+                              }))
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setLabelProfileForm((current) => ({
+                                ...current,
+                                nutrition: normalizeNutritionRows(current.nutrition).filter(
+                                  (_, entryIndex) => entryIndex !== index,
+                                ),
+                              }))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
-            </div>
 
-            <DialogFooter className="mx-0 mb-0 shrink-0">
+            <DialogFooter className="mx-0 mb-0 shrink-0 border-t border-border/60 bg-card/40 px-5 py-3 sm:px-6">
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-xl"
-                onClick={() => setOpen(false)}
+                className="rounded-full h-9 px-4 text-sm font-medium"
+                onClick={() => setDialogOpen(false)}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                className="rounded-full h-9 px-5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs shadow-primary/20"
                 disabled={
                   mutation.isPending || !hasCategories || isCompressingImage
                 }
@@ -1270,7 +1303,6 @@ const UpsertProductDialog = ({
             className="font-mono"
             inputMode="numeric"
             maxLength={13}
-            placeholder="04XXXXXXXXXXX"
             value={releasedInternalCode}
             onChange={(event) => setReleasedInternalCode(event.target.value)}
           />

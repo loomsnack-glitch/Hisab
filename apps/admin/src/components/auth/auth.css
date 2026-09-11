@@ -1,0 +1,179 @@
+/* Ganatri Auth — Smooth hardware-accelerated animations (no lag, no delays) */
+
+/* 1. Main auth card entrance */
+@keyframes auth-card-fade-in {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.995);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.auth-card-enter {
+    animation: auth-card-fade-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
+/* 2. Tab view transition (e.g. Password <-> WhatsApp OTP) */
+@keyframes auth-tab-fade-in {
+    0% {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.auth-tab-enter {
+    animation: auth-tab-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
+/* 3. Stepper transition (Step 1 -> 2 -> 3 -> 4) */
+@keyframes auth-step-slide-in {
+    0% {
+        opacity: 0;
+        transform: translateX(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.auth-step-enter {
+    animation: auth-step-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
+/* 4. Sliding pill for segmented toggle (Smooth & responsive) */
+.auth-pill-slider {
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+}
+
+/* 5. Seamless height collapse/expand for Password <-> WhatsApp OTP toggle */
+.auth-collapse {
+    display: grid;
+    transition: grid-template-rows 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                margin 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: grid-template-rows, opacity;
+}
+
+.auth-collapse-expanded {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    margin-bottom: 1rem;
+}
+
+.auth-collapse-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    margin-bottom: 0;
+    pointer-events: none;
+}
+
+.auth-collapse-content {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* WhatsApp helper message smooth collapse */
+.auth-otp-help {
+    display: grid;
+    transition: grid-template-rows 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: grid-template-rows, opacity;
+}
+
+.auth-otp-help-expanded {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    padding-top: 0.625rem;
+}
+
+.auth-otp-help-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    padding-top: 0;
+    pointer-events: none;
+}
+
+/* 6. Micro-interactions for buttons & interactive elements */
+.auth-btn-interactive {
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-btn-interactive:active {
+    transform: scale(0.98);
+}
+
+.auth-scale-on-active {
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-scale-on-active:active {
+    transform: scale(0.96);
+}
+
+/* 7. Mobile & iPad/Tablet Layout (Hero Banner at Top like Reference) */
+@media (max-width: 1024px) {
+    .auth-mobile-hero-banner {
+        display: block !important;
+    }
+    .auth-desktop-corner-controls {
+        display: none !important;
+    }
+    .auth-desktop-side-art {
+        display: none !important;
+    }
+    .auth-card-container {
+        max-width: 36rem !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }
+    .auth-card-content {
+        padding: 1.25rem 1.25rem 1.75rem !important;
+    }
+    .auth-form-column {
+        max-width: 28rem !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 639px) {
+    html, body {
+        width: 100%;
+        min-height: 100%;
+        overflow-x: hidden;
+        overscroll-behavior-y: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    /* Prevent iOS Safari from auto-zooming and panning the viewport on input focus */
+    input, select, textarea, .PhoneInputInput {
+        font-size: 16px !important;
+    }
+    .auth-card-container {
+        max-width: 100% !important;
+        border-radius: 1.5rem !important;
+        margin: auto 0 !important;
+    }
+    .auth-card-content {
+        padding: 1.25rem 1.25rem 1.25rem !important;
+    }
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+    .auth-card-content {
+        padding: 1.5rem 2rem 2.25rem !important;
+    }
+}
+
+

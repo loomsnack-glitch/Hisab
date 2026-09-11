@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getOrganizationDetails } from "@repo/services";
-import { Building2, Check, ChevronsUpDown, Store } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Plus, Store } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import {
     Popover,
@@ -13,6 +14,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { organizationKeys } from "@/lib/query-keys";
 import { getStoreWorkspacePath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 
 type WorkspaceStoreRef = {
     id: string;
@@ -24,6 +26,8 @@ type AdminWorkspaceSwitcherPanelProps = {
     organizationName: string;
     stores: WorkspaceStoreRef[];
     selectedStoreId?: string | null;
+    onAddStore?: () => void;
+    onNavigate?: () => void;
 };
 
 export const AdminWorkspaceSwitcherPanel = ({
@@ -31,13 +35,18 @@ export const AdminWorkspaceSwitcherPanel = ({
     organizationName,
     stores,
     selectedStoreId = null,
+    onAddStore,
+    onNavigate,
 }: AdminWorkspaceSwitcherPanelProps) => {
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const organizationWorkspacePath = getOrganizationWorkspacePath(organizationId);
 
     return (
-        <div className="flex flex-col gap-2 text-sm" data-admin-workspace={selectedStore ? "store" : "organization"}>
-            <div className="px-1 py-1">
+        <div
+            className="flex max-h-[min(28rem,calc(100dvh-6rem))] flex-col gap-2 text-sm"
+            data-admin-workspace={selectedStore ? "store" : "organization"}
+        >
+            <div className="shrink-0 px-1 py-1">
                 {selectedStore ? (
                     <>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Store workspace</p>
@@ -52,13 +61,14 @@ export const AdminWorkspaceSwitcherPanel = ({
                 )}
             </div>
 
-            <div className="h-px bg-border/60 -mx-3" />
+            <div className="h-px shrink-0 bg-border/60 -mx-3" />
 
             <Link
                 to={organizationWorkspacePath}
+                onClick={onNavigate}
                 aria-current={selectedStore ? undefined : "page"}
                 className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
+                    "flex w-full shrink-0 items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
                     selectedStore
                         ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                         : "bg-primary/10 text-primary",
@@ -69,17 +79,18 @@ export const AdminWorkspaceSwitcherPanel = ({
                 {selectedStore ? null : <Check className="size-4 shrink-0" />}
             </Link>
 
-            {stores.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                    <p className="px-2.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Store workspaces
-                    </p>
+            <div className="flex min-h-0 flex-1 flex-col gap-1">
+                <p className="shrink-0 px-2.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Store workspaces
+                </p>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {stores.map((store) => {
                         const active = store.id === selectedStoreId;
                         return (
                             <Link
                                 key={store.id}
                                 to={getStoreWorkspacePath(organizationId, store.id)}
+                                onClick={onNavigate}
                                 aria-current={active ? "page" : undefined}
                                 className={cn(
                                     "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left",
@@ -95,14 +106,22 @@ export const AdminWorkspaceSwitcherPanel = ({
                         );
                     })}
                 </div>
-            ) : null}
+                <button
+                    type="button"
+                    onClick={onAddStore}
+                    className="flex w-full shrink-0 items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors text-left text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                >
+                    <Plus className="size-4" />
+                    <span className="min-w-0 flex-1 truncate">Add store</span>
+                </button>
+            </div>
         </div>
     );
 };
 
-type AdminWorkspaceSwitcherProps = AdminWorkspaceSwitcherPanelProps & {
+type AdminWorkspaceSwitcherProps = Omit<AdminWorkspaceSwitcherPanelProps, "onAddStore"> & {
     collapsed?: boolean;
-    variant?: "header" | "sidebar";
+    variant?: "header" | "sidebar" | "sheet";
 };
 
 export const AdminWorkspaceSwitcher = ({
@@ -112,7 +131,10 @@ export const AdminWorkspaceSwitcher = ({
     selectedStoreId = null,
     collapsed = false,
     variant = "header",
+    onNavigate,
 }: AdminWorkspaceSwitcherProps) => {
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [createStoreOpen, setCreateStoreOpen] = useState(false);
     const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? null;
     const triggerLabel = selectedStore
         ? `${selectedStore.name} store workspace`
@@ -120,6 +142,73 @@ export const AdminWorkspaceSwitcher = ({
     const workspaceKindLabel = selectedStore ? "Store workspace" : "Organization workspace";
     const workspaceName = selectedStore ? selectedStore.name : organizationName;
     const WorkspaceIcon = selectedStore ? Store : Building2;
+
+    const openCreateStore = () => {
+        setPopoverOpen(false);
+        setCreateStoreOpen(true);
+    };
+
+    const handlePanelNavigate = () => {
+        setPopoverOpen(false);
+        onNavigate?.();
+    };
+
+    const panel = (
+        <AdminWorkspaceSwitcherPanel
+            organizationId={organizationId}
+            organizationName={organizationName}
+            stores={stores}
+            selectedStoreId={selectedStoreId}
+            onAddStore={openCreateStore}
+            onNavigate={handlePanelNavigate}
+        />
+    );
+
+    const createStoreDialog = (
+        <CreateStoreDialog
+            organizationId={organizationId}
+            open={createStoreOpen}
+            onOpenChange={setCreateStoreOpen}
+            trigger={null}
+        />
+    );
+
+    if (variant === "sheet") {
+        return (
+            <>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger
+                        render={
+                            <button
+                                type="button"
+                                aria-label={triggerLabel}
+                                aria-expanded={popoverOpen}
+                                className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 text-left font-medium transition-colors hover:bg-muted/50"
+                            >
+                                <WorkspaceIcon className="size-4 shrink-0 text-primary" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        {workspaceKindLabel}
+                                    </span>
+                                    <span className="block truncate font-semibold leading-tight">{workspaceName}</span>
+                                </span>
+                                <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                            </button>
+                        }
+                    />
+                    <PopoverContent
+                        align="start"
+                        side="top"
+                        sideOffset={8}
+                        className="w-(--anchor-width) overflow-hidden rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-[120]"
+                    >
+                        {panel}
+                    </PopoverContent>
+                </Popover>
+                {createStoreDialog}
+            </>
+        );
+    }
 
     if (variant === "sidebar") {
         const trigger = (
@@ -152,52 +241,48 @@ export const AdminWorkspaceSwitcher = ({
         );
 
         return (
-            <Popover>
-                <PopoverTrigger render={trigger} />
-                <PopoverContent
-                    align="start"
-                    side={collapsed ? "right" : "top"}
-                    sideOffset={8}
-                    className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
-                >
-                    <AdminWorkspaceSwitcherPanel
-                        organizationId={organizationId}
-                        organizationName={organizationName}
-                        stores={stores}
-                        selectedStoreId={selectedStoreId}
-                    />
-                </PopoverContent>
-            </Popover>
+            <>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger render={trigger} />
+                    <PopoverContent
+                        align="start"
+                        side={collapsed ? "right" : "top"}
+                        sideOffset={8}
+                        className="w-72 overflow-hidden rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
+                    >
+                        {panel}
+                    </PopoverContent>
+                </Popover>
+                {createStoreDialog}
+            </>
         );
     }
 
     return (
-        <Popover>
-            <PopoverTrigger
-                render={
-                    <Button
-                        variant="outline"
-                        className="h-9 max-w-[16rem] gap-2 rounded-xl border-border/70 bg-background/80 px-3 text-left font-medium"
-                        aria-label={triggerLabel}
-                    >
-                        <WorkspaceIcon className="size-4 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
-                        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
-                    </Button>
-                }
-            />
-            <PopoverContent
-                align="start"
-                className="w-72 rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
-            >
-                <AdminWorkspaceSwitcherPanel
-                    organizationId={organizationId}
-                    organizationName={organizationName}
-                    stores={stores}
-                    selectedStoreId={selectedStoreId}
+        <>
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <PopoverTrigger
+                    render={
+                        <Button
+                            variant="outline"
+                            className="h-9 max-w-[16rem] gap-2 rounded-xl border-border/70 bg-background/80 px-3 text-left font-medium"
+                            aria-label={triggerLabel}
+                        >
+                            <WorkspaceIcon className="size-4 shrink-0 text-primary" />
+                            <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+                            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        </Button>
+                    }
                 />
-            </PopoverContent>
-        </Popover>
+                <PopoverContent
+                    align="start"
+                    className="w-72 overflow-hidden rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-xl z-50"
+                >
+                    {panel}
+                </PopoverContent>
+            </Popover>
+            {createStoreDialog}
+        </>
     );
 };
 
@@ -205,12 +290,14 @@ export default AdminWorkspaceSwitcher;
 
 type AdminWorkspaceSwitcherFromRouteProps = {
     collapsed?: boolean;
-    variant?: "header" | "sidebar";
+    variant?: "header" | "sidebar" | "sheet";
+    onNavigate?: () => void;
 };
 
 export const AdminWorkspaceSwitcherFromRoute = ({
     collapsed = false,
     variant = "header",
+    onNavigate,
 }: AdminWorkspaceSwitcherFromRouteProps) => {
     const { organizationId = "" } = useParams();
     const location = useLocation();
@@ -237,6 +324,7 @@ export const AdminWorkspaceSwitcherFromRoute = ({
             selectedStoreId={workspace?.storeId ?? null}
             collapsed={collapsed}
             variant={variant}
+            onNavigate={onNavigate}
         />
     );
 };

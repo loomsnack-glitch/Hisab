@@ -1,16 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate } from "react-router-dom";
-import { getCategories, getOrganizationCatalogSettings, getProducts, reorderProducts } from "@repo/services";
+import { useParams } from "react-router-dom";
+import {
+    getCategories,
+    getProducts,
+    reorderProducts,
+} from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
-import { Barcode, Boxes, Layers3, Link2, ListOrdered, Package2, Pencil, PlusCircle, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { cn } from "@repo/ui/lib/utils";
+import {
+    Barcode,
+    Boxes,
+    Check,
+    CircleCheck,
+    Filter,
+    Layers3,
+    Link2,
+    ListOrdered,
+    Package2,
+    Pencil,
+    Plus,
+    PlusCircle,
+    Puzzle,
+    RefreshCw,
+    Search,
+    X,
+} from "lucide-react";
 
-import DeleteProductButton from "@/components/catalog/delete-product-button";
+import ToggleProductStatusButton from "@/components/catalog/toggle-product-status-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
@@ -18,20 +42,124 @@ import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import ProductPriceDisplay from "@/components/catalog/product-price-display";
-import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
 
+const STATUS_FILTER_OPTIONS = [
+    { label: "Active", value: "active" },
+    { label: "Inactive", value: "inactive" },
+] as const;
+
+const ADDONS_FILTER_OPTIONS = [
+    { label: "With add-ons", value: "with_addons" },
+    { label: "No add-ons", value: "without_addons" },
+] as const;
+
+type ProductFilterOptionsProps = {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    options: ReadonlyArray<{ label: string; value: string }>;
+    selectedValues: string[];
+    onChange: (value: string) => void;
+    onClear: () => void;
+    variant?: "popover" | "sheet";
+};
+
+const ProductFilterOptions = ({
+    label,
+    icon: Icon,
+    options,
+    selectedValues,
+    onChange,
+    onClear,
+    variant = "popover",
+}: ProductFilterOptionsProps) => {
+    const isSheet = variant === "sheet";
+
+    return (
+        <div className={cn("space-y-1", isSheet && "space-y-2")}>
+            <div className={cn("flex items-center justify-between gap-3", isSheet ? "px-1 py-1" : "px-2 py-1")}>
+                <div className="flex min-w-0 items-center gap-2">
+                    {isSheet ? (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Icon className="size-4" />
+                        </span>
+                    ) : (
+                        <Icon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                    )}
+                    <p
+                        className={cn(
+                            isSheet
+                                ? "text-sm font-semibold text-foreground"
+                                : "text-[10px] font-bold uppercase tracking-wider text-muted-foreground",
+                        )}
+                    >
+                        {label}
+                    </p>
+                </div>
+                {selectedValues.length > 0 ? (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        className={cn(
+                            "shrink-0 font-semibold text-primary hover:underline cursor-pointer",
+                            isSheet ? "text-sm" : "text-[10px]",
+                        )}
+                    >
+                        Clear
+                    </button>
+                ) : (
+                    <span className={cn("invisible shrink-0 font-semibold", isSheet ? "text-sm" : "text-[10px]")}>
+                        Clear
+                    </span>
+                )}
+            </div>
+            {options.map((opt) => {
+                const isChecked = selectedValues.includes(opt.value);
+                return (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onChange(opt.value)}
+                        className={cn(
+                            "flex w-full items-center gap-3 rounded-lg text-left font-medium hover:bg-muted/50 cursor-pointer",
+                            isSheet ? "px-2 py-2.5 text-sm" : "gap-2 px-2 py-1.5 text-xs",
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                "flex items-center justify-center rounded-[4px] border border-muted-foreground/35 transition-colors",
+                                isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent",
+                                isSheet ? "size-5" : "size-4",
+                            )}
+                        >
+                            {isChecked ? <Check className={cn("stroke-[3]", isSheet ? "size-3.5" : "size-3")} /> : null}
+                        </div>
+                        <span className="truncate">{opt.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
 const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
-    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
-
+    const [statusFilters, setStatusFilters] = useState<string[]>([]);
+    const [addOnsFilters, setAddOnsFilters] = useState<string[]>([]);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+    const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
+    const [addComboDialogOpen, setAddComboDialogOpen] = useState(false);
+    const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
+    const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
         queryFn: () => getCategories(organizationId),
@@ -44,17 +172,8 @@ const ProductsListPage = () => {
         enabled: Boolean(organizationId),
     });
 
-    const catalogSettingsQuery = useQuery({
-        queryKey: organizationKeys.catalogSettings(organizationId),
-        queryFn: () => getOrganizationCatalogSettings(organizationId),
-        enabled: Boolean(organizationId),
-    });
-
     const categories = categoriesQuery.data?.status === "success" ? categoriesQuery.data.data?.categories ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
     const products = productsQuery.data?.status === "success" ? productsQuery.data.data?.products ?? EMPTY_CATALOG_ITEMS : EMPTY_CATALOG_ITEMS;
-    const barcodeScanningEnabled =
-        catalogSettingsQuery.data?.status === "success"
-        && catalogSettingsQuery.data.data?.settings.barcodeScanningEnabled === true;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),
@@ -63,6 +182,67 @@ const ProductsListPage = () => {
 
     const defaultCategoryIdForNewProduct =
         selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
+
+    const activeFilterCount = statusFilters.length + addOnsFilters.length;
+    const draftFilterCount = draftStatusFilters.length + draftAddOnsFilters.length;
+
+    const toggleStatusFilter = (value: string) => {
+        setStatusFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleAddOnsFilter = (value: string) => {
+        setAddOnsFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleDraftStatusFilter = (value: string) => {
+        setDraftStatusFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const toggleDraftAddOnsFilter = (value: string) => {
+        setDraftAddOnsFilters((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
+    const clearAllFilters = () => {
+        setStatusFilters([]);
+        setAddOnsFilters([]);
+    };
+
+    const clearDraftFilters = () => {
+        setDraftStatusFilters([]);
+        setDraftAddOnsFilters([]);
+    };
+
+    const handleMobileFiltersOpenChange = (open: boolean) => {
+        if (open) {
+            setDraftStatusFilters(statusFilters);
+            setDraftAddOnsFilters(addOnsFilters);
+        }
+        setMobileFiltersOpen(open);
+    };
+
+    const applyMobileFilters = () => {
+        setStatusFilters(draftStatusFilters);
+        setAddOnsFilters(draftAddOnsFilters);
+        setMobileFiltersOpen(false);
+    };
+
+    const handleMobileAddProduct = () => {
+        setMobileActionsOpen(false);
+        setAddProductDialogOpen(true);
+    };
+
+    const handleMobileAddCombo = () => {
+        setMobileActionsOpen(false);
+        setAddComboDialogOpen(true);
+    };
 
     const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -79,6 +259,17 @@ const ProductsListPage = () => {
             if (selectedCategoryFilter !== "all" && product.categoryId !== selectedCategoryFilter) {
                 return false;
             }
+            if (statusFilters.length > 0 && !statusFilters.includes(product.status)) {
+                return false;
+            }
+            if (addOnsFilters.length > 0) {
+                const hasAddons = Boolean(product.activeAddOnCount && product.activeAddOnCount > 0);
+                const matchesWith = addOnsFilters.includes("with_addons") && hasAddons;
+                const matchesWithout = addOnsFilters.includes("without_addons") && !hasAddons;
+                if (!matchesWith && !matchesWithout) {
+                    return false;
+                }
+            }
             if (searchQuery.trim()) {
                 const query = searchQuery.toLowerCase().trim();
                 const productName = product.name.toLowerCase();
@@ -87,31 +278,38 @@ const ProductsListPage = () => {
             }
             return true;
         });
-    }, [products, selectedCategoryFilter, searchQuery, categoryMap]);
+    }, [products, selectedCategoryFilter, statusFilters, addOnsFilters, searchQuery, categoryMap]);
 
-    const selectedCategoryProducts = useMemo(
-        () => selectedCategoryFilter === "all"
-            ? []
-            : products.filter((product) => product.categoryId === selectedCategoryFilter),
-        [products, selectedCategoryFilter],
-    );
+    const reorderCategoryId = selectedCategoryFilter !== "all" ? selectedCategoryFilter : null;
+
+    const reorderCategoryProducts = useMemo(() => {
+        if (!reorderCategoryId) {
+            return [];
+        }
+
+        return products.filter((product) => product.categoryId === reorderCategoryId);
+    }, [products, reorderCategoryId]);
 
     const productOrderItems = useMemo(
-        () => selectedCategoryProducts.map((product) => ({
+        () => reorderCategoryProducts.map((product) => ({
             id: product.id,
             name: product.name,
             description: categoryMap.get(product.categoryId)?.name,
             leading: <Package2 className="size-4 shrink-0 text-primary" />,
         })),
-        [categoryMap, selectedCategoryProducts],
+        [categoryMap, reorderCategoryProducts],
     );
 
     const saveProductOrder = async (productIds: string[]) => {
-        if (selectedCategoryFilter === "all") {
-            return { status: "error" as const, message: "Select a category before reordering products" };
+        if (!reorderCategoryId) {
+            return {
+                status: "error" as const,
+                message: "Select a category before rearranging",
+            };
         }
+
         const response = await reorderProducts(organizationId, {
-            categoryId: selectedCategoryFilter,
+            categoryId: reorderCategoryId,
             productIds,
         });
         if (response.status === "success") {
@@ -121,10 +319,51 @@ const ProductsListPage = () => {
     };
 
     const productReorderDisabledReason = selectedCategoryFilter === "all"
-        ? "Select a category to reorder its products."
-        : selectedCategoryProducts.length < 2
-            ? "This category needs at least two products to reorder."
+        ? "Select a category to rearrange."
+        : reorderCategoryProducts.length < 2
+            ? "This category needs at least two products to rearrange."
             : null;
+
+    const productRearrangeButtonClassName =
+        "rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer";
+
+    const renderProductRearrangeControl = (className?: string) =>
+        productReorderDisabledReason ? (
+            <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                            productRearrangeButtonClassName,
+                            "text-muted-foreground/60 cursor-not-allowed",
+                            className,
+                        )}
+                        disabled
+                    >
+                        <ListOrdered className="size-3.5" />
+                        Rearrange
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>{productReorderDisabledReason}</TooltipContent>
+            </Tooltip>
+        ) : (
+            <ReorderListDialog
+                title="Rearrange products"
+                items={productOrderItems}
+                onSave={saveProductOrder}
+                trigger={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(productRearrangeButtonClassName, className)}
+                    >
+                        <ListOrdered className="size-3.5" />
+                        Rearrange
+                    </Button>
+                }
+            />
+        );
 
     if (categoriesQuery.isPending || productsQuery.isPending) {
         return (
@@ -175,133 +414,341 @@ const ProductsListPage = () => {
         );
     }
 
+    const renderCardActions = (product: (typeof filteredProducts)[number]) => (
+        <>
+            {product.productType === "single" ? (
+                <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                        <ManageProductAddOnsDialog
+                            organizationId={organizationId}
+                            product={product}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Manage add-ons for ${product.name}`}
+                                    className={cn(
+                                        "relative h-8 w-8 rounded-lg cursor-pointer touch-manipulation focus-visible:ring-2",
+                                        product.activeAddOnCount
+                                            ? "text-primary hover:bg-primary/15 hover:text-primary focus-visible:ring-primary/40"
+                                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:ring-primary/40",
+                                    )}
+                                >
+                                    <Link2 className="size-3.5" />
+                                    {product.activeAddOnCount ? (
+                                        <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold text-primary-foreground shadow-xs">
+                                            {product.activeAddOnCount}
+                                        </span>
+                                    ) : null}
+                                </Button>
+                            }
+                        />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        {product.activeAddOnCount
+                            ? `Manage add-ons (${product.activeAddOnCount} active)`
+                            : "Manage add-ons"}
+                    </TooltipContent>
+                </Tooltip>
+            ) : null}
+
+            {canOfferProductLabelPrint({
+                barcodeScanningEnabled: false,
+                productCode: product.productCode,
+            }) ? (
+                <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                        <InternalProductLabelDialog
+                            organizationId={organizationId}
+                            product={product}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Preview and print labels for ${product.name}`}
+                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                >
+                                    <Barcode className="size-3.5" />
+                                </Button>
+                            }
+                        />
+                    </TooltipTrigger>
+                    <TooltipContent>Print labels</TooltipContent>
+                </Tooltip>
+            ) : null}
+
+            {product.productType === "combo" ? (
+                <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                        <UpsertComboProductDialog
+                            organizationId={organizationId}
+                            categories={categories}
+                            products={products}
+                            product={product}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Edit ${product.name}`}
+                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                >
+                                    <Pencil className="size-3.5" />
+                                </Button>
+                            }
+                        />
+                    </TooltipTrigger>
+                    <TooltipContent>Edit combo</TooltipContent>
+                </Tooltip>
+            ) : product.productType === "single" ? (
+                <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex" />}>
+                        <UpsertProductDialog
+                            organizationId={organizationId}
+                            categories={categories}
+                            product={product}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Edit ${product.name}`}
+                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                >
+                                    <Pencil className="size-3.5" />
+                                </Button>
+                            }
+                        />
+                    </TooltipTrigger>
+                    <TooltipContent>Edit product</TooltipContent>
+                </Tooltip>
+            ) : null}
+
+            <ToggleProductStatusButton
+                organizationId={organizationId}
+                product={product}
+            />
+        </>
+    );
+
     return (
-        <div className="space-y-5">
-            {/* Search & Actions bar */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-md w-full group/search">
-                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
-                    <Input
-                        type="text"
-                        placeholder="Search products..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
-                    />
-                    {searchQuery && (
-                        <button
-                            type="button"
-                            onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                            aria-label="Clear search"
+        <div className="space-y-3">
+
+            {/* Search, Filters, View Switcher & Actions bar */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleMobileFiltersOpenChange(true)}
+                        aria-label="Filter products"
+                        className={cn(
+                            "relative h-10 w-10 shrink-0 rounded-full border-border/60 bg-card/60 p-0 shadow-2xs sm:hidden",
+                            activeFilterCount > 0
+                                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                : "text-muted-foreground",
+                        )}
+                    >
+                        <Filter className="size-4" />
+                        {activeFilterCount > 0 ? (
+                            <span className="absolute top-0.5 right-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold leading-none text-primary-foreground ring-2 ring-card">
+                                {activeFilterCount}
+                            </span>
+                        ) : null}
+                    </Button>
+
+                    <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
+                        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                        <Input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary/70 transition-all duration-200 text-sm w-full shadow-2xs"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                aria-label="Clear search"
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    <Button
+                        type="button"
+                        onClick={() => setMobileActionsOpen(true)}
+                        aria-label="Product actions"
+                        className="h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:hidden"
+                    >
+                        <Plus className="size-4" />
+                    </Button>
+
+                    {/* Status Filter Popover (PremiumTable pattern) */}
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        statusFilters.length > 0
+                                            ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                            : "text-muted-foreground"
+                                    )}
+                                >
+                                    <CircleCheck className={cn(
+                                        "size-3.5 transition-colors",
+                                        statusFilters.length > 0
+                                            ? "text-primary stroke-[2.5]"
+                                            : "text-muted-foreground/70"
+                                    )} />
+                                    <span>Status</span>
+                                    {statusFilters.length > 0 && (
+                                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground animate-in zoom-in duration-200">
+                                            {statusFilters.length}
+                                        </span>
+                                    )}
+                                </Button>
+                            }
+                        />
+                        <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
+                            <ProductFilterOptions
+                                label="Status"
+                                icon={CircleCheck}
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={statusFilters}
+                                onChange={toggleStatusFilter}
+                                onClear={() => setStatusFilters([])}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Add-ons Filter Popover (PremiumTable pattern) */}
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        addOnsFilters.length > 0
+                                            ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                            : "text-muted-foreground"
+                                    )}
+                                >
+                                    <Puzzle className={cn(
+                                        "size-3.5 transition-colors",
+                                        addOnsFilters.length > 0
+                                            ? "text-primary stroke-[2.5]"
+                                            : "text-muted-foreground/70"
+                                    )} />
+                                    <span>Add-ons</span>
+                                    {addOnsFilters.length > 0 && (
+                                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground animate-in zoom-in duration-200">
+                                            {addOnsFilters.length}
+                                        </span>
+                                    )}
+                                </Button>
+                            }
+                        />
+                        <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
+                            <ProductFilterOptions
+                                label="Add-ons"
+                                icon={Puzzle}
+                                options={ADDONS_FILTER_OPTIONS}
+                                selectedValues={addOnsFilters}
+                                onChange={toggleAddOnsFilter}
+                                onClear={() => setAddOnsFilters([])}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Clear All Filters Button (PremiumTable pattern) */}
+                    {(statusFilters.length > 0 || addOnsFilters.length > 0) && (
+                        <Button
+                            variant="ghost"
+                            onClick={clearAllFilters}
+                            className="hidden sm:flex h-9 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive text-xs font-semibold gap-1.5 px-3 shrink-0 cursor-pointer animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                             <X className="size-3.5" />
-                        </button>
+                            <span>Clear Filters</span>
+                        </Button>
                     )}
+
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                    <UpsertProductDialog
-                        organizationId={organizationId}
-                        categories={categories}
-                        defaultCategoryId={defaultCategoryIdForNewProduct}
-                        trigger={
-                            <Button
-                                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
-                                disabled={categories.length === 0}
-                            >
-                                <PlusCircle className="size-3.5 sm:size-4" />
-                                Add product
-                            </Button>
-                        }
-                    />
+                <div className="hidden sm:flex flex-wrap items-center gap-2">
+                    <Button
+                        type="button"
+                        className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20 transition-all cursor-pointer"
+                        disabled={categories.length === 0}
+                        onClick={() => setAddProductDialogOpen(true)}
+                    >
+                        <PlusCircle className="size-4" />
+                        Add product
+                    </Button>
 
-                    <UpsertComboProductDialog
-                        organizationId={organizationId}
-                        categories={categories}
-                        products={products}
-                        defaultCategoryId={defaultCategoryIdForNewProduct}
-                        trigger={
-                            <Button
-                                variant="outline"
-                                className="rounded-full border-border/60 h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
-                                disabled={categories.length === 0}
-                            >
-                                <Boxes className="size-3.5 sm:size-4" />
-                                Add Combo
-                            </Button>
-                        }
-                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full border-border/60 bg-card/50 hover:bg-card hover:border-border/80 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium text-foreground/90 transition-all cursor-pointer"
+                        disabled={categories.length === 0}
+                        onClick={() => setAddComboDialogOpen(true)}
+                    >
+                        <Boxes className="size-4" />
+                        Add Combo
+                    </Button>
 
-                    {productReorderDisabledReason ? (
-                        <Tooltip>
-                            <TooltipTrigger render={<span className="inline-flex" />}>
-                                <ReorderListDialog
-                                    title="Reorder products"
-                                    description="Choose the order products appear inside the selected category."
-                                    items={productOrderItems}
-                                    onSave={saveProductOrder}
-                                    trigger={
-                                        <Button
-                                            variant="outline"
-                                            className="rounded-full h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
-                                            disabled
-                                        >
-                                            <ListOrdered className="size-3.5 sm:size-4" />
-                                            Reorder
-                                        </Button>
-                                    }
-                                />
-                            </TooltipTrigger>
-                            <TooltipContent>{productReorderDisabledReason}</TooltipContent>
-                        </Tooltip>
-                    ) : (
-                        <ReorderListDialog
-                        title="Reorder products"
-                        description="Choose the order products appear inside the selected category."
-                        items={productOrderItems}
-                        onSave={saveProductOrder}
-                        trigger={
-                            <Button
-                                variant="outline"
-                                className="rounded-full h-9 sm:h-11 px-4 sm:px-5 text-xs sm:text-sm"
-                                disabled={selectedCategoryFilter === "all" || selectedCategoryProducts.length < 2}
-                            >
-                                <ListOrdered className="size-3.5 sm:size-4" />
-                                Reorder
-                            </Button>
-                        }
-                        />
-                    )}
+                    {renderProductRearrangeControl()}
                 </div>
             </div>
 
             {/* Category filter pills - Horizontally scrollable on mobile */}
             {categories.length > 0 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+                <div className="flex items-center gap-2 overflow-x-auto py-0 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
                     <Button
                         ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}
-                        className="rounded-full px-4 sm:px-5 h-8 sm:h-9 font-medium text-xs transition-all cursor-pointer shrink-0"
+                        className={`rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0 ${
+                            selectedCategoryFilter === "all"
+                                ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
+                                : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80"
+                        }`}
                         onClick={() => setSelectedCategoryFilter("all")}
                     >
                         All
                     </Button>
-                    {categories.map((category) => (
-                        <Button
-                            key={category.id}
-                            ref={(el) => { categoryPillRefs.current[category.id] = el; }}
-                            variant={selectedCategoryFilter === category.id ? "default" : "outline"}
-                            className="rounded-full px-4 sm:px-5 h-8 sm:h-9 font-medium text-xs transition-all cursor-pointer shrink-0"
-                            onClick={() => setSelectedCategoryFilter(category.id)}
-                        >
-                            {category.name}
-                        </Button>
-                    ))}
+                    {categories.map((category) => {
+                        const isSelected = selectedCategoryFilter === category.id;
+                        return (
+                            <Button
+                                key={category.id}
+                                ref={(el) => { categoryPillRefs.current[category.id] = el; }}
+                                variant={isSelected ? "default" : "outline"}
+                                className={`rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0 ${
+                                    isSelected
+                                        ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
+                                        : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80"
+                                }`}
+                                onClick={() => setSelectedCategoryFilter(category.id)}
+                            >
+                                {category.name}
+                            </Button>
+                        );
+                    })}
                 </div>
             )}
 
-            {/* Product Grid */}
+            {filteredProducts.length > 0 && (
+                <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
+                    <span className="text-xs text-muted-foreground/70">
+                        Showing {filteredProducts.length} product{filteredProducts.length === 1 ? "" : "s"}
+                    </span>
+                </div>
+            )}
+
             {categories.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
@@ -318,7 +765,6 @@ const ProductsListPage = () => {
                             <EmptyContent>
                                 <Button
                                     className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-5"
-                                    onClick={() => navigate("../categories")}
                                 >
                                     <Layers3 className="size-4" />
                                     Go to categories
@@ -337,12 +783,27 @@ const ProductsListPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No products found</EmptyTitle>
                                 <EmptyDescription>
-                                    {searchQuery || selectedCategoryFilter !== "all"
-                                        ? "Try adjusting your search query or category filter."
+                                    {searchQuery || selectedCategoryFilter !== "all" || statusFilters.length > 0 || addOnsFilters.length > 0
+                                        ? "Try adjusting your search query, category, status, or add-on filters."
                                         : "Add your first product to start building the catalog."}
                                 </EmptyDescription>
                             </EmptyHeader>
-                            {!(searchQuery || selectedCategoryFilter !== "all") && (
+                            {searchQuery || selectedCategoryFilter !== "all" || statusFilters.length > 0 || addOnsFilters.length > 0 ? (
+                                <EmptyContent>
+                                    <Button
+                                        variant="outline"
+                                        className="rounded-full"
+                                        onClick={() => {
+                                            setSearchQuery("");
+                                            setSelectedCategoryFilter("all");
+                                            setStatusFilters([]);
+                                            setAddOnsFilters([]);
+                                        }}
+                                    >
+                                        Clear all filters
+                                    </Button>
+                                </EmptyContent>
+                            ) : (
                                 <EmptyContent>
                                     <UpsertProductDialog
                                         organizationId={organizationId}
@@ -357,7 +818,7 @@ const ProductsListPage = () => {
             ) : (
                 <div
                     key={selectedCategoryFilter}
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
+                    className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
                 >
                     {filteredProducts.map((product) => {
                         const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
@@ -365,145 +826,69 @@ const ProductsListPage = () => {
                         return (
                             <Card
                                 key={product.id}
-                                className="group rounded-2xl border border-border/60 bg-card/70 p-3 sm:p-3.5 shadow-sm transition-all duration-200 hover:border-primary/25 hover:bg-card hover:shadow-md min-w-0"
+                                className={cn(
+                                    "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
+                                    product.status === "inactive" && "opacity-[0.82] hover:opacity-100",
+                                    product.status === "inactive"
+                                        ? "border-border/50 bg-muted/20"
+                                        : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
+                                )}
                             >
-                                <div className="flex items-start sm:items-center gap-3">
-                                    <div className="relative flex h-14 w-14 sm:h-[4.25rem] sm:w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.02] dark:ring-white/5">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    {/* Thumbnail */}
+                                    <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-muted/25 ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
                                         {product.imageSignedUrl ? (
                                             <img
                                                 src={product.imageSignedUrl}
                                                 alt={product.name}
                                                 className="h-full w-full object-cover"
+                                                loading="lazy"
                                             />
                                         ) : (
-                                            <Package2 className="size-6 sm:size-8 text-muted-foreground/55" />
+                                            <Package2 className="size-6 sm:size-7 text-muted-foreground/50" />
                                         )}
                                     </div>
 
-                                    <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                        <div className="min-w-0 space-y-1">
-                                            <h4 className="min-w-0 whitespace-normal break-words font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                                                {product.name}
-                                            </h4>
-                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                                <span className="text-[11px] sm:text-xs font-medium capitalize text-muted-foreground">
-                                                    {categoryName}
-                                                </span>
-                                                <ProductTypeBadge productType={product.productType} />
-                                                {product.status === "inactive" && (
-                                                    <ProductStatusBadge status={product.status} />
-                                                )}
-                                                {product.productType === "single" && product.activeAddOnCount ? (
-                                                    <>
-                                                        <span aria-hidden="true" className="text-muted-foreground/60">·</span>
-                                                        <span className="text-[11px] sm:text-xs font-medium text-muted-foreground">
-                                                            {product.activeAddOnCount} add-ons
-                                                        </span>
-                                                    </>
-                                                ) : null}
-                                            </div>
-                                        </div>
+                                    {/* Full Product Name & Category with ample width */}
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <Tooltip>
+                                            <TooltipTrigger render={<div className="min-w-0" />}>
+                                                <h4 className="font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-primary line-clamp-2 break-words">
+                                                    {product.name}
+                                                </h4>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="max-w-xs text-xs">{product.name}</TooltipContent>
+                                        </Tooltip>
 
-                                        <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
-                                            <div className="flex flex-col items-start">
-                                                <ProductPriceDisplay
-                                                    price={product.price}
-                                                    discount={product.discount}
-                                                    size="sm"
-                                                    align="left"
-                                                    singleTone="foreground"
-                                                />
-                                                <span className="text-[10px] font-medium text-muted-foreground">
-                                                    {catalogSellingQuantityLabel(product)}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex items-center gap-0.5 border-l border-border/50 pl-2">
-                                                {product.productType === "single" ? (
-                                                    <ManageProductAddOnsDialog
-                                                        organizationId={organizationId}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Manage add-ons for ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Link2 className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                ) : null}
-                                                {canOfferProductLabelPrint({
-                                                    barcodeScanningEnabled,
-                                                    productCode: product.productCode,
-                                                }) ? (
-                                                    <InternalProductLabelDialog
-                                                        organizationId={organizationId}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Preview and print labels for ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Barcode className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                ) : null}
-                                                {product.productType === "combo" ? (
-                                                    <UpsertComboProductDialog
-                                                        organizationId={organizationId}
-                                                        categories={categories}
-                                                        products={products}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Edit ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Pencil className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                ) : product.productType === "single" ? (
-                                                    <UpsertProductDialog
-                                                        organizationId={organizationId}
-                                                        categories={categories}
-                                                        product={product}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label={`Edit ${product.name}`}
-                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation"
-                                                            >
-                                                                <Pencil className="size-3.5" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                ) : null}
-                                                <DeleteProductButton
-                                                    organizationId={organizationId}
-                                                    product={product}
-                                                    trigger={
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            aria-label={`Delete ${product.name}`}
-                                                            className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer touch-manipulation"
-                                                        >
-                                                            <Trash2 className="size-3.5" />
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+                                            <span className="text-[11px] sm:text-xs font-medium capitalize text-muted-foreground">
+                                                {categoryName}
+                                            </span>
+                                            <ProductTypeBadge productType={product.productType} />
+                                            {product.status === "inactive" ? (
+                                                <ProductStatusBadge status={product.status} />
+                                            ) : null}
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
+                                    <div className="flex flex-col items-start gap-0.5 min-w-0">
+                                        <ProductPriceDisplay
+                                            price={product.price}
+                                            discount={product.discount}
+                                            size="sm"
+                                            align="left"
+                                            singleTone="foreground"
+                                            compact
+                                        />
+                                        <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground/80">
+                                            {catalogSellingQuantityLabel(product)}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                        {renderCardActions(product)}
                                     </div>
                                 </div>
                             </Card>
@@ -511,6 +896,145 @@ const ProductsListPage = () => {
                     })}
                 </div>
             )}
+
+            <UpsertProductDialog
+                organizationId={organizationId}
+                categories={categories}
+                defaultCategoryId={defaultCategoryIdForNewProduct}
+                open={addProductDialogOpen}
+                onOpenChange={setAddProductDialogOpen}
+                trigger={null}
+            />
+
+            <UpsertComboProductDialog
+                organizationId={organizationId}
+                categories={categories}
+                products={products}
+                defaultCategoryId={defaultCategoryIdForNewProduct}
+                open={addComboDialogOpen}
+                onOpenChange={setAddComboDialogOpen}
+                trigger={null}
+            />
+
+            <Sheet open={mobileActionsOpen} onOpenChange={setMobileActionsOpen}>
+                <SheetContent
+                    side="bottom"
+                    showCloseButton={false}
+                    className="gap-0 overflow-visible border-0 bg-transparent px-4 pt-2 shadow-none data-[side=bottom]:bottom-[var(--pos-mobile-nav-height,0px)] data-[side=bottom]:border-0 data-[side=bottom]:pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:hidden"
+                >
+                    <div className="space-y-2 pb-2">
+                        <button
+                            type="button"
+                            disabled={categories.length === 0}
+                            onClick={handleMobileAddProduct}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                <PlusCircle className="size-5" />
+                            </span>
+                            Add product
+                        </button>
+                        <button
+                            type="button"
+                            disabled={categories.length === 0}
+                            onClick={handleMobileAddCombo}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                <Boxes className="size-5" />
+                            </span>
+                            Add combo
+                        </button>
+                        {productReorderDisabledReason ? (
+                            <button
+                                type="button"
+                                disabled
+                                className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-muted-foreground/60 shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                    <ListOrdered className="size-5" />
+                                </span>
+                                Rearrange
+                            </button>
+                        ) : (
+                            <ReorderListDialog
+                                title="Rearrange products"
+                                items={productOrderItems}
+                                onSave={saveProductOrder}
+                                trigger={
+                                    <button
+                                        type="button"
+                                        onClick={() => setMobileActionsOpen(false)}
+                                        className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-left text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-card/95"
+                                    >
+                                        <span className="flex size-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+                                            <ListOrdered className="size-5" />
+                                        </span>
+                                        Rearrange
+                                    </button>
+                                }
+                            />
+                        )}
+                    </div>
+                </SheetContent>
+            </Sheet>
+
+            <Sheet open={mobileFiltersOpen} onOpenChange={handleMobileFiltersOpenChange}>
+                <SheetContent
+                    side="bottom"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4 sm:hidden"
+                >
+                    <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
+                        <div className="flex items-center justify-between gap-3">
+                            <SheetTitle className="text-lg">Filter products</SheetTitle>
+                            {draftFilterCount > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={clearDraftFilters}
+                                    className="shrink-0 text-sm font-semibold text-primary hover:underline"
+                                >
+                                    Clear all
+                                </button>
+                            ) : (
+                                <span className="invisible shrink-0 text-sm font-semibold">Clear all</span>
+                            )}
+                        </div>
+                    </SheetHeader>
+
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 px-6 py-4">
+                        <div className="space-y-6">
+                            <ProductFilterOptions
+                                variant="sheet"
+                                label="Status"
+                                icon={CircleCheck}
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={draftStatusFilters}
+                                onChange={toggleDraftStatusFilter}
+                                onClear={() => setDraftStatusFilters([])}
+                            />
+                            <ProductFilterOptions
+                                variant="sheet"
+                                label="Add-ons"
+                                icon={Puzzle}
+                                options={ADDONS_FILTER_OPTIONS}
+                                selectedValues={draftAddOnsFilters}
+                                onChange={toggleDraftAddOnsFilter}
+                                onClear={() => setDraftAddOnsFilters([])}
+                            />
+                        </div>
+                    </div>
+
+                    <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                        <Button
+                            type="button"
+                            onClick={applyMobileFilters}
+                            className="w-full rounded-xl"
+                        >
+                            Apply filters
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 };

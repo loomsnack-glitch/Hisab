@@ -3,10 +3,12 @@ import {
   LabelTemplateDocumentSchema,
   UpdateProductLabelProfileSchema,
   type AddOnResponse,
+  type AddOnDTO,
   type AddOnsListResponse,
   type BundleProductResponse,
   type ComboProductResponse,
   type CategoriesListResponse,
+  type CategoryDTO,
   type ComboProductsListResponse,
   type CategoryResponse,
   type CreateAddOnSVC,
@@ -29,12 +31,23 @@ import {
   type ProductsListResponse,
   type ReorderCategoriesJSON,
   type ReorderProductsJSON,
+  type ReorderStoreCategoryPresentationsJSON,
   type ReuseInternalProductCodeJSON,
   type ServiceResponse,
   type StoreProductOfferingDTO,
+  type StoreProductOfferingOverrideSummaryResponse,
   type StoreProductOfferingResponse,
   type StoreProductOfferingResponseDTO,
   type StoreProductOfferingsListResponse,
+  type StoreAddOnOfferingDTO,
+  type StoreAddOnOfferingOverrideSummaryResponse,
+  type StoreAddOnOfferingResponse,
+  type StoreAddOnOfferingResponseDTO,
+  type StoreAddOnOfferingsListResponse,
+  type StoreCategoryPresentationDTO,
+  type StoreCategoryPresentationResponse,
+  type StoreCategoryPresentationResponseDTO,
+  type StoreCategoryPresentationsListResponse,
   type UpdateAddOnSVC,
   type UpdateBundleProductSVC,
   type UpdateCategorySVC,
@@ -44,6 +57,8 @@ import {
   type UpdateProductLabelProfileSVC,
   type UpdateProductSVC,
   type UpdateStoreProductOfferingSVC,
+  type UpdateStoreAddOnOfferingSVC,
+  type UpdateStoreCategoryPresentationSVC,
   canAssignUnitToCatalogProduct,
   FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
   PIECE_PREDEFINED_UNIT_KEY,
@@ -522,36 +537,46 @@ const currentOrganizationStoreIds = async (organizationId: string): Promise<stri
   return stores.map((store) => store.id);
 };
 
+const persistForStores = async (
+  storeIds: string[],
+  create: (storeId: string) => Promise<{ id: string } | null>,
+  entityName: string,
+) => {
+  for (const storeId of storeIds) {
+    if (!(await create(storeId))) {
+      throw new Error(`Failed to create ${entityName}`);
+    }
+  }
+};
+
 const persistStoreProductOfferings = async (
   tx: Bun.TransactionSQL,
   input: {
     organizationId: string;
     productId: string;
     storeIds: string[];
-    price: number;
-    discount: number;
     status: "active" | "inactive";
     createdBy: string;
   },
 ) => {
-  for (const storeId of input.storeIds) {
-    const created = await catalogRepository.createStoreProductOffering(
+  await persistForStores(
+    input.storeIds,
+    (storeId) =>
+      catalogRepository.createStoreProductOffering(
       {
         id: crypto.randomUUID(),
         organizationId: input.organizationId,
         storeId,
         productId: input.productId,
-        price: input.price,
-        discount: input.discount,
+        priceOverride: null,
+        discountOverride: null,
         status: input.status,
         createdBy: input.createdBy,
       },
       tx,
-    );
-    if (!created) {
-      throw new Error("Failed to create Store Product Offering");
-    }
-  }
+      ),
+    "Store Product Offering",
+  );
 };
 
 export const seedInactiveOfferingsForNewStore = async (
@@ -571,12 +596,139 @@ export const seedInactiveOfferingsForNewStore = async (
       organizationId: input.organizationId,
       productId: product.id,
       storeIds: [input.storeId],
-      price: product.price,
-      discount: product.discount,
       status: "inactive",
       createdBy: input.createdBy,
     });
   }
+};
+
+const persistStoreAddOnOfferings = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    addOnId: string;
+    storeIds: string[];
+    status: "active" | "inactive";
+    createdBy: string;
+  },
+) => {
+  await persistForStores(
+    input.storeIds,
+    (storeId) =>
+      catalogRepository.createStoreAddOnOffering(
+      {
+        id: crypto.randomUUID(),
+        organizationId: input.organizationId,
+        storeId,
+        addOnId: input.addOnId,
+        priceOverride: null,
+        discountOverride: null,
+        status: input.status,
+        createdBy: input.createdBy,
+      },
+      tx,
+      ),
+    "Store Add-On Offering",
+  );
+};
+
+export const seedInactiveAddOnOfferingsForNewStore = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    storeId: string;
+    createdBy: string;
+  },
+) => {
+  const addOns = await catalogRepository.getAddOnsByOrganizationId(
+    input.organizationId,
+  );
+  for (const addOn of addOns) {
+    await persistStoreAddOnOfferings(tx, {
+      organizationId: input.organizationId,
+      addOnId: addOn.id,
+      storeIds: [input.storeId],
+      status: "inactive",
+      createdBy: input.createdBy,
+    });
+  }
+};
+
+const persistStoreCategoryPresentations = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    categoryId: string;
+    storeIds: string[];
+    visible: boolean;
+    sortOrder: number;
+    createdBy: string;
+  },
+) => {
+  await persistForStores(
+    input.storeIds,
+    (storeId) =>
+      catalogRepository.createStoreCategoryPresentation(
+      {
+        id: crypto.randomUUID(),
+        organizationId: input.organizationId,
+        storeId,
+        categoryId: input.categoryId,
+        visible: input.visible,
+        sortOrder: input.sortOrder,
+        createdBy: input.createdBy,
+      },
+      tx,
+      ),
+    "Store Category Presentation",
+  );
+};
+
+export const seedPresentationsForNewStore = async (
+  tx: Bun.TransactionSQL,
+  input: {
+    organizationId: string;
+    storeId: string;
+    createdBy: string;
+  },
+) => {
+  const categories = await catalogRepository.getCategoriesByOrganizationId(
+    input.organizationId,
+  );
+  for (const category of categories) {
+    await persistStoreCategoryPresentations(tx, {
+      organizationId: input.organizationId,
+      categoryId: category.id,
+      storeIds: [input.storeId],
+      visible: true,
+      sortOrder: category.sortOrder,
+      createdBy: input.createdBy,
+    });
+  }
+};
+
+const toStoreCategoryPresentationResponse = (
+  presentation: StoreCategoryPresentationDTO & { category: CategoryDTO },
+): StoreCategoryPresentationResponseDTO => ({
+  ...presentation,
+  category: presentation.category,
+});
+
+const toStoreAddOnOfferingResponse = async (
+  offering: StoreAddOnOfferingDTO,
+): Promise<StoreAddOnOfferingResponseDTO | null> => {
+  const addOn = await getAddOnForOrganization(
+    offering.organizationId,
+    offering.addOnId,
+  );
+  if (!addOn) {
+    return null;
+  }
+
+  return {
+    ...offering,
+    addOn,
+  };
 };
 
 const toStoreProductOfferingResponse = async (
@@ -652,6 +804,7 @@ export const createCategory = async (
 
   let category: Awaited<ReturnType<typeof catalogRepository.createCategory>> = null;
   await pg.begin(async (tx) => {
+    await catalogRepository.lockStoreCategoryPresentationTopology(organizationId, tx);
     const sortOrder = await catalogRepository.getNextCategorySortOrder(organizationId, tx);
     category = await catalogRepository.createCategory({
       id: crypto.randomUUID(),
@@ -661,6 +814,19 @@ export const createCategory = async (
       sortOrder,
       createdBy: userId,
     }, tx);
+    if (!category) {
+      throw new Error("Failed to create category");
+    }
+
+    const storeIds = await currentOrganizationStoreIds(organizationId);
+    await persistStoreCategoryPresentations(tx, {
+      organizationId,
+      categoryId: category.id,
+      storeIds,
+      visible: true,
+      sortOrder: category.sortOrder,
+      createdBy: userId,
+    });
   });
 
   if (!category) {
@@ -929,8 +1095,9 @@ export const getProducts = async (
 export const getCategoriesForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<CategoriesListResponse | null>> => {
-  const categories = await catalogRepository.getCategoriesByOrganizationId(
+  const categories = await catalogRepository.getVisibleCategoriesForStore(
     session.organization.id,
+    session.store.id,
   );
   return {
     status: "success",
@@ -1112,7 +1279,7 @@ export const createProduct = async (
           unitId: sellingUnit.unit.id,
           defaultSellingQuantity: sellingUnit.defaultSellingQuantity,
           allowCustomSellingQuantity: productData.allowCustomSellingQuantity === true,
-          status: productData.status ?? "active",
+          status: "inactive",
           sortOrder,
           createdBy: userId,
         },
@@ -1126,8 +1293,8 @@ export const createProduct = async (
         organizationId,
         productId: product.id,
         storeIds,
-        price: product.price,
-        discount: product.discount,
+        defaultPrice: product.price,
+        defaultDiscount: product.discount,
         status: "active",
         createdBy: userId,
       });
@@ -1195,6 +1362,168 @@ export const getProductDetails = async (
   };
 };
 
+type ProductCommercialDefaultsInput = {
+  price: number;
+  discount: number;
+  status: ProductDTO["status"];
+};
+
+const validateProductCommercialDefaultsUpdate = async (
+  organizationId: string,
+  productId: string,
+  existingProduct: ProductDTO,
+  nextCommercial: ProductCommercialDefaultsInput,
+): Promise<ServiceResponse<ProductResponse | null> | null> => {
+  if (nextCommercial.discount > nextCommercial.price) {
+    return {
+      status: "error",
+      message: "Discount cannot exceed price",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  if (
+    existingProduct.status === "active" &&
+    nextCommercial.status === "inactive" &&
+    existingProduct.productType === "single"
+  ) {
+    const [activeBundleCount, activeComboCount] = await Promise.all([
+      catalogRepository.countActiveBundlesByComponentProductId(
+        organizationId,
+        productId,
+      ),
+      catalogRepository.countActiveCombosByOptionProductId(
+        organizationId,
+        productId,
+      ),
+    ]);
+    if (activeBundleCount > 0 || activeComboCount > 0) {
+      return {
+        status: "error",
+        message:
+          "Product cannot be unpublished while it is used by an active bundle or Combo",
+        data: null,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+  }
+
+  const commercialChanged =
+    nextCommercial.price !== existingProduct.price ||
+    nextCommercial.discount !== existingProduct.discount;
+  if (!commercialChanged) {
+    return null;
+  }
+
+  const offerings = await catalogRepository.getStoreProductOfferingsByProductId(
+    organizationId,
+    productId,
+  );
+  const stores = await organizationRepository.getStoresByOrganizationId(
+    organizationId,
+  );
+  const storeNameById = new Map(stores.map((store) => [store.id, store.name]));
+  const conflicts = offerings.flatMap((offering) => {
+    const effectivePrice = offering.priceOverride ?? nextCommercial.price;
+    const effectiveDiscount =
+      offering.discountOverride ?? nextCommercial.discount;
+    if (effectiveDiscount <= effectivePrice) {
+      return [];
+    }
+    return [
+      {
+        message: `${storeNameById.get(offering.storeId) ?? offering.storeId}: effective price ${effectivePrice}, effective discount ${effectiveDiscount}`,
+        storeId: offering.storeId,
+        storeName: storeNameById.get(offering.storeId) ?? offering.storeId,
+        effectivePrice,
+        effectiveDiscount,
+      },
+    ];
+  });
+
+  if (conflicts.length === 0) {
+    return null;
+  }
+
+  return {
+    status: "error",
+    message:
+      "This Organization default would make the effective discount exceed the effective price at one or more Stores with commercial overrides",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+    errors: conflicts,
+  };
+};
+
+type AddOnCommercialDefaultsInput = {
+  price: number;
+  discount: number;
+  status: AddOnDTO["status"];
+};
+
+const validateAddOnCommercialDefaultsUpdate = async (
+  organizationId: string,
+  addOnId: string,
+  existingAddOn: AddOnDTO,
+  nextCommercial: AddOnCommercialDefaultsInput,
+): Promise<ServiceResponse<AddOnResponse | null> | null> => {
+  if (nextCommercial.discount > nextCommercial.price) {
+    return {
+      status: "error",
+      message: "Discount cannot exceed price",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  const commercialChanged =
+    nextCommercial.price !== existingAddOn.price ||
+    nextCommercial.discount !== existingAddOn.discount;
+  if (!commercialChanged) {
+    return null;
+  }
+
+  const offerings = await catalogRepository.getStoreAddOnOfferingsByAddOnId(
+    organizationId,
+    addOnId,
+  );
+  const stores = await organizationRepository.getStoresByOrganizationId(
+    organizationId,
+  );
+  const storeNameById = new Map(stores.map((store) => [store.id, store.name]));
+  const conflicts = offerings.flatMap((offering) => {
+    const effectivePrice = offering.priceOverride ?? nextCommercial.price;
+    const effectiveDiscount =
+      offering.discountOverride ?? nextCommercial.discount;
+    if (effectiveDiscount <= effectivePrice) {
+      return [];
+    }
+    return [
+      {
+        message: `${storeNameById.get(offering.storeId) ?? offering.storeId}: effective price ${effectivePrice}, effective discount ${effectiveDiscount}`,
+        storeId: offering.storeId,
+        storeName: storeNameById.get(offering.storeId) ?? offering.storeId,
+        effectivePrice,
+        effectiveDiscount,
+      },
+    ];
+  });
+
+  if (conflicts.length === 0) {
+    return null;
+  }
+
+  return {
+    status: "error",
+    message:
+      "This Organization default would make the effective discount exceed the effective price at one or more Stores with commercial overrides",
+    data: null,
+    code: STATUS_CODES.BAD_REQUEST,
+    errors: conflicts,
+  };
+};
+
 export const updateProduct = async (
   userId: string,
   organizationId: string,
@@ -1239,9 +1568,9 @@ export const updateProduct = async (
 
   const nextCategoryId = productData.categoryId ?? existingProduct.categoryId;
   const nextName = productData.name ?? existingProduct.name;
-  const nextPrice = existingProduct.price;
-  const nextDiscount = existingProduct.discount;
-  const nextStatus = existingProduct.status;
+  const nextPrice = productData.price ?? existingProduct.price;
+  const nextDiscount = productData.discount ?? existingProduct.discount;
+  const nextStatus = productData.status ?? existingProduct.status;
   const nextImagePath =
     productData.imagePath === undefined
       ? (existingProduct.imagePath ?? null)
@@ -1258,6 +1587,16 @@ export const updateProduct = async (
   );
   if (sellingUnit.error || !sellingUnit.unit) {
     return sellingUnit.error ?? unitNotFound();
+  }
+
+  const commercialValidationError = await validateProductCommercialDefaultsUpdate(
+    organizationId,
+    productId,
+    existingProduct,
+    { price: nextPrice, discount: nextDiscount, status: nextStatus },
+  );
+  if (commercialValidationError) {
+    return commercialValidationError;
   }
 
   let nextProductCode = existingProduct.productCode;
@@ -1958,7 +2297,7 @@ const validateBundleComponents = async (
 
     for (const addOn of normalizedAddOns.addOns) {
       const attachment =
-        await catalogRepository.getSelectableProductAddOnAttachmentByProductAndAddOn(
+        await catalogRepository.getActiveProductAddOnAttachmentByProductAndAddOn(
           organizationId,
           component.productId,
           addOn.addOnId,
@@ -2407,7 +2746,7 @@ export const createComboProduct = async (
           unitId: piece.unit.id,
           defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
           allowCustomSellingQuantity: false,
-          status: comboData.status ?? "active",
+          status: "inactive",
           sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, comboData.categoryId, tx),
           createdBy: userId,
         },
@@ -2425,8 +2764,8 @@ export const createComboProduct = async (
         organizationId,
         productId: comboProductId,
         storeIds,
-        price: createdProduct.price,
-        discount: createdProduct.discount,
+        defaultPrice: createdProduct.price,
+        defaultDiscount: createdProduct.discount,
         status: "active",
         createdBy: userId,
       });
@@ -2623,6 +2962,9 @@ export const updateComboProduct = async (
 
   const nextCategoryId = comboData.categoryId ?? existingProduct.categoryId;
   const nextName = comboData.name ?? existingProduct.name;
+  const nextPrice = comboData.price ?? existingProduct.price;
+  const nextDiscount = comboData.discount ?? existingProduct.discount;
+  const nextStatus = comboData.status ?? existingProduct.status;
   const category = await getCategoryForOrganization(
     organizationId,
     nextCategoryId,
@@ -2666,6 +3008,16 @@ export const updateComboProduct = async (
     if (!("choiceGroups" in validated)) return validated;
   }
 
+  const commercialValidationError = await validateProductCommercialDefaultsUpdate(
+    organizationId,
+    productId,
+    existingProduct,
+    { price: nextPrice, discount: nextDiscount, status: nextStatus },
+  );
+  if (commercialValidationError) {
+    return commercialValidationError;
+  }
+
   let updatedProduct: ProductDTO | null = null;
   try {
     await pg.begin(async (tx) => {
@@ -2675,8 +3027,8 @@ export const updateComboProduct = async (
           organizationId,
           categoryId: nextCategoryId,
           name: nextName,
-          price: existingProduct.price,
-          discount: existingProduct.discount,
+          price: nextPrice,
+          discount: nextDiscount,
           imagePath:
             comboData.imagePath === undefined
               ? existingProduct.imagePath
@@ -2686,7 +3038,7 @@ export const updateComboProduct = async (
           unitId: piece.unit.id,
           defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
           allowCustomSellingQuantity: false,
-          status: existingProduct.status,
+          status: nextStatus,
           sortOrder:
             nextCategoryId === existingProduct.categoryId
               ? existingProduct.sortOrder
@@ -2822,7 +3174,7 @@ export const createBundleProduct = async (
           unitId: piece.unit.id,
           defaultSellingQuantity: FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
           allowCustomSellingQuantity: false,
-          status: bundleData.status ?? "active",
+          status: "inactive",
           sortOrder: await catalogRepository.getNextProductSortOrder(organizationId, bundleData.categoryId, tx),
           createdBy: userId,
         },
@@ -2846,8 +3198,8 @@ export const createBundleProduct = async (
         organizationId,
         productId: bundleProductId,
         storeIds,
-        price: createdProduct.price,
-        discount: createdProduct.discount,
+        defaultPrice: createdProduct.price,
+        defaultDiscount: createdProduct.discount,
         status: "active",
         createdBy: userId,
       });
@@ -2958,9 +3310,9 @@ export const updateBundleProduct = async (
 
   const nextCategoryId = bundleData.categoryId ?? existingProduct.categoryId;
   const nextName = bundleData.name ?? existingProduct.name;
-  const nextPrice = existingProduct.price;
-  const nextDiscount = existingProduct.discount;
-  const nextStatus = existingProduct.status;
+  const nextPrice = bundleData.price ?? existingProduct.price;
+  const nextDiscount = bundleData.discount ?? existingProduct.discount;
+  const nextStatus = bundleData.status ?? existingProduct.status;
   const nextImagePath =
     bundleData.imagePath === undefined
       ? (existingProduct.imagePath ?? null)
@@ -3013,6 +3365,16 @@ export const updateBundleProduct = async (
       return validatedComponents;
     }
     nextComponents = validatedComponents.components;
+  }
+
+  const commercialValidationError = await validateProductCommercialDefaultsUpdate(
+    organizationId,
+    productId,
+    existingProduct,
+    { price: nextPrice, discount: nextDiscount, status: nextStatus },
+  );
+  if (commercialValidationError) {
+    return commercialValidationError;
   }
 
   let updatedProduct: ProductDTO | null = null;
@@ -3191,14 +3553,34 @@ export const createAddOn = async (
     };
   }
 
-  const addOn = await catalogRepository.createAddOn({
-    id: crypto.randomUUID(),
-    organizationId,
-    name: addOnData.name,
-    price: addOnData.price,
-    discount: addOnData.discount ?? 0,
-    status: addOnData.status ?? "active",
-    createdBy: userId,
+  const addOn = await pg.begin(async (tx) => {
+    await catalogRepository.lockStoreAddOnOfferingTopology(organizationId, tx);
+    const storeIds = await currentOrganizationStoreIds(organizationId);
+    const created = await catalogRepository.createAddOn(
+      {
+        id: crypto.randomUUID(),
+        organizationId,
+        name: addOnData.name,
+        price: addOnData.price,
+        discount: addOnData.discount ?? 0,
+        status: "inactive",
+        createdBy: userId,
+      },
+      tx,
+    );
+    if (!created) {
+      return null;
+    }
+    await persistStoreAddOnOfferings(tx, {
+      organizationId,
+      addOnId: created.id,
+      storeIds,
+      defaultPrice: created.price,
+      defaultDiscount: created.discount,
+      status: "active",
+      createdBy: userId,
+    });
+    return created;
   });
 
   if (!addOn) {
@@ -3323,6 +3705,20 @@ export const updateAddOn = async (
         code: STATUS_CODES.CONFLICT,
       };
     }
+  }
+
+  const commercialValidation = await validateAddOnCommercialDefaultsUpdate(
+    organizationId,
+    addOnId,
+    existingAddOn,
+    {
+      price: nextPrice,
+      discount: nextDiscount,
+      status: nextStatus,
+    },
+  );
+  if (commercialValidation) {
+    return commercialValidation;
   }
 
   const addOn = await catalogRepository.updateAddOn({
@@ -3497,8 +3893,9 @@ export const getSelectableProductAddOnAttachmentsForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ProductAddOnAttachmentsListResponse | null>> => {
   const attachments =
-    await catalogRepository.getSelectableProductAddOnAttachmentsByOrganizationId(
+    await catalogRepository.getSelectableProductAddOnAttachmentsByStoreId(
       session.organization.id,
+      session.store.id,
     );
   return {
     status: "success",
@@ -4308,10 +4705,96 @@ const offeringNotFound = (): ServiceResponse<null> => ({
   code: STATUS_CODES.NOT_FOUND,
 });
 
+type StoreCommercialOfferingState = Pick<
+  StoreProductOfferingDTO,
+  "priceOverride" | "discountOverride" | "status"
+>;
+
+type StoreCommercialOfferingUpdate = Pick<
+  UpdateStoreProductOfferingSVC,
+  | "priceOverride"
+  | "discountOverride"
+  | "clearPriceOverride"
+  | "clearDiscountOverride"
+  | "status"
+>;
+
+const resolveStoreCommercialOfferingUpdate = (
+  existing: StoreCommercialOfferingState,
+  defaults: { price: number; discount: number },
+  offeringData: StoreCommercialOfferingUpdate,
+):
+  | {
+      priceOverride: number | null;
+      discountOverride: number | null;
+      effectivePrice: number;
+      effectiveDiscount: number;
+      status: StoreProductOfferingDTO["status"];
+    }
+  | { error: string } => {
+  let priceOverride = existing.priceOverride;
+  let discountOverride = existing.discountOverride;
+
+  if (offeringData.clearPriceOverride) {
+    priceOverride = null;
+  } else if (offeringData.priceOverride !== undefined) {
+    priceOverride = offeringData.priceOverride;
+  }
+
+  if (offeringData.clearDiscountOverride) {
+    discountOverride = null;
+  } else if (offeringData.discountOverride !== undefined) {
+    discountOverride = offeringData.discountOverride;
+  }
+
+  const effectivePrice = Number(priceOverride ?? defaults.price);
+  const effectiveDiscount = Number(discountOverride ?? defaults.discount ?? 0);
+
+  if (effectiveDiscount > effectivePrice) {
+    return {
+      error: "Discount cannot be greater than price",
+    };
+  }
+
+  return {
+    priceOverride,
+    discountOverride,
+    effectivePrice,
+    effectiveDiscount,
+    status: offeringData.status ?? existing.status,
+  };
+};
+
 const getStoreForOrganization = async (
   organizationId: string,
   storeId: string,
 ) => organizationRepository.getStoreById(organizationId, storeId);
+
+export const getStoreProductOfferingOverrideSummary = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<StoreProductOfferingOverrideSummaryResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const summary = await catalogRepository.getStoreProductOfferingOverrideSummary(
+    organizationId,
+  );
+
+  return {
+    status: "success",
+    data: { summary },
+    message: "Store Product Offering override summary fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
 
 export const getStoreProductOfferings = async (
   userId: string,
@@ -4380,13 +4863,32 @@ export const updateStoreProductOffering = async (
     return offeringNotFound();
   }
 
+  const product = await getProductForOrganization(organizationId, existing.productId);
+  if (!product) {
+    return offeringNotFound();
+  }
+
+  const resolved = resolveStoreCommercialOfferingUpdate(
+    existing,
+    { price: product.price, discount: product.discount },
+    offeringData,
+  );
+  if ("error" in resolved) {
+    return {
+      status: "error",
+      message: resolved.error,
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
   const updated = await catalogRepository.updateStoreProductOffering({
     id: offeringId,
     organizationId,
     storeId,
-    price: offeringData.price ?? existing.price,
-    discount: offeringData.discount ?? existing.discount,
-    status: offeringData.status ?? existing.status,
+    priceOverride: resolved.priceOverride,
+    discountOverride: resolved.discountOverride,
+    status: resolved.status,
     updatedBy: userId,
   });
 
@@ -4399,7 +4901,17 @@ export const updateStoreProductOffering = async (
     };
   }
 
-  const response = await toStoreProductOfferingResponse(updated);
+  const response = await toStoreProductOfferingResponse({
+    ...existing,
+    priceOverride: resolved.priceOverride,
+    discountOverride: resolved.discountOverride,
+    effectivePrice: resolved.effectivePrice,
+    effectiveDiscount: resolved.effectiveDiscount,
+    isPriceInherited: resolved.priceOverride === null,
+    isDiscountInherited: resolved.discountOverride === null,
+    status: resolved.status,
+    updatedBy: userId,
+  });
   if (!response) {
     return offeringNotFound();
   }
@@ -4408,6 +4920,338 @@ export const updateStoreProductOffering = async (
     status: "success",
     data: { offering: response },
     message: "Store Product Offering updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const addOnOfferingNotFound = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Store Add-On Offering not found",
+  data: null,
+  code: STATUS_CODES.NOT_FOUND,
+});
+
+export const getStoreAddOnOfferingOverrideSummary = async (
+  userId: string,
+  organizationId: string,
+): Promise<ServiceResponse<StoreAddOnOfferingOverrideSummaryResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const summary = await catalogRepository.getStoreAddOnOfferingOverrideSummary(
+    organizationId,
+  );
+
+  return {
+    status: "success",
+    data: { summary },
+    message: "Store Add-On Offering override summary fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const getStoreAddOnOfferings = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreAddOnOfferingsListResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const offerings = await catalogRepository.getStoreAddOnOfferingsByStoreId(
+    organizationId,
+    storeId,
+  );
+  const resolved = (
+    await Promise.all(offerings.map((offering) => toStoreAddOnOfferingResponse(offering)))
+  ).filter((offering): offering is StoreAddOnOfferingResponseDTO => offering !== null);
+
+  return {
+    status: "success",
+    data: { offerings: resolved },
+    message: "Store Add-On Offerings fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updateStoreAddOnOffering = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  offeringId: string,
+  offeringData: UpdateStoreAddOnOfferingSVC,
+): Promise<ServiceResponse<StoreAddOnOfferingResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const existing = await catalogRepository.getStoreAddOnOfferingById(
+    organizationId,
+    storeId,
+    offeringId,
+  );
+  if (!existing) {
+    return addOnOfferingNotFound();
+  }
+
+  const addOn = await getAddOnForOrganization(organizationId, existing.addOnId);
+  if (!addOn) {
+    return addOnOfferingNotFound();
+  }
+
+  const resolved = resolveStoreCommercialOfferingUpdate(
+    existing,
+    { price: addOn.price, discount: addOn.discount },
+    offeringData,
+  );
+  if ("error" in resolved) {
+    return {
+      status: "error",
+      message: resolved.error,
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  const updated = await catalogRepository.updateStoreAddOnOffering({
+    id: offeringId,
+    organizationId,
+    storeId,
+    priceOverride: resolved.priceOverride,
+    discountOverride: resolved.discountOverride,
+    status: resolved.status,
+    updatedBy: userId,
+  });
+
+  if (!updated) {
+    return {
+      status: "error",
+      message: "Failed to update Store Add-On Offering",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  const response = await toStoreAddOnOfferingResponse({
+    ...existing,
+    priceOverride: resolved.priceOverride,
+    discountOverride: resolved.discountOverride,
+    effectivePrice: resolved.effectivePrice,
+    effectiveDiscount: resolved.effectiveDiscount,
+    isPriceInherited: resolved.priceOverride === null,
+    isDiscountInherited: resolved.discountOverride === null,
+    status: resolved.status,
+    updatedBy: userId,
+  });
+  if (!response) {
+    return addOnOfferingNotFound();
+  }
+
+  return {
+    status: "success",
+    data: { offering: response },
+    message: "Store Add-On Offering updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const presentationNotFound = (): ServiceResponse<null> => ({
+  status: "error",
+  message: "Store Category Presentation not found",
+  data: null,
+  code: STATUS_CODES.NOT_FOUND,
+});
+
+export const getStoreCategoryPresentations = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+): Promise<ServiceResponse<StoreCategoryPresentationsListResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const presentations = await catalogRepository.getStoreCategoryPresentationsByStoreId(
+    organizationId,
+    storeId,
+  );
+
+  return {
+    status: "success",
+    data: {
+      presentations: presentations.map((presentation) =>
+        toStoreCategoryPresentationResponse(presentation),
+      ),
+    },
+    message: "Store Category Presentations fetched successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const updateStoreCategoryPresentation = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  presentationId: string,
+  presentationData: UpdateStoreCategoryPresentationSVC,
+): Promise<ServiceResponse<StoreCategoryPresentationResponse | null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const existing = await catalogRepository.getStoreCategoryPresentationById(
+    organizationId,
+    storeId,
+    presentationId,
+  );
+  if (!existing) {
+    return presentationNotFound();
+  }
+
+  const updated = await catalogRepository.updateStoreCategoryPresentation({
+    id: presentationId,
+    organizationId,
+    storeId,
+    visible: presentationData.visible ?? existing.visible,
+    sortOrder: presentationData.sortOrder ?? existing.sortOrder,
+    updatedBy: userId,
+  });
+
+  if (!updated) {
+    return {
+      status: "error",
+      message: "Failed to update Store Category Presentation",
+      data: null,
+      code: STATUS_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
+  const category = await getCategoryForOrganization(
+    organizationId,
+    updated.categoryId,
+  );
+  if (!category) {
+    return presentationNotFound();
+  }
+
+  return {
+    status: "success",
+    data: {
+      presentation: toStoreCategoryPresentationResponse({
+        ...updated,
+        category,
+      }),
+    },
+    message: "Store Category Presentation updated successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const reorderStoreCategoryPresentations = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  orderData: ReorderStoreCategoryPresentationsJSON,
+): Promise<ServiceResponse<null>> => {
+  const organization = await getOrganizationForUser(organizationId, userId);
+  if (!organization) {
+    return {
+      status: "error",
+      message: "Organization not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  const store = await getStoreForOrganization(organizationId, storeId);
+  if (!store) {
+    return storeNotFound();
+  }
+
+  const presentations = await catalogRepository.getStoreCategoryPresentationsByStoreId(
+    organizationId,
+    storeId,
+  );
+  const requestedIds = new Set(orderData.categoryIds);
+  const categoryIds = new Set(presentations.map((presentation) => presentation.categoryId));
+  if (
+    requestedIds.size !== categoryIds.size ||
+    orderData.categoryIds.some((id) => !categoryIds.has(id))
+  ) {
+    return {
+      status: "error",
+      message: "The category order must include every category exactly once",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  await pg.begin((tx) =>
+    catalogRepository.reorderStoreCategoryPresentations(
+      organizationId,
+      storeId,
+      orderData.categoryIds,
+      userId,
+      tx,
+    ),
+  );
+
+  return {
+    status: "success",
+    message: "Store category order updated successfully",
+    data: null,
     code: STATUS_CODES.SUCCESS,
   };
 };

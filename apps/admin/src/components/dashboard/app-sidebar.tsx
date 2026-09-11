@@ -4,14 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import {
     ChevronLeft,
     ChevronRight,
-    Settings2,
 } from "lucide-react";
 import { getOrganizations } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 
-import { getAuthenticatedHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
+import { getSidebarHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
@@ -22,10 +21,6 @@ import {
 } from "@/components/dashboard/admin-nav-items";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
-
-const secondaryNavItems = [
-    { label: "Appearance", icon: Settings2, to: "/appearance" },
-] as const;
 
 type AppSidebarProps = {
     isMobile?: boolean;
@@ -77,7 +72,7 @@ const AppSidebar = ({
     );
 
     const effectiveOrgId = organizationId || resolveDefaultOrgId(organizations) || "";
-    const homePath = getAuthenticatedHomePath(organizations);
+    const homePath = getSidebarHomePath(organizations, organizationId, location.pathname);
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
@@ -158,51 +153,6 @@ const AppSidebar = ({
         );
     };
 
-    const renderSecondaryItem = (item: (typeof secondaryNavItems)[number]) => {
-        const Icon = item.icon;
-        const collapsed = !isMobile && isCollapsed;
-        const isActive = location.pathname === item.to;
-
-        const link = (
-            <button
-                type="button"
-                onClick={() => goTo(item.to)}
-                aria-current={isActive ? "page" : undefined}
-                className={cn(
-                    "sidebar-nav-link group cursor-pointer appearance-none rounded-xl border-0 bg-transparent text-sm font-medium transition-all duration-200",
-                    collapsed ? collapsedNavRowClass : expandedNavRowClassNoTrail,
-                    isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                    collapsed && "sidebar-nav-link--collapsed",
-                )}
-            >
-                {collapsed && isActive ? <span className="sidebar-active-rail" aria-hidden /> : null}
-                <Icon
-                    className={cn(
-                        "size-[18px] transition-colors duration-200",
-                        isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                    )}
-                    strokeWidth={isActive ? 2.25 : 2}
-                />
-                {!collapsed ? <span className="sidebar-label truncate text-left">{item.label}</span> : null}
-            </button>
-        );
-
-        if (!collapsed) {
-            return link;
-        }
-
-        return (
-            <Tooltip>
-                <TooltipTrigger render={link} />
-                <TooltipContent side="right" className="border border-border bg-popover text-popover-foreground">
-                    {item.label}
-                </TooltipContent>
-            </Tooltip>
-        );
-    };
-
     return (
         <div className="relative flex h-full">
             <div
@@ -261,12 +211,6 @@ const AppSidebar = ({
                             </div>
                         );
                     })}
-
-                    <div className="my-3 h-px bg-border/60" />
-
-                    {secondaryNavItems.map((item) => (
-                        <div key={item.label}>{renderSecondaryItem(item)}</div>
-                    ))}
                 </nav>
 
                 <div

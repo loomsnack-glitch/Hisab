@@ -6,8 +6,26 @@ export const getStoreWorkspacePath = (organizationId: string, storeId: string) =
 export const getStoreProductsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/products`;
 
+export const getStoreAddOnsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/add-ons`;
+
+export const getStoreCategoriesPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/categories`;
+
 export const getStoreVendorsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/vendors`;
+
+export const getStoreDevicesPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/devices`;
+
+export const getStoreSettingsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/settings`;
+
+export const getStoreLicensePath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/license`;
+
+export const getStoreAppearancePath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/appearance`;
 
 export const parseStoreWorkspacePath = (
     pathname: string,

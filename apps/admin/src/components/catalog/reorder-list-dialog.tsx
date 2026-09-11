@@ -33,7 +33,7 @@ type ReorderResponse = {
 
 type ReorderListDialogProps = {
   title: string;
-  description: string;
+  description?: string;
   items: readonly ReorderListItem[];
   onSave: (orderedIds: string[]) => Promise<ReorderResponse>;
   trigger: ReactElement;
@@ -122,14 +122,10 @@ const ReorderListDialog = ({
             <ListOrdered className="size-5 text-primary" />
             {title}
           </DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
-          <p className="mb-3 text-xs text-muted-foreground">
-            The first item appears first in the POS. Use the arrows to set the
-            order.
-          </p>
           <div className="space-y-2" role="list" aria-label={title}>
             {orderedItems.map((item, index) => (
               <div

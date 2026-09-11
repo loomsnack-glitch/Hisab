@@ -18,17 +18,12 @@ const ThemeToggle = () => {
             type="button"
             variant="outline"
             size="icon-sm"
-            className="rounded-full border-border/70 bg-background/80 backdrop-blur"
+            className="rounded-full border-border/70 bg-background/80 backdrop-blur relative overflow-hidden"
             aria-label={mounted ? `Switch to ${nextTheme} mode` : "Toggle theme"}
             onClick={() => setTheme(nextTheme)}
         >
-            {!mounted ? (
-                <span className="h-4 w-4 animate-pulse rounded-full bg-muted" />
-            ) : resolvedTheme === "dark" ? (
-                <SunMedium className="size-4" />
-            ) : (
-                <MoonStar className="size-4" />
-            )}
+            <SunMedium className={`size-4 transition-all duration-150 ${mounted && resolvedTheme === "dark" ? "scale-100 rotate-0 opacity-100" : "scale-0 rotate-90 opacity-0 absolute"}`} />
+            <MoonStar className={`size-4 transition-all duration-150 ${mounted && resolvedTheme === "dark" ? "scale-0 -rotate-90 opacity-0 absolute" : "scale-100 rotate-0 opacity-100"}`} />
         </Button>
     );
 };

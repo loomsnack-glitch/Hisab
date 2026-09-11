@@ -75,7 +75,7 @@ const defaultValues: UpsertAddOnFormInput = {
     name: "",
     price: "",
     discount: "",
-    status: "active",
+    status: "inactive",
 };
 
 const statusSelectOptions = AddOnStatusSchema.options.map((status) => ({
@@ -132,7 +132,7 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
             name: values.name.trim(),
             price: values.price,
             discount: values.discount ?? 0,
-            status: (values.status ?? "active") as AddOnStatus,
+            status: (values.status ?? "inactive") as AddOnStatus,
         });
     };
 
@@ -151,26 +151,25 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
             <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Puzzle className="size-5" />}
-                    title={isEditMode ? "Edit add-on" : "Create add-on"}
+                    title={isEditMode ? "Edit Add-On" : "Create Add-On"}
                 />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Add-on name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="e.g. Extra Cheese" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
 
                     <div className="grid grid-cols-2 gap-3">
                         <Field data-invalid={!!form.formState.errors.price}>
-                            <FieldLabel required>Price</FieldLabel>
+                            <FieldLabel required>Price ₹</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
                                     inputMode="decimal"
-                                    placeholder="0.00"
                                     value={form.watch("price")}
                                     onChange={(event) => {
                                         form.setValue("price", sanitizeDecimalInput(event.target.value), {
@@ -183,12 +182,11 @@ const UpsertAddOnDialog = ({ organizationId, addOn, trigger }: UpsertAddOnDialog
                         </Field>
 
                         <Field data-invalid={!!form.formState.errors.discount}>
-                            <FieldLabel>Discount</FieldLabel>
+                            <FieldLabel>Discount ₹</FieldLabel>
                             <FieldContent>
                                 <Input
                                     className="h-11 rounded-xl"
                                     inputMode="decimal"
-                                    placeholder="0.00"
                                     value={form.watch("discount") ?? ""}
                                     onChange={(event) => {
                                         form.setValue("discount", sanitizeDecimalInput(event.target.value), {

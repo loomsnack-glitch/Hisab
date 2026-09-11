@@ -15,8 +15,15 @@ const OtpField = <T extends FieldValues>({ control, name, autoFocus = true }: Ot
         if (!autoFocus) return undefined;
 
         const timer = window.setTimeout(() => {
-            document.getElementById(String(name))?.focus();
-        }, 100);
+            const input = document.getElementById(String(name)) 
+                ?? document.querySelector<HTMLInputElement>('.cn-input-otp input')
+                ?? document.querySelector<HTMLInputElement>('input[data-slot="input-otp"]');
+            try {
+                input?.focus({ preventScroll: true });
+            } catch {
+                input?.focus();
+            }
+        }, 80);
 
         return () => window.clearTimeout(timer);
     }, [autoFocus, name]);
@@ -37,24 +44,24 @@ const OtpField = <T extends FieldValues>({ control, name, autoFocus = true }: Ot
                                 onChange={field.onChange}
                             >
                                 <InputOTPGroup className="gap-1.5 sm:gap-2.5">
-                                    <InputOTPSlot index={0} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
-                                    <InputOTPSlot index={1} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
-                                    <InputOTPSlot index={2} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={0} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
+                                    <InputOTPSlot index={1} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
+                                    <InputOTPSlot index={2} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
                                 </InputOTPGroup>
-                                <InputOTPSeparator className="w-3 sm:w-6 flex justify-center shrink-0 text-muted-foreground" />
+                                <InputOTPSeparator className="w-2 sm:w-5 flex justify-center shrink-0 text-muted-foreground" />
                                 <InputOTPGroup className="gap-1.5 sm:gap-2.5">
-                                    <InputOTPSlot index={3} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
-                                    <InputOTPSlot index={4} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
-                                    <InputOTPSlot index={5} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl text-base sm:text-lg font-semibold" />
+                                    <InputOTPSlot index={3} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
+                                    <InputOTPSlot index={4} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
+                                    <InputOTPSlot index={5} className="h-11 w-10 sm:h-13 sm:w-12 md:h-14 md:w-14 rounded-xl text-base sm:text-lg md:text-xl font-semibold" />
                                 </InputOTPGroup>
                             </InputOTP>
                         </div>
-                        <FieldDescription className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+                        <FieldDescription className="mt-3 flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
                             <span>Enter the code sent on</span>
-                            <img src={whatsAppIcon} alt="WhatsApp" className="h-3.5 w-3.5" />
+                            <img src={whatsAppIcon} alt="WhatsApp" className="h-4 w-4" />
                             <span className="font-semibold text-emerald-600 dark:text-emerald-400">WhatsApp</span>
                         </FieldDescription>
-                        <FieldError errors={[fieldState.error]} />
+                        <FieldError errors={[fieldState.error]} className="text-xs" />
                     </Field>
                 )}
             />

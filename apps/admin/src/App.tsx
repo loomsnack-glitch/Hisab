@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { userAuthenticate } from "@repo/services";
+import { getOrganizations, userAuthenticate } from "@repo/services";
 import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 
 import AuthenticatedHomeRedirect from "@/components/dashboard/authenticated-home-redirect";
@@ -10,7 +10,6 @@ import BillingPage from "@/pages/billing-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import RegisterPage from "@/pages/register-page";
-import StoresPage from "@/pages/stores-page";
 import {
     StoreDetailIndexRedirect,
     StoreDetailShell,
@@ -38,18 +37,23 @@ import MoneyAccountsPage from "@/pages/money-accounts-page";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
-import WhatsAppInboxPage from "@/pages/whatsapp-inbox-page";
 import OrganizationSettingsPage from "@/pages/organization-settings-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
 import StoreWorkspacePage from "@/pages/store-workspace-page";
+import StoreAddOnOfferingsPage from "@/pages/store-add-on-offerings-page";
 import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
+import StoreCategoryPresentationsPage from "@/pages/store-category-presentations-page";
 import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-page";
-import { authKeys } from "@/lib/query-keys";
+import StoreWorkspaceDevicesPage from "@/pages/store-workspace-devices-page";
+import StoreWorkspaceSettingsPage from "@/pages/store-workspace-settings-page";
+import StoreWorkspaceLicensePage from "@/pages/store-workspace-license-page";
+import { authKeys, organizationKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
+import { getAppearanceRedirectPath, getOrganizationWorkspacePath } from "@/lib/default-org-path";
 
 const SPLASH_DURATION_MS = 2200;
 
@@ -62,6 +66,27 @@ const WhatsAppStoreInboxRedirect = () => {
 const WhatsAppInboxWorkspaceRedirect = () => {
     const { organizationId = "" } = useParams();
     return <Navigate to={`/organizations/${organizationId}/whatsapp/message-history`} replace />;
+};
+
+const OrganizationWorkspaceRedirect = () => {
+    const { organizationId = "" } = useParams();
+    return <Navigate to={getOrganizationWorkspacePath(organizationId)} replace />;
+};
+
+const AppearanceRedirect = () => {
+    const organizationsQuery = useQuery({
+        queryKey: organizationKeys.list(),
+        queryFn: getOrganizations,
+    });
+
+    const organizations =
+        organizationsQuery.data?.status === "success" ? organizationsQuery.data.data?.organizations ?? [] : [];
+
+    if (organizationsQuery.isPending) {
+        return <div className="min-h-screen bg-background" aria-busy="true" aria-label="Loading" />;
+    }
+
+    return <Navigate to={getAppearanceRedirectPath(organizations)} replace />;
 };
 
 const App = () => {
@@ -130,14 +155,24 @@ const App = () => {
                                 element={authenticatedUser ? <DashboardLayout /> : <Navigate to="/login" replace />}
                             >
                                 <Route path="/dashboard" element={<AuthenticatedHomeRedirect />} />
-                                <Route path="/appearance" element={<AppearancePage />} />
-                                <Route path="/settings" element={<Navigate to="/appearance" replace />} />
+                                <Route path="/appearance" element={<AppearanceRedirect />} />
+                                <Route path="/settings" element={<AppearanceRedirect />} />
+                                <Route path="/organizations/:organizationId/appearance" element={<AppearancePage />} />
+                                <Route
+                                    path="/organizations/:organizationId/workspaces/:storeId/appearance"
+                                    element={<AppearancePage />}
+                                />
                                 <Route path="/organizations" element={<OrganizationsPage />} />
-                                <Route path="/organizations/:organizationId" element={<Navigate to="stores" replace />} />
-                                <Route path="/organizations/:organizationId/stores" element={<StoresPage />} />
+                                <Route path="/organizations/:organizationId" element={<OrganizationWorkspaceRedirect />} />
+                                <Route path="/organizations/:organizationId/stores" element={<OrganizationWorkspaceRedirect />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId" element={<StoreWorkspacePage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/products" element={<StoreProductOfferingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/add-ons" element={<StoreAddOnOfferingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/categories" element={<StoreCategoryPresentationsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/vendors" element={<StoreVendorAvailabilitiesPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/devices" element={<StoreWorkspaceDevicesPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/settings" element={<StoreWorkspaceSettingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/license" element={<StoreWorkspaceLicensePage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />

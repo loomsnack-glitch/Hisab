@@ -109,7 +109,7 @@ const UpsertCategoryDialog = ({ organizationId, category, trigger }: UpsertCateg
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Category name</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" placeholder="e.g. Beverages" {...form.register("name")} />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>

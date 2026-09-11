@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Building2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { cn } from "@repo/ui/lib/utils";
 
+import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import {
     getVisibleAdminPrimaryMobileDestinations,
     getGroupedAdminMainDestinations,
@@ -87,25 +87,13 @@ const AdminMobileBottomNav = ({
                     className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4"
                 >
                     <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
-                        <SheetTitle className="sr-only">Pages and organization</SheetTitle>
-                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            Organization
-                        </p>
-                        <Link
-                            to="/organizations"
-                            onClick={() => setMoreOpen(false)}
-                            className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/70 px-3 py-3 text-sm font-semibold text-foreground hover:bg-muted/50"
-                        >
-                            <span
-                                className={cn(
-                                    "flex size-10 items-center justify-center rounded-lg",
-                                    "bg-muted/70 text-muted-foreground",
-                                )}
-                            >
-                                <Building2 className="size-5" />
-                            </span>
-                            Organizations
-                        </Link>
+                        <SheetTitle className="sr-only">Pages and workspace</SheetTitle>
+                        {hasOrganization ? (
+                            <AdminWorkspaceSwitcherFromRoute
+                                variant="sheet"
+                                onNavigate={() => setMoreOpen(false)}
+                            />
+                        ) : null}
                     </SheetHeader>
 
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">

@@ -11,7 +11,6 @@ import { Pencil, PlusCircle, Store, Search, Settings2, X } from "lucide-react";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 import EditStoreDialog from "@/components/organizations/edit-store-dialog";
 import StoreWhatsAppDialog from "@/components/organizations/store-whatsapp-dialog";
-import { formatDateTime } from "@/lib/format";
 import { getStoreDetailPath } from "@/lib/store-routes";
 import { getStoreWorkspacePath } from "@/lib/store-workspace-routes";
 
@@ -58,9 +57,9 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
     }
 
     return (
-        <section className="space-y-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-md w-full group/search">
+        <section className="space-y-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
                     <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                     <Input
                         type="text"
@@ -81,16 +80,20 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" className="rounded-full h-11 px-5" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}>
-                        <Settings2 className="size-4" />
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        variant="outline"
+                        className="rounded-full h-10 px-4 text-xs sm:text-sm font-medium"
+                        render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}
+                    >
+                        <Settings2 className="size-3.5" />
                         WhatsApp accounts
                     </Button>
                     <CreateStoreDialog
                         organizationId={organizationId}
                         trigger={
-                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5">
-                                <PlusCircle className="size-4" />
+                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20">
+                                <PlusCircle className="size-3.5" />
                                 Add store
                             </Button>
                         }
@@ -98,90 +101,93 @@ const StoresSection = ({ organizationId, stores }: StoresSectionProps) => {
                 </div>
             </div>
 
+            {filteredStores.length > 0 && (
+                <div className="flex items-center px-1 py-0.5">
+                    <span className="text-xs text-muted-foreground/70">
+                        Showing {filteredStores.length} store{filteredStores.length === 1 ? "" : "s"}
+                    </span>
+                </div>
+            )}
+
             {filteredStores.length === 0 ? (
-                <Card className="border-border/60 bg-card/80 shadow-md">
-                    <CardContent className="pt-6">
-                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
-                            <EmptyHeader>
-                                <EmptyMedia variant="icon">
-                                    <Store />
-                                </EmptyMedia>
-                                <EmptyTitle>No stores found</EmptyTitle>
-                                <EmptyDescription>
-                                    Try adjusting your search query.
-                                </EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    </CardContent>
+                <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
+                    No stores match your search.
                 </Card>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredStores.map((store) => {
                         const activeDeviceCount = store.devices.filter((device) => device.status === "active").length;
 
                         return (
                             <div
                                 key={store.id}
-                                className="group relative rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                                className="group relative rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
                             >
                                 <Link
                                     to={getStoreDetailPath(organizationId, store.id)}
                                     className="absolute inset-0 z-0 rounded-2xl"
                                     aria-label={`Open ${store.name}`}
                                 />
-                                <div className="pointer-events-none relative z-[1] flex items-start gap-3">
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                        <Store className="size-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <p className="truncate text-lg font-semibold text-foreground">{store.name}</p>
-                                                <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                                                    {store.address ?? "Address not added yet"}
-                                                </p>
-                                            </div>
-                                            <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="h-8 rounded-full px-3 text-xs"
-                                                    render={<Link to={getStoreWorkspacePath(organizationId, store.id)} />}
-                                                >
-                                                    Open workspace
-                                                </Button>
-                                                <StoreWhatsAppDialog organizationId={organizationId} storeId={store.id} storeName={store.name} />
-                                                <EditStoreDialog
-                                                    organizationId={organizationId}
-                                                    store={store}
-                                                    trigger={
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon-sm"
-                                                            className="pointer-events-auto relative z-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                                                            aria-label={`Edit ${store.name}`}
-                                                        >
-                                                            <Pencil className="size-4" />
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+
+                                <div className="relative z-[1] flex flex-col">
+                                    <div className="pointer-events-none flex items-center gap-3 min-w-0">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                            <Store className="size-4" />
                                         </div>
-                                        <div className="mt-3 flex flex-wrap gap-2">
-                                            <Badge variant="outline" className="rounded-full text-xs">
+                                        <div className="min-w-0">
+                                            <h4 className="font-display text-sm font-semibold text-foreground truncate">
+                                                {store.name}
+                                            </h4>
+                                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                {store.address ?? "Address not added yet"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="pointer-events-auto mt-3 flex flex-col gap-2.5 border-t border-border/40 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <Badge variant="outline" className="rounded-full text-[11px] px-2.5 py-0.5">
                                                 {store.devices.length} device{store.devices.length === 1 ? "" : "s"}
                                             </Badge>
                                             <Badge
                                                 variant="outline"
-                                                className="rounded-full border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs"
+                                                className="rounded-full border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-300"
                                             >
                                                 {activeDeviceCount} active
                                             </Badge>
                                         </div>
-                                        <p className="mt-3 text-xs text-muted-foreground">
-                                            Created {formatDateTime(store.createdAt)}
-                                        </p>
+
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 rounded-full px-3 text-xs"
+                                                render={<Link to={getStoreWorkspacePath(organizationId, store.id)} />}
+                                            >
+                                                Open workspace
+                                            </Button>
+                                            <StoreWhatsAppDialog
+                                                organizationId={organizationId}
+                                                storeId={store.id}
+                                                storeName={store.name}
+                                            />
+                                            <EditStoreDialog
+                                                organizationId={organizationId}
+                                                store={store}
+                                                trigger={
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 rounded-full px-3 text-xs"
+                                                        aria-label={`Edit ${store.name}`}
+                                                    >
+                                                        <Pencil className="size-3" />
+                                                        Edit
+                                                    </Button>
+                                                }
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>

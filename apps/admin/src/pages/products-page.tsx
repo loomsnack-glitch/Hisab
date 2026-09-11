@@ -62,10 +62,10 @@ const ProductsPage = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-3">
             {/* Tab Navigation */}
-            <div className="border-b border-border/60">
-                <nav className="grid grid-cols-2 w-full sm:flex sm:w-auto sm:justify-start gap-1" aria-label="Product navigation tabs">
+            <div className="border-b border-border/60 pb-px">
+                <nav className="flex items-center gap-1 overflow-x-auto scrollbar-none" aria-label="Product catalog navigation tabs">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.path;
@@ -75,16 +75,16 @@ const ProductsPage = () => {
                                 key={tab.path}
                                 to={`${basePath}/${tab.path}`}
                                 className={cn(
-                                    "relative flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium transition-colors duration-200 rounded-t-lg whitespace-nowrap text-center",
+                                    "relative inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-all duration-150 rounded-lg whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                                     isActive
-                                        ? "text-primary font-semibold"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                                        ? "text-primary font-semibold bg-primary/10 shadow-2xs"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
                                 )}
                             >
-                                <Icon className="size-3.5 sm:size-4 shrink-0" />
-                                <span className="whitespace-nowrap">{tab.label}</span>
+                                <Icon className={cn("size-3.5 sm:size-4 shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground/70")} />
+                                <span>{tab.label}</span>
                                 {isActive && (
-                                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+                                    <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded-full" />
                                 )}
                             </Link>
                         );

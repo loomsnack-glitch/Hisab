@@ -370,7 +370,7 @@ const UpsertBundleProductDialog = ({
                     ...shared,
                     price: values.price,
                     discount: values.discount ?? 0,
-                    status: "active" as const,
+                    status: "inactive" as const,
                 },
         );
     };
@@ -509,7 +509,7 @@ const UpsertBundleProductDialog = ({
                             <>
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field data-invalid={!!form.formState.errors.price}>
-                                        <FieldLabel required>Price</FieldLabel>
+                                        <FieldLabel required>Organization default price (₹)</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={form.watch("price")}
@@ -527,7 +527,7 @@ const UpsertBundleProductDialog = ({
                                     </Field>
 
                                     <Field data-invalid={!!form.formState.errors.discount}>
-                                        <FieldLabel>Discount</FieldLabel>
+                                        <FieldLabel>Organization default discount (₹)</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={form.watch("discount") ?? ""}
@@ -545,12 +545,12 @@ const UpsertBundleProductDialog = ({
                                     </Field>
                                 </div>
                                 <FieldDescription>
-                                    This initial selling price applies as an active Offering at every current Store. Each Store can change it later.
+                                    Organization defaults apply to every Store that has not set a local override. Store menu status stays in each Store workspace.
                                 </FieldDescription>
                             </>
                         ) : (
                             <FieldDescription>
-                                Selling price, discount, and menu status are configured in each Store workspace.
+                                Organization default price and discount are edited here. Effective selling values and local menu status are configured in each Store workspace.
                             </FieldDescription>
                         )}
 

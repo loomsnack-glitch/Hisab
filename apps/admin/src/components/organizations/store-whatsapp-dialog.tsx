@@ -26,6 +26,28 @@ const cloudStatusLabel: Record<string, string> = {
 type Props = { organizationId: string; storeId: string; storeName: string };
 type QueryError = { message?: string; data?: WhatsAppAccountStatusResponseDTO | null };
 
+const isWhatsAppNotLinkedError = (error: unknown) =>
+    typeof error === "object"
+    && error !== null
+    && "message" in error
+    && (error as { message?: string }).message === "WhatsApp account is not linked";
+
+const loadStoreWhatsAppAccount = async (organizationId: string, storeId: string) => {
+    try {
+        return await getWhatsAppAccount(organizationId, storeId);
+    } catch (error) {
+        if (isWhatsAppNotLinkedError(error)) {
+            return {
+                status: "success" as const,
+                data: null,
+                message: "WhatsApp account not linked",
+                code: 200,
+            };
+        }
+        throw error;
+    }
+};
+
 const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
@@ -35,7 +57,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
     const accountsKey = whatsappKeys.accounts(organizationId);
     const accountQuery = useQuery({
         queryKey: accountKey,
-        queryFn: () => getWhatsAppAccount(organizationId, storeId),
+        queryFn: () => loadStoreWhatsAppAccount(organizationId, storeId),
         enabled: open,
     });
     const accountsQuery = useQuery({ queryKey: accountsKey, queryFn: () => getWhatsAppAccounts(organizationId), enabled: open });
@@ -127,7 +149,7 @@ const StoreWhatsAppDialog = ({ organizationId, storeId, storeName }: Props) => {
                                     <Button variant="link" className="h-auto px-0 text-destructive" onClick={() => accountsQuery.refetch()}>Retry</Button>
                                 </div>
                             ) : null}
-                            {accountQuery.isError && !accountError?.data ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{accountError?.message ?? "Unable to load this Store account."}</p> : null}
+                            {accountQuery.isError && !isWhatsAppNotLinkedError(accountError) && !accountError?.data ? <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{accountError?.message ?? "Unable to load this Store account."}</p> : null}
                             {availableAccounts.length > 0 ? (
                                 <div className="space-y-3">
                                     <div><p className="text-sm font-medium">Choose an organization account</p><p className="mt-1 text-xs text-muted-foreground">The account session is managed centrally; this action only links it to the Store.</p></div>
