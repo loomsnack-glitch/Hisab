@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Ganatri Admin",
+    "slug": "ganatri-admin-mobile",
+    "scheme": "ganatri-admin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "in.ganatri.admin"
+    }
+  }
+}

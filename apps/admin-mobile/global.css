@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@import "uniwind";
+
+@theme static {
+  --color-admin-background: #f8fafc;
+  --color-admin-background-dark: #0f172a;
+  --color-admin-surface: #ffffff;
+  --color-admin-surface-dark: #1e293b;
+  --color-admin-foreground: #0f172a;
+  --color-admin-foreground-dark: #f8fafc;
+  --color-admin-muted: #64748b;
+  --color-admin-muted-dark: #cbd5e1;
+  --color-admin-border: #e2e8f0;
+  --color-admin-border-dark: #475569;
+  --color-admin-primary: #2563eb;
+  --color-admin-primary-foreground: #ffffff;
+}
