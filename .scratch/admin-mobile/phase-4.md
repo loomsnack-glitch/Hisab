@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 4: Login
 
-Status: planning — subphase 4.1 ready for implementation
+Status: subphase 4.1 completed with follow-up — ready for 4.2
 
 ## User-facing outcome
 
@@ -62,6 +62,31 @@ Allow an existing Ganatri Admin user to sign in from the native app using passwo
 - Do not treat a service success without a complete session payload as authenticated.
 - Keep the existing Phase 2 preview available until the real login screen is verified.
 - The planned five-minute timer belongs to 4.2, not password login.
+
+### 4.1 implementation record
+
+Status: completed with follow-up
+
+- Added the real Admin password-login screen using React Hook Form and `zodResolver(LoginFormSchema)`.
+- Wired `userLogin` with validation, pending state, recoverable service errors, and invalid-session-response handling.
+- Added a pure login-session response seam that requires both an authenticated user and JWT before protected navigation.
+- Persisted the JWT through the Admin secure token adapter, updated the Admin auth store, and seeded `adminAuthKeys.me` on success.
+- Replaced the login side of the Phase 2 preview host while keeping registration preview behavior isolated for Phase 5.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun test apps/admin-mobile/src/lib/login-session.test.ts` — 3 passed.
+- `git diff --check` — passed.
+- Admin login boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage imports.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: the screen uses native `View`/controls, shared schemas/services, and the existing Admin auth seams; no browser form or duplicate auth client was introduced.
+- Spec: password login is wired without adding OTP, registration, Organization, or dashboard behavior; incomplete session responses cannot authenticate.
+
+Next subphase: 4.2 WhatsApp OTP login.
 
 ## Phase-level non-goals
 
