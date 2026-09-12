@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 4: Login
 
-Status: in progress — subphase 4.2 completed with follow-up; ready for 4.3
+Status: completed with follow-up — ready for Phase 5
 
 ## User-facing outcome
 
@@ -161,6 +161,29 @@ Subphase review:
 - Spec: request, verification, cooldown, expiry, recovery, and successful session handoff are covered without adding registration, Organization, dashboard, or channel fallback behavior.
 
 Next subphase: 4.3 Login integration review.
+
+## Subphase 4.3 implementation record
+
+Status: completed with follow-up
+
+- Reviewed password and WhatsApp OTP method switching, stale OTP reset behavior, protected/public session handoff, and Admin-only storage/service boundaries.
+- Confirmed the existing registration preview remains isolated and is not part of the completed login contract.
+- Confirmed the five-minute expiry is client-side presentation/recovery guidance only; backend OTP expiry remains authoritative.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Focused Admin auth suite — 12 passed across bootstrap, auth-state, login-session, and OTP timing tests.
+- `git diff --check` — passed.
+- Full Admin mobile source boundary scan found no POS session/storage, Device Login, Owner User, browser, SMS, or email-auth behavior in the login implementation. Existing registration-preview email fields remain deferred registration UI.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Phase review:
+
+- Standards: the implementation stays within the shared service/schema contracts and existing native Admin seams; timing behavior is pure and deterministic-testable.
+- Spec: password and WhatsApp OTP login now cover request, verification, expiry, resend recovery, recoverable errors, and protected-route handoff without expanding into registration or Organization behavior.
+
+Phase 4 is complete with native validation follow-up. Phase 5 registration is next.
 
 ## Phase completion gate
 
