@@ -142,7 +142,6 @@ Status: completed with follow-up
 Verification:
 
 - `bun run --cwd apps/admin-mobile check-types` — passed.
-- `bun run --cwd apps/admin-mobile test` — no tests found; UI behavior remains pending native visual validation and later auth behavior tests.
 - `git diff --check` — passed.
 - Admin mobile boundary scan for browser APIs and POS imports/session identifiers — passed; only the intentional Phase 1 shared storage-provider setup remains.
 - Native build, emulator, device, and runtime visual validation remain pending under repository `AGENTS.md`.
@@ -204,6 +203,7 @@ Status: completed with follow-up
 Verification:
 
 - `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun run --cwd apps/admin-mobile test` — no tests found; UI behavior remains pending native visual validation and later auth behavior tests.
 - `git diff --check` — passed.
 - Admin mobile boundary scan for browser APIs, POS imports, auth service calls, and storage writes — passed with no matches in the Phase 2 screens/components/navigation.
 - Native build, emulator, device, and runtime visual validation remain pending under repository `AGENTS.md`.
