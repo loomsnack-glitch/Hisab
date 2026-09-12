@@ -1,17 +1,23 @@
 import { Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import AuthShell from "../components/auth/auth-shell";
 
 const FoundationScreen = () => (
-    <SafeAreaView className="flex-1 bg-admin-background dark:bg-admin-background-dark">
-        <View className="flex-1 items-center justify-center px-6">
-            <Text className="text-3xl font-bold text-admin-foreground dark:text-admin-foreground-dark">
-                Ganatri Admin
+    <AuthShell
+        title="Welcome to Ganatri Admin"
+        subtitle="A native authentication experience for managing your organization."
+        stepLabel="Auth UI preview"
+        currentStep={1}
+        totalSteps={4}
+    >
+        <View className="gap-2">
+            <Text className="text-base font-semibold text-admin-foreground dark:text-admin-foreground-dark">
+                Authentication foundation ready
             </Text>
-            <Text className="mt-3 text-center text-base text-admin-muted dark:text-admin-muted-dark">
-                Admin mobile foundation ready.
+            <Text className="text-sm leading-5 text-admin-muted dark:text-admin-muted-dark">
+                Login and registration controls will be added in the next UI subphase.
             </Text>
         </View>
-    </SafeAreaView>
+    </AuthShell>
 );
 
 export default FoundationScreen;
