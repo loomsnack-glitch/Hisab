@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
@@ -39,9 +39,11 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 type OrganizationSetupProps = {
     onCreated: (organization: OrganizationRef) => void;
+    onSignOut: () => void;
+    signingOut: boolean;
 };
 
-const OrganizationSetup = ({ onCreated }: OrganizationSetupProps) => {
+const OrganizationSetup = ({ onCreated, onSignOut, signingOut }: OrganizationSetupProps) => {
     const [feedback, setFeedback] = useState<string | null>(null);
     const form = useForm<CreateOrganizationJSON>({
         resolver: zodResolver(CreateOrganizationSchema),
@@ -115,10 +117,128 @@ const OrganizationSetup = ({ onCreated }: OrganizationSetupProps) => {
                     loading={form.formState.isSubmitting}
                     onPress={form.handleSubmit(submit)}
                 />
+                <AuthButton
+                    label="Sign out"
+                    variant="secondary"
+                    loading={signingOut}
+                    onPress={onSignOut}
+                />
             </View>
         </AuthShell>
     );
 };
+
+type OrganizationPickerProps = {
+    organizations: OrganizationRef[];
+    onSelect: (organization: OrganizationRef) => void;
+    onSignOut: () => void;
+    signingOut: boolean;
+};
+
+const OrganizationPicker = ({
+    organizations,
+    onSelect,
+    onSignOut,
+    signingOut,
+}: OrganizationPickerProps) => (
+    <View className="flex-1 bg-admin-background px-5 py-8 dark:bg-admin-background-dark">
+        <View className="mb-8">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-admin-primary">
+                Ganatri Admin
+            </Text>
+            <Text className="mt-2 text-3xl font-bold text-admin-foreground dark:text-admin-foreground-dark">
+                Choose an organization
+            </Text>
+            <Text className="mt-2 text-base leading-6 text-admin-muted dark:text-admin-muted-dark">
+                Select the workspace you want to manage.
+            </Text>
+        </View>
+        <View className="gap-3">
+            {organizations.map((organization) => (
+                <Pressable
+                    key={organization.id}
+                    className="flex-row items-center rounded-2xl border border-admin-border bg-admin-surface px-4 py-4 dark:border-admin-border-dark dark:bg-admin-surface-dark"
+                    onPress={() => onSelect(organization)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${organization.name}`}
+                >
+                    <View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-admin-primary">
+                        <Text className="text-lg font-bold text-admin-primary-foreground">
+                            {organization.name.slice(0, 1).toUpperCase()}
+                        </Text>
+                    </View>
+                    <View className="flex-1">
+                        <Text className="text-base font-semibold text-admin-foreground dark:text-admin-foreground-dark">
+                            {organization.name}
+                        </Text>
+                        <Text className="mt-1 text-sm text-admin-muted dark:text-admin-muted-dark">
+                            Open workspace
+                        </Text>
+                    </View>
+                    <Text className="text-xl font-semibold text-admin-primary">›</Text>
+                </Pressable>
+            ))}
+        </View>
+        <View className="mt-auto pt-8">
+            <AuthButton
+                label="Sign out"
+                variant="secondary"
+                loading={signingOut}
+                onPress={onSignOut}
+            />
+        </View>
+    </View>
+);
+
+type OrganizationWorkspaceProps = {
+    organization: OrganizationRef;
+    canChangeOrganization: boolean;
+    onChangeOrganization: () => void;
+    onSignOut: () => void;
+    signingOut: boolean;
+};
+
+const OrganizationWorkspace = ({
+    organization,
+    canChangeOrganization,
+    onChangeOrganization,
+    onSignOut,
+    signingOut,
+}: OrganizationWorkspaceProps) => (
+    <View className="flex-1 bg-admin-background px-5 py-8 dark:bg-admin-background-dark">
+        <View className="flex-1 justify-center">
+            <View className="mb-6 h-14 w-14 items-center justify-center rounded-2xl bg-admin-primary">
+                <Text className="text-2xl font-bold text-admin-primary-foreground">
+                    {organization.name.slice(0, 1).toUpperCase()}
+                </Text>
+            </View>
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-admin-primary">
+                Ganatri Admin workspace
+            </Text>
+            <Text className="mt-3 text-3xl font-bold text-admin-foreground dark:text-admin-foreground-dark">
+                {organization.name}
+            </Text>
+            <Text className="mt-3 text-base leading-6 text-admin-muted dark:text-admin-muted-dark">
+                Your organization is ready. Catalog, billing, and other Admin modules will be added in later product phases.
+            </Text>
+        </View>
+        <View className="gap-3">
+            {canChangeOrganization ? (
+                <AuthButton
+                    label="Change organization"
+                    variant="secondary"
+                    onPress={onChangeOrganization}
+                />
+            ) : null}
+            <AuthButton
+                label="Sign out"
+                variant="secondary"
+                loading={signingOut}
+                onPress={onSignOut}
+            />
+        </View>
+    </View>
+);
 
 const OrganizationLandingScreen = () => {
     const logoutMutation = useAdminLogout();
@@ -157,12 +277,18 @@ const OrganizationLandingScreen = () => {
                         : organizationsQuery.data?.message || "Try again in a moment."
                 }
                 footer={
-                    <AuthButton
-                        label="Sign out"
-                        variant="secondary"
-                        loading={logoutMutation.isPending}
-                        onPress={() => logoutMutation.mutate()}
-                    />
+                    <View className="gap-3">
+                        <AuthButton
+                            label="Try again"
+                            onPress={() => void organizationsQuery.refetch()}
+                        />
+                        <AuthButton
+                            label="Sign out"
+                            variant="secondary"
+                            loading={logoutMutation.isPending}
+                            onPress={() => logoutMutation.mutate()}
+                        />
+                    </View>
                 }
             />
         );
@@ -185,26 +311,30 @@ const OrganizationLandingScreen = () => {
                         queryKey: adminOrganizationKeys.list,
                     });
                 }}
+                onSignOut={() => logoutMutation.mutate()}
+                signingOut={logoutMutation.isPending}
+            />
+        );
+    }
+
+    if (landing.mode === "picker") {
+        return (
+            <OrganizationPicker
+                organizations={landing.organizations}
+                onSelect={setSelectedOrganization}
+                onSignOut={() => logoutMutation.mutate()}
+                signingOut={logoutMutation.isPending}
             />
         );
     }
 
     return (
-        <SessionStatusScreen
-            title={
-                landing.mode === "workspace"
-                    ? landing.organization.name
-                    : "Choose an organization"
-            }
-            subtitle="Organization setup and selection will be connected in the next Admin mobile slices."
-            footer={
-                <AuthButton
-                    label="Sign out"
-                    variant="secondary"
-                    loading={logoutMutation.isPending}
-                    onPress={() => logoutMutation.mutate()}
-                />
-            }
+        <OrganizationWorkspace
+            organization={landing.organization}
+            canChangeOrganization={organizations.length > 1}
+            onChangeOrganization={() => setSelectedOrganization(null)}
+            onSignOut={() => logoutMutation.mutate()}
+            signingOut={logoutMutation.isPending}
         />
     );
 };

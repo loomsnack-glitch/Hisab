@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 6: Organization Landing
 
-Status: in progress — subphase 6.2 completed with follow-up; 6.3 next
+Status: in progress — subphase 6.3 completed with follow-up; 6.4 next
 
 ## User-facing outcome
 
@@ -92,6 +92,30 @@ Subphase review:
 - Spec: zero Organizations now have an explicit first-workspace setup path without adding dashboard or business modules.
 
 Next subphase: 6.3 Picker and workspace landing.
+
+## 6.3 implementation record
+
+Status: completed with follow-up
+
+- Added a native multiple-Organization picker with accessible organization actions and sign-out.
+- Added a bounded selected-Organization workspace landing with change-organization behavior when multiple Organizations exist.
+- Added retry behavior for Organization query errors and retained sign-out across loading, error, setup, picker, and workspace states.
+- Kept the landing intentionally free of catalog, billing, POS, and broader Admin business modules.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Organization routing, auth-state, and bootstrap tests — 10 passed.
+- `git diff --check` — passed.
+- Landing boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage dependency.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: selection remains in protected app state, while server Organization data remains in the Admin TanStack Query boundary.
+- Spec: one Organization opens directly, multiple use a picker, and zero uses setup; no Organization is silently inferred during registration.
+
+Next subphase: 6.4 Organization integration review.
 
 ## Phase-level non-goals
 
