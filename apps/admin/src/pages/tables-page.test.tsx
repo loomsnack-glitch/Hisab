@@ -119,9 +119,9 @@ describe("Admin Service Table setup", () => {
   test("adds tables from a dialog and defaults to the simple aligned grid", () => {
     const markup = renderAdminTables([table]);
 
-    expect(markup).toContain("Edit layout");
-    expect(markup).not.toContain("Add area");
-    expect(markup).not.toContain("Add table to Patio");
+    expect(markup).toContain("Rearrange layout");
+    expect(markup).toContain("Add area");
+    expect(markup).toContain("Add table to Patio");
     expect(markup).not.toContain("Confirm layout");
     expect(markup).not.toContain("Remove table T2");
     expect(markup).toContain("service-table-simple-grid");
@@ -164,7 +164,7 @@ describe("Admin Service Table setup", () => {
     expect(markup).toContain("service-table-simple-grid");
     expect(markup).toContain("Table T1");
     expect(markup).toContain("Table T2");
-    expect(markup).toContain("Edit layout");
+    expect(markup).toContain("Rearrange layout");
     expect(markup).not.toContain("Table service navigation tabs");
     expect(markup).not.toContain("service-areas-list");
     expect(markup).not.toContain("Area Patio");
@@ -183,9 +183,9 @@ describe("Admin Service Table setup", () => {
     expect(markup).not.toContain("Showing tables");
     expect(markup).not.toContain("All areas");
     expect(markup).toContain('data-admin-workspace="store"');
-    expect(markup).toContain("Edit layout");
-    expect(markup).not.toContain("Add area");
-    expect(markup).not.toContain("Add table to Patio");
+    expect(markup).toContain("Rearrange layout");
+    expect(markup).toContain("Add area");
+    expect(markup).toContain("Add table to Patio");
     expect(markup).not.toContain("Search tables...");
     expect(markup).not.toContain("Add a Store first");
   });

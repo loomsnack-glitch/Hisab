@@ -12,6 +12,7 @@ export const createTableServiceRepositoryMock = (
   serviceTableLabelExists: noopAsync(),
   createServiceTable: noopAsync(),
   updateServiceTable: noopAsync(),
+  retireServiceTable: noopAsync(),
   transitionServiceTableState: noopAsync(),
   lockServiceTableForDevice: noopAsync(),
   attachTableOrder: noopAsync(),

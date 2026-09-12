@@ -80,6 +80,19 @@ export const updateServiceTable = async (
   );
 };
 
+export const deleteServiceTable = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const scope = { organizationId, storeId };
+  return tableServiceRequest(() =>
+    api.delete<ServiceResponse<ServiceTableResponse | null>>(
+      `${storePath(scope)}/tables/${tableId}`,
+    ),
+  );
+};
+
 export const getServiceAreas = async (
   organizationId: string,
   storeId: string,

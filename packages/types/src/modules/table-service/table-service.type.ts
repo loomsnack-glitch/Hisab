@@ -29,7 +29,9 @@ export type CreateServiceTableREPO = Pick<
   | "tableLabel"
   | "capacity"
   | "createdBy"
->;
+> & {
+  serviceAreaId?: string | null;
+};
 
 export type UpdateServiceTableREPO = Pick<
   ServiceTableDTO,
@@ -37,6 +39,7 @@ export type UpdateServiceTableREPO = Pick<
 > & {
   tableLabel?: string;
   capacity?: number | null;
+  serviceAreaId?: string | null;
   updatedBy: string;
 };
 

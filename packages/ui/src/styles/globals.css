@@ -6,6 +6,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant fine-hover (@media (hover: hover) and (pointer: fine));
 
 html {
   font-size: var(--hisab-display-scale, 100%);

@@ -14,6 +14,7 @@ export const unassignedServiceTables = <
 export type ServiceAreaTableGroup<T> = {
   areaId: string | null;
   title: string;
+  description?: string | null;
   tables: T[];
 };
 
@@ -21,7 +22,7 @@ export const groupServiceTablesByArea = <
   T extends { serviceAreaId: string | null; tableLabel: string },
 >(
   tables: T[],
-  areas: { id: string; title: string }[],
+  areas: { id: string; title: string; description?: string | null }[],
   options?: { includeEmptyAreas?: boolean },
 ): ServiceAreaTableGroup<T>[] => {
   const includeEmptyAreas = options?.includeEmptyAreas === true;
@@ -42,9 +43,11 @@ export const groupServiceTablesByArea = <
   for (const area of areas) {
     const assigned = tablesAssignedToServiceArea(tables, area.id);
     if (assigned.length === 0 && !includeEmptyAreas) continue;
+    const description = area.description?.trim();
     groups.push({
       areaId: area.id,
       title: area.title,
+      description: description ? description : null,
       tables: assigned,
     });
   }

@@ -47,12 +47,13 @@ const mapRow = (row: Record<string, unknown>): ServiceTableDTO => ({
   updatedBy: (row.updated_by as string | null | undefined) ?? null,
   createdAt: row.created_at as string | Date,
   updatedAt: row.updated_at as string | Date,
+  retiredAt: (row.retired_at as string | Date | null | undefined) ?? null,
 });
 
 const selectColumns = `
   id, organization_id, store_id, service_area_id, table_label, capacity,
   state, current_sale_id, current_table_order_id,
-  created_by, updated_by, created_at, updated_at
+  created_by, updated_by, created_at, updated_at, retired_at
 `;
 
 const selectColumnsWithSaleTotal = `
@@ -87,7 +88,8 @@ const selectColumnsWithSaleTotal = `
   service_tables.created_by,
   service_tables.updated_by,
   service_tables.created_at,
-  service_tables.updated_at
+  service_tables.updated_at,
+  service_tables.retired_at
 `;
 
 export const getServiceTables = async (
@@ -104,6 +106,7 @@ export const getServiceTables = async (
      AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
+      AND service_tables.retired_at IS NULL
     ORDER BY service_tables.sort_order ASC, LOWER(TRIM(service_tables.table_label)) ASC, service_tables.created_at ASC, service_tables.id ASC
   `;
   return rows.map((row: Record<string, unknown>) => mapRow(row));
@@ -140,12 +143,14 @@ export const serviceTableLabelExists = async (
         WHERE store_id = ${storeId}
           AND lower(btrim(table_label)) = lower(btrim(${tableLabel}))
           AND id <> ${excludeId}
+          AND retired_at IS NULL
         LIMIT 1
       `
     : await pg`
         SELECT 1 FROM service_tables
         WHERE store_id = ${storeId}
           AND lower(btrim(table_label)) = lower(btrim(${tableLabel}))
+          AND retired_at IS NULL
         LIMIT 1
       `;
   return Boolean(rows[0]);
@@ -162,12 +167,14 @@ const nextTableSortOrder = async (
         FROM service_tables
         WHERE store_id = ${storeId}
           AND service_area_id = ${serviceAreaId}
+          AND retired_at IS NULL
       `
     : await db`
         SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
         FROM service_tables
         WHERE store_id = ${storeId}
           AND service_area_id IS NULL
+          AND retired_at IS NULL
       `;
   return Number(row?.next_sort_order ?? 0);
 };
@@ -186,12 +193,13 @@ export const createServiceTable = async (
   tx?: Bun.TransactionSQL,
 ): Promise<ServiceTableDTO | null> => {
   const db: Db = tx || pg;
-  const sortOrder = await nextTableSortOrder(table.storeId, null, db);
+  const serviceAreaId = table.serviceAreaId ?? null;
+  const sortOrder = await nextTableSortOrder(table.storeId, serviceAreaId, db);
   const [row] = await db`
     INSERT INTO service_tables (
-      id, organization_id, store_id, table_label, capacity, sort_order, created_by
+      id, organization_id, store_id, service_area_id, table_label, capacity, sort_order, created_by
     ) VALUES (
-      ${table.id}, ${table.organizationId}, ${table.storeId}, ${table.tableLabel}, ${table.capacity},
+      ${table.id}, ${table.organizationId}, ${table.storeId}, ${serviceAreaId}, ${table.tableLabel}, ${table.capacity},
       ${sortOrder}, ${table.createdBy}
     )
     RETURNING ${db.unsafe(selectColumns)}
@@ -207,20 +215,71 @@ export const updateServiceTable = async (
     table.storeId,
     table.id,
   );
-  if (!current) return null;
+  if (!current || current.retiredAt) return null;
 
   const nextLabel = table.tableLabel ?? current.tableLabel;
   const nextCapacity =
     table.capacity === undefined ? current.capacity : table.capacity;
+  const nextAreaId =
+    table.serviceAreaId !== undefined
+      ? table.serviceAreaId
+      : current.serviceAreaId;
+  const areaChanged =
+    table.serviceAreaId !== undefined &&
+    table.serviceAreaId !== current.serviceAreaId;
+  const sortOrder = areaChanged
+    ? await nextTableSortOrder(table.storeId, nextAreaId, pg)
+    : null;
+  const [row] = areaChanged
+    ? await pg`
+        UPDATE service_tables
+        SET table_label = ${nextLabel},
+            capacity = ${nextCapacity},
+            service_area_id = ${nextAreaId},
+            sort_order = ${sortOrder},
+            updated_by = ${table.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${table.id}
+          AND organization_id = ${table.organizationId}
+          AND store_id = ${table.storeId}
+          AND retired_at IS NULL
+        RETURNING ${pg.unsafe(selectColumns)}
+      `
+    : await pg`
+        UPDATE service_tables
+        SET table_label = ${nextLabel},
+            capacity = ${nextCapacity},
+            updated_by = ${table.updatedBy},
+            updated_at = NOW()
+        WHERE id = ${table.id}
+          AND organization_id = ${table.organizationId}
+          AND store_id = ${table.storeId}
+          AND retired_at IS NULL
+        RETURNING ${pg.unsafe(selectColumns)}
+      `;
+  return row ? mapRow(row) : null;
+};
+
+export const retireServiceTable = async (
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+  retiredBy: string,
+): Promise<ServiceTableDTO | null> => {
   const [row] = await pg`
     UPDATE service_tables
-    SET table_label = ${nextLabel},
-        capacity = ${nextCapacity},
-        updated_by = ${table.updatedBy},
+    SET retired_at = NOW(),
+        retired_by = ${retiredBy},
+        service_area_id = NULL,
+        updated_by = ${retiredBy},
         updated_at = NOW()
-    WHERE id = ${table.id}
-      AND organization_id = ${table.organizationId}
-      AND store_id = ${table.storeId}
+    WHERE id = ${tableId}
+      AND organization_id = ${organizationId}
+      AND store_id = ${storeId}
+      AND retired_at IS NULL
+      AND state = 'free'
+      AND current_sale_id IS NULL
+      AND current_table_order_id IS NULL
     RETURNING ${pg.unsafe(selectColumns)}
   `;
   return row ? mapRow(row) : null;
@@ -242,6 +301,7 @@ export const transitionServiceTableState = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state = ${fromState}
       AND current_sale_id IS NULL
     RETURNING ${pg.unsafe(selectColumns)}
@@ -266,6 +326,7 @@ export const lockServiceTableForDevice = async (
     WHERE service_tables.id = ${tableId}
       AND service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
+      AND service_tables.retired_at IS NULL
     FOR UPDATE OF service_tables
   `;
   return row ? mapRow(row) : null;
@@ -288,6 +349,7 @@ export const attachTableOrder = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state = 'allocated'
       AND current_sale_id IS NULL
       AND current_table_order_id IS NULL
@@ -313,6 +375,7 @@ export const clearTableOrder = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state IN ('engaged', 'ready_to_bill')
       AND current_table_order_id = ${tableOrderId}
     RETURNING ${tx.unsafe(selectColumns)}
@@ -340,6 +403,7 @@ export const attachCheckedOutSale = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND current_table_order_id = ${tableOrderId}
       AND state IN ('engaged', 'ready_to_bill')
     RETURNING ${tx.unsafe(selectColumns)}
@@ -364,6 +428,7 @@ export const attachDraftSale = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state = 'allocated'
       AND current_sale_id IS NULL
       AND current_table_order_id IS NULL
@@ -389,6 +454,7 @@ export const clearDraftSale = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state IN ('engaged', 'ready_to_bill')
       AND current_sale_id = ${saleId}
     RETURNING ${tx.unsafe(selectColumns)}
@@ -413,6 +479,7 @@ export const releasePaidTableFromActiveState = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state IN ('engaged', 'ready_to_bill')
       AND current_sale_id = ${saleId}
     RETURNING ${tx.unsafe(selectColumns)}
@@ -432,6 +499,7 @@ export const markReadyDraftAsEngaged = async (
     SET state = 'engaged', updated_by = ${updatedBy}, updated_at = NOW()
     WHERE organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND current_sale_id = ${saleId}
       AND state = 'ready_to_bill'
     RETURNING id
@@ -454,6 +522,7 @@ export const setCommittedSaleTableState = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND current_sale_id = ${saleId}
       AND state IN ('engaged', 'ready_to_bill')
     RETURNING ${tx.unsafe(selectColumns)}
@@ -474,6 +543,7 @@ export const syncCommittedSalePaymentState = async (
     SET state = ${state}, updated_by = ${updatedBy}, updated_at = NOW()
     WHERE organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND current_sale_id = ${saleId}
       AND state IN ('payment_due', 'paid')
     RETURNING ${tx.unsafe(selectColumns)}
@@ -498,6 +568,7 @@ export const lockServiceTableForSale = async (
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
       AND service_tables.current_sale_id = ${saleId}
+      AND service_tables.retired_at IS NULL
     FOR UPDATE OF service_tables
   `;
   return row ? mapRow(row) : null;
@@ -519,6 +590,7 @@ const releaseCommittedTable = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND state = ${fromState}
       AND current_sale_id = ${saleId}
     RETURNING ${tx.unsafe(selectColumns)}
@@ -582,6 +654,7 @@ export const assignServiceTableToArea = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND service_area_id IS NULL
     RETURNING ${tx.unsafe(selectColumns)}
   `;
@@ -608,6 +681,7 @@ export const unassignServiceTableFromArea = async (
     WHERE id = ${tableId}
       AND organization_id = ${organizationId}
       AND store_id = ${storeId}
+      AND retired_at IS NULL
       AND service_area_id = ${areaId}
     RETURNING ${tx.unsafe(selectColumns)}
   `;
@@ -795,6 +869,7 @@ export const reorderServiceTables = async (
         WHERE id = ${tableId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
+          AND retired_at IS NULL
           AND service_area_id = ${serviceAreaId}
       `;
     } else {
@@ -806,6 +881,7 @@ export const reorderServiceTables = async (
         WHERE id = ${tableId}
           AND organization_id = ${organizationId}
           AND store_id = ${storeId}
+          AND retired_at IS NULL
           AND service_area_id IS NULL
       `;
     }

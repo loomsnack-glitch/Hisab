@@ -468,16 +468,20 @@ A Sale Number is assigned when a Sale is committed, not while it is still a Draf
 _Avoid_: Draft bill number, pre-commit sequence
 
 **Service Table**:
-A physical customer table configured for one Store, identified by a short Store-unique table label (shown as “Table no” in the UI). It may carry a positive whole-number seating capacity and a position in that Store's floor layout; a blank capacity means it is unknown.
+A physical customer table configured for one Store, identified by a short table label (shown as “Table no” in the UI) that is unique among that Store's live Service Tables. It may carry a positive whole-number seating capacity and a position in that Store's floor layout; a blank capacity means it is unknown.
 _Avoid_: Organization table, shared table, seating chart item
+
+**Retired Service Table**:
+A Service Table the administrator has deleted. It never returns to the live floor or configuration UI, is not restorable, and is kept only so Table-Linked Sales and Table Orders retain their original table context. A live Service Table can be deleted only while it is Free. Several retired tables may share a former table label; only one live Service Table in that Store may hold that label.
+_Avoid_: Restored table, archived table, discarded table, soft-deleted table as the spoken term
 
 **Service Area**:
 A named grouping of a Store's floor, identified by a Store-unique title and an optional description. A Service Table may belong to at most one Service Area, or to none.
 _Avoid_: Floor section, zone, room, named layout region
 
 **Unassigned Service Table**:
-A Service Table that does not belong to any Service Area. It can be assigned to a Service Area only while unassigned; moving it to another area requires unassigning it first.
-_Avoid_: Unallocated table when referring to area membership, free-floating table
+A Service Table that does not belong to any Service Area. A live Service Table belongs to at most one Service Area, or to none; changing that membership is a configuration change on the table.
+_Avoid_: Unallocated table when referring to area membership, free-floating table, unassign-then-reassign as the only way to move a table
 
 **Active Table Order**:
 The single open Table Order currently linked to a Service Table. It groups that table's KOTs and becomes one Sale only at checkout.

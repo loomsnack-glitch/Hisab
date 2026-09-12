@@ -710,6 +710,23 @@ export const createServiceTable = async (
   if (await tableRepository.serviceTableLabelExists(storeId, tableLabel))
     return conflictResponse();
 
+  const serviceAreaId = data.serviceAreaId ?? null;
+  if (serviceAreaId) {
+    const area = await tableRepository.getServiceAreaById(
+      organizationId,
+      storeId,
+      serviceAreaId,
+    );
+    if (!area) {
+      return {
+        status: "error",
+        message: "Service area not found",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+  }
+
   try {
     const table = await pg.begin((tx) =>
       tableRepository.createServiceTable(
@@ -719,6 +736,7 @@ export const createServiceTable = async (
           storeId,
           tableLabel,
           capacity: data.capacity ?? null,
+          serviceAreaId,
           createdBy: userId,
         },
         tx,
@@ -769,13 +787,29 @@ export const updateServiceTable = async (
     storeId,
     tableId,
   );
-  if (!existing)
+  if (!existing || existing.retiredAt)
     return {
       status: "error",
       message: "Service table not found",
       data: null,
       code: STATUS_CODES.NOT_FOUND,
     };
+
+  if (data.serviceAreaId) {
+    const area = await tableRepository.getServiceAreaById(
+      organizationId,
+      storeId,
+      data.serviceAreaId,
+    );
+    if (!area) {
+      return {
+        status: "error",
+        message: "Service area not found",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+  }
 
   const nextLabel = data.tableLabel?.trim();
   if (
@@ -795,6 +829,9 @@ export const updateServiceTable = async (
       storeId,
       ...(nextLabel ? { tableLabel: nextLabel } : {}),
       ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
+      ...(data.serviceAreaId !== undefined
+        ? { serviceAreaId: data.serviceAreaId }
+        : {}),
       updatedBy: userId,
     });
     if (!table)
@@ -814,6 +851,76 @@ export const updateServiceTable = async (
     if (isUniqueViolation(error)) return conflictResponse();
     throw error;
   }
+};
+
+export const deleteServiceTable = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  tableId: string,
+): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok)
+    return {
+      status: "error",
+      message: scope.error,
+      data: null,
+      code: scope.code,
+    };
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
+  const existing = await tableRepository.getServiceTableById(
+    organizationId,
+    storeId,
+    tableId,
+  );
+  if (!existing || existing.retiredAt) {
+    return {
+      status: "error",
+      message: "Service table not found",
+      data: null,
+      code: STATUS_CODES.NOT_FOUND,
+    };
+  }
+
+  if (
+    existing.state !== "free" ||
+    existing.currentSaleId ||
+    existing.currentTableOrderId
+  ) {
+    return {
+      status: "error",
+      message: "Free this table in POS before deleting it",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  const table = await tableRepository.retireServiceTable(
+    organizationId,
+    storeId,
+    tableId,
+    userId,
+  );
+  if (!table) {
+    return {
+      status: "error",
+      message: "Free this table in POS before deleting it",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+
+  return {
+    status: "success",
+    data: { table },
+    message: "Service table deleted successfully",
+    code: STATUS_CODES.SUCCESS,
+  };
 };
 
 const areaConflictResponse = (

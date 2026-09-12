@@ -81,7 +81,13 @@ describe("Service Table contracts", () => {
       UpdateServiceTableSchema.safeParse({
         serviceAreaId: tableId,
       }).success,
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      CreateServiceTableSchema.safeParse({
+        tableLabel: "A1",
+        serviceAreaId: tableId,
+      }).success,
+    ).toBe(true);
   });
 });
 

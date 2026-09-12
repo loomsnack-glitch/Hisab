@@ -2041,6 +2041,7 @@ export const listOrganizationTables = async (
          AND area.organization_id = st.organization_id
          AND area.store_id = st.store_id
         WHERE st.organization_id = ${query.organizationId}
+          AND st.retired_at IS NULL
           AND (${storeId} = '' OR st.store_id::text = ${storeId})
           AND (${state} = '' OR st.state::text = ${state})
           AND (
@@ -2087,6 +2088,7 @@ export const listOrganizationTables = async (
          AND current_sale.store_id = st.store_id
          AND current_sale.status IN ('draft', 'completed')
         WHERE st.organization_id = ${query.organizationId}
+          AND st.retired_at IS NULL
           AND (${storeId} = '' OR st.store_id::text = ${storeId})
           AND (${state} = '' OR st.state::text = ${state})
           AND (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createServiceArea, updateServiceArea } from "@repo/services";
@@ -18,7 +18,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
-import { MapPinned, Pencil, PlusCircle } from "lucide-react";
+import { MapPinned, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { serviceAreaKeys } from "@/lib/query-keys";
@@ -34,7 +34,9 @@ type UpsertServiceAreaDialogProps = {
   organizationId: string;
   storeId: string;
   area?: ServiceAreaDTO;
-  trigger?: React.ReactElement;
+  trigger?: ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 const UpsertServiceAreaDialog = ({
@@ -42,8 +44,16 @@ const UpsertServiceAreaDialog = ({
   storeId,
   area,
   trigger,
+  open: controlledOpen,
+  onOpenChange,
 }: UpsertServiceAreaDialogProps) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (nextOpen: boolean) => {
+    if (!isControlled) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
   const queryClient = useQueryClient();
   const isEditMode = Boolean(area);
   const form = useForm<FormValues>({ defaultValues });
@@ -83,7 +93,7 @@ const UpsertServiceAreaDialog = ({
   const onSubmit: SubmitHandler<FormValues> = (values) => {
     const result = CreateServiceAreaSchema.safeParse({
       title: values.title,
-      description: isEditMode ? values.description : "",
+      description: values.description,
     });
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -94,21 +104,16 @@ const UpsertServiceAreaDialog = ({
 
     mutation.mutate({
       title: result.data.title,
-      description: isEditMode ? (result.data.description ?? "") : "",
+      description: result.data.description ?? "",
     });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            isEditMode ? (
-              <Button variant="outline" size="sm" className="rounded-full">
-                <Pencil className="size-4" />
-                Edit
-              </Button>
-            ) : (
+      {trigger !== null ? (
+        <DialogTrigger
+          render={
+            trigger ?? (
               <Button
                 className="h-10 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:px-5 sm:text-sm"
                 disabled={!storeId}
@@ -117,14 +122,13 @@ const UpsertServiceAreaDialog = ({
                 Add area
               </Button>
             )
-          )
-        }
-      />
+          }
+        />
+      ) : null}
       <DialogContent className="sm:max-w-md">
         <DialogHeader
           icon={<MapPinned className="size-5" />}
           title={isEditMode ? "Edit Service Area" : "Add Service Area"}
-          subtitle="Give this part of the floor a title staff will recognize."
         />
         <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
           <Field data-invalid={Boolean(form.formState.errors.title)}>
@@ -133,28 +137,24 @@ const UpsertServiceAreaDialog = ({
               <Input
                 aria-label="Area title"
                 className="h-11 rounded-xl"
-                placeholder="e.g. Patio"
                 {...form.register("title")}
               />
               <FieldError errors={[form.formState.errors.title]} />
             </FieldContent>
           </Field>
-          {isEditMode ? (
-            <Field data-invalid={Boolean(form.formState.errors.description)}>
-              <FieldLabel>
-                Description <span className="font-normal text-muted-foreground">(optional)</span>
-              </FieldLabel>
-              <FieldContent>
-                <Textarea
-                  aria-label="Area description"
-                  className="min-h-24 rounded-xl"
-                  placeholder="e.g. Outdoor seating near the entrance"
-                  {...form.register("description")}
-                />
-                <FieldError errors={[form.formState.errors.description]} />
-              </FieldContent>
-            </Field>
-          ) : null}
+          <Field data-invalid={Boolean(form.formState.errors.description)}>
+            <FieldLabel>
+              Description <span className="font-normal text-muted-foreground">(optional)</span>
+            </FieldLabel>
+            <FieldContent>
+              <Textarea
+                aria-label="Area description"
+                className="min-h-24 rounded-xl"
+                {...form.register("description")}
+              />
+              <FieldError errors={[form.formState.errors.description]} />
+            </FieldContent>
+          </Field>
           <DialogFooter>
             <Button
               type="button"

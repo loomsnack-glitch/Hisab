@@ -113,6 +113,35 @@ router.patch(
   },
 );
 
+router.delete(
+  "/:organizationId/stores/:storeId/tables/:tableId",
+  async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      const storeId = c.req.param("storeId");
+      const tableId = c.req.param("tableId");
+      const invalid = validateScope(
+        organizationId,
+        storeId,
+        tableId,
+        "Invalid table id",
+      );
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await tableService.deleteServiceTable(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          tableId,
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "deleteServiceTable", c, error);
+    }
+  },
+);
+
 router.post(
   "/:organizationId/stores/:storeId/tables/reorder",
   validateSchema("json", ReorderServiceTablesSchema),

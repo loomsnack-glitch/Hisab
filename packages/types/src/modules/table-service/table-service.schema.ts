@@ -32,12 +32,14 @@ export const ServiceTableDTOSchema = z.object({
   updatedBy: z.uuid("Invalid updater id").nullable(),
   createdAt: dtoDateSchema,
   updatedAt: dtoDateSchema,
+  retiredAt: dtoDateSchema.nullable().optional().default(null),
 });
 
 export const CreateServiceTableSchema = z
   .object({
     tableLabel: tableLabelSchema,
     capacity: z.number().int().positive().nullable().optional(),
+    serviceAreaId: z.uuid("Invalid area id").nullable().optional(),
   })
   .strict();
 
@@ -45,6 +47,7 @@ export const UpdateServiceTableSchema = z
   .object({
     tableLabel: tableLabelSchema.optional(),
     capacity: z.number().int().positive().nullable().optional(),
+    serviceAreaId: z.uuid("Invalid area id").nullable().optional(),
   })
   .strict()
   .refine(

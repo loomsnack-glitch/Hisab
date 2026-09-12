@@ -98,12 +98,22 @@ const createServiceTableRepo = mock(
   }) => ({ ...table, ...data }),
 );
 const updateServiceTableRepo = mock(
-  async (data: { capacity?: number | null; tableLabel?: string }) => ({
+  async (data: {
+    capacity?: number | null;
+    tableLabel?: string;
+    serviceAreaId?: string | null;
+  }) => ({
     ...table,
     ...data,
     updatedBy: userId,
   }),
 );
+const retireServiceTableRepo = mock(async () => ({
+  ...table,
+  serviceAreaId: null,
+  retiredAt: now,
+  updatedBy: userId,
+}));
 const getServiceAreas = mock(
   async (requestedOrganizationId?: string, requestedStoreId?: string) =>
     requestedOrganizationId === organizationId && requestedStoreId === storeId
@@ -251,6 +261,7 @@ installTableServiceRepositoryMock({
   serviceTableLabelExists,
   createServiceTable: createServiceTableRepo,
   updateServiceTable: updateServiceTableRepo,
+  retireServiceTable: retireServiceTableRepo,
   getServiceAreas,
   getServiceAreaById,
   serviceAreaTitleExists,
@@ -346,10 +357,18 @@ describe("Service Table application service", () => {
     );
     getServiceTables.mockClear();
     getServiceTableById.mockClear();
+    getServiceTableById.mockResolvedValue(table);
     serviceTableLabelExists.mockClear();
     serviceTableLabelExists.mockResolvedValue(false);
     createServiceTableRepo.mockClear();
     updateServiceTableRepo.mockClear();
+    retireServiceTableRepo.mockClear();
+    retireServiceTableRepo.mockResolvedValue({
+      ...table,
+      serviceAreaId: null,
+      retiredAt: now,
+      updatedBy: userId,
+    });
     getServiceAreas.mockClear();
     getServiceAreaById.mockClear();
     getServiceAreaById.mockResolvedValue(area);
@@ -482,6 +501,92 @@ describe("Service Table application service", () => {
         updatedBy: userId,
       }),
     );
+  });
+
+  test("moves a table to another Service Area through the table update", async () => {
+    const response = await tableService.updateServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      tableId,
+      { serviceAreaId: areaId },
+    );
+
+    expect(response.status).toBe("success");
+    expect(updateServiceTableRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: tableId,
+        serviceAreaId: areaId,
+        updatedBy: userId,
+      }),
+    );
+  });
+
+  test("creates a table already assigned to a Service Area", async () => {
+    const response = await tableService.createServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      { tableLabel: "T9", serviceAreaId: areaId },
+    );
+
+    expect(response.status).toBe("success");
+    expect(createServiceTableRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tableLabel: "T9",
+        serviceAreaId: areaId,
+        createdBy: userId,
+      }),
+      expect.anything(),
+    );
+  });
+
+  test("deletes a Free Service Table by retiring it", async () => {
+    const response = await tableService.deleteServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      tableId,
+    );
+
+    expect(response).toMatchObject({
+      status: "success",
+      message: "Service table deleted successfully",
+    });
+    expect(retireServiceTableRepo).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      tableId,
+      userId,
+    );
+  });
+
+  test("does not delete a Service Table that is still in use", async () => {
+    getServiceTableById.mockResolvedValue(allocatedTable);
+
+    const response = await tableService.deleteServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      tableId,
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 409 });
+    expect(retireServiceTableRepo).not.toHaveBeenCalled();
+  });
+
+  test("hides an already deleted Service Table from further deletes", async () => {
+    getServiceTableById.mockResolvedValue({ ...table, retiredAt: now });
+
+    const response = await tableService.deleteServiceTable(
+      userId,
+      organizationId,
+      storeId,
+      tableId,
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 404 });
+    expect(retireServiceTableRepo).not.toHaveBeenCalled();
   });
 
   test("lists only the authenticated device Store and allocates without creating a Sale", async () => {

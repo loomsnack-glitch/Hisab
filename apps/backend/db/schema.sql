@@ -2205,6 +2205,8 @@ CREATE TABLE public.service_tables (
     service_area_id uuid,
     current_table_order_id uuid,
     sort_order integer NOT NULL,
+    retired_at timestamp with time zone,
+    retired_by uuid,
     CONSTRAINT service_tables_capacity_check CHECK (((capacity IS NULL) OR (capacity > 0))),
     CONSTRAINT service_tables_table_label_check CHECK ((length(btrim((table_label)::text)) > 0))
 );
@@ -6425,10 +6427,10 @@ CREATE UNIQUE INDEX service_tables_current_table_order_unique ON public.service_
 
 
 --
--- Name: service_tables_store_table_label_lower_unique; Type: INDEX; Schema: public; Owner: -
+-- Name: service_tables_store_live_table_label_lower_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX service_tables_store_table_label_lower_unique ON public.service_tables USING btree (store_id, lower(btrim((table_label)::text)));
+CREATE UNIQUE INDEX service_tables_store_live_table_label_lower_unique ON public.service_tables USING btree (store_id, lower(btrim((table_label)::text))) WHERE (retired_at IS NULL);
 
 
 --
@@ -8327,6 +8329,14 @@ ALTER TABLE ONLY public.service_tables
 
 ALTER TABLE ONLY public.service_tables
     ADD CONSTRAINT service_tables_service_area_fkey FOREIGN KEY (service_area_id, organization_id, store_id) REFERENCES public.service_areas(id, organization_id, store_id) ON DELETE SET NULL (service_area_id);
+
+
+--
+-- Name: service_tables service_tables_retired_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_tables
+    ADD CONSTRAINT service_tables_retired_by_fkey FOREIGN KEY (retired_by) REFERENCES public.users(id);
 
 
 --

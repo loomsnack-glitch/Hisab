@@ -55,6 +55,18 @@ describe("Service Area table membership", () => {
     ).toEqual(["Unassigned"]);
   });
 
+  test("carries area descriptions into grouped sections", () => {
+    expect(
+      groupServiceTablesByArea(tables, [
+        {
+          id: patioId,
+          title: "First Floor",
+          description: "  Main dining hall  ",
+        },
+      ]).find((group) => group.title === "First Floor")?.description,
+    ).toBe("Main dining hall");
+  });
+
   test("can keep empty areas so staff can add tables to them", () => {
     expect(
       groupServiceTablesByArea(

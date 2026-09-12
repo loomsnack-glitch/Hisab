@@ -24,16 +24,15 @@ Object.assign(globalThis, {
 
 const { cleanup, fireEvent, render, screen } =
   await import("@testing-library/react");
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
-
-import {
+const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+const { default: TablesPage } = await import("@/pages/tables-page");
+const {
   organizationKeys,
   serviceAreaKeys,
   serviceTableKeys,
-} from "@/lib/query-keys";
-import TablesPage from "@/pages/tables-page";
+} = await import("@/lib/query-keys");
+import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 
 afterEach(cleanup);
 
@@ -150,67 +149,136 @@ const renderTables = (tables: ServiceTableDTO[]) => {
 };
 
 describe("Admin Service Table layout editing", () => {
-  test("keeps table deletion unavailable while editing the Store grid", () => {
+  test("keeps add and edit available until Rearrange, then only order changes", () => {
     renderTables([assignedTable]);
 
-    expect(screen.queryByRole("button", { name: "Add area" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add table to Patio" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Remove table T1" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Confirm layout" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit layout" }));
-
-    expect(screen.queryByRole("button", { name: "Add table" })).toBeNull();
     expect(screen.getByRole("button", { name: "Add area" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Add table to Patio" }),
     ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit table T1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete table T1" })).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Remove table T1" }),
+      screen.getAllByRole("button", { name: "Open Patio area menu" }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Confirm layout" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rearrange layout" }));
+
+    expect(screen.queryByRole("button", { name: "Add table" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add area" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add table to Patio" }),
     ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit table T1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete table T1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open Patio area menu" })).toBeNull();
     expect(screen.getByRole("button", { name: "Confirm layout" })).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Cancel layout edits" }),
     );
     expect(screen.getByLabelText("Table T1")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add area" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add area" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Confirm layout" })).toBeNull();
   });
 
   test("shows only the filtered area and its tables", () => {
     renderTables([assignedTable, unassignedTable]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Patio" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Filter by Patio, 1 table" }),
+    );
 
     expect(screen.getByLabelText("Table T1")).toBeTruthy();
     expect(screen.queryByLabelText("Table T2")).toBeNull();
     expect(screen.queryByText("No tables in this area yet.")).toBeNull();
   });
 
-  test("shows add table on the Unassigned section in edit mode", () => {
+  test("shows add table on the Unassigned section", () => {
     renderTables([assignedTable, unassignedTable]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit layout" }));
 
     expect(
       screen.getByRole("button", { name: "Add table to Unassigned" }),
     ).toBeTruthy();
   });
 
-  test("lets an empty Store add unassigned tables from the Unassigned section", () => {
-    renderTables([]);
+  test("opens edit and delete as separate table actions", () => {
+    renderTables([assignedTable]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit layout" }));
-    fireEvent.click(screen.getByRole("button", { name: "Unassigned" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit table T1" }));
+    expect(screen.getByText("Edit Service Table")).toBeTruthy();
+    expect(
+      screen.queryByText("will be removed from this Store and from POS."),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete table T1" }));
+    expect(
+      screen.getByText("will be removed from this Store and from POS.", {
+        exact: false,
+      }),
+    ).toBeTruthy();
+  });
+
+  test("opens a mobile sheet with edit and delete table actions", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Table T1 actions" }));
+    expect(screen.getByRole("button", { name: /^Edit table$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Delete table$/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Edit table$/ }));
+    expect(screen.getByText("Edit Service Table")).toBeTruthy();
+  });
+
+  test("opens area actions from the area name on touch", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Patio area actions" }));
+    expect(screen.getByRole("button", { name: /^Edit area$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Delete area$/ })).toBeTruthy();
+  });
+
+  test("opens a mobile sheet with edit and delete area actions", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Patio area actions" }));
+    expect(screen.getByRole("button", { name: /^Edit area$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Delete area$/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Edit area$/ }));
+    expect(screen.getByText("Edit Service Area")).toBeTruthy();
+  });
+
+  test("opens area edit and delete as separate area actions", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Open Patio area menu" })[0],
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /Edit area/ }));
+    expect(screen.getByText("Edit Service Area")).toBeTruthy();
+    expect(screen.queryByText("Tables in this area will become unassigned.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Open Patio area menu" })[0],
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /Delete area/ }));
+    expect(
+      screen.getByText("Tables in this area will become unassigned.", {
+        exact: false,
+      }),
+    ).toBeTruthy();
+  });
+
+  test("lets staff add tables to an empty Service Area", () => {
+    renderTables([]);
 
     expect(screen.queryByRole("button", { name: "Add table" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Add table to Unassigned" }),
+      screen.getByRole("button", { name: "Add table to Patio" }),
     ).toBeTruthy();
   });
 });

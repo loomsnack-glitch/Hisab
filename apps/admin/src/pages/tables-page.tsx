@@ -8,8 +8,6 @@ import {
   reorderServiceAreas,
   reorderServiceTables,
 } from "@repo/services";
-import type { ServiceTableDTO } from "@repo/types";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import {
@@ -30,14 +28,17 @@ import {
   Plus,
   RefreshCw,
   Store,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import UnderDevelopment from "@/components/under-development";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
+import ServiceTableCard, {
+  ServiceTableTile,
+} from "@/components/table-service/service-table-card";
+import ServiceAreaActionsMenu from "@/components/table-service/service-area-actions-menu";
 import UpsertServiceAreaDialog from "@/components/table-service/upsert-service-area-dialog";
-import CreateServiceTableDialog from "@/components/table-service/create-service-table-dialog";
+import UpsertServiceTableDialog from "@/components/table-service/upsert-service-table-dialog";
 import { groupServiceTablesByArea } from "@/lib/service-area-tables";
 import {
   buildTableLayoutPersistPlan,
@@ -64,30 +65,6 @@ import {
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
 
 type AreaFilter = "all" | "unassigned" | string;
-
-const ServiceTableTile = ({ table }: { table: ServiceTableDTO }) => (
-  <div
-    role="listitem"
-    aria-label={`Table ${table.tableLabel}`}
-    className="group relative flex aspect-square min-h-24 flex-col items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-2 text-center shadow-2xs transition-all duration-200 hover:border-primary/30 hover:bg-card/95 hover:shadow-md"
-  >
-    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary/70 via-primary/40 to-transparent" />
-    <div className="flex size-12 items-center justify-center rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 transition-transform duration-200 group-hover:scale-[1.03] sm:size-14">
-      <span className="font-display text-base font-bold leading-none text-primary sm:text-lg">
-        {table.tableLabel}
-      </span>
-    </div>
-    {table.capacity !== null ? (
-      <Badge
-        variant="outline"
-        className="mt-2 rounded-full border-border/60 bg-muted/30 px-2 py-0 text-[10px] font-semibold text-muted-foreground"
-      >
-        <Users className="size-3" />
-        {table.capacity}
-      </Badge>
-    ) : null}
-  </div>
-);
 
 const TablesWorkspace = () => {
   const { organizationId = "", storeId = "" } = useParams();
@@ -193,7 +170,7 @@ const TablesWorkspace = () => {
   const tableGroups = useMemo(() => {
     if (areaFilter === "all") {
       return groupServiceTablesByArea(filteredTables, layoutAreas, {
-        includeEmptyAreas: isEditing,
+        includeEmptyAreas: true,
       });
     }
 
@@ -204,22 +181,51 @@ const TablesWorkspace = () => {
     const area = layoutAreas.find((entry) => entry.id === areaFilter);
     if (!area) return [];
 
+    const description = area.description?.trim();
+
     return [
       {
         areaId: area.id,
         title: area.title,
+        description: description ? description : null,
         tables: filteredTables,
       },
     ];
-  }, [areaFilter, filteredTables, isEditing, layoutAreas]);
+  }, [areaFilter, filteredTables, layoutAreas]);
 
   const hasUnassignedTables = useMemo(
     () => layoutTables.some((table) => table.serviceAreaId === null),
     [layoutTables],
   );
-  const showUnassignedFilter = hasUnassignedTables || isEditing;
+  const showUnassignedFilter = hasUnassignedTables;
+
+  const tableCountByAreaId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const table of layoutTables) {
+      if (!table.serviceAreaId) continue;
+      counts.set(
+        table.serviceAreaId,
+        (counts.get(table.serviceAreaId) ?? 0) + 1,
+      );
+    }
+    return counts;
+  }, [layoutTables]);
+
+  const unassignedTableCount = useMemo(
+    () => layoutTables.filter((table) => table.serviceAreaId === null).length,
+    [layoutTables],
+  );
 
   const hasActiveFilters = areaFilter !== "all";
+
+  const filterPillCountClassName = (active: boolean) =>
+    cn(
+      "ml-1 tabular-nums",
+      active ? "text-primary-foreground/80" : "text-muted-foreground/80",
+    );
+
+  const tableCountLabel = (count: number) =>
+    `${count} table${count === 1 ? "" : "s"}`;
 
   const confirmLayoutEdit = async () => {
     if (!draft || !baseline) return;
@@ -347,7 +353,7 @@ const TablesWorkspace = () => {
     >
       <div className="flex items-center gap-2">
         <div className={cn(scrollRowClassName, "min-w-0 flex-1")}>
-          {isEditing ? (
+          {isEditing ? null : (
             <UpsertServiceAreaDialog
               organizationId={organizationId}
               storeId={effectiveStoreId}
@@ -362,7 +368,7 @@ const TablesWorkspace = () => {
                 </Button>
               }
             />
-          ) : null}
+          )}
           <Button
             variant={areaFilter === "all" ? "default" : "outline"}
             className={cn(
@@ -371,9 +377,13 @@ const TablesWorkspace = () => {
                 ? "border-primary bg-primary text-primary-foreground shadow-xs shadow-primary/20"
                 : "border-border/60 bg-card/50 text-muted-foreground hover:border-border/80 hover:bg-card hover:text-foreground",
             )}
+            aria-label={`Filter by all areas, ${tableCountLabel(layoutTables.length)}`}
             onClick={() => setAreaFilter("all")}
           >
             All
+            <span className={filterPillCountClassName(areaFilter === "all")}>
+              {layoutTables.length}
+            </span>
           </Button>
           {layoutAreas.map((area, index) => (
             <span
@@ -420,6 +430,7 @@ const TablesWorkspace = () => {
                     ? "border-primary bg-primary text-primary-foreground shadow-xs shadow-primary/20"
                     : "border-border/60 bg-card/50 text-muted-foreground hover:border-border/80 hover:bg-card hover:text-foreground",
                 )}
+                aria-label={`Filter by ${area.title}, ${tableCountLabel(tableCountByAreaId.get(area.id) ?? 0)}`}
                 onClick={() => {
                   if (areaDidDragRef.current) {
                     areaDidDragRef.current = false;
@@ -429,6 +440,11 @@ const TablesWorkspace = () => {
                 }}
               >
                 {area.title}
+                <span
+                  className={filterPillCountClassName(areaFilter === area.id)}
+                >
+                  {tableCountByAreaId.get(area.id) ?? 0}
+                </span>
               </Button>
             </span>
           ))}
@@ -441,9 +457,15 @@ const TablesWorkspace = () => {
                   ? "border-primary bg-primary text-primary-foreground shadow-xs shadow-primary/20"
                   : "border-border/60 bg-card/50 text-muted-foreground hover:border-border/80 hover:bg-card hover:text-foreground",
               )}
+              aria-label={`Filter by unassigned tables, ${tableCountLabel(unassignedTableCount)}`}
               onClick={() => setAreaFilter("unassigned")}
             >
               Unassigned
+              <span
+                className={filterPillCountClassName(areaFilter === "unassigned")}
+              >
+                {unassignedTableCount}
+              </span>
             </Button>
           ) : null}
         </div>
@@ -475,12 +497,12 @@ const TablesWorkspace = () => {
             <Button
               type="button"
               variant="outline"
-              aria-label="Edit layout"
+              aria-label="Rearrange layout"
               className="h-8.5 rounded-full px-3 text-xs font-medium"
               onClick={startLayoutEdit}
             >
               <Pencil className="size-3.5" />
-              Edit
+              Rearrange
             </Button>
           )}
         </div>
@@ -534,27 +556,62 @@ const TablesWorkspace = () => {
                   : current,
               );
             }}
-            renderTable={(table) => <ServiceTableTile table={table} />}
-            renderHeadingAction={(group) =>
+            renderTable={(table) =>
               isEditing ? (
-                <CreateServiceTableDialog
+                <ServiceTableTile table={table} />
+              ) : (
+                <ServiceTableCard
                   organizationId={organizationId}
                   storeId={effectiveStoreId}
-                  serviceAreaId={group.areaId}
-                  areaTitle={group.title}
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      aria-label={`Add table to ${group.title}`}
-                      className="h-6 w-6 shrink-0 rounded-full border-border/60 bg-card/50 p-0 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-                    >
-                      <Plus className="size-3.5" />
-                    </Button>
-                  }
+                  areas={layoutAreas}
+                  table={table}
                 />
-              ) : null
+              )
             }
+            renderHeading={(group) => {
+              const headingClassName =
+                "font-display text-left text-sm font-semibold tracking-tight text-foreground sm:text-base";
+              const area = group.areaId
+                ? layoutAreas.find((entry) => entry.id === group.areaId)
+                : undefined;
+
+              if (!isEditing && area) {
+                return (
+                  <ServiceAreaActionsMenu
+                    organizationId={organizationId}
+                    storeId={effectiveStoreId}
+                    area={area}
+                  />
+                );
+              }
+
+              return <h2 className={headingClassName}>{group.title}</h2>;
+            }}
+            renderHeadingAction={(group) => {
+              if (isEditing) return null;
+
+              return (
+                <>
+                  <UpsertServiceTableDialog
+                    organizationId={organizationId}
+                    storeId={effectiveStoreId}
+                    areas={layoutAreas}
+                    serviceAreaId={group.areaId}
+                    areaTitle={group.title}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        aria-label={`Add table to ${group.title}`}
+                        className="h-6 w-6 shrink-0 rounded-full border-border/60 bg-card/50 p-0 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                </>
+              );
+            }}
           />
         </div>
       ) : tables.length === 0 ? (
@@ -570,6 +627,12 @@ const TablesWorkspace = () => {
                   Add an area, then add tables to it for {selectedStoreName}.
                 </EmptyDescription>
               </EmptyHeader>
+              <EmptyContent>
+                <UpsertServiceAreaDialog
+                  organizationId={organizationId}
+                  storeId={effectiveStoreId}
+                />
+              </EmptyContent>
             </Empty>
           </CardContent>
         </Card>
