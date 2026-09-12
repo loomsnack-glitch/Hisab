@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 3: Auth Infrastructure
 
-Status: subphase 3.2 completed with follow-up — ready for 3.3
+Status: completed with follow-up
 
 ## User-facing outcome
 
@@ -146,6 +146,83 @@ Subphase review:
 - Spec: no token is trusted before `GET /auth`; absent/rejected sessions are cleared; protected workspace behavior remains deferred to 3.3.
 
 Next subphase: 3.3 Logout and protected navigation.
+
+## Subphase 3.3 plan — Logout and protected navigation
+
+### Scope
+
+- Add an Admin-owned logout hook using the shared `userLogout` method.
+- Clear the Admin JWT, auth query cache, and in-memory user state after logout succeeds or fails locally.
+- Switch the root navigator between the public auth preview and a protected placeholder workspace using the Admin auth status.
+- Keep the placeholder workspace intentionally empty of dashboard, Organization, or business behavior while proving protected-route ownership.
+- Treat a rejected bootstrap session as the expiry cleanup path for the current infrastructure phase.
+
+### Acceptance criteria
+
+- Signed-out users can only reach the public auth preview route.
+- Signed-in users reach the protected Admin workspace route and cannot reach the public route through the root navigator.
+- Logout marks the session as logging out, disables the logout action, and returns to signed-out/public state after local cleanup.
+- Local cleanup runs even when the server logout request fails.
+- Admin JWT and auth query cache are cleared; POS or Owner User credentials are untouched.
+- Bootstrap rejection clears expired/invalid Admin sessions and routes back to public auth.
+- No dashboard, Organization, login, registration, OTP, or backend contract behavior is added.
+
+### Dependencies and public seams
+
+- Subphase 3.1 auth store and `adminAuthKeys`.
+- Subphase 3.2 bootstrap hook and root loading boundary.
+- Shared `userLogout` and `clearAuthToken` services.
+- Phase 2 `AuthButton` for the placeholder logout action.
+
+### Verification
+
+- `bun run --cwd apps/admin-mobile check-types`
+- Focused auth-state and logout decision tests where pure seams are available.
+- `git diff --check`
+- Read-only boundary scan for POS/Owner User storage and route imports.
+
+### Risks and rollback
+
+- Always clear local Admin state in a `finally`-equivalent path; server logout failure must not leave a local credential active.
+- Use a keyed navigation boundary so authenticated and public route trees are not retained together.
+- Keep the protected screen a placeholder until later product phases define its Organization destination.
+
+### 3.3 implementation record
+
+Status: completed with follow-up
+
+- Added `useAdminLogout` using the shared `userLogout` method and guaranteed local Admin cleanup on settlement.
+- Added protected/public root navigation switching keyed by the Admin auth lifecycle.
+- Added an authenticated placeholder workspace with a loading/disabled sign-out action.
+- Kept the protected workspace free of dashboard, Organization, and business behavior.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun test apps/admin-mobile/src/store/auth-state.test.ts apps/admin-mobile/src/hooks/use-admin-auth-bootstrap.test.ts` — 7 passed.
+- `git diff --check` — passed.
+- Admin mobile boundary scan found no POS, Device Login, Owner User, browser, or duplicate storage imports.
+
+Subphase review:
+
+- Standards: logout orchestration is isolated in a hook, query cleanup uses the Admin-owned key boundary, and public/protected route trees are keyed separately.
+- Spec: local logout cleanup runs from the settlement path, rejected bootstrap sessions are cleared, and no dashboard or Organization behavior was added.
+
+## Phase 3 completion review
+
+Phase 3 is complete with native-runtime follow-ups. Admin auth state, secure-token bootstrap, rejected-session cleanup, logout, and protected/public navigation are implemented and focused checks pass.
+
+Phase commits:
+
+- `a333429 feat(admin-mobile): add auth state seam`
+- `c02f2aa feat(admin-mobile): bootstrap admin auth session`
+- The current Phase 3.3 commit records logout, protected navigation, and this phase completion state.
+
+Deferred validation:
+
+- Android build, emulator, physical-device, and runtime validation remain pending because repository `AGENTS.md` prohibits those commands while planned POS mobile phases remain incomplete.
+
+Next phase: Phase 4 Login.
 
 ## Phase-level non-goals
 

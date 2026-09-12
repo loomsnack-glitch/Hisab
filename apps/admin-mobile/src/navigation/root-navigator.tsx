@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { useAdminAuthBootstrap } from "../hooks/use-admin-auth-bootstrap";
+import AdminWorkspacePlaceholderScreen from "../screens/admin-workspace-placeholder-screen";
 import AuthPreviewScreen from "../screens/auth-preview-screen";
 import SessionStatusScreen from "../screens/session-status-screen";
 import type { RootStackParamList } from "./types";
@@ -15,19 +16,16 @@ const RootNavigator = () => {
         return <SessionStatusScreen title="Checking your session" subtitle="Preparing Ganatri Admin securely." loading />;
     }
 
-    if (auth.status === "signed-in" || auth.status === "logging-out") {
-        return (
-            <SessionStatusScreen
-                title="Session restored"
-                subtitle="Your Admin session is ready. The protected workspace will be connected in the next infrastructure slice."
-            />
-        );
-    }
+    const isAuthenticated = auth.status === "signed-in" || auth.status === "logging-out";
 
     return (
-        <NavigationContainer>
+        <NavigationContainer key={isAuthenticated ? "protected" : "public"}>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="AuthPreview" component={AuthPreviewScreen} />
+                {isAuthenticated ? (
+                    <Stack.Screen name="AdminWorkspace" component={AdminWorkspacePlaceholderScreen} />
+                ) : (
+                    <Stack.Screen name="AuthPreview" component={AuthPreviewScreen} />
+                )}
             </Stack.Navigator>
         </NavigationContainer>
     );

@@ -1,6 +1,6 @@
 # Ganatri Admin Mobile — Planning Status
 
-Status: Phase 3 in progress — subphase 3.2 completed with follow-up; 3.3 next
+Status: Phase 3 completed with follow-up — Phase 4 ready
 
 Last updated: 2026-09-12
 
@@ -22,8 +22,8 @@ Create a new Android-first Ganatri Admin mobile app with the Admin web portal's 
 | 0. Planning and boundary | Approved | Identity, platform, post-registration flow, WhatsApp OTP, English-only auth, and secure storage are approved. |
 | 1. New app foundation | Completed with follow-up | New isolated shell and workspace wiring implemented; focused type validation passed; native runtime/build validation remains pending. |
 | 2. Auth UI foundation | Completed with follow-up | Shell, controls, feedback, and static login/registration compositions are committed; native runtime validation remains pending. |
-| 3. Auth infrastructure | In progress — 3.2 completed with follow-up | Bootstrap and persistence are committed; logout and protected navigation are next. |
-| 4. Login | Not started | Depends on Phase 2 and 3. |
+| 3. Auth infrastructure | Completed with follow-up | Auth state, bootstrap, persistence, logout, and protected/public navigation are committed; native runtime validation remains pending. |
+| 4. Login | Ready | Phase 2 UI and Phase 3 auth infrastructure are ready for password and WhatsApp OTP wiring. |
 | 5. Registration | Not started | Depends on Phase 2 and 3. |
 | 6. Organization landing | Not started | Post-registration behavior is approved; implementation follows auth foundation. |
 | 7. Auth release gate | Not started | Depends on all previous phases. |
