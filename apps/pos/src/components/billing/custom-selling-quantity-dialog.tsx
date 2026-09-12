@@ -135,7 +135,7 @@ const CustomSellingQuantityDialog = ({
           ) : null}
         </div>
 
-        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-b-2xl border-t border-border/60 bg-muted/30 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-b-2xl border-t border-border/60 bg-muted/30 p-3 sm:px-6 sm:py-4">
           <div className="grid w-full grid-cols-2 gap-2">
             <Button
               variant="outline"

@@ -4,13 +4,30 @@ import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-const Toaster = ({ ...props }: ToasterProps) => {
+// Standalone iOS web apps report real safe-area insets; without this, top toasts sit under the status bar / Dynamic Island.
+const toasterOffset = {
+  top: "max(24px, env(safe-area-inset-top, 0px))",
+  right: "max(24px, env(safe-area-inset-right, 0px))",
+  bottom: "max(24px, env(safe-area-inset-bottom, 0px))",
+  left: "max(24px, env(safe-area-inset-left, 0px))",
+}
+
+const toasterMobileOffset = {
+  top: "max(16px, env(safe-area-inset-top, 0px))",
+  right: "max(16px, env(safe-area-inset-right, 0px))",
+  bottom: "max(16px, env(safe-area-inset-bottom, 0px))",
+  left: "max(16px, env(safe-area-inset-left, 0px))",
+}
+
+const Toaster = ({ offset, mobileOffset, ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      offset={offset ?? toasterOffset}
+      mobileOffset={mobileOffset ?? toasterMobileOffset}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />

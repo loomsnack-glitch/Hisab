@@ -444,7 +444,7 @@ const TablesWorkspace = () => {
 
   return (
     <div
-      className="space-y-2"
+      className="space-y-5"
       data-testid="tables-page"
       data-admin-workspace="store"
     >

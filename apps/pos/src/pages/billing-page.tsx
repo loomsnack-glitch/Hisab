@@ -5567,7 +5567,7 @@ const BillingPage = ({
                     </div>
                     )}
 
-                    <DialogFooter className="border-t border-border/50 bg-background/95 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+                    <DialogFooter className="border-t border-border/50 bg-background/95 px-3 py-3 sm:px-6 sm:py-4">
                         {customerCreateOpen ? (
                             <div className="grid w-full grid-cols-2 gap-2">
                                 <Button

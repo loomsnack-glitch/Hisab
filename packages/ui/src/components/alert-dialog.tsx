@@ -5,6 +5,11 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 
 import { cn } from "@repo/ui/lib/utils"
 import { Button } from "@repo/ui/components/button"
+import {
+  capToDialogViewport,
+  DIALOG_VIEWPORT_CENTER_CLASSNAME,
+  dialogViewportCssVars,
+} from "@repo/ui/lib/dialog-viewport"
 
 const getNestedLayerStyle = (
   baseZIndex: number
@@ -36,10 +41,11 @@ const getNestedPopupStyle = (
 ): ((state: any) => React.CSSProperties | undefined) => {
   const zIndex = `calc(${baseZIndex} + (var(--nested-dialogs, 0) * 10))`
 
-  return (state) => ({
-    ...(typeof style === "function" ? style(state) : style),
-    zIndex,
-  })
+  return (state) =>
+    capToDialogViewport({
+      ...(typeof style === "function" ? style(state) : style),
+      zIndex,
+    })
 }
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
@@ -96,13 +102,14 @@ function AlertDialogContent({
           className="pointer-events-none fixed inset-0 hidden bg-black/40 supports-backdrop-filter:backdrop-blur-sm dark:bg-black/55 dark:supports-backdrop-filter:backdrop-blur-md group-has-[[data-nested][data-open]]/alert-dialog-layer:block"
         />
         <div
-          className="flex min-h-full w-full items-center justify-center px-[max(1rem,env(safe-area-inset-left,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]"
+          className={DIALOG_VIEWPORT_CENTER_CLASSNAME}
+          style={dialogViewportCssVars}
         >
           <AlertDialogPrimitive.Popup
             data-slot="alert-dialog-content"
             data-size={size}
             className={cn(
-              "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content relative grid w-full max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem)] shrink-0 outline-none transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50",
+              "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 gap-4 rounded-xl p-4 ring-1 duration-100 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm group/alert-dialog-content relative grid w-full max-h-[var(--dialog-max-height)] min-h-0 shrink-0 outline-none transition-[scale,opacity] duration-100 data-nested-dialog-open:scale-[calc(1-0.02*var(--nested-dialogs))] data-nested:relative data-nested:z-10 data-nested:shadow-2xl data-nested:ring-foreground/15 after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/30 after:opacity-0 after:transition-opacity after:duration-100 after:pointer-events-none data-nested-dialog-open:after:opacity-100 dark:after:bg-black/50",
               className
             )}
           style={getNestedPopupStyle(style, 60)}
@@ -135,7 +142,7 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end sm:pb-4",
+        "bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
