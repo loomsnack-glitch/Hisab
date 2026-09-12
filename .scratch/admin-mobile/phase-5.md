@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 5: Registration
 
-Status: in progress — subphase 5.2 completed with follow-up; 5.3 next
+Status: completed with follow-up — ready for Phase 6
 
 ## User-facing outcome
 
@@ -109,6 +109,30 @@ Subphase review:
 - Spec: OTP request, verification, expiry, resend, recoverable errors, and protected-route handoff are implemented without assuming an Organization exists.
 
 Next subphase: 5.3 Registration integration review.
+
+## 5.3 implementation record
+
+Status: completed with follow-up
+
+- Reviewed all four registration steps, including forward/back transitions, returning from OTP to password, method switching back to login, and stale timer cleanup.
+- Confirmed duplicate registration, OTP verification, and resend submissions are guarded while pending.
+- Confirmed only complete User/JWT responses enter the existing protected/public navigation boundary.
+- Confirmed optional email is profile data only; it is not an OTP channel or fallback.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Focused Admin auth suite — 14 passed across bootstrap, auth-state, login-session, registration-session, and OTP timing tests.
+- `git diff --check` — passed.
+- Registration source boundary scan found no POS, Device Login, Owner User, browser, Organization, or alternate OTP-channel behavior.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Phase review:
+
+- Standards: the registration screen is app-owned, uses shared schemas/services, and keeps session material behind the existing secure seam.
+- Spec: the approved four-step WhatsApp registration flow is complete; Organization behavior remains exclusively in Phase 6.
+
+Phase 5 is complete with native validation follow-up. Phase 6 Organization landing is next.
 
 ## Phase-level non-goals
 
