@@ -4,6 +4,7 @@ import { clearAuthToken, hydrateAuthToken, userAuthenticate } from "@repo/servic
 import type { BaseAuthResponse, ServiceResponse } from "@repo/types";
 import { adminAuthKeys } from "../lib/auth-keys";
 import { useAdminAuthActions, useAdminAuthStatus } from "../store/auth.store";
+import type { AdminAuthStatus } from "../store/auth-state";
 
 export const resolveBootstrapUser = (
     response: ServiceResponse<BaseAuthResponse | null> | undefined,
@@ -14,6 +15,11 @@ export const shouldClearBootstrapSession = (
     isSettled: boolean,
     isError = false,
 ) => isSettled && (isError || response?.status !== "success" || !response.data?.user);
+
+export const shouldClearMissingBootstrapToken = (
+    hasToken: boolean,
+    status: AdminAuthStatus,
+) => !hasToken && status !== "signed-in" && status !== "logging-out";
 
 const clearAdminToken = async () => {
     try {
@@ -62,10 +68,12 @@ export const useAdminAuthBootstrap = () => {
     useEffect(() => {
         if (!tokenHydrated) return;
 
-        if (!hasToken) {
+        if (shouldClearMissingBootstrapToken(hasToken, status)) {
             clearSession();
             return;
         }
+
+        if (!hasToken) return;
 
         if (
             shouldClearBootstrapSession(
@@ -83,7 +91,7 @@ export const useAdminAuthBootstrap = () => {
         if (user) {
             setAuthenticated(user);
         }
-    }, [authQuery.data, authQuery.isError, authQuery.isSuccess, clearSession, hasToken, setAuthenticated, tokenHydrated]);
+    }, [authQuery.data, authQuery.isError, authQuery.isSuccess, clearSession, hasToken, setAuthenticated, status, tokenHydrated]);
 
     return {
         status,

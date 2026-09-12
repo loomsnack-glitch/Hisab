@@ -10,7 +10,6 @@ import {
     type RegisterFormJSON,
 } from "@repo/types";
 import AuthButton from "../components/auth/auth-button";
-import AuthFeedback from "../components/auth/auth-feedback";
 import AuthField from "../components/auth/auth-field";
 import AuthShell from "../components/auth/auth-shell";
 import OtpField from "../components/auth/otp-field";
@@ -18,9 +17,9 @@ import PhoneNumberField from "../components/auth/phone-number-field";
 import { adminAuthKeys } from "../lib/auth-keys";
 import { getAuthErrorMessage } from "../lib/auth-errors";
 import { resolveAuthSession } from "../lib/auth-session";
+import { showAuthToast } from "../lib/auth-toast";
 import {
     createOtpTiming,
-    formatOtpCountdown,
     getRemainingSeconds,
 } from "../lib/otp-timing";
 import { useAdminAuthActions } from "../store/auth.store";
@@ -30,6 +29,11 @@ type RegistrationScreenProps = {
 };
 
 type RegistrationStep = "phone" | "profile" | "password" | "otp";
+
+type RegistrationFeedback = {
+    message: string;
+    tone: "error" | "info" | "success";
+};
 
 const STEP_NUMBERS: Record<RegistrationStep, number> = {
     phone: 1,
@@ -54,7 +58,7 @@ const defaultValues: RegisterFormJSON = {
 const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
     const [step, setStep] = useState<RegistrationStep>("phone");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [feedback, setFeedback] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<RegistrationFeedback | null>(null);
     const [otpTiming, setOtpTiming] = useState<{
         expiresAt: number;
         resendAvailableAt: number;
@@ -75,6 +79,17 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
         const timer = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(timer);
     }, [otpTiming]);
+
+    useEffect(() => {
+        if (feedback) {
+            showAuthToast(feedback.message, feedback.tone);
+        }
+    }, [feedback]);
+
+    const setFeedbackMessage = (
+        message: string,
+        tone: RegistrationFeedback["tone"] = "error",
+    ) => setFeedback({ message, tone });
 
     const otpExpiresIn = otpTiming
         ? getRemainingSeconds(otpTiming.expiresAt, now)
@@ -126,7 +141,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             });
 
             if (response.status === "error") {
-                setFeedback(response.message || "Unable to create your account.");
+                setFeedbackMessage(response.message || "Unable to create your account.");
                 return;
             }
 
@@ -137,7 +152,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                 setOtpTiming(createOtpTiming(issuedAt));
                 setNow(issuedAt);
                 setStep("otp");
-                setFeedback(response.message || "Verification code sent on WhatsApp.");
+                setFeedbackMessage(response.message || "Verification code sent on WhatsApp.", "info");
                 return;
             }
 
@@ -149,9 +164,9 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                 return;
             }
 
-            setFeedback("Registration did not start phone verification. Please try again.");
+            setFeedbackMessage("Registration did not start phone verification. Please try again.");
         } catch (error) {
-            setFeedback(
+            setFeedbackMessage(
                 getAuthErrorMessage(error, "Unable to create your account. Please try again."),
             );
         } finally {
@@ -161,7 +176,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
 
     const submitOtp: SubmitHandler<RegisterFormJSON> = async (values) => {
         if (otpExpired) {
-            setFeedback("This code has expired. Request a new code to continue.");
+            setFeedbackMessage("This code has expired. Request a new code to continue.");
             return;
         }
 
@@ -174,7 +189,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             });
 
             if (response.status === "error") {
-                setFeedback(response.message || "The verification code could not be accepted.");
+                setFeedbackMessage(response.message || "The verification code could not be accepted.");
                 return;
             }
 
@@ -183,13 +198,13 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                 setOtpTiming(createOtpTiming(issuedAt));
                 setNow(issuedAt);
                 form.setValue("otp", "");
-                setFeedback(response.message || "A new verification code was sent on WhatsApp.");
+                setFeedbackMessage(response.message || "A new verification code was sent on WhatsApp.", "info");
                 return;
             }
 
             const session = resolveAuthSession(response);
             if (!session) {
-                setFeedback("Registration did not return a valid session. Please try again.");
+                setFeedbackMessage("Registration did not return a valid session. Please try again.");
                 return;
             }
 
@@ -197,7 +212,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             setAuthenticated(session.user);
             queryClient.setQueryData(adminAuthKeys.me, response);
         } catch (error) {
-            setFeedback(
+            setFeedbackMessage(
                 getAuthErrorMessage(error, "Unable to verify your account. Please try again."),
             );
         } finally {
@@ -220,7 +235,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             });
 
             if (response.status === "error") {
-                setFeedback(response.message || "Unable to resend the verification code.");
+                setFeedbackMessage(response.message || "Unable to resend the verification code.");
                 return;
             }
 
@@ -228,9 +243,9 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             setOtpTiming(createOtpTiming(issuedAt));
             setNow(issuedAt);
             form.setValue("otp", "");
-            setFeedback(response.message || "A new verification code was sent on WhatsApp.");
+            setFeedbackMessage(response.message || "A new verification code was sent on WhatsApp.", "info");
         } catch (error) {
-            setFeedback(
+            setFeedbackMessage(
                 getAuthErrorMessage(error, "Unable to resend the verification code. Please try again."),
             );
         } finally {
@@ -261,7 +276,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
     if (step === "phone") {
         return (
             <AuthShell
-                title="Create an Admin account"
+                title="Register for Ganatri Admin"
                 subtitle="Start with the phone number you use for Ganatri."
                 stepLabel={stepLabel}
                 currentStep={1}
@@ -287,8 +302,11 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                         accessibilityRole="button"
                         className="items-center"
                     >
-                        <Text className="text-sm font-semibold text-admin-primary">
-                            Already have an account? Sign in
+                        <Text className="text-sm text-admin-muted dark:text-admin-muted-dark">
+                            Already have an account?{" "}
+                            <Text className="font-semibold text-admin-primary">
+                                Login
+                            </Text>
                         </Text>
                     </Pressable>
                 </View>
@@ -359,7 +377,6 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                             />
                         )}
                     />
-                    {feedback ? <AuthFeedback message={feedback} /> : null}
                     <View className="flex-row gap-3">
                         <AuthButton label="Back" variant="secondary" onPress={goBack} />
                         <View className="flex-1">
@@ -415,7 +432,6 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                             />
                         )}
                     />
-                    {feedback ? <AuthFeedback message={feedback} /> : null}
                     <View className="flex-row gap-3">
                         <AuthButton label="Back" variant="secondary" onPress={goBack} />
                         <View className="flex-1">
@@ -451,40 +467,36 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                         />
                     )}
                 />
-                <Text className="text-center text-sm font-medium text-admin-muted dark:text-admin-muted-dark">
-                    {otpExpired
-                        ? "Code expired"
-                        : `Code expires in ${formatOtpCountdown(otpExpiresIn)}`}
-                </Text>
-                {feedback ? <AuthFeedback message={feedback} /> : null}
+                <View className="items-center">
+                    {resendAvailableIn > 0 ? (
+                        <Text className="text-center text-sm text-admin-muted dark:text-admin-muted-dark">
+                            Didn&apos;t receive it? Resend in {resendAvailableIn}s
+                        </Text>
+                    ) : (
+                        <Pressable
+                            onPress={resendOtp}
+                            accessibilityRole="button"
+                            className="min-h-11 items-center justify-center px-3"
+                        >
+                            <Text className="text-sm font-semibold text-admin-primary">
+                                Didn&apos;t receive it? Resend code
+                            </Text>
+                        </Pressable>
+                    )}
+                </View>
                 <AuthButton
-                    label="Create Admin account"
+                    label="Register"
                     loading={isSubmitting}
                     disabled={otpExpired}
                     onPress={form.handleSubmit(submitOtp)}
                 />
-                {resendAvailableIn > 0 ? (
-                    <Text className="text-center text-sm text-admin-muted dark:text-admin-muted-dark">
-                        Resend code in {resendAvailableIn}s
-                    </Text>
-                ) : (
-                    <Pressable
-                        onPress={resendOtp}
-                        accessibilityRole="button"
-                        className="items-center"
-                    >
-                        <Text className="text-sm font-semibold text-admin-primary">
-                            Resend verification code
-                        </Text>
-                    </Pressable>
-                )}
                 <Pressable
                     onPress={goBack}
                     accessibilityRole="button"
-                    className="items-center"
+                    className="min-h-11 items-center justify-center px-3"
                 >
-                    <Text className="text-sm font-semibold text-admin-primary">
-                        Back
+                    <Text className="text-sm font-semibold text-admin-muted dark:text-admin-muted-dark">
+                        Use a different phone number
                     </Text>
                 </Pressable>
             </View>

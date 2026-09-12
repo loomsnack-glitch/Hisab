@@ -1,6 +1,6 @@
 import { ActivityIndicator, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import type { ReactNode } from "react";
+import { SafeAreaView } from "../components/ui/uniwind-native";
 
 type SessionStatusScreenProps = {
     title: string;

@@ -2,7 +2,7 @@
 @import "uniwind";
 
 @theme static {
-  --color-admin-background: #f8fafc;
+  --color-admin-background: #eef2f7;
   --color-admin-background-dark: #0f172a;
   --color-admin-surface: #ffffff;
   --color-admin-surface-dark: #1e293b;
@@ -19,4 +19,5 @@
   --color-admin-success: #16a34a;
   --color-admin-success-surface: #f0fdf4;
   --color-admin-info-surface: #eff6ff;
+  --color-admin-info-surface-dark: #1e3a5f;
 }

@@ -10,18 +10,16 @@ import {
     type LoginFormJSON,
 } from "@repo/types";
 import AuthButton from "../components/auth/auth-button";
-import AuthFeedback from "../components/auth/auth-feedback";
 import AuthField from "../components/auth/auth-field";
-import AuthPreviewSwitcher from "../components/auth/auth-preview-switcher";
 import AuthShell from "../components/auth/auth-shell";
 import OtpField from "../components/auth/otp-field";
 import PhoneNumberField from "../components/auth/phone-number-field";
 import { adminAuthKeys } from "../lib/auth-keys";
 import { getAuthErrorMessage } from "../lib/auth-errors";
 import { resolveAuthSession } from "../lib/auth-session";
+import { showAuthToast } from "../lib/auth-toast";
 import {
     createOtpTiming,
-    formatOtpCountdown,
     getRemainingSeconds,
 } from "../lib/otp-timing";
 import { useAdminAuthActions } from "../store/auth.store";
@@ -47,7 +45,7 @@ const defaultValues: LoginFormJSON = {
 const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
     const { setAuthenticated } = useAdminAuthActions();
     const queryClient = useQueryClient();
-    const [method, setMethod] = useState<LoginMethod>("password");
+    const [method, setMethod] = useState<LoginMethod>("otp");
     const [otpRequested, setOtpRequested] = useState(false);
     const [otpTiming, setOtpTiming] = useState<{
         expiresAt: number;
@@ -69,6 +67,12 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
         const timer = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(timer);
     }, [otpTiming]);
+
+    useEffect(() => {
+        if (feedback) {
+            showAuthToast(feedback.message, feedback.tone);
+        }
+    }, [feedback]);
 
     const otpExpiresIn = otpTiming
         ? getRemainingSeconds(otpTiming.expiresAt, now)
@@ -128,7 +132,7 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             setFeedback({
                 message: getAuthErrorMessage(
                     error,
-                    "Unable to sign in. Please try again.",
+                    "Unable to login. Please try again.",
                 ),
                 tone: "error",
             });
@@ -216,13 +220,6 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
     };
 
     if (otpRequested) {
-        const expiryFeedback = otpExpired
-            ? {
-                  message: "This code has expired. Request a new code to continue.",
-                  tone: "error" as const,
-              }
-            : feedback;
-
         return (
             <AuthShell
                 title="Enter verification code"
@@ -241,47 +238,38 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
                             />
                         )}
                     />
-                    <Text className="text-center text-sm font-medium text-admin-muted dark:text-admin-muted-dark">
-                        {otpExpired
-                            ? "Code expired"
-                            : `Code expires in ${formatOtpCountdown(otpExpiresIn)}`}
-                    </Text>
-                    {expiryFeedback ? (
-                        <AuthFeedback
-                            message={expiryFeedback.message}
-                            tone={expiryFeedback.tone}
-                        />
-                    ) : null}
-                    <AuthButton
-                        label="Verify & sign in"
-                        loading={isSubmitting}
-                        disabled={otpExpired}
-                        onPress={form.handleSubmit(submitOtp)}
-                    />
-                    <View className="items-center gap-3">
+                    <View className="items-center">
                         {resendAvailableIn > 0 ? (
-                            <Text className="text-sm text-admin-muted dark:text-admin-muted-dark">
-                                Resend code in {resendAvailableIn}s
+                            <Text className="text-center text-sm text-admin-muted dark:text-admin-muted-dark">
+                                Didn&apos;t receive it? Resend in {resendAvailableIn}s
                             </Text>
                         ) : (
                             <Pressable
                                 onPress={requestOtp}
                                 accessibilityRole="button"
+                                className="min-h-11 items-center justify-center px-3"
                             >
                                 <Text className="text-sm font-semibold text-admin-primary">
-                                    Resend verification code
+                                    Didn&apos;t receive it? Resend code
                                 </Text>
                             </Pressable>
                         )}
-                        <Pressable
-                            onPress={resetOtpFlow}
-                            accessibilityRole="button"
-                        >
-                            <Text className="text-sm font-semibold text-admin-primary">
-                                Use a different phone number
-                            </Text>
-                        </Pressable>
                     </View>
+                    <AuthButton
+                        label="Verify & login"
+                        loading={isSubmitting}
+                        disabled={otpExpired}
+                        onPress={form.handleSubmit(submitOtp)}
+                    />
+                    <Pressable
+                        onPress={resetOtpFlow}
+                        accessibilityRole="button"
+                        className="min-h-11 items-center justify-center px-3"
+                    >
+                        <Text className="text-sm font-semibold text-admin-muted dark:text-admin-muted-dark">
+                            Use a different phone number
+                        </Text>
+                    </Pressable>
                 </View>
             </AuthShell>
         );
@@ -289,18 +277,12 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
 
     return (
         <AuthShell
-            title="Sign in to Ganatri Admin"
+            title="Login to Ganatri Admin"
             subtitle="Manage your organization from a secure admin workspace."
         >
-            <AuthPreviewSwitcher
-                mode="login"
-                onChange={(nextMode) =>
-                    nextMode === "register" && onSwitchToRegister()
-                }
-            />
             <View className="gap-5">
                 <View className="flex-row rounded-2xl border border-admin-border bg-admin-background p-1 dark:border-admin-border-dark dark:bg-admin-background-dark">
-                    {(["password", "otp"] as const).map((option) => (
+                    {(["otp", "password"] as const).map((option) => (
                         <Pressable
                             key={option}
                             className={`flex-1 items-center rounded-xl px-3 py-2.5 ${
@@ -356,11 +338,8 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
                         )}
                     />
                 ) : null}
-                {feedback ? (
-                    <AuthFeedback message={feedback.message} tone={feedback.tone} />
-                ) : null}
                 <AuthButton
-                    label={method === "password" ? "Sign in" : "Send WhatsApp code"}
+                    label={method === "password" ? "Login" : "Send WhatsApp code"}
                     loading={isSubmitting}
                     onPress={
                         method === "password"
@@ -371,12 +350,12 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             </View>
             <View className="mt-5 items-center">
                 <Text className="text-sm text-admin-muted dark:text-admin-muted-dark">
-                    New to Ganatri?{" "}
+                    Need an account?{" "}
                     <Text
                         className="font-semibold text-admin-primary"
                         onPress={onSwitchToRegister}
                     >
-                        Create an account
+                        Register
                     </Text>
                 </Text>
             </View>

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { AuthenticatedUserDTO, ServiceResponse } from "@repo/types";
-import { resolveBootstrapUser, shouldClearBootstrapSession } from "./use-admin-auth-bootstrap";
+import {
+    resolveBootstrapUser,
+    shouldClearBootstrapSession,
+    shouldClearMissingBootstrapToken,
+} from "./use-admin-auth-bootstrap";
 
 const user = { id: "user-1" } as AuthenticatedUserDTO;
 
@@ -58,5 +62,9 @@ describe("Admin auth bootstrap response", () => {
         } satisfies ServiceResponse<{ user: AuthenticatedUserDTO }>;
 
         expect(shouldClearBootstrapSession(response, true, true)).toBe(true);
+    });
+
+    it("does not clear a session after login when bootstrap still has its startup token state", () => {
+        expect(shouldClearMissingBootstrapToken(false, "signed-in")).toBe(false);
     });
 });

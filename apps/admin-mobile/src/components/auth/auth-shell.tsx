@@ -37,6 +37,8 @@ const AuthShell = ({
                     className="flex-1"
                     contentContainerClassName="grow px-5"
                     contentContainerStyle={{
+                        flexGrow: 1,
+                        paddingHorizontal: 20,
                         paddingTop: insets.top + 24,
                         paddingBottom: insets.bottom + 28,
                     }}

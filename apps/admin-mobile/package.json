@@ -10,6 +10,7 @@
     "@repo/services": "workspace:*",
     "@repo/types": "workspace:*",
     "@tanstack/react-query": "^5.101.1",
+    "country-list": "^2.4.1",
     "expo": "~56.0.12",
     "expo-constants": "^56.0.18",
     "expo-crypto": "~56.0.5",
@@ -20,10 +21,11 @@
     "react-native-keychain": "^10.0.0",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.25.2",
+    "react-native-toast-message": "^2.5.2",
     "tailwindcss": "^4.3.1",
     "uniwind": "^1.9.0",
-    "zustand": "^5.0.14",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

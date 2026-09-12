@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { AuthPreviewMode } from "../components/auth/auth-preview-switcher";
 import LoginScreen from "./login-screen";
 import RegistrationScreen from "./registration-screen";
+
+type AuthPreviewMode = "login" | "register";
 
 const AuthPreviewScreen = () => {
     const [mode, setMode] = useState<AuthPreviewMode>("login");

@@ -13,6 +13,7 @@ import AuthButton from "../components/auth/auth-button";
 import AuthFeedback from "../components/auth/auth-feedback";
 import AuthField from "../components/auth/auth-field";
 import AuthShell from "../components/auth/auth-shell";
+import ThemeToggle from "../components/ui/theme-toggle";
 import { useAdminLogout } from "../hooks/use-admin-logout";
 import SessionStatusScreen from "./session-status-screen";
 import { adminOrganizationKeys } from "../lib/organization-keys";
@@ -130,16 +131,19 @@ const OrganizationPicker = ({
     signingOut,
 }: OrganizationPickerProps) => (
     <View className="flex-1 bg-admin-background px-5 py-8 dark:bg-admin-background-dark">
-        <View className="mb-8">
-            <Text className="text-xs font-semibold uppercase tracking-[2px] text-admin-primary">
-                Ganatri Admin
-            </Text>
-            <Text className="mt-2 text-3xl font-bold text-admin-foreground dark:text-admin-foreground-dark">
-                Choose an organization
-            </Text>
-            <Text className="mt-2 text-base leading-6 text-admin-muted dark:text-admin-muted-dark">
-                Select the workspace you want to manage.
-            </Text>
+        <View className="mb-8 flex-row items-start justify-between">
+            <View className="flex-1 pr-4">
+                <Text className="text-xs font-semibold uppercase tracking-[2px] text-admin-primary">
+                    Ganatri Admin
+                </Text>
+                <Text className="mt-2 text-3xl font-bold text-admin-foreground dark:text-admin-foreground-dark">
+                    Choose an organization
+                </Text>
+                <Text className="mt-2 text-base leading-6 text-admin-muted dark:text-admin-muted-dark">
+                    Select the workspace you want to manage.
+                </Text>
+            </View>
+            <ThemeToggle />
         </View>
         <View className="gap-3">
             {organizations.map((organization) => (
@@ -195,10 +199,13 @@ const OrganizationWorkspace = ({
 }: OrganizationWorkspaceProps) => (
     <View className="flex-1 bg-admin-background px-5 py-8 dark:bg-admin-background-dark">
         <View className="flex-1 justify-center">
-            <View className="mb-6 h-14 w-14 items-center justify-center rounded-2xl bg-admin-primary">
-                <Text className="text-2xl font-bold text-admin-primary-foreground">
-                    {organization.name.slice(0, 1).toUpperCase()}
-                </Text>
+            <View className="mb-6 flex-row items-start justify-between">
+                <View className="h-14 w-14 items-center justify-center rounded-2xl bg-admin-primary">
+                    <Text className="text-2xl font-bold text-admin-primary-foreground">
+                        {organization.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                </View>
+                <ThemeToggle />
             </View>
             <Text className="text-xs font-semibold uppercase tracking-[2px] text-admin-primary">
                 Ganatri Admin workspace
