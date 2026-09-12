@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 6: Organization Landing
 
-Status: in progress — subphase 6.3 completed with follow-up; 6.4 next
+Status: completed with follow-up — ready for Phase 7
 
 ## User-facing outcome
 
@@ -116,6 +116,29 @@ Subphase review:
 - Spec: one Organization opens directly, multiple use a picker, and zero uses setup; no Organization is silently inferred during registration.
 
 Next subphase: 6.4 Organization integration review.
+
+## 6.4 implementation record
+
+Status: completed with follow-up
+
+- Reviewed the complete zero/one/multiple Organization transition set, including query loading, service-response errors, retry, creation invalidation, selection, change-organization, and logout.
+- Confirmed the protected root cannot render Organization landing while the Admin auth bootstrap is signed out or pending.
+- Confirmed the workspace is deliberately bounded and does not expose catalog, billing, POS, or broader Admin modules.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Full Admin mobile focused suite — 17 passed across auth, registration, OTP timing, and Organization routing tests.
+- `git diff --check` — passed.
+- Organization landing boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage dependency; deferred-module words only occur in explanatory copy.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Phase review:
+
+- Standards: Organization query state, creation, and selection stay inside the Admin mobile boundary and shared services; routing policy is pure and testable.
+- Spec: zero Organizations use setup, one opens directly, and multiple use a picker, with explicit recoverable states and no hidden Organization assumption.
+
+Phase 6 is complete with native validation follow-up. Phase 7 Auth release gate is next.
 
 ## Phase-level non-goals
 
