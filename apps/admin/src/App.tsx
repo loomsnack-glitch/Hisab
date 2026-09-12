@@ -7,6 +7,7 @@ import SplashLoader from "@repo/ui/components/loaders/splash-loader";
 import AuthenticatedHomeRedirect from "@/components/dashboard/authenticated-home-redirect";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import BillingPage from "@/pages/billing-page";
+import StoreWorkspaceBillingPage from "@/pages/store-workspace-billing-page";
 import LoginPage from "@/pages/login-page";
 import OrganizationsPage from "@/pages/organizations-page";
 import RegisterPage from "@/pages/register-page";
@@ -173,6 +174,8 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/devices" element={<StoreWorkspaceDevicesPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/settings" element={<StoreWorkspaceSettingsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/license" element={<StoreWorkspaceLicensePage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/billing" element={<StoreWorkspaceBillingPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />
                                     <Route path="devices" element={<StoreDevicesPage />} />
@@ -191,7 +194,6 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
                                 <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
-                                <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/expense-categories" element={<Navigate to="../expenses?tab=categories" replace />} />
                                 <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />

@@ -12,8 +12,8 @@ This makes it difficult for waiters and cashiers to coordinate service, find the
 
 Add a store-scoped table-service capability with two views:
 
-- **Admin → Tables** lets a manager create Service Tables using a required store-unique **Table no** label and optional **Persons no** capacity, then arrange table-shaped boxes by drag and drop to match that Store’s floor.
-- **POS → Tables** shows the same floor as a live operational view. Each table box shows its label, its optional person count centered beneath the box, the current table state, and the current bill total when one exists. Staff can allocate a free table, start and resume its Draft Sale, mark it ready to bill, place and print the bill, collect its Payment, and manually free the table.
+- **Admin → Store workspace → Tables** lets a manager create Service Tables using a required store-unique **Table no** label and optional **Persons no** capacity, then arrange table-shaped boxes in their saved order within a simple grid.
+- **POS → Tables** shows the same saved grid order as a live operational view. Each table box shows its label, its optional person count centered beneath the box, the current table state, and the current bill total when one exists. Staff can allocate a free table, start and resume its Draft Sale, mark it ready to bill, place and print the bill, collect its Payment, and manually free the table.
 
 The table lifecycle is explicit:
 
@@ -25,19 +25,19 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 
 ## User Stories
 
-1. As an administrator, I want a Tables destination in the Admin sidebar, so that I can configure the floor for a specific Store.
-2. As an administrator, I want to select the Store whose tables I am managing, so that each branch has its own independent floor plan.
+1. As an administrator, I want a Tables destination in a selected Store workspace, so that I can configure that Store’s tables.
+2. As an administrator, I want each Store workspace to show only its own tables, so that table setup never falls back to Organization-wide data.
 3. As an administrator, I want to create a Service Table with a required Table no label, so that staff can identify the physical table.
 4. As an administrator, I want the Table no label to accept meaningful short labels such as `1`, `A1`, `Patio-2`, or `Counter`, so that the system reflects the store’s real naming convention.
 5. As an administrator, I want duplicate Table no labels rejected within the same Store, so that staff cannot open the wrong table.
 6. As an administrator, I want the same label to be allowed in different Stores, so that each branch can use its own layout.
 7. As an administrator, I want to optionally record a positive whole-number Persons no capacity, so that staff can see how many guests a table normally seats.
 8. As an administrator, I want to leave Persons no blank, so that a useful table can be configured even when its capacity is unknown.
-9. As an administrator, I want every configured table rendered as a table-like box, so that the layout looks like the physical service area rather than a generic list.
+9. As an administrator, I want every configured table rendered as a table-like box in a simple grid, so that the layout is easy to scan.
 10. As an administrator, I want the optional person count displayed below the center of the table box, so that capacity is visible without obscuring the table label or status.
-11. As an administrator, I want to drag and drop table boxes around the floor canvas, so that the arrangement matches the café or store seating area.
-12. As an administrator, I want layout changes to remain after reopening the page, so that I do not need to rebuild the floor each time.
-13. As an administrator, I want table configuration to be available only in the Admin workspace, so that store setup stays separate from point-of-sale operations.
+11. As an administrator, I want to drag and drop table boxes within their Service Area grid, so that I can set a useful display order.
+12. As an administrator, I want saved table and Service Area order to remain after reopening the page, so that the grid stays familiar.
+13. As an administrator, I want table configuration to be available only in a selected Store workspace, so that table setup stays scoped to one Store and separate from point-of-sale operations.
 14. As a POS operator, I want a Tables destination in the Ganatri POS sidebar, so that I can work from a live table-oriented view.
 15. As a POS operator, I want to see every Service Table for my device’s Store, so that I can assess the current service area at a glance.
 16. As a POS operator, I want each table to visibly distinguish Free, Allocated, Engaged, Ready to bill, Payment due, and Paid, so that I know the next action without opening every bill.
@@ -65,22 +65,22 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 38. As a cashier, I want to free a Payment due table while preserving its unpaid or partial Sale, so that a guest who leaves or absconds does not block the physical table.
 39. As a cashier, I want the released due bill to keep its original table association in history, so that staff can later trace where the unpaid bill originated.
 40. As a POS operator, I want a table released with bill due to accept a new allocation and order, so that an old debt never prevents a new guest from using the physical table.
-41. As an administrator, I want historical table-linked sales to retain their original table context after the floor changes, so that receipt and due-history interpretation remain reliable.
+41. As an administrator, I want historical table-linked sales to retain their original table context after table configuration changes, so that receipt and due-history interpretation remain reliable.
 42. As a POS operator, I want all authenticated Store Devices to use the same table workflow, so that waiters and cashiers can cooperate across devices in the same Store.
 43. As a store owner, I want no new waiter/cashier permission system in this release, so that existing device-authenticated POS access remains simple.
 44. As a store owner, I want admin billing to remain read-only, so that table-service configuration is not mistaken for permission to create or alter Sales from the Admin workspace.
 45. As a POS operator, I want table operations to remain confined to my device’s Store, so that tables and their bills never cross Store boundaries.
-46. As an administrator, I want to see which Service Tables belong to a selected Service Area, so that I can review that part of the floor.
+46. As an administrator, I want to see which Service Tables belong to a selected Service Area, so that I can review that group in the grid.
 47. As an administrator, I want to assign Unassigned Service Tables to a Service Area, so that those tables belong to that part of the floor.
 48. As an administrator, I want to unassign a table from its Service Area, so that it becomes available for another area.
 49. As an administrator, I want a table that already belongs to one Service Area rejected from assignment to another until I unassign it first, so that tables cannot silently move between areas.
 50. As an administrator, I want deleting a Service Area to unassign its tables rather than delete them, so that the tables remain configured for the Store.
-51. As an administrator or POS operator, I want Simple view to group tables under their Service Area headings, so that the floor is scanned by area rather than as one flat list.
+51. As an administrator or POS operator, I want the grid to group tables under their Service Area headings, so that tables are scanned by area rather than as one flat list.
 
 ## Implementation Decisions
 
-- Introduce a store-owned **Service Table** model. Its required `tableLabel` is trimmed, short, and unique within its Store; uniqueness is enforced case-insensitively. Its optional `capacity` is a positive whole number. The model also persists its floor position and its current operational state.
-- Persist floor coordinates as normalized positions within a logical floor canvas rather than raw viewport pixels. This keeps a layout usable across desktop and smaller POS screens. Use a fixed table-box presentation in this release; the Store layout records placement, not arbitrary furniture geometry.
+- Introduce a store-owned **Service Table** model. Its required `tableLabel` is trimmed, short, and unique within its Store; uniqueness is enforced case-insensitively. Its optional `capacity` is a positive whole number. The model persists its current operational state and its ordinal position within its Service Area or the Unassigned group.
+- Persist Service Area order and Service Table order as integer sort values. Render those values as a responsive simple grid; dragging changes order only and never records floor coordinates.
 - Give the Service Table a current state: `free`, `allocated`, `engaged`, `ready_to_bill`, `payment_due`, or `paid`. Only explicit table-service commands perform state transitions; a browser client must not be trusted to write an arbitrary state.
 - Keep a `currentSaleId` (nullable) on the Service Table for the bill currently occupying that physical table. Keep a nullable `serviceTableId` on Sales as the historical Table-Linked Sale association. Releasing a table clears its `currentSaleId` and changes its state to `free`; it does not erase the Sale’s `serviceTableId`.
 - Create a Store-scoped uniqueness safeguard for a table’s draft order, backed by transactional table/sale locking. A table can have one Active Table Sale at most, while previously released due Sales may remain historically linked to the same table.
@@ -96,20 +96,20 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 - Free table with bill due is a deliberate release command for a currently `payment_due` table. It preserves the outstanding Sale, total, payment status, and historical `serviceTableId`; it does not forgive debt, void the Sale, or affect a Customer ledger beyond the normal recorded balance.
 - Manually free a `paid` table by clearing its current sale. Do not automatically free a table after payment, because service staff may need to wait for guests to leave or the table to be cleaned.
 - Add typed DTOs, request schemas, query keys, client service functions, backend routes, application-service commands, and repositories for the table model and live table view. Admin configuration routes remain user-authenticated and explicitly Store-scoped. POS operational routes derive Store scope from the authenticated Store Device, following the existing device-scoped billing-route rule.
-- A Service Table may belong to at most one Service Area through a nullable area association. Only Unassigned Service Tables can be assigned to an area. A table already assigned to another area must be unassigned first; there is no direct move between areas. Deleting an area unassigns its tables and does not delete the tables. Area assignment is admin configuration only and does not change table operational state. Simple view groups tables under each Service Area heading and lists Unassigned tables last; Floor layout remains a single canvas.
-- Add **Tables** to both workspace route trees. Admin Tables is a manager configuration screen. POS Tables is a live floor/status screen and hands table drafts into the existing POS composer instead of duplicating product-selection, settlement, invoice, or printing UI.
+- A Service Table may belong to at most one Service Area through a nullable area association. Only Unassigned Service Tables can be assigned to an area. A table already assigned to another area must be unassigned first; there is no direct move between areas. Deleting an area unassigns its tables and does not delete the tables. Area assignment is admin configuration only and does not change table operational state. The grid groups tables under each Service Area heading and lists Unassigned tables last.
+- Add **Tables** only to the selected Store workspace route in Admin. POS Tables is a live grid/status screen and hands table drafts into the existing POS composer instead of duplicating product-selection, settlement, invoice, or printing UI.
 - Keep access role-neutral: every Active Store Device may allocate, order, mark ready, place, collect, cancel, and release tables. No waiter/cashier role or per-action authorization schema is added.
 - Maintain the current read-only Admin Billing boundary. The Admin Tables page manages Service Table configuration and layout only; Sales and Payments remain writable only through device-authenticated POS flows.
 
 ## Testing Decisions
 
 - Test observable outcomes at the table-service application-service boundary: returned table state, current-sale linkage, persisted Table-Linked Sale association, Sale status, Payment status, totals, and Customer Ledger effects. Do not assert private helper calls or UI implementation structure.
-- Add contract tests for Service Table creation and update payloads: trimmed labels, per-Store uniqueness behavior, optional positive integer capacity, valid floor coordinates, and rejection of invalid states or cross-Store identifiers. Follow the existing Zod billing-contract tests in the types package. Cover Service Area assignment payloads and rejection of writing `serviceAreaId` through the generic table update contract.
+- Add contract tests for Service Table creation and update payloads: trimmed labels, per-Store uniqueness behavior, optional positive integer capacity, and rejection of invalid states or cross-Store identifiers. Follow the existing Zod billing-contract tests in the types package. Cover Service Area assignment payloads and rejection of writing `serviceAreaId` through the generic table update contract.
 - Add service tests following the existing billing service’s repository-mocked test style. Cover allocation with no Sale, freeing allocation with no bill, start order, one-current-draft enforcement, resume/update, ready-to-bill, canceling a draft, commit-and-print handoff, paid, partial, due, collection, manual release, and free-with-bill-due. Cover assigning Unassigned Service Tables to an area, rejecting a table already assigned to another area, and unassigning a table from the selected area.
 - Test the receivable-rule change through billing service behavior: committed Due and partial Sales with customer-only, table-only, both, and neither; confirm ledger entries only exist for a Customer-linked Sale; confirm later collection works for a customerless due Sale.
 - Add persistence/migration coverage for Store isolation, case-insensitive table-label uniqueness, historical Sale table linkage after release, and a new draft being allowed after an earlier due Sale is released.
 - Test concurrent Start order attempts so only one Draft Sale becomes the table’s Active Table Sale, and test concurrent release/payment commands so table state and Sale state cannot diverge.
-- Extend the existing POS route-context and navigation tests for the Tables route, and add user-behavior tests for table card actions and composer handoff. The tests should verify state/action visibility and inputs/outputs, not CSS class names or component internals.
+- Extend the existing Admin Store-workspace and POS route-context/navigation tests for the Tables route, and add user-behavior tests for table card actions and composer handoff. The tests should verify state/action visibility and inputs/outputs, not CSS class names or component internals.
 - Preserve and run existing billing tests for trusted snapshot pricing, Draft Sale deletion, commit, payment collection, sale-number assignment, and printing payloads, since table service composes those existing paths.
 
 ## Out of Scope
@@ -118,7 +118,7 @@ Cashiers may also use **Free table with bill due** for an unpaid or partially pa
 - Automated state changes, automatic receipt printing, auto-freeing after payment, timers, table turnover alerts, or cleaning workflows.
 - Kitchen-order tickets, kitchen display integration, table-side printer routing, and restaurant course management.
 - Splitting one table bill, merging tables, moving an active order between tables, or multiple simultaneous current orders on one table.
-- Custom table shapes, rotation, walls, furniture, seating diagrams beyond the optional capacity number, or multi-floor layout editing.
+- Coordinate-based floor canvases, custom table shapes, rotation, walls, furniture, seating diagrams beyond the optional capacity number, or multi-floor layout editing.
 - Writing off, forgiving, sending reminders for, or reconciling a Released Table Due. The feature only preserves the outstanding Sale and permits ordinary future Payment collection.
 - Changing payment-method taxonomy by adding an `unpaid` tender; existing Due settlement remains the representation of no money collected.
 - Deleting or archiving Service Tables and retroactively changing historical table associations.

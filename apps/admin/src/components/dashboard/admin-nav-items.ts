@@ -1,349 +1,392 @@
 import type { LucideIcon } from "lucide-react";
 import {
-    Armchair,
-    BadgeCheck,
-    Banknote,
-    BarChart3,
-    Contact,
-    MonitorSmartphone,
-    Package2,
-    ReceiptText,
-    Ruler,
-    Settings2,
-    ShoppingBag,
-    Truck,
-    Users,
-    Wallet,
+  Armchair,
+  BadgeCheck,
+  Banknote,
+  BarChart3,
+  Contact,
+  MonitorSmartphone,
+  Package2,
+  ReceiptText,
+  Ruler,
+  Settings2,
+  ShoppingBag,
+  Truck,
+  Users,
+  Wallet,
 } from "lucide-react";
 
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { getOrganizationAppearancePath } from "@/lib/default-org-path";
 import {
-    getStoreAppearancePath,
-    getStoreDevicesPath,
-    getStoreLicensePath,
-    getStoreProductsPath,
-    getStoreSettingsPath,
-    getStoreVendorsPath,
+  getStoreAppearancePath,
+  getStoreBillingPath,
+  getStoreDevicesPath,
+  getStoreLicensePath,
+  getStoreProductsPath,
+  getStoreSettingsPath,
+  getStoreTablesPath,
+  getStoreVendorsPath,
 } from "@/lib/store-workspace-routes";
 
 export type AdminNavIcon = LucideIcon | typeof WhatsAppIcon;
 
 export type AdminNavGroup =
-    | "store"
-    | "organization"
-    | "catalog"
-    | "sales"
-    | "reports"
-    | "finance"
-    | "integrations";
+  | "store"
+  | "organization"
+  | "catalog"
+  | "sales"
+  | "reports"
+  | "finance"
+  | "integrations";
 
 export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
-    store: "Store",
-    organization: "Organization",
-    catalog: "Catalog",
-    sales: "Sales & Service",
-    reports: "Reports",
-    finance: "Finance",
-    integrations: "Integrations",
+  store: "Store",
+  organization: "Organization",
+  catalog: "Catalog",
+  sales: "Sales & Service",
+  reports: "Reports",
+  finance: "Finance",
+  integrations: "Integrations",
 };
 
 export const adminNavGroupOrder: AdminNavGroup[] = [
-    "catalog",
-    "store",
-    "sales",
-    "reports",
-    "finance",
-    "integrations",
-    "organization",
+  "catalog",
+  "store",
+  "sales",
+  "reports",
+  "finance",
+  "integrations",
+  "organization",
 ];
 
 export type AdminNavDestination = {
-    id: string;
-    label: string;
-    mobileLabel?: string;
-    icon: AdminNavIcon;
-    requiresOrganization: boolean;
-    path: string;
-    isActive: (pathname: string) => boolean;
-    group: AdminNavGroup;
+  id: string;
+  label: string;
+  mobileLabel?: string;
+  icon: AdminNavIcon;
+  requiresOrganization: boolean;
+  path: string;
+  isActive: (pathname: string) => boolean;
+  group: AdminNavGroup;
 };
 
 type AdminNavDestinationDef = Omit<AdminNavDestination, "path" | "isActive"> & {
-    getPath: (organizationId: string, storeId?: string) => string;
-    isActive: (pathname: string, storeId?: string) => boolean;
-    storeWorkspaceOnly?: boolean;
+  getPath: (organizationId: string, storeId?: string) => string;
+  isActive: (pathname: string, storeId?: string) => boolean;
+  storeWorkspaceOnly?: boolean;
 };
 
 export type VisibleAdminNavArgs = {
-    organizationId?: string;
-    storeId?: string;
-    hasOrganization: boolean;
+  organizationId?: string;
+  storeId?: string;
+  hasOrganization: boolean;
 };
 
 const adminDestinationDefs: AdminNavDestinationDef[] = [
-    {
-        id: "devices",
-        label: "Devices",
-        icon: MonitorSmartphone,
-        requiresOrganization: true,
-        group: "store",
-        storeWorkspaceOnly: true,
-        getPath: (organizationId, storeId) => getStoreDevicesPath(organizationId, storeId ?? ""),
-        isActive: (pathname, storeId) =>
-            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/devices`),
-    },
-    {
-        id: "settings",
-        label: "Settings",
-        icon: Settings2,
-        requiresOrganization: true,
-        group: "store",
-        storeWorkspaceOnly: true,
-        getPath: (organizationId, storeId) => getStoreSettingsPath(organizationId, storeId ?? ""),
-        isActive: (pathname, storeId) =>
-            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/settings`),
-    },
-    {
-        id: "license",
-        label: "License",
-        icon: BadgeCheck,
-        requiresOrganization: true,
-        group: "store",
-        storeWorkspaceOnly: true,
-        getPath: (organizationId, storeId) => getStoreLicensePath(organizationId, storeId ?? ""),
-        isActive: (pathname, storeId) =>
-            Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/license`),
-    },
-    {
-        id: "products",
-        label: "Product",
-        icon: Package2,
-        requiresOrganization: true,
-        group: "catalog",
-        getPath: (organizationId, storeId) =>
-            storeId
-                ? getStoreProductsPath(organizationId, storeId)
-                : `/organizations/${organizationId}/products`,
-        isActive: (pathname, storeId) =>
-            storeId
-                ? pathname.includes(`/workspaces/${storeId}/products`) ||
-                  pathname.includes(`/workspaces/${storeId}/categories`) ||
-                  pathname.includes(`/workspaces/${storeId}/add-ons`)
-                : /\/organizations\/[^/]+\/products(\/|$)/.test(pathname) &&
-                  !pathname.includes("/workspaces/"),
-    },
-    {
-        id: "units",
-        label: "Units",
-        icon: Ruler,
-        requiresOrganization: true,
-        group: "catalog",
-        getPath: (organizationId) => `/organizations/${organizationId}/units`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
-    },
-    {
-        id: "billing",
-        label: "Billing",
-        icon: ReceiptText,
-        requiresOrganization: true,
-        group: "sales",
-        getPath: (organizationId) => `/organizations/${organizationId}/billing`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/billing/.test(pathname),
-    },
-    {
-        id: "tables",
-        label: "Tables",
-        icon: Armchair,
-        requiresOrganization: true,
-        group: "sales",
-        getPath: (organizationId) => `/organizations/${organizationId}/tables`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/tables/.test(pathname),
-    },
-    {
-        id: "customers",
-        label: "Customers",
-        icon: Users,
-        requiresOrganization: true,
-        group: "sales",
-        getPath: (organizationId) => `/organizations/${organizationId}/customers`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/customers/.test(pathname),
-    },
-    {
-        id: "reports",
-        label: "Reports",
-        icon: BarChart3,
-        requiresOrganization: true,
-        group: "reports",
-        getPath: (organizationId) => `/organizations/${organizationId}/reports`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/reports/.test(pathname),
-    },
-    {
-        id: "money-accounts",
-        label: "Money Accounts",
-        icon: Wallet,
-        requiresOrganization: true,
-        group: "finance",
-        getPath: (organizationId) => `/organizations/${organizationId}/money-accounts`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/money-accounts(\/|$)/.test(pathname),
-    },
-    {
-        id: "vendors",
-        label: "Vendors",
-        icon: Truck,
-        requiresOrganization: true,
-        group: "finance",
-        getPath: (organizationId, storeId) =>
-            storeId
-                ? getStoreVendorsPath(organizationId, storeId)
-                : `/organizations/${organizationId}/vendors`,
-        isActive: (pathname, storeId) =>
-            storeId
-                ? pathname.includes(`/workspaces/${storeId}/vendors`)
-                : /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname) &&
-                  !pathname.includes("/workspaces/"),
-    },
-    {
-        id: "purchases",
-        label: "Purchases",
-        icon: ShoppingBag,
-        requiresOrganization: true,
-        group: "finance",
-        getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/purchases(\/|$)/.test(pathname),
-    },
-    {
-        id: "expenses",
-        label: "Expenses",
-        icon: Banknote,
-        requiresOrganization: true,
-        group: "finance",
-        getPath: (organizationId) => `/organizations/${organizationId}/expenses`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/expenses(\/|$)/.test(pathname),
-    },
-    {
-        id: "whatsapp",
-        label: "WhatsApp",
-        icon: WhatsAppIcon,
-        requiresOrganization: true,
-        group: "integrations",
-        getPath: (organizationId) => `/organizations/${organizationId}/whatsapp/accounts`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(pathname),
-    },
-    {
-        id: "google-contacts",
-        label: "Google Contacts",
-        icon: Contact,
-        requiresOrganization: true,
-        group: "integrations",
-        getPath: (organizationId) => `/organizations/${organizationId}/settings`,
-        isActive: (pathname) => /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname),
-    },
-    {
-        id: "appearance",
-        label: "Appearance",
-        icon: Settings2,
-        requiresOrganization: true,
-        group: "organization",
-        getPath: (organizationId, storeId) =>
-            storeId
-                ? getStoreAppearancePath(organizationId, storeId)
-                : getOrganizationAppearancePath(organizationId),
-        isActive: (pathname, storeId) =>
-            pathname === "/appearance" ||
-            pathname === "/settings" ||
-            (storeId
-                ? pathname.includes(`/workspaces/${storeId}/appearance`)
-                : /\/organizations\/[^/]+\/appearance(\/|$)/.test(pathname) &&
-                  !pathname.includes("/workspaces/")),
-    },
+  {
+    id: "devices",
+    label: "Devices",
+    icon: MonitorSmartphone,
+    requiresOrganization: true,
+    group: "store",
+    storeWorkspaceOnly: true,
+    getPath: (organizationId, storeId) =>
+      getStoreDevicesPath(organizationId, storeId ?? ""),
+    isActive: (pathname, storeId) =>
+      Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/devices`),
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings2,
+    requiresOrganization: true,
+    group: "store",
+    storeWorkspaceOnly: true,
+    getPath: (organizationId, storeId) =>
+      getStoreSettingsPath(organizationId, storeId ?? ""),
+    isActive: (pathname, storeId) =>
+      Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/settings`),
+  },
+  {
+    id: "license",
+    label: "License",
+    icon: BadgeCheck,
+    requiresOrganization: true,
+    group: "store",
+    storeWorkspaceOnly: true,
+    getPath: (organizationId, storeId) =>
+      getStoreLicensePath(organizationId, storeId ?? ""),
+    isActive: (pathname, storeId) =>
+      Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/license`),
+  },
+  {
+    id: "products",
+    label: "Product",
+    icon: Package2,
+    requiresOrganization: true,
+    group: "catalog",
+    getPath: (organizationId, storeId) =>
+      storeId
+        ? getStoreProductsPath(organizationId, storeId)
+        : `/organizations/${organizationId}/products`,
+    isActive: (pathname, storeId) =>
+      storeId
+        ? pathname.includes(`/workspaces/${storeId}/products`) ||
+          pathname.includes(`/workspaces/${storeId}/categories`) ||
+          pathname.includes(`/workspaces/${storeId}/add-ons`)
+        : /\/organizations\/[^/]+\/products(\/|$)/.test(pathname) &&
+          !pathname.includes("/workspaces/"),
+  },
+  {
+    id: "units",
+    label: "Units",
+    icon: Ruler,
+    requiresOrganization: true,
+    group: "catalog",
+    getPath: (organizationId) => `/organizations/${organizationId}/units`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/units(\/|$)/.test(pathname),
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    icon: ReceiptText,
+    requiresOrganization: true,
+    group: "sales",
+    getPath: (organizationId, storeId) =>
+      storeId
+        ? getStoreBillingPath(organizationId, storeId)
+        : `/organizations/${organizationId}/billing`,
+    isActive: (pathname, storeId) =>
+      storeId
+        ? pathname.includes(`/workspaces/${storeId}/billing`)
+        : /\/organizations\/[^/]+\/billing/.test(pathname) &&
+          !pathname.includes("/workspaces/"),
+  },
+  {
+    id: "tables",
+    label: "Tables",
+    icon: Armchair,
+    requiresOrganization: true,
+    storeWorkspaceOnly: true,
+    group: "sales",
+    getPath: (organizationId, storeId) =>
+      getStoreTablesPath(organizationId, storeId ?? ""),
+    isActive: (pathname, storeId) =>
+      Boolean(storeId) && pathname.includes(`/workspaces/${storeId}/tables`),
+  },
+  {
+    id: "customers",
+    label: "Customers",
+    icon: Users,
+    requiresOrganization: true,
+    group: "sales",
+    getPath: (organizationId) => `/organizations/${organizationId}/customers`,
+    isActive: (pathname) => /\/organizations\/[^/]+\/customers/.test(pathname),
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    icon: BarChart3,
+    requiresOrganization: true,
+    group: "reports",
+    getPath: (organizationId) => `/organizations/${organizationId}/reports`,
+    isActive: (pathname) => /\/organizations\/[^/]+\/reports/.test(pathname),
+  },
+  {
+    id: "money-accounts",
+    label: "Money Accounts",
+    icon: Wallet,
+    requiresOrganization: true,
+    group: "finance",
+    getPath: (organizationId) =>
+      `/organizations/${organizationId}/money-accounts`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/money-accounts(\/|$)/.test(pathname),
+  },
+  {
+    id: "vendors",
+    label: "Vendors",
+    icon: Truck,
+    requiresOrganization: true,
+    group: "finance",
+    getPath: (organizationId, storeId) =>
+      storeId
+        ? getStoreVendorsPath(organizationId, storeId)
+        : `/organizations/${organizationId}/vendors`,
+    isActive: (pathname, storeId) =>
+      storeId
+        ? pathname.includes(`/workspaces/${storeId}/vendors`)
+        : /\/organizations\/[^/]+\/vendors(\/|$)/.test(pathname) &&
+          !pathname.includes("/workspaces/"),
+  },
+  {
+    id: "purchases",
+    label: "Purchases",
+    icon: ShoppingBag,
+    requiresOrganization: true,
+    group: "finance",
+    getPath: (organizationId) => `/organizations/${organizationId}/purchases`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/purchases(\/|$)/.test(pathname),
+  },
+  {
+    id: "expenses",
+    label: "Expenses",
+    icon: Banknote,
+    requiresOrganization: true,
+    group: "finance",
+    getPath: (organizationId) => `/organizations/${organizationId}/expenses`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/expenses(\/|$)/.test(pathname),
+  },
+  {
+    id: "whatsapp",
+    label: "WhatsApp",
+    icon: WhatsAppIcon,
+    requiresOrganization: true,
+    group: "integrations",
+    getPath: (organizationId) =>
+      `/organizations/${organizationId}/whatsapp/accounts`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/whatsapp(\/|$)/.test(pathname),
+  },
+  {
+    id: "google-contacts",
+    label: "Google Contacts",
+    icon: Contact,
+    requiresOrganization: true,
+    group: "integrations",
+    getPath: (organizationId) => `/organizations/${organizationId}/settings`,
+    isActive: (pathname) =>
+      /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname),
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: Settings2,
+    requiresOrganization: true,
+    group: "organization",
+    getPath: (organizationId, storeId) =>
+      storeId
+        ? getStoreAppearancePath(organizationId, storeId)
+        : getOrganizationAppearancePath(organizationId),
+    isActive: (pathname, storeId) =>
+      pathname === "/appearance" ||
+      pathname === "/settings" ||
+      (storeId
+        ? pathname.includes(`/workspaces/${storeId}/appearance`)
+        : /\/organizations\/[^/]+\/appearance(\/|$)/.test(pathname) &&
+          !pathname.includes("/workspaces/")),
+  },
 ];
 
 export const adminPrimaryMobileNavIds = ["products", "billing"] as const;
 
 const storeWorkspaceDestinationIds = new Set([
-    "devices",
-    "settings",
-    "license",
-    "products",
-    "vendors",
-    "appearance",
+  "devices",
+  "settings",
+  "license",
+  "billing",
+  "tables",
+  "products",
+  "vendors",
+  "appearance",
 ]);
 
 const resolveDestinations = ({
-    organizationId = "",
-    storeId,
-    hasOrganization,
+  organizationId = "",
+  storeId,
+  hasOrganization,
 }: VisibleAdminNavArgs): AdminNavDestination[] =>
-    adminDestinationDefs
-        .filter((destination) =>
-            storeId
-                ? storeWorkspaceDestinationIds.has(destination.id)
-                : !destination.storeWorkspaceOnly,
-        )
-        .filter((destination) => !destination.requiresOrganization || (hasOrganization && Boolean(organizationId)))
-        .map((destination) => ({
-            id: destination.id,
-            label: destination.label,
-            mobileLabel: destination.mobileLabel,
-            icon: destination.icon,
-            requiresOrganization: destination.requiresOrganization,
-            group: destination.group,
-            path: destination.getPath(organizationId, storeId),
-            isActive: (pathname: string) => destination.isActive(pathname, storeId),
-        }));
+  adminDestinationDefs
+    .filter((destination) =>
+      storeId
+        ? storeWorkspaceDestinationIds.has(destination.id)
+        : !destination.storeWorkspaceOnly,
+    )
+    .filter(
+      (destination) =>
+        !destination.requiresOrganization ||
+        (hasOrganization && Boolean(organizationId)),
+    )
+    .map((destination) => ({
+      id: destination.id,
+      label: destination.label,
+      mobileLabel: destination.mobileLabel,
+      icon: destination.icon,
+      requiresOrganization: destination.requiresOrganization,
+      group:
+        storeId && (destination.id === "billing" || destination.id === "tables")
+          ? "store"
+          : destination.group,
+      path: destination.getPath(organizationId, storeId),
+      isActive: (pathname: string) => destination.isActive(pathname, storeId),
+    }));
 
-export const getVisibleAdminWorkspaceDestinations = (args: VisibleAdminNavArgs) =>
-    resolveDestinations(args);
+export const getVisibleAdminWorkspaceDestinations = (
+  args: VisibleAdminNavArgs,
+) => resolveDestinations(args);
 
-export const getVisibleAdminMainDestinations = (args: VisibleAdminNavArgs) => resolveDestinations(args);
+export const getVisibleAdminMainDestinations = (args: VisibleAdminNavArgs) =>
+  resolveDestinations(args);
 
 export type AdminNavGroupedSection = {
-    group: AdminNavGroup;
-    label: string;
-    items: AdminNavDestination[];
+  group: AdminNavGroup;
+  label: string;
+  items: AdminNavDestination[];
 };
 
-export const getGroupedAdminMainDestinations = (args: VisibleAdminNavArgs): AdminNavGroupedSection[] => {
-    const flat = getVisibleAdminMainDestinations(args);
-    const byGroup = new Map<AdminNavGroup, AdminNavDestination[]>();
+export const getGroupedAdminMainDestinations = (
+  args: VisibleAdminNavArgs,
+): AdminNavGroupedSection[] => {
+  const flat = getVisibleAdminMainDestinations(args);
+  const byGroup = new Map<AdminNavGroup, AdminNavDestination[]>();
 
-    for (const item of flat) {
-        const existing = byGroup.get(item.group);
-        if (existing) {
-            existing.push(item);
-        } else {
-            byGroup.set(item.group, [item]);
-        }
+  for (const item of flat) {
+    const existing = byGroup.get(item.group);
+    if (existing) {
+      existing.push(item);
+    } else {
+      byGroup.set(item.group, [item]);
     }
+  }
 
-    return adminNavGroupOrder
-        .filter((group) => byGroup.has(group))
-        .map((group) => ({
-            group,
-            label: adminNavGroupLabels[group],
-            items: byGroup.get(group)!,
-        }));
+  return adminNavGroupOrder
+    .filter((group) => byGroup.has(group))
+    .map((group) => ({
+      group,
+      label: adminNavGroupLabels[group],
+      items: byGroup.get(group)!,
+    }));
 };
 
-export const getVisibleAdminPrimaryMobileDestinations = (args: VisibleAdminNavArgs) => {
-    const visible = resolveDestinations(args);
-    const primary = visible.filter((destination) =>
-        (adminPrimaryMobileNavIds as readonly string[]).includes(destination.id),
-    );
+export const getVisibleAdminPrimaryMobileDestinations = (
+  args: VisibleAdminNavArgs,
+) => {
+  const visible = resolveDestinations(args);
+  const primary = visible.filter((destination) =>
+    (adminPrimaryMobileNavIds as readonly string[]).includes(destination.id),
+  );
 
-    if (primary.length > 0) {
-        return primary;
-    }
+  if (primary.length > 0) {
+    return primary;
+  }
 
-    return [];
+  return [];
 };
 
-export const isAdminMoreDestinationActive = (pathname: string, args: VisibleAdminNavArgs) => {
-    const primary = getVisibleAdminPrimaryMobileDestinations(args);
-    if (primary.some((destination) => destination.isActive(pathname))) {
-        return false;
-    }
+export const isAdminMoreDestinationActive = (
+  pathname: string,
+  args: VisibleAdminNavArgs,
+) => {
+  const primary = getVisibleAdminPrimaryMobileDestinations(args);
+  if (primary.some((destination) => destination.isActive(pathname))) {
+    return false;
+  }
 
-    return getVisibleAdminWorkspaceDestinations(args).some((destination) => destination.isActive(pathname));
+  return getVisibleAdminWorkspaceDestinations(args).some((destination) =>
+    destination.isActive(pathname),
+  );
 };

@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 
-import { organizationKeys, serviceAreaKeys, serviceTableKeys } from "@/lib/query-keys";
+import {
+  organizationKeys,
+  serviceAreaKeys,
+  serviceTableKeys,
+} from "@/lib/query-keys";
 import TablesPage from "@/pages/tables-page";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -48,7 +52,7 @@ const assignedTable: ServiceTableDTO = {
 
 const renderAdminTables = (
   tables: ServiceTableDTO[],
-  path = `/organizations/${organizationId}/tables`,
+  path = `/organizations/${organizationId}/workspaces/${storeId}/tables`,
   areaResult: "success" | "error" = "success",
 ) => {
   const queryClient = new QueryClient();
@@ -101,7 +105,10 @@ const renderAdminTables = (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/organizations/:organizationId/tables" element={<TablesPage />} />
+          <Route
+            path="/organizations/:organizationId/workspaces/:storeId/tables"
+            element={<TablesPage />}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -112,12 +119,18 @@ describe("Admin Service Table setup", () => {
   test("adds tables from a dialog and defaults to the simple aligned grid", () => {
     const markup = renderAdminTables([table]);
 
-    expect(markup).toContain("Add table");
+    expect(markup).toContain("Edit layout");
+    expect(markup).not.toContain("Add area");
+    expect(markup).not.toContain("Add table to Patio");
+    expect(markup).not.toContain("Confirm layout");
+    expect(markup).not.toContain("Remove table T2");
     expect(markup).toContain("service-table-simple-grid");
     expect(markup).toContain("Table T2");
-    expect(markup).toContain("Areas");
+    expect(markup).not.toContain("Table service navigation tabs");
+    expect(markup).not.toContain("service-areas-list");
     expect(markup).not.toContain("floor-canvas");
     expect(markup).not.toContain("e.g. Patio-2");
+    expect(markup).not.toContain("e.g. Outdoor seating near the entrance");
   });
 
   test("groups the simple grid under Service Area headings", () => {
@@ -133,7 +146,7 @@ describe("Admin Service Table setup", () => {
   test("does not relabel assigned tables when Service Areas cannot be loaded", () => {
     const markup = renderAdminTables(
       [assignedTable],
-      `/organizations/${organizationId}/tables`,
+      `/organizations/${organizationId}/workspaces/${storeId}/tables`,
       "error",
     );
 
@@ -142,24 +155,38 @@ describe("Admin Service Table setup", () => {
     expect(markup).not.toContain("Table T1");
   });
 
-  test("opens the Areas tab with assigned tables and add/remove actions", () => {
+  test("ignores the retired Areas tab query and keeps the table grid", () => {
     const markup = renderAdminTables(
       [table, assignedTable],
-      `/organizations/${organizationId}/tables?tab=areas`,
+      `/organizations/${organizationId}/workspaces/${storeId}/tables?tab=areas`,
     );
 
-    expect(markup).toContain("Add area");
-    expect(markup).toContain("service-areas-list");
-    expect(markup).toContain("Area Patio");
-    expect(markup).toContain("Outdoor seating");
-    expect(markup).toContain("Tables in Patio");
-    expect(markup).toContain("Table T1 in Patio");
-    expect(markup).toContain("Add tables");
-    expect(markup).toContain("Remove");
-    expect(markup).not.toContain("Table T2 in Patio");
-    expect(markup).toContain("Edit");
-    expect(markup).toContain("Delete");
-    expect(markup).not.toContain("Add table</button>");
-    expect(markup).not.toContain("service-table-simple-grid");
+    expect(markup).toContain("service-table-simple-grid");
+    expect(markup).toContain("Table T1");
+    expect(markup).toContain("Table T2");
+    expect(markup).toContain("Edit layout");
+    expect(markup).not.toContain("Table service navigation tabs");
+    expect(markup).not.toContain("service-areas-list");
+    expect(markup).not.toContain("Area Patio");
+    expect(markup).not.toContain("Tables in Patio");
+    expect(markup).not.toContain("Add tables");
+  });
+
+  test("locks Store workspace tables to the selected Store", () => {
+    const markup = renderAdminTables(
+      [table],
+      `/organizations/${organizationId}/workspaces/${storeId}/tables`,
+    );
+
+    expect(markup).toContain("Table T2");
+    expect(markup).toContain(">All<");
+    expect(markup).not.toContain("Showing tables");
+    expect(markup).not.toContain("All areas");
+    expect(markup).toContain('data-admin-workspace="store"');
+    expect(markup).toContain("Edit layout");
+    expect(markup).not.toContain("Add area");
+    expect(markup).not.toContain("Add table to Patio");
+    expect(markup).not.toContain("Search tables...");
+    expect(markup).not.toContain("Add a Store first");
   });
 });

@@ -13,6 +13,8 @@ import {
   type ServiceTableResponse,
   type ServiceTableSaleResponse,
   type ServiceTablesListResponse,
+  type ReorderServiceAreasSVC,
+  type ReorderServiceTablesSVC,
   type UpdateServiceAreaSVC,
   type UpdateServiceTableSVC,
 } from "@repo/types";
@@ -265,7 +267,11 @@ export const startServiceTableOrderForDevice = async (
       tx,
     );
     if (!table) return { kind: "not_found" as const };
-    if (table.state !== "allocated" || table.currentSaleId || table.currentTableOrderId)
+    if (
+      table.state !== "allocated" ||
+      table.currentSaleId ||
+      table.currentTableOrderId
+    )
       return { kind: "conflict" as const };
 
     const saleId = crypto.randomUUID();
@@ -482,7 +488,8 @@ export const cancelServiceTableOrderForDevice = async (
         session.device.id,
         tx,
       );
-      if (!freeTable) throw new Error("Failed to clear stale service table draft");
+      if (!freeTable)
+        throw new Error("Failed to clear stale service table draft");
 
       return {
         kind: "recovered" as const,
@@ -511,7 +518,11 @@ export const cancelServiceTableOrderForDevice = async (
       };
     }
 
-    if (!saleIsDraft || sale.status !== "draft" || sale.serviceTableId !== tableId)
+    if (
+      !saleIsDraft ||
+      sale.status !== "draft" ||
+      sale.serviceTableId !== tableId
+    )
       return { kind: "conflict" as const };
 
     const freeTable = await tableRepository.clearDraftSale(
@@ -604,7 +615,8 @@ const releaseCommittedServiceTableForDevice = async (
     const saleMatchesTableState =
       expectedState === "paid"
         ? sale?.paymentStatus === "paid"
-        : sale?.paymentStatus === "pending" || sale?.paymentStatus === "partial";
+        : sale?.paymentStatus === "pending" ||
+          sale?.paymentStatus === "partial";
     if (
       !sale ||
       sale.status !== "completed" ||
@@ -924,7 +936,9 @@ export const updateServiceArea = async (
 
   const nextTitle = data.title?.trim();
   if (nextTitle && nextTitle.toLowerCase() !== existing.title.toLowerCase()) {
-    if (await tableRepository.serviceAreaTitleExists(storeId, nextTitle, areaId))
+    if (
+      await tableRepository.serviceAreaTitleExists(storeId, nextTitle, areaId)
+    )
       return areaConflictResponse();
   }
 
@@ -1099,15 +1113,15 @@ export const assignServiceTablesToArea = async (
   };
 };
 
-export const unassignServiceTableFromArea = async (
-  {
-    userId,
-    organizationId,
-    storeId,
-    areaId,
-    tableId,
-  }: AdminServiceTableAreaScope,
-): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+export const unassignServiceTableFromArea = async ({
+  userId,
+  organizationId,
+  storeId,
+  areaId,
+  tableId,
+}: AdminServiceTableAreaScope): Promise<
+  ServiceResponse<ServiceTableResponse | null>
+> => {
   const scope = await getStoreForUser(userId, organizationId, storeId);
   if (!scope.ok) return scopeError(scope);
 
@@ -1144,7 +1158,8 @@ export const unassignServiceTableFromArea = async (
       },
       tx,
     );
-    if (!unassigned) throw new Error("Failed to unassign service table from area");
+    if (!unassigned)
+      throw new Error("Failed to unassign service table from area");
 
     return {
       kind: "ok" as const,
@@ -1185,6 +1200,139 @@ export const unassignServiceTableFromArea = async (
     status: "success",
     data: { table: result.table },
     message: "Service table unassigned from area",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+const sameIdSet = (left: string[], right: string[]) => {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((id) => rightSet.has(id));
+};
+
+export const reorderServiceAreas = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  data: ReorderServiceAreasSVC,
+): Promise<ServiceResponse<ServiceAreasListResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
+  const areas = await tableRepository.getServiceAreas(organizationId, storeId);
+  if (
+    !sameIdSet(
+      areas.map((area) => area.id),
+      data.areaIds,
+    )
+  ) {
+    return {
+      status: "error",
+      message: "Area order must include every area in this Store exactly once",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  await pg.begin((tx) =>
+    tableRepository.reorderServiceAreas(
+      organizationId,
+      storeId,
+      data.areaIds,
+      userId,
+      tx,
+    ),
+  );
+
+  const nextAreas = await tableRepository.getServiceAreas(
+    organizationId,
+    storeId,
+  );
+  return {
+    status: "success",
+    data: { areas: nextAreas },
+    message: "Service areas rearranged",
+    code: STATUS_CODES.SUCCESS,
+  };
+};
+
+export const reorderServiceTables = async (
+  userId: string,
+  organizationId: string,
+  storeId: string,
+  data: ReorderServiceTablesSVC,
+): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
+  const scope = await getStoreForUser(userId, organizationId, storeId);
+  if (!scope.ok) return scopeError(scope);
+
+  const entitlementError = await requireTableManagementForStore(storeId);
+  if (entitlementError) {
+    return entitlementError;
+  }
+
+  if (data.serviceAreaId) {
+    const area = await tableRepository.getServiceAreaById(
+      organizationId,
+      storeId,
+      data.serviceAreaId,
+    );
+    if (!area) {
+      return {
+        status: "error",
+        message: "Service area not found",
+        data: null,
+        code: STATUS_CODES.NOT_FOUND,
+      };
+    }
+  }
+
+  const tables = await tableRepository.getServiceTables(
+    organizationId,
+    storeId,
+  );
+  const groupTables = tables.filter((table) =>
+    data.serviceAreaId
+      ? table.serviceAreaId === data.serviceAreaId
+      : table.serviceAreaId === null,
+  );
+  if (
+    !sameIdSet(
+      groupTables.map((table) => table.id),
+      data.tableIds,
+    )
+  ) {
+    return {
+      status: "error",
+      message: "Table order must include every table in this area exactly once",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  await pg.begin((tx) =>
+    tableRepository.reorderServiceTables(
+      organizationId,
+      storeId,
+      data.serviceAreaId,
+      data.tableIds,
+      userId,
+      tx,
+    ),
+  );
+
+  const nextTables = await tableRepository.getServiceTables(
+    organizationId,
+    storeId,
+  );
+  return {
+    status: "success",
+    data: { tables: nextTables },
+    message: "Service tables rearranged",
     code: STATUS_CODES.SUCCESS,
   };
 };

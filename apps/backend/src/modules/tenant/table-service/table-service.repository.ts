@@ -104,7 +104,7 @@ export const getServiceTables = async (
      AND current_sale.status IN ('draft', 'completed')
     WHERE service_tables.organization_id = ${organizationId}
       AND service_tables.store_id = ${storeId}
-    ORDER BY LOWER(TRIM(service_tables.table_label)) ASC, service_tables.created_at ASC, service_tables.id ASC
+    ORDER BY service_tables.sort_order ASC, LOWER(TRIM(service_tables.table_label)) ASC, service_tables.created_at ASC, service_tables.id ASC
   `;
   return rows.map((row: Record<string, unknown>) => mapRow(row));
 };
@@ -151,17 +151,48 @@ export const serviceTableLabelExists = async (
   return Boolean(rows[0]);
 };
 
+const nextTableSortOrder = async (
+  storeId: string,
+  serviceAreaId: string | null,
+  db: Db,
+): Promise<number> => {
+  const [row] = serviceAreaId
+    ? await db`
+        SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
+        FROM service_tables
+        WHERE store_id = ${storeId}
+          AND service_area_id = ${serviceAreaId}
+      `
+    : await db`
+        SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
+        FROM service_tables
+        WHERE store_id = ${storeId}
+          AND service_area_id IS NULL
+      `;
+  return Number(row?.next_sort_order ?? 0);
+};
+
+const nextAreaSortOrder = async (storeId: string, db: Db): Promise<number> => {
+  const [row] = await db`
+    SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
+    FROM service_areas
+    WHERE store_id = ${storeId}
+  `;
+  return Number(row?.next_sort_order ?? 0);
+};
+
 export const createServiceTable = async (
   table: CreateServiceTableREPO,
   tx?: Bun.TransactionSQL,
 ): Promise<ServiceTableDTO | null> => {
   const db: Db = tx || pg;
+  const sortOrder = await nextTableSortOrder(table.storeId, null, db);
   const [row] = await db`
     INSERT INTO service_tables (
-      id, organization_id, store_id, table_label, capacity, created_by
+      id, organization_id, store_id, table_label, capacity, sort_order, created_by
     ) VALUES (
       ${table.id}, ${table.organizationId}, ${table.storeId}, ${table.tableLabel}, ${table.capacity},
-      ${table.createdBy}
+      ${sortOrder}, ${table.createdBy}
     )
     RETURNING ${db.unsafe(selectColumns)}
   `;
@@ -502,7 +533,16 @@ export const releaseDueTable = (
   saleId: string,
   updatedBy: string,
   tx: Bun.TransactionSQL,
-) => releaseCommittedTable(organizationId, storeId, tableId, saleId, "payment_due", updatedBy, tx);
+) =>
+  releaseCommittedTable(
+    organizationId,
+    storeId,
+    tableId,
+    saleId,
+    "payment_due",
+    updatedBy,
+    tx,
+  );
 
 export const releasePaidTable = (
   organizationId: string,
@@ -511,7 +551,16 @@ export const releasePaidTable = (
   saleId: string,
   updatedBy: string,
   tx: Bun.TransactionSQL,
-) => releaseCommittedTable(organizationId, storeId, tableId, saleId, "paid", updatedBy, tx);
+) =>
+  releaseCommittedTable(
+    organizationId,
+    storeId,
+    tableId,
+    saleId,
+    "paid",
+    updatedBy,
+    tx,
+  );
 
 export const assignServiceTableToArea = async (
   {
@@ -523,9 +572,11 @@ export const assignServiceTableToArea = async (
   }: ServiceTableAreaWrite,
   tx: Bun.TransactionSQL,
 ): Promise<ServiceTableDTO | null> => {
+  const sortOrder = await nextTableSortOrder(storeId, areaId, tx);
   const [row] = await tx`
     UPDATE service_tables
     SET service_area_id = ${areaId},
+        sort_order = ${sortOrder},
         updated_by = ${updatedBy},
         updated_at = NOW()
     WHERE id = ${tableId}
@@ -547,9 +598,11 @@ export const unassignServiceTableFromArea = async (
   }: ServiceTableAreaWrite,
   tx: Bun.TransactionSQL,
 ): Promise<ServiceTableDTO | null> => {
+  const sortOrder = await nextTableSortOrder(storeId, null, tx);
   const [row] = await tx`
     UPDATE service_tables
     SET service_area_id = NULL,
+        sort_order = ${sortOrder},
         updated_by = ${updatedBy},
         updated_at = NOW()
     WHERE id = ${tableId}
@@ -602,7 +655,7 @@ export const getServiceAreas = async (
     FROM service_areas
     WHERE organization_id = ${organizationId}
       AND store_id = ${storeId}
-    ORDER BY lower(title) ASC, created_at ASC, id ASC
+    ORDER BY sort_order ASC, lower(title) ASC, created_at ASC, id ASC
   `;
   return rows.map((row: Record<string, unknown>) => mapAreaRow(row));
 };
@@ -649,11 +702,13 @@ export const createServiceArea = async (
   tx?: Bun.TransactionSQL,
 ): Promise<ServiceAreaDTO | null> => {
   const db: Db = tx || pg;
+  const sortOrder = await nextAreaSortOrder(area.storeId, db);
   const [row] = await db`
     INSERT INTO service_areas (
-      id, organization_id, store_id, title, description, created_by
+      id, organization_id, store_id, title, description, sort_order, created_by
     ) VALUES (
-      ${area.id}, ${area.organizationId}, ${area.storeId}, ${area.title}, ${area.description}, ${area.createdBy}
+      ${area.id}, ${area.organizationId}, ${area.storeId}, ${area.title}, ${area.description},
+      ${sortOrder}, ${area.createdBy}
     )
     RETURNING ${db.unsafe(areaSelectColumns)}
   `;
@@ -700,4 +755,59 @@ export const deleteServiceArea = async (
     RETURNING ${pg.unsafe(areaSelectColumns)}
   `;
   return row ? mapAreaRow(row) : null;
+};
+
+export const reorderServiceAreas = async (
+  organizationId: string,
+  storeId: string,
+  areaIds: string[],
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<void> => {
+  for (const [sortOrder, areaId] of areaIds.entries()) {
+    await tx`
+      UPDATE service_areas
+      SET sort_order = ${sortOrder},
+          updated_by = ${updatedBy},
+          updated_at = NOW()
+      WHERE id = ${areaId}
+        AND organization_id = ${organizationId}
+        AND store_id = ${storeId}
+    `;
+  }
+};
+
+export const reorderServiceTables = async (
+  organizationId: string,
+  storeId: string,
+  serviceAreaId: string | null,
+  tableIds: string[],
+  updatedBy: string,
+  tx: Bun.TransactionSQL,
+): Promise<void> => {
+  for (const [sortOrder, tableId] of tableIds.entries()) {
+    if (serviceAreaId) {
+      await tx`
+        UPDATE service_tables
+        SET sort_order = ${sortOrder},
+            updated_by = ${updatedBy},
+            updated_at = NOW()
+        WHERE id = ${tableId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND service_area_id = ${serviceAreaId}
+      `;
+    } else {
+      await tx`
+        UPDATE service_tables
+        SET sort_order = ${sortOrder},
+            updated_by = ${updatedBy},
+            updated_at = NOW()
+        WHERE id = ${tableId}
+          AND organization_id = ${organizationId}
+          AND store_id = ${storeId}
+          AND service_area_id IS NULL
+      `;
+    }
+  }
 };

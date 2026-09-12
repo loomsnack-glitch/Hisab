@@ -3,6 +3,8 @@ import {
   AssignServiceTablesToAreaSchema,
   CreateServiceAreaSchema,
   CreateServiceTableSchema,
+  ReorderServiceAreasSchema,
+  ReorderServiceTablesSchema,
   ServiceAreaDTOSchema,
   ServiceTableDTOSchema,
   UpdateServiceAreaSchema,
@@ -160,5 +162,31 @@ describe("Service Area contracts", () => {
         storeId,
       }).success,
     ).toBe(false);
+  });
+
+  test("reorders areas and tables with a unique id list", () => {
+    const otherId = "88888888-8888-4888-8888-888888888888";
+    expect(
+      ReorderServiceAreasSchema.safeParse({
+        areaIds: [tableId, otherId],
+      }).success,
+    ).toBe(true);
+    expect(
+      ReorderServiceAreasSchema.safeParse({
+        areaIds: [tableId, tableId],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReorderServiceTablesSchema.safeParse({
+        serviceAreaId: tableId,
+        tableIds: [otherId],
+      }).success,
+    ).toBe(true);
+    expect(
+      ReorderServiceTablesSchema.safeParse({
+        serviceAreaId: null,
+        tableIds: [otherId],
+      }).success,
+    ).toBe(true);
   });
 });

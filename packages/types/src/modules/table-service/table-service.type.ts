@@ -3,6 +3,8 @@ import type {
   AssignServiceTablesToAreaSchema,
   CreateServiceAreaSchema,
   CreateServiceTableSchema,
+  ReorderServiceAreasSchema,
+  ReorderServiceTablesSchema,
   ServiceAreaDTOSchema,
   ServiceTableDTOSchema,
   UpdateServiceAreaSchema,
@@ -85,3 +87,8 @@ export type AssignServiceTablesToAreaJSON = z.infer<
   typeof AssignServiceTablesToAreaSchema
 >;
 export type AssignServiceTablesToAreaSVC = AssignServiceTablesToAreaJSON;
+
+export type ReorderServiceAreasJSON = z.infer<typeof ReorderServiceAreasSchema>;
+export type ReorderServiceAreasSVC = ReorderServiceAreasJSON;
+export type ReorderServiceTablesJSON = z.infer<typeof ReorderServiceTablesSchema>;
+export type ReorderServiceTablesSVC = ReorderServiceTablesJSON;

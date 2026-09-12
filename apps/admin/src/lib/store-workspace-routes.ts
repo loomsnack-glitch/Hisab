@@ -24,6 +24,12 @@ export const getStoreSettingsPath = (organizationId: string, storeId: string) =>
 export const getStoreLicensePath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/license`;
 
+export const getStoreBillingPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/billing`;
+
+export const getStoreTablesPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/tables`;
+
 export const getStoreAppearancePath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/appearance`;
 

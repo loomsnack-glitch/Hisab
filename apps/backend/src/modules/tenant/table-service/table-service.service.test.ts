@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DeviceSessionDTO, ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
+import type {
+  DeviceSessionDTO,
+  ServiceAreaDTO,
+  ServiceTableDTO,
+} from "@repo/types";
 import { installTableServiceRepositoryMock } from "./table-service.repository.test-harness";
 
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -124,11 +128,14 @@ const updateServiceAreaRepo = mock(
   async (data: { title?: string; description?: string | null }) => ({
     ...area,
     title: data.title ?? area.title,
-    description: data.description === undefined ? area.description : data.description,
+    description:
+      data.description === undefined ? area.description : data.description,
     updatedBy: userId,
   }),
 );
 const deleteServiceAreaRepo = mock(async () => area);
+const reorderServiceAreasRepo = mock(async () => undefined);
+const reorderServiceTablesRepo = mock(async () => undefined);
 const lockServiceArea = mock(async (): Promise<ServiceAreaDTO | null> => area);
 const assignServiceTableToArea = mock(
   async (): Promise<ServiceTableDTO | null> => ({
@@ -250,6 +257,8 @@ installTableServiceRepositoryMock({
   createServiceArea: createServiceAreaRepo,
   updateServiceArea: updateServiceAreaRepo,
   deleteServiceArea: deleteServiceAreaRepo,
+  reorderServiceAreas: reorderServiceAreasRepo,
+  reorderServiceTables: reorderServiceTablesRepo,
   lockServiceArea,
   assignServiceTableToArea,
   unassignServiceTableFromArea,
@@ -961,7 +970,10 @@ describe("Service Area application service", () => {
     lockServiceArea.mockClear();
     lockServiceArea.mockResolvedValue(area);
     lockServiceTableForDevice.mockReset();
-    lockServiceTableForDevice.mockResolvedValue({ ...table, serviceAreaId: null });
+    lockServiceTableForDevice.mockResolvedValue({
+      ...table,
+      serviceAreaId: null,
+    });
     assignServiceTableToArea.mockClear();
     assignServiceTableToArea.mockResolvedValue({
       ...table,
@@ -1146,7 +1158,8 @@ describe("Service Area application service", () => {
     expect(response).toMatchObject({
       status: "error",
       code: 409,
-      message: "Table A1 must be unassigned before it can be assigned to an area",
+      message:
+        "Table A1 must be unassigned before it can be assigned to an area",
     });
     expect(assignServiceTableToArea).not.toHaveBeenCalled();
   });
@@ -1165,7 +1178,8 @@ describe("Service Area application service", () => {
     expect(response).toMatchObject({
       status: "error",
       code: 409,
-      message: "Table A1 must be unassigned before it can be assigned to an area",
+      message:
+        "Table A1 must be unassigned before it can be assigned to an area",
     });
     expect(assignServiceTableToArea).not.toHaveBeenCalled();
   });
@@ -1176,9 +1190,13 @@ describe("Service Area application service", () => {
       serviceAreaId: areaId,
     });
 
-    const response = await tableService.unassignServiceTableFromArea(
-      { userId, organizationId, storeId, areaId, tableId },
-    );
+    const response = await tableService.unassignServiceTableFromArea({
+      userId,
+      organizationId,
+      storeId,
+      areaId,
+      tableId,
+    });
 
     expect(response.status).toBe("success");
     expect(response.data?.table).toEqual(
@@ -1201,9 +1219,13 @@ describe("Service Area application service", () => {
       { userId, organizationId, storeId: otherStoreId, areaId },
       { tableIds: [tableId] },
     );
-    const unassignResponse = await tableService.unassignServiceTableFromArea(
-      { userId, organizationId, storeId: otherStoreId, areaId, tableId },
-    );
+    const unassignResponse = await tableService.unassignServiceTableFromArea({
+      userId,
+      organizationId,
+      storeId: otherStoreId,
+      areaId,
+      tableId,
+    });
 
     expect(assignResponse).toMatchObject({ status: "error", code: 404 });
     expect(unassignResponse).toMatchObject({ status: "error", code: 404 });
@@ -1213,38 +1235,139 @@ describe("Service Area application service", () => {
   });
 });
 
+describe("Service Table layout edits", () => {
+  beforeEach(() => {
+    getOrganizationByIdForUser.mockResolvedValue(organization);
+    getStoreById.mockImplementation(
+      async (_organizationId, requestedStoreId) =>
+        requestedStoreId === storeId ? store : null,
+    );
+    getServiceAreas.mockReset();
+    getServiceAreas.mockImplementation(
+      async (requestedOrganizationId?: string, requestedStoreId?: string) =>
+        requestedOrganizationId === organizationId &&
+        requestedStoreId === storeId
+          ? [area]
+          : [],
+    );
+    getServiceAreaById.mockResolvedValue(area);
+    getServiceTables.mockReset();
+    getServiceTables.mockImplementation(
+      async (requestedOrganizationId?: string, requestedStoreId?: string) =>
+        requestedOrganizationId === organizationId &&
+        requestedStoreId === storeId
+          ? [table]
+          : [],
+    );
+    getServiceTableById.mockResolvedValue(table);
+    reorderServiceAreasRepo.mockClear();
+    reorderServiceTablesRepo.mockClear();
+  });
+
+  test("rearranges every area in the Store", async () => {
+    const secondArea = { ...area, id: otherAreaId, title: "Hall" };
+    getServiceAreas.mockImplementation(async () => [area, secondArea]);
+
+    const response = await tableService.reorderServiceAreas(
+      userId,
+      organizationId,
+      storeId,
+      { areaIds: [otherAreaId, areaId] },
+    );
+
+    expect(response.status).toBe("success");
+    expect(reorderServiceAreasRepo).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      [otherAreaId, areaId],
+      userId,
+      expect.anything(),
+    );
+  });
+
+  test("rejects an incomplete area order", async () => {
+    const response = await tableService.reorderServiceAreas(
+      userId,
+      organizationId,
+      storeId,
+      { areaIds: [areaId, otherAreaId] },
+    );
+
+    expect(response).toMatchObject({ status: "error", code: 400 });
+    expect(reorderServiceAreasRepo).not.toHaveBeenCalled();
+  });
+
+  test("rearranges tables inside one area", async () => {
+    const first = {
+      ...table,
+      id: tableId,
+      serviceAreaId: areaId,
+      tableLabel: "T2",
+    };
+    const second = {
+      ...table,
+      id: "88888888-8888-4888-8888-888888888888",
+      serviceAreaId: areaId,
+      tableLabel: "T1",
+    };
+    getServiceTables.mockResolvedValue([first, second]);
+
+    const response = await tableService.reorderServiceTables(
+      userId,
+      organizationId,
+      storeId,
+      { serviceAreaId: areaId, tableIds: [second.id, first.id] },
+    );
+
+    expect(response.status).toBe("success");
+    expect(reorderServiceTablesRepo).toHaveBeenCalledWith(
+      organizationId,
+      storeId,
+      areaId,
+      [second.id, first.id],
+      userId,
+      expect.anything(),
+    );
+  });
+});
+
 describe("Table Management Feature Entitlement enforcement", () => {
   test("forbids device table reads for an unentitled Store", async () => {
-    const { resolveFeatureEntitlement } = await import(
-      "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+    const { resolveFeatureEntitlement } =
+      await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness");
+    resolveFeatureEntitlement.mockImplementation(
+      async (_storeId, featureKey) => ({
+        entitled: false,
+        featureKey,
+        evidence: [],
+      }),
     );
-    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
-      entitled: false,
-      featureKey,
-      evidence: [],
-    }));
 
-    const response = await tableService.getServiceTablesForDevice(deviceSession);
+    const response =
+      await tableService.getServiceTablesForDevice(deviceSession);
 
     expect(response.code).toBe(403);
     expect(response.message).toContain("Table Management");
 
-    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
-      entitled: true,
-      featureKey,
-      evidence: [],
-    }));
+    resolveFeatureEntitlement.mockImplementation(
+      async (_storeId, featureKey) => ({
+        entitled: true,
+        featureKey,
+        evidence: [],
+      }),
+    );
   });
 
   test("forbids admin table setup for an unentitled Store", async () => {
-    const { resolveFeatureEntitlement } = await import(
-      "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
+    const { resolveFeatureEntitlement } =
+      await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness");
+    resolveFeatureEntitlement.mockImplementation(
+      async (_storeId, featureKey) => ({
+        entitled: false,
+        featureKey,
+        evidence: [],
+      }),
     );
-    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
-      entitled: false,
-      featureKey,
-      evidence: [],
-    }));
 
     const response = await tableService.createServiceTable(
       userId,
@@ -1257,10 +1380,12 @@ describe("Table Management Feature Entitlement enforcement", () => {
     expect(response.message).toContain("Table Management");
     expect(createServiceTableRepo).not.toHaveBeenCalled();
 
-    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
-      entitled: true,
-      featureKey,
-      evidence: [],
-    }));
+    resolveFeatureEntitlement.mockImplementation(
+      async (_storeId, featureKey) => ({
+        entitled: true,
+        featureKey,
+        evidence: [],
+      }),
+    );
   });
 });

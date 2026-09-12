@@ -478,6 +478,8 @@ type BillingPageProps = {
     productSearch?: string;
     salesSearch?: string;
     customerSearch?: string;
+    fixedStoreId?: string;
+    hideStoreSwitcher?: boolean;
     onPanelTabChange?: (
         tab: PosPanelTab,
         composerHandoff?: PosComposerHandoff,
@@ -495,6 +497,8 @@ const BillingPage = ({
     productSearch: productSearchProp,
     salesSearch: salesSearchProp,
     customerSearch: customerSearchProp,
+    fixedStoreId,
+    hideStoreSwitcher = false,
     onPanelTabChange,
     onProductSearchChange,
     onCustomerSearchChange,
@@ -747,13 +751,15 @@ const BillingPage = ({
     };
 
     const clearDraftBillsFilters = () => {
-        setDraftSelectedStoreId(organizationStores[0]?.id ?? "");
+        if (!hideStoreSwitcher) {
+            setDraftSelectedStoreId(organizationStores[0]?.id ?? "");
+        }
         setDraftPaymentMethodSelection(new Set());
         setDraftSortBy("newest");
     };
 
     const applyMobileBillsFilters = () => {
-        if (draftSelectedStoreId && draftSelectedStoreId !== selectedStoreId) {
+        if (!hideStoreSwitcher && draftSelectedStoreId && draftSelectedStoreId !== selectedStoreId) {
             setStore(draftSelectedStoreId);
         }
         setPaymentMethodSelection(new Set(draftPaymentMethodSelection));
@@ -784,7 +790,9 @@ const BillingPage = ({
         setLeftPanelTab(tab);
     };
 
-    const selectedStoreId = isDeviceMode ? (session?.store.id ?? "") : searchParams.get("storeId") || "";
+    const selectedStoreId = isDeviceMode
+        ? (session?.store.id ?? "")
+        : (fixedStoreId || searchParams.get("storeId") || "");
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -1210,7 +1218,7 @@ const BillingPage = ({
         : (organizationStores.find((store) => store.id === selectedStoreId) ?? null);
 
     useEffect(() => {
-        if (isDeviceMode) {
+        if (isDeviceMode || fixedStoreId) {
             return;
         }
 
@@ -1231,7 +1239,7 @@ const BillingPage = ({
         startTransition(() => {
             setSearchParams({ storeId: nextStoreId });
         });
-    }, [isDeviceMode, organization, selectedStoreId, setSearchParams]);
+    }, [fixedStoreId, isDeviceMode, organization, selectedStoreId, setSearchParams]);
 
     const deepLinkSaleId = searchParams.get("saleId");
 
@@ -2405,7 +2413,7 @@ const BillingPage = ({
     });
 
     const setStore = (storeId: string | null) => {
-        if (isDeviceMode || !storeId) {
+        if (isDeviceMode || hideStoreSwitcher || fixedStoreId || !storeId) {
             return;
         }
 
@@ -2880,7 +2888,7 @@ const BillingPage = ({
                                     </Button>
 
                                     <div className="hidden flex-wrap items-center gap-2 lg:flex">
-                                        {!isDeviceMode && organizationStores.length > 0 ? (
+                                        {!isDeviceMode && !hideStoreSwitcher && organizationStores.length > 0 ? (
                                             <DataTableSortFilter
                                                 title="Store"
                                                 icon={Store}
@@ -3082,7 +3090,7 @@ const BillingPage = ({
 
                                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 px-6 py-4">
                                         <div className="space-y-6">
-                                            {!isDeviceMode && organizationStores.length > 0 ? (
+                                            {!isDeviceMode && !hideStoreSwitcher && organizationStores.length > 0 ? (
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-2.5 px-1 py-1">
                                                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">

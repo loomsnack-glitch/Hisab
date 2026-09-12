@@ -4,6 +4,8 @@ import {
   AssignServiceTablesToAreaSchema,
   CreateServiceAreaSchema,
   CreateServiceTableSchema,
+  ReorderServiceAreasSchema,
+  ReorderServiceTablesSchema,
   STATUS_CODES,
   UpdateServiceAreaSchema,
   UpdateServiceTableSchema,
@@ -20,7 +22,9 @@ const router = new Hono<{ Variables: AppVariables }>();
 
 const validateUuid = (value: string, message: string) => {
   const result = uuidSchema.safeParse(value);
-  return result.success ? null : { status: "error" as const, message, code: STATUS_CODES.BAD_REQUEST };
+  return result.success
+    ? null
+    : { status: "error" as const, message, code: STATUS_CODES.BAD_REQUEST };
 };
 
 const validateScope = (
@@ -29,9 +33,9 @@ const validateScope = (
   resourceId?: string,
   resourceMessage = "Invalid id",
 ) =>
-  validateUuid(organizationId, "Invalid organization id")
-    ?? validateUuid(storeId, "Invalid store id")
-    ?? (resourceId ? validateUuid(resourceId, resourceMessage) : null);
+  validateUuid(organizationId, "Invalid organization id") ??
+  validateUuid(storeId, "Invalid store id") ??
+  (resourceId ? validateUuid(resourceId, resourceMessage) : null);
 
 router.use("*", authMiddleware);
 
@@ -41,7 +45,14 @@ router.get("/:organizationId/stores/:storeId/tables", async (c) => {
     const storeId = c.req.param("storeId");
     const invalid = validateScope(organizationId, storeId);
     if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(c, await tableService.getServiceTables(c.get("authUser").id, organizationId, storeId));
+    return handleServiceResponse(
+      c,
+      await tableService.getServiceTables(
+        c.get("authUser").id,
+        organizationId,
+        storeId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getServiceTables", c, error);
   }
@@ -56,12 +67,15 @@ router.post(
       const storeId = c.req.param("storeId");
       const invalid = validateScope(organizationId, storeId);
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.createServiceTable(
-        c.get("authUser").id,
-        organizationId,
-        storeId,
-        c.req.valid("json"),
-      ));
+      return handleServiceResponse(
+        c,
+        await tableService.createServiceTable(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "createServiceTable", c, error);
     }
@@ -76,17 +90,49 @@ router.patch(
       const organizationId = c.req.param("organizationId");
       const storeId = c.req.param("storeId");
       const tableId = c.req.param("tableId");
-      const invalid = validateScope(organizationId, storeId, tableId, "Invalid table id");
-      if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.updateServiceTable(
-        c.get("authUser").id,
+      const invalid = validateScope(
         organizationId,
         storeId,
         tableId,
-        c.req.valid("json"),
-      ));
+        "Invalid table id",
+      );
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await tableService.updateServiceTable(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          tableId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "updateServiceTable", c, error);
+    }
+  },
+);
+
+router.post(
+  "/:organizationId/stores/:storeId/tables/reorder",
+  validateSchema("json", ReorderServiceTablesSchema),
+  async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      const storeId = c.req.param("storeId");
+      const invalid = validateScope(organizationId, storeId);
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await tableService.reorderServiceTables(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "reorderServiceTables", c, error);
     }
   },
 );
@@ -97,7 +143,14 @@ router.get("/:organizationId/stores/:storeId/areas", async (c) => {
     const storeId = c.req.param("storeId");
     const invalid = validateScope(organizationId, storeId);
     if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(c, await tableService.getServiceAreas(c.get("authUser").id, organizationId, storeId));
+    return handleServiceResponse(
+      c,
+      await tableService.getServiceAreas(
+        c.get("authUser").id,
+        organizationId,
+        storeId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "getServiceAreas", c, error);
   }
@@ -112,14 +165,41 @@ router.post(
       const storeId = c.req.param("storeId");
       const invalid = validateScope(organizationId, storeId);
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.createServiceArea(
-        c.get("authUser").id,
-        organizationId,
-        storeId,
-        c.req.valid("json"),
-      ));
+      return handleServiceResponse(
+        c,
+        await tableService.createServiceArea(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "createServiceArea", c, error);
+    }
+  },
+);
+
+router.post(
+  "/:organizationId/stores/:storeId/areas/reorder",
+  validateSchema("json", ReorderServiceAreasSchema),
+  async (c) => {
+    try {
+      const organizationId = c.req.param("organizationId");
+      const storeId = c.req.param("storeId");
+      const invalid = validateScope(organizationId, storeId);
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await tableService.reorderServiceAreas(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          c.req.valid("json"),
+        ),
+      );
+    } catch (error) {
+      return handleError(FILE_NAME, "reorderServiceAreas", c, error);
     }
   },
 );
@@ -132,15 +212,23 @@ router.patch(
       const organizationId = c.req.param("organizationId");
       const storeId = c.req.param("storeId");
       const areaId = c.req.param("areaId");
-      const invalid = validateScope(organizationId, storeId, areaId, "Invalid area id");
-      if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.updateServiceArea(
-        c.get("authUser").id,
+      const invalid = validateScope(
         organizationId,
         storeId,
         areaId,
-        c.req.valid("json"),
-      ));
+        "Invalid area id",
+      );
+      if (invalid) return c.json(invalid, invalid.code);
+      return handleServiceResponse(
+        c,
+        await tableService.updateServiceArea(
+          c.get("authUser").id,
+          organizationId,
+          storeId,
+          areaId,
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "updateServiceArea", c, error);
     }
@@ -152,14 +240,22 @@ router.delete("/:organizationId/stores/:storeId/areas/:areaId", async (c) => {
     const organizationId = c.req.param("organizationId");
     const storeId = c.req.param("storeId");
     const areaId = c.req.param("areaId");
-    const invalid = validateScope(organizationId, storeId, areaId, "Invalid area id");
-    if (invalid) return c.json(invalid, invalid.code);
-    return handleServiceResponse(c, await tableService.deleteServiceArea(
-      c.get("authUser").id,
+    const invalid = validateScope(
       organizationId,
       storeId,
       areaId,
-    ));
+      "Invalid area id",
+    );
+    if (invalid) return c.json(invalid, invalid.code);
+    return handleServiceResponse(
+      c,
+      await tableService.deleteServiceArea(
+        c.get("authUser").id,
+        organizationId,
+        storeId,
+        areaId,
+      ),
+    );
   } catch (error) {
     return handleError(FILE_NAME, "deleteServiceArea", c, error);
   }
@@ -173,17 +269,25 @@ router.post(
       const organizationId = c.req.param("organizationId");
       const storeId = c.req.param("storeId");
       const areaId = c.req.param("areaId");
-      const invalid = validateScope(organizationId, storeId, areaId, "Invalid area id");
+      const invalid = validateScope(
+        organizationId,
+        storeId,
+        areaId,
+        "Invalid area id",
+      );
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.assignServiceTablesToArea(
-        {
-          userId: c.get("authUser").id,
-          organizationId,
-          storeId,
-          areaId,
-        },
-        c.req.valid("json"),
-      ));
+      return handleServiceResponse(
+        c,
+        await tableService.assignServiceTablesToArea(
+          {
+            userId: c.get("authUser").id,
+            organizationId,
+            storeId,
+            areaId,
+          },
+          c.req.valid("json"),
+        ),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "assignServiceTablesToArea", c, error);
     }
@@ -198,18 +302,20 @@ router.delete(
       const storeId = c.req.param("storeId");
       const areaId = c.req.param("areaId");
       const tableId = c.req.param("tableId");
-      const invalid = validateScope(organizationId, storeId, areaId, "Invalid area id")
-        ?? validateUuid(tableId, "Invalid table id");
+      const invalid =
+        validateScope(organizationId, storeId, areaId, "Invalid area id") ??
+        validateUuid(tableId, "Invalid table id");
       if (invalid) return c.json(invalid, invalid.code);
-      return handleServiceResponse(c, await tableService.unassignServiceTableFromArea(
-        {
+      return handleServiceResponse(
+        c,
+        await tableService.unassignServiceTableFromArea({
           userId: c.get("authUser").id,
           organizationId,
           storeId,
           areaId,
           tableId,
-        },
-      ));
+        }),
+      );
     } catch (error) {
       return handleError(FILE_NAME, "unassignServiceTableFromArea", c, error);
     }

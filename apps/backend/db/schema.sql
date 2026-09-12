@@ -2181,6 +2181,7 @@ CREATE TABLE public.service_areas (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    sort_order integer NOT NULL,
     CONSTRAINT service_areas_title_check CHECK ((length(btrim((title)::text)) > 0))
 );
 
@@ -2203,6 +2204,7 @@ CREATE TABLE public.service_tables (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     service_area_id uuid,
     current_table_order_id uuid,
+    sort_order integer NOT NULL,
     CONSTRAINT service_tables_capacity_check CHECK (((capacity IS NULL) OR (capacity > 0))),
     CONSTRAINT service_tables_table_label_check CHECK ((length(btrim((table_label)::text)) > 0))
 );
@@ -5891,10 +5893,24 @@ CREATE INDEX idx_service_areas_store ON public.service_areas USING btree (organi
 
 
 --
+-- Name: idx_service_areas_store_sort; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_service_areas_store_sort ON public.service_areas USING btree (organization_id, store_id, sort_order, id);
+
+
+--
 -- Name: idx_service_tables_service_area; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_service_tables_service_area ON public.service_tables USING btree (organization_id, store_id, service_area_id);
+
+
+--
+-- Name: idx_service_tables_store_area_sort; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_service_tables_store_area_sort ON public.service_tables USING btree (organization_id, store_id, service_area_id, sort_order, id);
 
 
 --

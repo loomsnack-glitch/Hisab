@@ -11,6 +11,7 @@ import {
     SaleDetailDTOSchema,
     SaleNumberSettingsDTOSchema,
     SalesListQuerySchema,
+    serializeSalesListQueryParams,
     UpdateSaleNumberSettingsSchema,
 } from "./billing.schema";
 
@@ -482,5 +483,35 @@ describe("Configured sale billing contracts", () => {
             expect(fromArray.data.paymentMethods).toEqual(["cash", "upi"]);
             expect(fromCsv.data.paymentMethods).toEqual(["cash", "upi"]);
         }
+    });
+
+    test("axios-style array query keys drop the payment method filter", () => {
+        const parsed = SalesListQuerySchema.parse({
+            "paymentMethods[]": "cash",
+        });
+
+        expect(parsed.paymentMethods).toBeUndefined();
+    });
+
+    test("serialized payment method filters survive HTTP query encoding", () => {
+        const params = serializeSalesListQueryParams({
+            paymentMethods: ["cash", "upi"],
+        });
+        const search = new URLSearchParams();
+        for (const [key, value] of Object.entries(params ?? {})) {
+            if (value === undefined) {
+                continue;
+            }
+            if (Array.isArray(value)) {
+                for (const item of value) {
+                    search.append(`${key}[]`, String(item));
+                }
+            } else {
+                search.set(key, String(value));
+            }
+        }
+
+        const parsed = SalesListQuerySchema.parse(Object.fromEntries(search.entries()));
+        expect(parsed.paymentMethods).toEqual(["cash", "upi"]);
     });
 });

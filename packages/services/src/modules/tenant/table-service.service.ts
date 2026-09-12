@@ -2,6 +2,8 @@ import type {
   AssignServiceTablesToAreaJSON,
   CreateServiceAreaJSON,
   CreateServiceTableJSON,
+  ReorderServiceAreasJSON,
+  ReorderServiceTablesJSON,
   ServiceAreaResponse,
   ServiceAreasListResponse,
   ServiceTableResponse,
@@ -145,18 +147,46 @@ export const assignServiceTablesToArea = async (
   );
 };
 
-export const unassignServiceTableFromArea = async (
-  {
-    organizationId,
-    storeId,
-    areaId,
-    tableId,
-  }: ServiceTableAreaScope,
-): Promise<ServiceResponse<ServiceTableResponse | null>> => {
+export const unassignServiceTableFromArea = async ({
+  organizationId,
+  storeId,
+  areaId,
+  tableId,
+}: ServiceTableAreaScope): Promise<
+  ServiceResponse<ServiceTableResponse | null>
+> => {
   const scope = { organizationId, storeId };
   return tableServiceRequest(() =>
     api.delete<ServiceResponse<ServiceTableResponse | null>>(
       `${storePath(scope)}/areas/${areaId}/tables/${tableId}`,
+    ),
+  );
+};
+
+export const reorderServiceAreas = async (
+  organizationId: string,
+  storeId: string,
+  data: ReorderServiceAreasJSON,
+): Promise<ServiceResponse<ServiceAreasListResponse | null>> => {
+  const scope = { organizationId, storeId };
+  return tableServiceRequest(() =>
+    api.post<ServiceResponse<ServiceAreasListResponse | null>>(
+      `${storePath(scope)}/areas/reorder`,
+      data,
+    ),
+  );
+};
+
+export const reorderServiceTables = async (
+  organizationId: string,
+  storeId: string,
+  data: ReorderServiceTablesJSON,
+): Promise<ServiceResponse<ServiceTablesListResponse | null>> => {
+  const scope = { organizationId, storeId };
+  return tableServiceRequest(() =>
+    api.post<ServiceResponse<ServiceTablesListResponse | null>>(
+      `${storePath(scope)}/tables/reorder`,
+      data,
     ),
   );
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     collectPayment,
@@ -28,7 +28,6 @@ import { Card, CardContent } from "@repo/ui/components/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Separator } from "@repo/ui/components/separator";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
@@ -103,6 +102,77 @@ const paymentMethodColor = (method: string) => {
     if (normalized === "card") return "text-violet-600 dark:text-violet-400";
     if (normalized === "upi") return "text-sky-600 dark:text-sky-400";
     return "text-muted-foreground";
+};
+
+const paymentMethodIconBg = (method: string) => {
+    const normalized = method.toLowerCase();
+    if (normalized === "cash") return "bg-emerald-500/10";
+    if (normalized === "card") return "bg-violet-500/10";
+    if (normalized === "upi") return "bg-sky-500/10";
+    return "bg-muted";
+};
+
+const MetaChip = ({ icon: Icon, children }: { icon: typeof User; children: ReactNode }) => (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+        <Icon className="size-3 shrink-0 opacity-70" />
+        {children}
+    </span>
+);
+
+const SectionHeading = ({ children, count }: { children: string; count?: number }) => (
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {children}
+        {count !== undefined ? (
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/70">({count})</span>
+        ) : null}
+    </h3>
+);
+
+type PaymentRow = SaleDetailDTO["payments"][number];
+
+const PaymentsList = ({ payments }: { payments: PaymentRow[] }) => {
+    if (payments.length === 0) {
+        return (
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+                No payments collected yet.
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {payments.map((payment) => {
+                const Icon = paymentMethodIcon(payment.method);
+                const colorClass = paymentMethodColor(payment.method);
+                const bgClass = paymentMethodIconBg(payment.method);
+
+                return (
+                    <div
+                        key={payment.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5"
+                    >
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", bgClass)}>
+                                <Icon className={cn("size-4", colorClass)} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium capitalize text-foreground">
+                                    {payment.method.replace("_", " ")}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                    {formatDateTime(payment.collectedAt)}
+                                    {payment.referenceNumber ? ` · Ref ${payment.referenceNumber}` : ""}
+                                </p>
+                            </div>
+                        </div>
+                        <p className="text-sm font-semibold tabular-nums text-foreground shrink-0">
+                            {formatCurrency(payment.amount)}
+                        </p>
+                    </div>
+                );
+            })}
+        </div>
+    );
 };
 
 const SaleDetailDialog = ({
@@ -375,9 +445,113 @@ const SaleDetailDialog = ({
                 ) : (
                     <div>
                         {/* Header */}
-                        <div className="border-b border-border/60 bg-muted/20 px-5 py-5 sm:px-6">
-                            <div className="flex flex-col gap-4">
-                                <div className="flex flex-wrap items-center gap-2 pr-10">
+                        <div className="border-b border-border/60 bg-gradient-to-b from-muted/40 to-muted/10 px-5 py-5 sm:px-6">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <DialogHeader className="min-w-0 flex-1 space-y-3 text-left">
+                                    {(sale.tokenNumber ||
+                                        sale.serviceTableLabel ||
+                                        (sale.kotHistory && sale.kotHistory.length > 0) ||
+                                        (sale.kotNumbers && sale.kotNumbers.length > 0)) && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {sale.tokenNumber ? (
+                                                <MetaChip icon={Hash}>Token {sale.tokenNumber}</MetaChip>
+                                            ) : null}
+                                            {sale.serviceTableLabel ? (
+                                                <MetaChip icon={UtensilsCrossed}>Table {sale.serviceTableLabel}</MetaChip>
+                                            ) : null}
+                                            {sale.kotHistory && sale.kotHistory.length > 0 ? (
+                                                sale.kotHistory.map((kot) => (
+                                                    <MetaChip key={kot.kotNumber} icon={ReceiptText}>
+                                                        {kot.kotNumber} ·{" "}
+                                                        {kot.fulfillmentType === "pick_up" ? "Pick-Up" : "Dine-In"}
+                                                    </MetaChip>
+                                                ))
+                                            ) : sale.kotNumbers && sale.kotNumbers.length > 0 ? (
+                                                <MetaChip icon={ReceiptText}>KOT {sale.kotNumbers.join(", ")}</MetaChip>
+                                            ) : null}
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                            <DialogTitle className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                                                {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
+                                            </DialogTitle>
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <Badge
+                                                    className={cn(
+                                                        "rounded-full border px-2.5 py-0.5 text-xs capitalize",
+                                                        saleStatusStyles[sale.status],
+                                                    )}
+                                                >
+                                                    {sale.status}
+                                                </Badge>
+                                                <Badge
+                                                    className={cn(
+                                                        "rounded-full border px-2.5 py-0.5 text-xs capitalize",
+                                                        paymentStatusStyles[sale.paymentStatus],
+                                                    )}
+                                                >
+                                                    {sale.paymentStatus}
+                                                </Badge>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="rounded-full px-2.5 py-0.5 text-xs text-muted-foreground"
+                                                >
+                                                    {formatSaleServiceModeLabel(sale.serviceMode)}
+                                                </Badge>
+                                                {sale.status === "completed" && whatsappInvoice?.messageStatus ? (
+                                                    <Badge
+                                                        className="rounded-full border border-[#25D366]/25 bg-[#25D366]/10 px-2.5 py-0.5 text-xs text-[#168c45] dark:text-[#6ee7a1]"
+                                                    >
+                                                        WhatsApp {whatsappInvoice.messageStatus}
+                                                    </Badge>
+                                                ) : null}
+                                                {sale.status === "completed" &&
+                                                sale.paymentStatus !== "paid" &&
+                                                sale.customerId &&
+                                                whatsappDueReminder?.messageStatus ? (
+                                                    <Badge
+                                                        className="rounded-full border border-orange-500/25 bg-orange-500/10 px-2.5 py-0.5 text-xs text-orange-700 dark:text-orange-300"
+                                                    >
+                                                        Reminder {whatsappDueReminder.messageStatus}
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
+                                        </div>
+
+                                        <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                            <MetaChip icon={User}>
+                                                <span className="font-medium text-foreground">
+                                                    {sale.customer?.name || "Walk-in Customer"}
+                                                </span>
+                                            </MetaChip>
+                                            <MetaChip icon={Calendar}>{formatDateTime(sale.createdAt)}</MetaChip>
+                                            {sale.updatedAt !== sale.createdAt ? (
+                                                <MetaChip icon={Clock}>Updated {formatDateTime(sale.updatedAt)}</MetaChip>
+                                            ) : null}
+                                            {sale.replacementOfSaleId ? (
+                                                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300">
+                                                    <Link2 className="size-3 shrink-0" />
+                                                    Edited from{" "}
+                                                    {sale.replacementOfSaleNumber
+                                                        ? `Bill ${sale.replacementOfSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            ) : sale.replacementSaleId ? (
+                                                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300">
+                                                    <Link2 className="size-3 shrink-0" />
+                                                    Edited as{" "}
+                                                    {sale.replacementSaleNumber
+                                                        ? `Bill ${sale.replacementSaleNumber}`
+                                                        : "linked bill"}
+                                                </span>
+                                            ) : null}
+                                        </DialogDescription>
+                                    </div>
+                                </DialogHeader>
+
+                                <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
                                     {canMutate && sale.status === "completed" && onEdit ? (
                                         <Button
                                             variant="default"
@@ -396,7 +570,7 @@ const SaleDetailDialog = ({
                                         variant="outline"
                                         size="sm"
                                         onClick={handlePrint}
-                                        className="h-8 rounded-lg px-2.5"
+                                        className="h-8 rounded-lg bg-background/80 px-2.5 shadow-xs"
                                     >
                                         <Printer className="size-4" />
                                         Print
@@ -405,9 +579,13 @@ const SaleDetailDialog = ({
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            disabled={whatsappInvoiceMutation.isPending || whatsappInvoiceQuery.isPending || isInvoiceSending}
+                                            disabled={
+                                                whatsappInvoiceMutation.isPending ||
+                                                whatsappInvoiceQuery.isPending ||
+                                                isInvoiceSending
+                                            }
                                             onClick={() => whatsappInvoiceMutation.mutate()}
-                                            className="h-8 rounded-lg px-2.5"
+                                            className="h-8 rounded-lg bg-background/80 px-2.5 shadow-xs"
                                         >
                                             <Smartphone className="size-4 text-[#25D366]" />
                                             {whatsappInvoiceLabel}
@@ -419,7 +597,7 @@ const SaleDetailDialog = ({
                                             size="sm"
                                             disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending}
                                             onClick={() => dueReminderMutation.mutate()}
-                                            className="h-8 rounded-lg px-2.5"
+                                            className="h-8 rounded-lg bg-background/80 px-2.5 shadow-xs"
                                         >
                                             <Clock className="size-4 text-orange-500" />
                                             {dueReminderMutation.isPending
@@ -433,149 +611,21 @@ const SaleDetailDialog = ({
                                         variant="outline"
                                         size="sm"
                                         onClick={handleDownloadTxt}
-                                        className="h-8 rounded-lg px-2.5"
+                                        className="h-8 rounded-lg bg-background/80 px-2.5 shadow-xs"
                                     >
                                         <Download className="size-4" />
                                         Download
                                     </Button>
                                 </div>
-
-                                <DialogHeader className="min-w-0 space-y-3 text-left">
-                                    {(sale.tokenNumber ||
-                                        sale.serviceTableLabel ||
-                                        (sale.kotHistory && sale.kotHistory.length > 0) ||
-                                        (sale.kotNumbers && sale.kotNumbers.length > 0)) && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {sale.tokenNumber ? (
-                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                                                    <Hash className="size-3.5 shrink-0" />
-                                                    Token {sale.tokenNumber}
-                                                </span>
-                                            ) : null}
-                                            {sale.serviceTableLabel ? (
-                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                                                    <UtensilsCrossed className="size-3.5 shrink-0" />
-                                                    Table {sale.serviceTableLabel}
-                                                </span>
-                                            ) : null}
-                                            {sale.kotHistory && sale.kotHistory.length > 0 ? (
-                                                sale.kotHistory.map((kot) => (
-                                                    <span
-                                                        key={kot.kotNumber}
-                                                        className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground"
-                                                    >
-                                                        <ReceiptText className="size-3.5 shrink-0" />
-                                                        {kot.kotNumber} ·{" "}
-                                                        {kot.fulfillmentType === "pick_up" ? "Pick-Up" : "Dine-In"}
-                                                    </span>
-                                                ))
-                                            ) : sale.kotNumbers && sale.kotNumbers.length > 0 ? (
-                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                                                    <ReceiptText className="size-3.5 shrink-0" />
-                                                    KOT {sale.kotNumbers.join(", ")}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                    )}
-
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                        <DialogTitle className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-                                            {sale.saleNumber ? `Bill ${sale.saleNumber}` : "Draft bill"}
-                                        </DialogTitle>
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            <Badge
-                                                className={cn("rounded-md border text-xs capitalize", saleStatusStyles[sale.status])}
-                                            >
-                                                {sale.status}
-                                            </Badge>
-                                            <Badge
-                                                className={cn(
-                                                    "rounded-md border text-xs capitalize",
-                                                    paymentStatusStyles[sale.paymentStatus],
-                                                )}
-                                            >
-                                                {sale.paymentStatus}
-                                            </Badge>
-                                            <Badge
-                                                variant="outline"
-                                                className="rounded-md text-xs text-muted-foreground"
-                                            >
-                                                {formatSaleServiceModeLabel(sale.serviceMode)}
-                                            </Badge>
-                                            {sale.status === "completed" && whatsappInvoice?.messageStatus ? (
-                                                <Badge
-                                                    className="rounded-md border border-[#25D366]/25 bg-[#25D366]/10 text-xs text-[#168c45] dark:text-[#6ee7a1]"
-                                                >
-                                                    WhatsApp {whatsappInvoice.messageStatus}
-                                                </Badge>
-                                            ) : null}
-                                            {sale.status === "completed" &&
-                                            sale.paymentStatus !== "paid" &&
-                                            sale.customerId &&
-                                            whatsappDueReminder?.messageStatus ? (
-                                                <Badge
-                                                    className="rounded-md border border-orange-500/25 bg-orange-500/10 text-xs text-orange-700 dark:text-orange-300"
-                                                >
-                                                    Reminder {whatsappDueReminder.messageStatus}
-                                                </Badge>
-                                            ) : null}
-                                        </div>
-                                    </div>
-
-                                    <DialogDescription className="flex flex-col gap-2 text-sm">
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <User className="size-4 shrink-0" />
-                                            <span className="font-medium text-foreground">
-                                                {sale.customer?.name || "Walk-in Customer"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Calendar className="size-4 shrink-0" />
-                                            <span>{formatDateTime(sale.createdAt)}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Clock className="size-4 shrink-0" />
-                                            <span>Updated {formatDateTime(sale.updatedAt)}</span>
-                                        </div>
-                                        {sale.replacementOfSaleId ? (
-                                            <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
-                                                <Link2 className="size-4 shrink-0" />
-                                                <span>
-                                                    Edited from{" "}
-                                                    {sale.replacementOfSaleNumber
-                                                        ? `Bill ${sale.replacementOfSaleNumber}`
-                                                        : "linked bill"}
-                                                </span>
-                                            </div>
-                                        ) : sale.replacementSaleId ? (
-                                            <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
-                                                <Link2 className="size-4 shrink-0" />
-                                                <span>
-                                                    Edited as{" "}
-                                                    {sale.replacementSaleNumber
-                                                        ? `Bill ${sale.replacementSaleNumber}`
-                                                        : "linked bill"}
-                                                </span>
-                                            </div>
-                                        ) : null}
-                                    </DialogDescription>
-                                </DialogHeader>
                             </div>
                         </div>
 
                         {/* Body */}
-                        <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-[1fr_280px] md:gap-8">
+                        <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-[1fr_300px] md:gap-6 lg:gap-8">
                             <div className="space-y-6 min-w-0">
                                 {/* Line items */}
                                 <section className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-sm font-semibold text-foreground">
-                                            Items
-                                            <span className="ml-2 text-muted-foreground font-normal">
-                                                ({sale.items.length})
-                                            </span>
-                                        </h3>
-                                    </div>
+                                    <SectionHeading count={sale.items.length}>Items</SectionHeading>
                                     <div className="rounded-xl border border-border/60 overflow-hidden">
                                         <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-0 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground sm:grid-cols-[1fr_80px_96px]">
                                             <span>Product</span>
@@ -674,28 +724,32 @@ const SaleDetailDialog = ({
                                                         ) : null}
 
                                                         {bundleComponents.length > 0 ? (
-                                                            <div className="mt-2 space-y-2 pl-3 border-l-2 border-border/40">
+                                                            <div className="mt-2.5 flex flex-wrap gap-1.5">
                                                                 {bundleComponents.map((component) => (
                                                                     <div key={component.id} className="space-y-1">
-                                                                        <p className="text-sm text-foreground/85">
+                                                                        <span
+                                                                            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-muted/40 px-2 py-1 text-xs text-foreground/90"
+                                                                        >
                                                                             {component.productNameSnapshot}
                                                                             <span className="text-muted-foreground">
-                                                                                {" "}
                                                                                 × {Number(component.totalQuantity)}
                                                                             </span>
                                                                             {Number(component.priceAdjustmentSnapshot ?? 0) !== 0 ? (
-                                                                                <span className="text-muted-foreground">
-                                                                                    {" "}
-                                                                                    ·{" "}
-                                                                                    {Number(component.priceAdjustmentSnapshot) > 0
-                                                                                        ? "+"
-                                                                                        : ""}
+                                                                                <span
+                                                                                    className={cn(
+                                                                                        "font-medium",
+                                                                                        Number(component.priceAdjustmentSnapshot) > 0
+                                                                                            ? "text-foreground"
+                                                                                            : "text-rose-500",
+                                                                                    )}
+                                                                                >
+                                                                                    {Number(component.priceAdjustmentSnapshot) > 0 ? "+" : ""}
                                                                                     {formatCurrency(component.priceAdjustmentSnapshot)}
                                                                                 </span>
                                                                             ) : null}
-                                                                        </p>
+                                                                        </span>
                                                                         {(component.addOns ?? []).length > 0 ? (
-                                                                            <div className="space-y-0.5 pl-2">
+                                                                            <div className="flex flex-wrap gap-1 pl-1">
                                                                                 {(component.addOns ?? []).map((addOn) => {
                                                                                     const addOnDiscountAmount =
                                                                                         Number(addOn.unitDiscountSnapshot) *
@@ -706,21 +760,16 @@ const SaleDetailDialog = ({
                                                                                     );
 
                                                                                     return (
-                                                                                        <p
+                                                                                        <span
                                                                                             key={addOn.id}
-                                                                                            className="text-xs text-muted-foreground"
+                                                                                            className="inline-flex items-center gap-1 rounded-md border border-dashed border-border/50 bg-background px-2 py-0.5 text-[11px] text-muted-foreground"
                                                                                         >
                                                                                             + {addOn.addOnNameSnapshot} ×{" "}
-                                                                                            {Number(addOn.totalQuantity)} ·{" "}
-                                                                                            {formatCurrency(
-                                                                                                (Number(addOn.unitPriceSnapshot) -
-                                                                                                    Number(addOn.unitDiscountSnapshot)) *
-                                                                                                    Number(addOn.totalQuantity),
-                                                                                            )}
+                                                                                            {Number(addOn.totalQuantity)}
                                                                                             {addOnDiscountAmount > 0
                                                                                                 ? ` · -${formatCurrency(addOnDiscountAmount)}${addOnDiscountPct ? ` (${addOnDiscountPct})` : ""}`
-                                                                                                : ""}
-                                                                                        </p>
+                                                                                                : null}
+                                                                                        </span>
                                                                                     );
                                                                                 })}
                                                                             </div>
@@ -736,56 +785,13 @@ const SaleDetailDialog = ({
                                     </div>
                                 </section>
 
-                                {/* Payments */}
-                                <section className="space-y-3">
-                                    <h3 className="text-sm font-semibold text-foreground">
-                                        Payments
-                                        {sale.payments.length > 0 ? (
-                                            <span className="ml-2 text-muted-foreground font-normal">
-                                                ({sale.payments.length})
-                                            </span>
-                                        ) : null}
-                                    </h3>
-                                    {sale.payments.length === 0 ? (
-                                        <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-                                            No payments collected yet.
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-xl border border-border/60 divide-y divide-border/50">
-                                            {sale.payments.map((payment) => {
-                                                const Icon = paymentMethodIcon(payment.method);
-                                                const colorClass = paymentMethodColor(payment.method);
-
-                                                return (
-                                                    <div
-                                                        key={payment.id}
-                                                        className="flex items-center justify-between gap-4 px-4 py-3"
-                                                    >
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className={cn("shrink-0", colorClass)}>
-                                                                <Icon className="size-4" />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-medium capitalize text-foreground">
-                                                                    {payment.method.replace("_", " ")}
-                                                                </p>
-                                                                <p className="text-xs text-muted-foreground truncate">
-                                                                    {formatDateTime(payment.collectedAt)}
-                                                                    {payment.referenceNumber
-                                                                        ? ` · Ref ${payment.referenceNumber}`
-                                                                        : ""}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <p className="text-sm font-semibold tabular-nums text-foreground shrink-0">
-                                                            {formatCurrency(payment.amount)}
-                                                        </p>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </section>
+                                {/* Payments — device mode keeps them in the main column */}
+                                {canMutate ? (
+                                    <section className="space-y-3">
+                                        <SectionHeading count={sale.payments.length}>Payments</SectionHeading>
+                                        <PaymentsList payments={sale.payments} />
+                                    </section>
+                                ) : null}
 
                                 {canMutate && sale.status === "completed" && Number(sale.paidTotal) === 0 ? (
                                     <section className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 space-y-4">
@@ -825,20 +831,18 @@ const SaleDetailDialog = ({
                             </div>
 
                             {/* Summary sidebar */}
-                            <div className="space-y-4 lg:sticky lg:top-0 lg:self-start">
-                                <div className="rounded-xl border border-border/60 bg-card p-5 space-y-4">
-                                    <div>
-                                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            <div className="space-y-4 md:sticky md:top-0 md:self-start">
+                                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-b from-card to-muted/20 shadow-sm">
+                                    <div className="border-b border-border/50 bg-muted/30 px-5 py-4">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                             Bill total
                                         </p>
-                                        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+                                        <p className="mt-0.5 font-display text-3xl font-bold tabular-nums tracking-tight text-foreground">
                                             {formatCurrency(sale.grandTotal)}
                                         </p>
                                     </div>
 
-                                    <Separator />
-
-                                    <div className="space-y-2.5 text-sm">
+                                    <div className="space-y-2.5 px-5 py-4 text-sm">
                                         <div className="flex justify-between gap-4">
                                             <span className="text-muted-foreground">Items subtotal</span>
                                             <span className="font-medium tabular-nums">
@@ -871,9 +875,14 @@ const SaleDetailDialog = ({
                                         </div>
                                     </div>
 
-                                    <Separator />
-
-                                    <div className="flex justify-between items-baseline gap-4">
+                                    <div
+                                        className={cn(
+                                            "flex justify-between items-baseline gap-4 border-t px-5 py-4",
+                                            Number(sale.dueTotal) > 0
+                                                ? "border-amber-500/20 bg-amber-500/5"
+                                                : "border-emerald-500/20 bg-emerald-500/5",
+                                        )}
+                                    >
                                         <span className="font-semibold text-foreground">Due</span>
                                         <span
                                             className={cn(
@@ -887,6 +896,14 @@ const SaleDetailDialog = ({
                                         </span>
                                     </div>
                                 </div>
+
+                                {/* Payments — admin mode shows them in the sidebar */}
+                                {!canMutate ? (
+                                    <section className="space-y-3">
+                                        <SectionHeading count={sale.payments.length}>Payments</SectionHeading>
+                                        <PaymentsList payments={sale.payments} />
+                                    </section>
+                                ) : null}
 
                                 {formError ? (
                                     <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">

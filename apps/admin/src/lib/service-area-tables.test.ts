@@ -16,10 +16,10 @@ describe("Service Area table membership", () => {
     { tableLabel: "A1", serviceAreaId: indoorId },
   ];
 
-  test("lists only tables assigned to the selected area, sorted by label", () => {
+  test("lists only tables assigned to the selected area, in source order", () => {
     expect(
       tablesAssignedToServiceArea(tables, patioId).map((table) => table.tableLabel),
-    ).toEqual(["T1", "T10"]);
+    ).toEqual(["T10", "T1"]);
   });
 
   test("lists Unassigned Service Tables and excludes tables already in an area", () => {
@@ -39,7 +39,7 @@ describe("Service Area table membership", () => {
       })),
     ).toEqual([
       { title: "Hall", labels: ["A1"] },
-      { title: "First Floor", labels: ["T1", "T10"] },
+      { title: "First Floor", labels: ["T10", "T1"] },
       { title: "Unassigned", labels: ["T2"] },
     ]);
   });
@@ -53,5 +53,21 @@ describe("Service Area table membership", () => {
     expect(
       groupServiceTablesByArea(tables, []).map((group) => group.title),
     ).toEqual(["Unassigned"]);
+  });
+
+  test("can keep empty areas so staff can add tables to them", () => {
+    expect(
+      groupServiceTablesByArea(
+        [{ tableLabel: "T2", serviceAreaId: null }],
+        [{ id: indoorId, title: "Hall" }],
+        { includeEmptyAreas: true },
+      ).map((group) => ({
+        title: group.title,
+        count: group.tables.length,
+      })),
+    ).toEqual([
+      { title: "Hall", count: 0 },
+      { title: "Unassigned", count: 1 },
+    ]);
   });
 });

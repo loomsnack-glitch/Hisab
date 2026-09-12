@@ -48,6 +48,7 @@ import type {
   CheckoutTableOrderJSON,
   KitchenKotsListResponse,
 } from "@repo/types";
+import { serializeSalesListQueryParams } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
 export const getPosCategories = async (): Promise<
@@ -343,7 +344,9 @@ export const getPosSales = async (
   params?: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
   try {
-    const response = await api.get("/pos/sales", { params });
+    const response = await api.get("/pos/sales", {
+      params: serializeSalesListQueryParams(params),
+    });
     return response.data;
   } catch (error) {
     return handleApiError(error);

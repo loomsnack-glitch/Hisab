@@ -104,3 +104,23 @@ export const AssignServiceTablesToAreaSchema = z
       .min(1, "Select at least one table"),
   })
   .strict();
+
+const orderedIdsSchema = z
+  .array(z.uuid("Invalid id"))
+  .min(1, "At least one item is required")
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "Items cannot be repeated",
+  });
+
+export const ReorderServiceAreasSchema = z
+  .object({
+    areaIds: orderedIdsSchema,
+  })
+  .strict();
+
+export const ReorderServiceTablesSchema = z
+  .object({
+    serviceAreaId: z.uuid("Invalid area id").nullable(),
+    tableIds: orderedIdsSchema,
+  })
+  .strict();

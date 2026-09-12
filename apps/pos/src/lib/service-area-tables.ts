@@ -1,23 +1,15 @@
-import { sortServiceTablesByLabel } from "@/lib/service-table-layout";
-
 export const tablesAssignedToServiceArea = <
   T extends { serviceAreaId: string | null; tableLabel: string },
 >(
   tables: T[],
   areaId: string,
-) =>
-  sortServiceTablesByLabel(
-    tables.filter((table) => table.serviceAreaId === areaId),
-  );
+) => tables.filter((table) => table.serviceAreaId === areaId);
 
 export const unassignedServiceTables = <
   T extends { serviceAreaId: string | null; tableLabel: string },
 >(
   tables: T[],
-) =>
-  sortServiceTablesByLabel(
-    tables.filter((table) => table.serviceAreaId === null),
-  );
+) => tables.filter((table) => table.serviceAreaId === null);
 
 export type ServiceAreaTableGroup<T> = {
   areaId: string | null;
@@ -38,7 +30,7 @@ export const groupServiceTablesByArea = <
       {
         areaId: null,
         title: "Unassigned",
-        tables: sortServiceTablesByLabel(tables),
+        tables,
       },
     ];
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createServiceTable } from "@repo/services";
+import { assignServiceTablesToArea, createServiceTable } from "@repo/services";
 import {
   CreateServiceTableSchema,
   type CreateServiceTableJSON,
@@ -16,7 +16,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Armchair, Plus } from "lucide-react";
+import { Armchair, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { serviceTableKeys } from "@/lib/query-keys";
@@ -31,12 +31,16 @@ const defaultValues: FormValues = { tableLabel: "", capacity: "" };
 type CreateServiceTableDialogProps = {
   organizationId: string;
   storeId: string;
+  serviceAreaId?: string | null;
+  areaTitle?: string;
   trigger?: React.ReactElement;
 };
 
 const CreateServiceTableDialog = ({
   organizationId,
   storeId,
+  serviceAreaId = null,
+  areaTitle,
   trigger,
 }: CreateServiceTableDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -50,14 +54,34 @@ const CreateServiceTableDialog = ({
   }, [form, open]);
 
   const mutation = useMutation({
-    mutationFn: (data: CreateServiceTableJSON) =>
-      createServiceTable(organizationId, storeId, data),
+    mutationFn: async (data: CreateServiceTableJSON) => {
+      const created = await createServiceTable(organizationId, storeId, data);
+      if (created.status !== "success" || !created.data?.table) {
+        return created;
+      }
+      if (!serviceAreaId) {
+        return created;
+      }
+
+      const assigned = await assignServiceTablesToArea(
+        { organizationId, storeId, areaId: serviceAreaId },
+        { tableIds: [created.data.table.id] },
+      );
+      if (assigned.status !== "success") {
+        return assigned;
+      }
+      return created;
+    },
     onSuccess: (response) => {
       if (response.status !== "success") {
         toast.error(response.message);
         return;
       }
-      toast.success(response.message ?? "Service table created");
+      toast.success(
+        serviceAreaId && areaTitle
+          ? `Table added to ${areaTitle}`
+          : (response.message ?? "Service table created"),
+      );
       void queryClient.invalidateQueries({
         queryKey: serviceTableKeys.store(organizationId, storeId),
       });
@@ -93,8 +117,11 @@ const CreateServiceTableDialog = ({
       <DialogTrigger
         render={
           trigger ?? (
-            <Button className="rounded-xl" disabled={!storeId}>
-              <Plus className="size-4" />
+            <Button
+              className="h-10 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:px-5 sm:text-sm"
+              disabled={!storeId}
+            >
+              <PlusCircle className="size-4" />
               Add table
             </Button>
           )
@@ -104,7 +131,11 @@ const CreateServiceTableDialog = ({
         <DialogHeader
           icon={<Armchair className="size-5" />}
           title="Add Service Table"
-          subtitle="Use the same Table no that staff see in POS."
+          subtitle={
+            areaTitle
+              ? `This table will be added to ${areaTitle}.`
+              : "Use the same Table no that staff see in POS."
+          }
         />
         <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
           <Field data-invalid={Boolean(form.formState.errors.tableLabel)}>

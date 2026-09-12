@@ -93,27 +93,47 @@ export const SalesSortSchema = z.enum([
   "lowest",
 ]);
 
-export const SalesPaymentMethodsQuerySchema = z.preprocess(
-  (value) => {
-    if (value === undefined || value === null || value === "") {
-      return undefined;
-    }
+export const SalesPaymentMethodsQuerySchema = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
 
-    if (Array.isArray(value)) {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      return value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean);
-    }
-
+  if (Array.isArray(value)) {
     return value;
-  },
-  z.array(PaymentMethodSchema).optional(),
-);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+}, z.array(PaymentMethodSchema).optional());
+
+export type SerializedSalesListQueryParams<
+  T extends { paymentMethods?: readonly string[] },
+> = Omit<T, "paymentMethods"> & {
+  paymentMethods?: string;
+};
+
+export const serializeSalesListQueryParams = <
+  T extends { paymentMethods?: readonly string[] },
+>(
+  query?: T,
+): SerializedSalesListQueryParams<T> | undefined => {
+  if (!query) {
+    return undefined;
+  }
+
+  const { paymentMethods, ...queryWithoutPaymentMethods } = query;
+
+  return {
+    ...queryWithoutPaymentMethods,
+    ...(paymentMethods ? { paymentMethods: paymentMethods.join(",") } : {}),
+  };
+};
 export const CustomerLedgerEntryTypeSchema = z.enum([
   "sale",
   "payment",
@@ -135,15 +155,36 @@ export const CustomerDTOSchema = z.object({
   marketingOptedOut: z.boolean().default(false),
   marketingOptedIn: z.boolean().default(false),
   marketingOptedInAt: dtoDateSchema.nullable().optional().default(null),
-  marketingOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
+  marketingOptInSource: z
+    .string()
+    .trim()
+    .min(1)
+    .max(32)
+    .nullable()
+    .optional()
+    .default(null),
   // Utility messages (bills and due reminders) are enabled for customers by default.
   // An explicit utility opt-out is still represented as false by the API.
   utilityOptedIn: z.boolean().default(true),
   utilityOptedInAt: dtoDateSchema.nullable().optional().default(null),
-  utilityOptInSource: z.string().trim().min(1).max(32).nullable().optional().default(null),
+  utilityOptInSource: z
+    .string()
+    .trim()
+    .min(1)
+    .max(32)
+    .nullable()
+    .optional()
+    .default(null),
   whatsappSuppressed: z.boolean().default(false),
   whatsappSuppressedAt: dtoDateSchema.nullable().optional().default(null),
-  whatsappSuppressionReason: z.string().trim().min(1).max(1000).nullable().optional().default(null),
+  whatsappSuppressionReason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1000)
+    .nullable()
+    .optional()
+    .default(null),
   createdBy: z.uuid("Invalid creator id"),
   updatedBy: z.uuid("Invalid updater id").nullable().optional(),
   createdAt: dtoDateSchema,

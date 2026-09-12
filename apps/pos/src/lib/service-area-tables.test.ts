@@ -16,10 +16,10 @@ describe("Service Area table membership", () => {
     { tableLabel: "A1", serviceAreaId: indoorId },
   ];
 
-  test("lists only tables assigned to the selected area, sorted by label", () => {
+  test("lists only tables assigned to the selected area, in source order", () => {
     expect(
       tablesAssignedToServiceArea(tables, patioId).map((table) => table.tableLabel),
-    ).toEqual(["T1", "T10"]);
+    ).toEqual(["T10", "T1"]);
   });
 
   test("lists Unassigned Service Tables and excludes tables already in an area", () => {
@@ -39,7 +39,7 @@ describe("Service Area table membership", () => {
       })),
     ).toEqual([
       { title: "Hall", labels: ["A1"] },
-      { title: "First Floor", labels: ["T1", "T10"] },
+      { title: "First Floor", labels: ["T10", "T1"] },
       { title: "Unassigned", labels: ["T2"] },
     ]);
   });

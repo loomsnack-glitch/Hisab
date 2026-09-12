@@ -23,6 +23,7 @@ import type {
     UpdateDraftSaleJSON,
     VoidSaleJSON,
 } from "@repo/types";
+import { serializeSalesListQueryParams } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
 export const getSaleNumberSettings = async (
@@ -121,7 +122,9 @@ export const getSales = async (
     params?: SalesListQuery,
 ): Promise<ServiceResponse<SalesListResponse | null>> => {
     try {
-        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/sales`, { params });
+        const response = await api.get(`/organizations/${organizationId}/stores/${storeId}/sales`, {
+            params: serializeSalesListQueryParams(params),
+        });
         return response.data;
     } catch (error) {
         return handleApiError(error);

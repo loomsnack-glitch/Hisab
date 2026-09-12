@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 
 import {
     getStoreAppearancePath,
+    getStoreBillingPath,
     getStoreCategoriesPath,
     getStoreDevicesPath,
     getStoreLicensePath,
     getStoreProductsPath,
     getStoreSettingsPath,
+    getStoreTablesPath,
     getStoreVendorsPath,
     getStoreWorkspacePath,
     isStoreWorkspaceNavActive,
@@ -45,6 +47,12 @@ describe("store workspace routes", () => {
         expect(getStoreLicensePath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/license`,
         );
+        expect(getStoreBillingPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/billing`,
+        );
+        expect(getStoreTablesPath(organizationId, storeId)).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/tables`,
+        );
         expect(getStoreAppearancePath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/appearance`,
         );
@@ -68,6 +76,14 @@ describe("store workspace routes", () => {
             storeId,
         });
         expect(parseStoreWorkspacePath(getStoreLicensePath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
+        expect(parseStoreWorkspacePath(getStoreBillingPath(organizationId, storeId))).toEqual({
+            organizationId,
+            storeId,
+        });
+        expect(parseStoreWorkspacePath(getStoreTablesPath(organizationId, storeId))).toEqual({
             organizationId,
             storeId,
         });

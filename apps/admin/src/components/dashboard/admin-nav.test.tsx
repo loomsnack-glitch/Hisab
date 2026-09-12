@@ -4,11 +4,11 @@ import { MemoryRouter } from "react-router-dom";
 
 import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav";
 import {
-    getGroupedAdminMainDestinations,
-    getVisibleAdminMainDestinations,
-    getVisibleAdminPrimaryMobileDestinations,
-    getVisibleAdminWorkspaceDestinations,
-    isAdminMoreDestinationActive,
+  getGroupedAdminMainDestinations,
+  getVisibleAdminMainDestinations,
+  getVisibleAdminPrimaryMobileDestinations,
+  getVisibleAdminWorkspaceDestinations,
+  isAdminMoreDestinationActive,
 } from "@/components/dashboard/admin-nav-items";
 
 const organizationId = "org-1";
@@ -16,237 +16,419 @@ const withOrg = { organizationId, hasOrganization: true };
 const withoutOrg = { organizationId: "", hasOrganization: false };
 
 describe("Admin mobile navigation", () => {
-    test("orders main sidebar destinations grouped by Catalog, Sales, Reports, Finance, Integrations", () => {
-        const mainIds = getVisibleAdminMainDestinations(withOrg).map((destination) => destination.id);
+  test("orders main sidebar destinations grouped by Catalog, Sales, Reports, Finance, Integrations", () => {
+    const mainIds = getVisibleAdminMainDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
 
-        expect(mainIds).toEqual([
-            "products",
-            "units",
-            "billing",
-            "tables",
-            "customers",
-            "reports",
-            "money-accounts",
-            "vendors",
-            "purchases",
-            "expenses",
-            "whatsapp",
-            "google-contacts",
-            "appearance",
-        ]);
-    });
+    expect(mainIds).toEqual([
+      "products",
+      "units",
+      "billing",
+      "customers",
+      "reports",
+      "money-accounts",
+      "vendors",
+      "purchases",
+      "expenses",
+      "whatsapp",
+      "google-contacts",
+      "appearance",
+    ]);
+  });
 
-    test("groups destinations into five named sections", () => {
-        const sections = getGroupedAdminMainDestinations(withOrg);
+  test("groups destinations into five named sections", () => {
+    const sections = getGroupedAdminMainDestinations(withOrg);
 
-        expect(sections.map((s) => s.group)).toEqual([
-            "catalog",
-            "sales",
-            "reports",
-            "finance",
-            "integrations",
-            "organization",
-        ]);
+    expect(sections.map((s) => s.group)).toEqual([
+      "catalog",
+      "sales",
+      "reports",
+      "finance",
+      "integrations",
+      "organization",
+    ]);
 
-        expect(sections.map((s) => s.label)).toEqual([
-            "Catalog",
-            "Sales & Service",
-            "Reports",
-            "Finance",
-            "Integrations",
-            "Organization",
-        ]);
-    });
+    expect(sections.map((s) => s.label)).toEqual([
+      "Catalog",
+      "Sales & Service",
+      "Reports",
+      "Finance",
+      "Integrations",
+      "Organization",
+    ]);
+  });
 
-    test("includes Units as an Organization-scoped workspace destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const units = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "units");
+  test("includes Units as an Organization-scoped workspace destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const units = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "units",
+    );
 
-        expect(workspaceIds).toContain("units");
-        expect(units?.path).toBe(`/organizations/${organizationId}/units`);
-        expect(units?.isActive(`/organizations/${organizationId}/units`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/units`, withOrg)).toBe(true);
-    });
+    expect(workspaceIds).toContain("units");
+    expect(units?.path).toBe(`/organizations/${organizationId}/units`);
+    expect(units?.isActive(`/organizations/${organizationId}/units`)).toBe(
+      true,
+    );
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/units`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("does not include Expense Categories as a separate sidebar destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
+  test("does not include Expense Categories as a separate sidebar destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
 
-        expect(workspaceIds).not.toContain("expense-categories");
-        expect(workspaceIds).toContain("expenses");
-    });
+    expect(workspaceIds).not.toContain("expense-categories");
+    expect(workspaceIds).toContain("expenses");
+  });
 
-    test("includes Vendors as an Organization-scoped workspace destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const vendors = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "vendors");
+  test("includes Vendors as an Organization-scoped workspace destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const vendors = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "vendors",
+    );
 
-        expect(workspaceIds).toContain("vendors");
-        expect(vendors?.path).toBe(`/organizations/${organizationId}/vendors`);
-        expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/vendors`, withOrg)).toBe(true);
-    });
+    expect(workspaceIds).toContain("vendors");
+    expect(vendors?.path).toBe(`/organizations/${organizationId}/vendors`);
+    expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(
+      true,
+    );
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/vendors`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("includes Purchases as an Organization-scoped workspace destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const purchases = getVisibleAdminWorkspaceDestinations(withOrg).find(
-            (destination) => destination.id === "purchases",
-        );
+  test("includes Purchases as an Organization-scoped workspace destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const purchases = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "purchases",
+    );
 
-        expect(workspaceIds).toContain("purchases");
-        expect(purchases?.path).toBe(`/organizations/${organizationId}/purchases`);
-        expect(purchases?.isActive(`/organizations/${organizationId}/purchases`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/purchases`, withOrg)).toBe(true);
-    });
+    expect(workspaceIds).toContain("purchases");
+    expect(purchases?.path).toBe(`/organizations/${organizationId}/purchases`);
+    expect(
+      purchases?.isActive(`/organizations/${organizationId}/purchases`),
+    ).toBe(true);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/purchases`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("includes Expenses as an Organization-scoped workspace destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const expenses = getVisibleAdminWorkspaceDestinations(withOrg).find(
-            (destination) => destination.id === "expenses",
-        );
+  test("includes Expenses as an Organization-scoped workspace destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const expenses = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "expenses",
+    );
 
-        expect(workspaceIds).toContain("expenses");
-        expect(expenses?.path).toBe(`/organizations/${organizationId}/expenses`);
-        expect(expenses?.isActive(`/organizations/${organizationId}/expenses`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/expenses`, withOrg)).toBe(true);
-    });
+    expect(workspaceIds).toContain("expenses");
+    expect(expenses?.path).toBe(`/organizations/${organizationId}/expenses`);
+    expect(
+      expenses?.isActive(`/organizations/${organizationId}/expenses`),
+    ).toBe(true);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/expenses`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("includes Money Accounts as an Organization-scoped workspace destination", () => {
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const moneyAccounts = getVisibleAdminWorkspaceDestinations(withOrg).find(
-            (destination) => destination.id === "money-accounts",
-        );
+  test("includes Money Accounts as an Organization-scoped workspace destination", () => {
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const moneyAccounts = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "money-accounts",
+    );
 
-        expect(workspaceIds).toContain("money-accounts");
-        expect(moneyAccounts?.path).toBe(`/organizations/${organizationId}/money-accounts`);
-        expect(moneyAccounts?.isActive(`/organizations/${organizationId}/money-accounts`)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/money-accounts`, withOrg)).toBe(true);
-    });
+    expect(workspaceIds).toContain("money-accounts");
+    expect(moneyAccounts?.path).toBe(
+      `/organizations/${organizationId}/money-accounts`,
+    );
+    expect(
+      moneyAccounts?.isActive(
+        `/organizations/${organizationId}/money-accounts`,
+      ),
+    ).toBe(true);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/money-accounts`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("pins Product and Billing as the primary tabs when an organization is selected", () => {
-        const primaryIds = getVisibleAdminPrimaryMobileDestinations(withOrg).map((destination) => destination.id);
+  test("pins Product and Billing as the primary tabs when an organization is selected", () => {
+    const primaryIds = getVisibleAdminPrimaryMobileDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
 
-        expect(primaryIds).toEqual(["products", "billing"]);
-    });
+    expect(primaryIds).toEqual(["products", "billing"]);
+  });
 
-    test("shows no destinations when no organization is available", () => {
-        const primary = getVisibleAdminPrimaryMobileDestinations(withoutOrg);
-        const workspaceIds = getVisibleAdminWorkspaceDestinations(withoutOrg).map((destination) => destination.id);
+  test("shows no destinations when no organization is available", () => {
+    const primary = getVisibleAdminPrimaryMobileDestinations(withoutOrg);
+    const workspaceIds = getVisibleAdminWorkspaceDestinations(withoutOrg).map(
+      (destination) => destination.id,
+    );
 
-        expect(primary).toEqual([]);
-        expect(workspaceIds).toEqual([]);
-    });
+    expect(primary).toEqual([]);
+    expect(workspaceIds).toEqual([]);
+  });
 
-    test("marks More as active on secondary pages, not on primary tabs", () => {
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/billing`, withOrg)).toBe(false);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/reports`, withOrg)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/settings`, withOrg)).toBe(true);
-        expect(isAdminMoreDestinationActive(`/organizations/${organizationId}/appearance`, withOrg)).toBe(true);
-    });
+  test("marks More as active on secondary pages, not on primary tabs", () => {
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/billing`,
+        withOrg,
+      ),
+    ).toBe(false);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/reports`,
+        withOrg,
+      ),
+    ).toBe(true);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/settings`,
+        withOrg,
+      ),
+    ).toBe(true);
+    expect(
+      isAdminMoreDestinationActive(
+        `/organizations/${organizationId}/appearance`,
+        withOrg,
+      ),
+    ).toBe(true);
+  });
 
-    test("keeps Organization destinations on Organization routes, including while a Store workspace URL exists", () => {
-        const products = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "products");
-        const billing = getVisibleAdminWorkspaceDestinations(withOrg).find((destination) => destination.id === "billing");
+  test("keeps Organization destinations on Organization routes, including while a Store workspace URL exists", () => {
+    const products = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "products",
+    );
+    const billing = getVisibleAdminWorkspaceDestinations(withOrg).find(
+      (destination) => destination.id === "billing",
+    );
 
-        expect(products?.path).toBe(`/organizations/${organizationId}/products`);
-        expect(billing?.path).toBe(`/organizations/${organizationId}/billing`);
-        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${organizationId}`)).toBe(false);
-    });
+    expect(products?.path).toBe(`/organizations/${organizationId}/products`);
+    expect(billing?.path).toBe(`/organizations/${organizationId}/billing`);
+    expect(
+      products?.isActive(
+        `/organizations/${organizationId}/workspaces/${organizationId}`,
+      ),
+    ).toBe(false);
+  });
 
-    test("shows only Store-scoped destinations when a Store workspace is selected", () => {
-        const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-        const withStore = { ...withOrg, storeId };
-        const products = getVisibleAdminWorkspaceDestinations(withStore).find(
-            (destination) => destination.id === "products",
-        );
-        const storeDestinationIds = getVisibleAdminWorkspaceDestinations(withStore).map((destination) => destination.id);
+  test("shows only Store-scoped destinations when a Store workspace is selected", () => {
+    const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const withStore = { ...withOrg, storeId };
+    const products = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "products",
+    );
+    const storeDestinationIds = getVisibleAdminWorkspaceDestinations(
+      withStore,
+    ).map((destination) => destination.id);
 
-        expect(products?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/products`);
-        expect(products?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/products`)).toBe(true);
-        expect(products?.isActive(`/organizations/${organizationId}/products`)).toBe(false);
-        const vendors = getVisibleAdminWorkspaceDestinations(withStore).find(
-            (destination) => destination.id === "vendors",
-        );
-        expect(vendors?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/vendors`);
-        expect(vendors?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/vendors`)).toBe(true);
-        expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(false);
-        const devices = getVisibleAdminWorkspaceDestinations(withStore).find(
-            (destination) => destination.id === "devices",
-        );
-        expect(devices?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/devices`);
-        expect(devices?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/devices`)).toBe(true);
-        expect(devices?.isActive(`/organizations/${organizationId}/stores/${storeId}/devices`)).toBe(false);
-        const settings = getVisibleAdminWorkspaceDestinations(withStore).find(
-            (destination) => destination.id === "settings",
-        );
-        expect(settings?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/settings`);
-        expect(settings?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/settings`)).toBe(true);
-        expect(settings?.isActive(`/organizations/${organizationId}/stores/${storeId}/settings`)).toBe(false);
-        const license = getVisibleAdminWorkspaceDestinations(withStore).find(
-            (destination) => destination.id === "license",
-        );
-        expect(license?.path).toBe(`/organizations/${organizationId}/workspaces/${storeId}/license`);
-        expect(license?.isActive(`/organizations/${organizationId}/workspaces/${storeId}/license`)).toBe(true);
-        expect(license?.isActive(`/organizations/${organizationId}/stores/${storeId}/license`)).toBe(false);
-        expect(storeDestinationIds).toEqual([
-            "devices",
-            "settings",
-            "license",
-            "products",
-            "vendors",
-            "appearance",
-        ]);
+    expect(products?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/products`,
+    );
+    expect(
+      products?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/products`,
+      ),
+    ).toBe(true);
+    expect(
+      products?.isActive(`/organizations/${organizationId}/products`),
+    ).toBe(false);
+    const vendors = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "vendors",
+    );
+    expect(vendors?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/vendors`,
+    );
+    expect(
+      vendors?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/vendors`,
+      ),
+    ).toBe(true);
+    expect(vendors?.isActive(`/organizations/${organizationId}/vendors`)).toBe(
+      false,
+    );
+    const devices = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "devices",
+    );
+    expect(devices?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/devices`,
+    );
+    expect(
+      devices?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/devices`,
+      ),
+    ).toBe(true);
+    expect(
+      devices?.isActive(
+        `/organizations/${organizationId}/stores/${storeId}/devices`,
+      ),
+    ).toBe(false);
+    const settings = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "settings",
+    );
+    expect(settings?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/settings`,
+    );
+    expect(
+      settings?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/settings`,
+      ),
+    ).toBe(true);
+    expect(
+      settings?.isActive(
+        `/organizations/${organizationId}/stores/${storeId}/settings`,
+      ),
+    ).toBe(false);
+    const license = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "license",
+    );
+    expect(license?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/license`,
+    );
+    expect(
+      license?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/license`,
+      ),
+    ).toBe(true);
+    expect(
+      license?.isActive(
+        `/organizations/${organizationId}/stores/${storeId}/license`,
+      ),
+    ).toBe(false);
+    const billing = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "billing",
+    );
+    expect(billing?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/billing`,
+    );
+    expect(billing?.group).toBe("store");
+    expect(
+      billing?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/billing`,
+      ),
+    ).toBe(true);
+    expect(billing?.isActive(`/organizations/${organizationId}/billing`)).toBe(
+      false,
+    );
+    const tables = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "tables",
+    );
+    expect(tables?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/tables`,
+    );
+    expect(tables?.group).toBe("store");
+    expect(
+      tables?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/tables`,
+      ),
+    ).toBe(true);
+    expect(tables?.isActive(`/organizations/${organizationId}/tables`)).toBe(
+      false,
+    );
+    expect(storeDestinationIds).toEqual([
+      "devices",
+      "settings",
+      "license",
+      "products",
+      "billing",
+      "tables",
+      "vendors",
+      "appearance",
+    ]);
 
-        const sections = getGroupedAdminMainDestinations(withStore);
-        expect(sections.map((section) => section.label)).toEqual([
-            "Catalog",
-            "Store",
-            "Finance",
-            "Organization",
-        ]);
-        expect(sections[0]?.items.map((item) => item.id)).toEqual(["products"]);
-        expect(sections[1]?.items.map((item) => item.id)).toEqual(["devices", "settings", "license"]);
-    });
+    const sections = getGroupedAdminMainDestinations(withStore);
+    expect(sections.map((section) => section.label)).toEqual([
+      "Catalog",
+      "Store",
+      "Finance",
+      "Organization",
+    ]);
+    expect(sections[0]?.items.map((item) => item.id)).toEqual(["products"]);
+    expect(sections[1]?.items.map((item) => item.id)).toEqual([
+      "devices",
+      "settings",
+      "license",
+      "billing",
+      "tables",
+    ]);
+  });
 
-    test("does not show Store setup destinations in the Organization workspace sidebar", () => {
-        const destinationIds = getVisibleAdminWorkspaceDestinations(withOrg).map((destination) => destination.id);
-        const sections = getGroupedAdminMainDestinations(withOrg);
+  test("does not show Store setup destinations in the Organization workspace sidebar", () => {
+    const destinationIds = getVisibleAdminWorkspaceDestinations(withOrg).map(
+      (destination) => destination.id,
+    );
+    const sections = getGroupedAdminMainDestinations(withOrg);
 
-        expect(destinationIds).not.toContain("devices");
-        expect(destinationIds).not.toContain("settings");
-        expect(destinationIds).not.toContain("license");
-        expect(sections.map((section) => section.label)).toContain("Organization");
-        expect(sections.map((section) => section.label)).not.toContain("Store");
-    });
+    expect(destinationIds).not.toContain("devices");
+    expect(destinationIds).not.toContain("settings");
+    expect(destinationIds).not.toContain("license");
+    expect(destinationIds).not.toContain("tables");
+    expect(destinationIds).not.toContain("tables");
+    expect(sections.map((section) => section.label)).toContain("Organization");
+    expect(sections.map((section) => section.label)).not.toContain("Store");
+  });
 
-    test("renders the primary tabs and organization avatar on the More tab", () => {
-        const markup = renderToStaticMarkup(
-            <MemoryRouter initialEntries={[`/organizations/${organizationId}/products`]}>
-                <AdminMobileBottomNav
-                    organizationId={organizationId}
-                    hasOrganization
-                    activeOrgName="Panini House"
-                />
-            </MemoryRouter>,
-        );
+  test("renders the primary tabs and organization avatar on the More tab", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter
+        initialEntries={[`/organizations/${organizationId}/products`]}
+      >
+        <AdminMobileBottomNav
+          organizationId={organizationId}
+          hasOrganization
+          activeOrgName="Panini House"
+        />
+      </MemoryRouter>,
+    );
 
-        expect(markup).toContain('aria-label="Admin mobile navigation"');
-        expect(markup).toContain(`href="/organizations/${organizationId}/products"`);
-        expect(markup).toContain(`href="/organizations/${organizationId}/billing"`);
-        expect(markup).toContain("Product");
-        expect(markup).toContain("Billing");
-        expect(markup).toContain("PH");
-        expect(markup).not.toMatch(/<span[^>]*>More<\/span>/);
-    });
+    expect(markup).toContain('aria-label="Admin mobile navigation"');
+    expect(markup).toContain(
+      `href="/organizations/${organizationId}/products"`,
+    );
+    expect(markup).toContain(`href="/organizations/${organizationId}/billing"`);
+    expect(markup).toContain("Product");
+    expect(markup).toContain("Billing");
+    expect(markup).toContain("PH");
+    expect(markup).not.toMatch(/<span[^>]*>More<\/span>/);
+  });
 
-    test("omits organization-scoped links when no organization is selected", () => {
-        const markup = renderToStaticMarkup(
-            <MemoryRouter initialEntries={["/organizations"]}>
-                <AdminMobileBottomNav hasOrganization={false} />
-            </MemoryRouter>,
-        );
+  test("omits organization-scoped links when no organization is selected", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/organizations"]}>
+        <AdminMobileBottomNav hasOrganization={false} />
+      </MemoryRouter>,
+    );
 
-        expect(markup).toContain('aria-label="Organization and more pages"');
-        expect(markup).not.toContain("/stores");
-        expect(markup).not.toContain("/billing");
-        expect(markup).not.toContain("/products");
-    });
+    expect(markup).toContain('aria-label="Organization and more pages"');
+    expect(markup).not.toContain("/stores");
+    expect(markup).not.toContain("/billing");
+    expect(markup).not.toContain("/products");
+  });
 });

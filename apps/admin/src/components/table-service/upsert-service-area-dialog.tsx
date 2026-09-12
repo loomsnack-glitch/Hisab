@@ -18,7 +18,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
-import { MapPinned, Pencil, Plus } from "lucide-react";
+import { MapPinned, Pencil, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { serviceAreaKeys } from "@/lib/query-keys";
@@ -83,7 +83,7 @@ const UpsertServiceAreaDialog = ({
   const onSubmit: SubmitHandler<FormValues> = (values) => {
     const result = CreateServiceAreaSchema.safeParse({
       title: values.title,
-      description: values.description,
+      description: isEditMode ? values.description : "",
     });
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -94,7 +94,7 @@ const UpsertServiceAreaDialog = ({
 
     mutation.mutate({
       title: result.data.title,
-      description: result.data.description ?? "",
+      description: isEditMode ? (result.data.description ?? "") : "",
     });
   };
 
@@ -109,8 +109,11 @@ const UpsertServiceAreaDialog = ({
                 Edit
               </Button>
             ) : (
-              <Button className="rounded-xl" disabled={!storeId}>
-                <Plus className="size-4" />
+              <Button
+                className="h-10 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:px-5 sm:text-sm"
+                disabled={!storeId}
+              >
+                <PlusCircle className="size-4" />
                 Add area
               </Button>
             )
@@ -136,20 +139,22 @@ const UpsertServiceAreaDialog = ({
               <FieldError errors={[form.formState.errors.title]} />
             </FieldContent>
           </Field>
-          <Field data-invalid={Boolean(form.formState.errors.description)}>
-            <FieldLabel>
-              Description <span className="font-normal text-muted-foreground">(optional)</span>
-            </FieldLabel>
-            <FieldContent>
-              <Textarea
-                aria-label="Area description"
-                className="min-h-24 rounded-xl"
-                placeholder="e.g. Outdoor seating near the entrance"
-                {...form.register("description")}
-              />
-              <FieldError errors={[form.formState.errors.description]} />
-            </FieldContent>
-          </Field>
+          {isEditMode ? (
+            <Field data-invalid={Boolean(form.formState.errors.description)}>
+              <FieldLabel>
+                Description <span className="font-normal text-muted-foreground">(optional)</span>
+              </FieldLabel>
+              <FieldContent>
+                <Textarea
+                  aria-label="Area description"
+                  className="min-h-24 rounded-xl"
+                  placeholder="e.g. Outdoor seating near the entrance"
+                  {...form.register("description")}
+                />
+                <FieldError errors={[form.formState.errors.description]} />
+              </FieldContent>
+            </Field>
+          ) : null}
           <DialogFooter>
             <Button
               type="button"
