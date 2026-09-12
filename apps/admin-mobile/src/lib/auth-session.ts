@@ -1,7 +1,7 @@
-import type { RegisterAuthResponse, ServiceResponse } from "@repo/types";
+import type { BaseAuthResponse, ServiceResponse } from "@repo/types";
 
-export const resolveRegistrationSession = (
-    response: ServiceResponse<RegisterAuthResponse | null>,
+export const resolveAuthSession = (
+    response: ServiceResponse<BaseAuthResponse | null>,
 ) => {
     if (response.status !== "success" || !response.data?.user || !response.data.token) {
         return null;

@@ -95,3 +95,17 @@ Status: completed with native validation follow-up
 These remain follow-ups because the repository validation rule prohibits those commands while planned POS mobile work remains incomplete. The MVP is statically and behaviorally validated within the permitted boundary, not declared store/device-ready.
 
 Phase 7 is complete with native validation follow-up. The limited Ganatri Admin mobile MVP is ready for the separately authorized native validation gate.
+
+## Post-review fixes
+
+- Fixed bootstrap cleanup for settled successful `/auth` responses without a user, including rejected responses that retain stale query data.
+- Consolidated duplicate login/registration session resolution and error-message helpers into shared Admin utilities.
+- Removed unused preview and placeholder screens after their real flow replacements.
+- Added shared auth-form contract tests for password, OTP, and registration confirmation validation.
+
+Post-review verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun test apps/admin-mobile/src` — 18 passed across 6 files.
+- `git diff --check` — passed.
+- Native build, emulator, device, WhatsApp delivery, and runtime API validation remain pending under repository `AGENTS.md`.

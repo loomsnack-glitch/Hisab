@@ -9,6 +9,12 @@ export const resolveBootstrapUser = (
     response: ServiceResponse<BaseAuthResponse | null> | undefined,
 ) => response?.status === "success" ? response.data?.user ?? null : null;
 
+export const shouldClearBootstrapSession = (
+    response: ServiceResponse<BaseAuthResponse | null> | undefined,
+    isSettled: boolean,
+    isError = false,
+) => isSettled && (isError || response?.status !== "success" || !response.data?.user);
+
 const clearAdminToken = async () => {
     try {
         await clearAuthToken();
@@ -61,17 +67,23 @@ export const useAdminAuthBootstrap = () => {
             return;
         }
 
-        const user = resolveBootstrapUser(authQuery.data);
-        if (user) {
-            setAuthenticated(user);
+        if (
+            shouldClearBootstrapSession(
+                authQuery.data,
+                authQuery.isError || authQuery.isSuccess,
+                authQuery.isError,
+            )
+        ) {
+            void clearAdminToken();
+            clearSession();
             return;
         }
 
-        if (authQuery.isError || authQuery.data?.status === "error") {
-            void clearAdminToken();
-            clearSession();
+        const user = resolveBootstrapUser(authQuery.data);
+        if (user) {
+            setAuthenticated(user);
         }
-    }, [authQuery.data, authQuery.isError, clearSession, hasToken, setAuthenticated, tokenHydrated]);
+    }, [authQuery.data, authQuery.isError, authQuery.isSuccess, clearSession, hasToken, setAuthenticated, tokenHydrated]);
 
     return {
         status,

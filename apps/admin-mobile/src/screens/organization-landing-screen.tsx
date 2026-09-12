@@ -16,6 +16,7 @@ import AuthShell from "../components/auth/auth-shell";
 import { useAdminLogout } from "../hooks/use-admin-logout";
 import SessionStatusScreen from "./session-status-screen";
 import { adminOrganizationKeys } from "../lib/organization-keys";
+import { getAuthErrorMessage } from "../lib/auth-errors";
 import {
     resolveOrganizationLanding,
     type OrganizationRef,
@@ -23,19 +24,6 @@ import {
 
 const asOrganizationRefs = (organizations: OrganizationDTO[]) =>
     organizations.map(({ id, name }) => ({ id, name }));
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-    if (
-        error &&
-        typeof error === "object" &&
-        "message" in error &&
-        typeof error.message === "string"
-    ) {
-        return error.message;
-    }
-
-    return fallback;
-};
 
 type OrganizationSetupProps = {
     onCreated: (organization: OrganizationRef) => void;
@@ -68,7 +56,7 @@ const OrganizationSetup = ({ onCreated, onSignOut, signingOut }: OrganizationSet
             onCreated({ id: organization.id, name: organization.name });
         } catch (error) {
             setFeedback(
-                getErrorMessage(error, "Unable to create your organization. Please try again."),
+                getAuthErrorMessage(error, "Unable to create your organization. Please try again."),
             );
         }
     };

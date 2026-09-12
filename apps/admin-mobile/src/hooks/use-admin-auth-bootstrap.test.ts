@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { AuthenticatedUserDTO, ServiceResponse } from "@repo/types";
-import { resolveBootstrapUser } from "./use-admin-auth-bootstrap";
+import { resolveBootstrapUser, shouldClearBootstrapSession } from "./use-admin-auth-bootstrap";
 
 const user = { id: "user-1" } as AuthenticatedUserDTO;
 
@@ -35,5 +35,28 @@ describe("Admin auth bootstrap response", () => {
         } satisfies ServiceResponse<null>;
 
         expect(resolveBootstrapUser(response)).toBeNull();
+    });
+
+    it("clears a settled successful response without a user", () => {
+        const response = {
+            status: "success",
+            message: "No session",
+            code: 200,
+            data: null,
+        } satisfies ServiceResponse<null>;
+
+        expect(shouldClearBootstrapSession(response, true)).toBe(true);
+        expect(shouldClearBootstrapSession(response, false)).toBe(false);
+    });
+
+    it("clears a rejected response even when stale data is present", () => {
+        const response = {
+            status: "success",
+            message: "Stale data",
+            code: 200,
+            data: { user },
+        } satisfies ServiceResponse<{ user: AuthenticatedUserDTO }>;
+
+        expect(shouldClearBootstrapSession(response, true, true)).toBe(true);
     });
 });

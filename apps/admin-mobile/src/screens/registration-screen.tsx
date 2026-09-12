@@ -16,7 +16,8 @@ import AuthShell from "../components/auth/auth-shell";
 import OtpField from "../components/auth/otp-field";
 import PhoneNumberField from "../components/auth/phone-number-field";
 import { adminAuthKeys } from "../lib/auth-keys";
-import { resolveRegistrationSession } from "../lib/registration-session";
+import { getAuthErrorMessage } from "../lib/auth-errors";
+import { resolveAuthSession } from "../lib/auth-session";
 import {
     createOtpTiming,
     formatOtpCountdown,
@@ -48,19 +49,6 @@ const defaultValues: RegisterFormJSON = {
     email: "",
     password: "",
     confirmPassword: "",
-};
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-    if (
-        error &&
-        typeof error === "object" &&
-        "message" in error &&
-        typeof error.message === "string"
-    ) {
-        return error.message;
-    }
-
-    return fallback;
 };
 
 const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
@@ -153,7 +141,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                 return;
             }
 
-            const session = resolveRegistrationSession(response);
+            const session = resolveAuthSession(response);
             if (session) {
                 await setAuthToken(session.token);
                 setAuthenticated(session.user);
@@ -164,7 +152,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             setFeedback("Registration did not start phone verification. Please try again.");
         } catch (error) {
             setFeedback(
-                getErrorMessage(error, "Unable to create your account. Please try again."),
+                getAuthErrorMessage(error, "Unable to create your account. Please try again."),
             );
         } finally {
             setIsSubmitting(false);
@@ -199,7 +187,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                 return;
             }
 
-            const session = resolveRegistrationSession(response);
+            const session = resolveAuthSession(response);
             if (!session) {
                 setFeedback("Registration did not return a valid session. Please try again.");
                 return;
@@ -210,7 +198,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             queryClient.setQueryData(adminAuthKeys.me, response);
         } catch (error) {
             setFeedback(
-                getErrorMessage(error, "Unable to verify your account. Please try again."),
+                getAuthErrorMessage(error, "Unable to verify your account. Please try again."),
             );
         } finally {
             setIsSubmitting(false);
@@ -243,7 +231,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             setFeedback(response.message || "A new verification code was sent on WhatsApp.");
         } catch (error) {
             setFeedback(
-                getErrorMessage(error, "Unable to resend the verification code. Please try again."),
+                getAuthErrorMessage(error, "Unable to resend the verification code. Please try again."),
             );
         } finally {
             setIsSubmitting(false);

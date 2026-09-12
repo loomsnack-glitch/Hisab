@@ -17,7 +17,8 @@ import AuthShell from "../components/auth/auth-shell";
 import OtpField from "../components/auth/otp-field";
 import PhoneNumberField from "../components/auth/phone-number-field";
 import { adminAuthKeys } from "../lib/auth-keys";
-import { resolveLoginSession } from "../lib/login-session";
+import { getAuthErrorMessage } from "../lib/auth-errors";
+import { resolveAuthSession } from "../lib/auth-session";
 import {
     createOtpTiming,
     formatOtpCountdown,
@@ -41,19 +42,6 @@ const defaultValues: LoginFormJSON = {
     phone: "",
     password: "",
     otp: "",
-};
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-    if (
-        error &&
-        typeof error === "object" &&
-        "message" in error &&
-        typeof error.message === "string"
-    ) {
-        return error.message;
-    }
-
-    return fallback;
 };
 
 const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
@@ -115,7 +103,7 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             return;
         }
 
-        const session = resolveLoginSession(response);
+        const session = resolveAuthSession(response);
         if (!session) {
             setFeedback({
                 message: "Login did not return a valid session. Please try again.",
@@ -138,7 +126,7 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             await persistLoginSession({ ...values, requestType: "user-info" });
         } catch (error) {
             setFeedback({
-                message: getErrorMessage(
+                message: getAuthErrorMessage(
                     error,
                     "Unable to sign in. Please try again.",
                 ),
@@ -166,7 +154,7 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             });
         } catch (error) {
             setFeedback({
-                message: getErrorMessage(
+                message: getAuthErrorMessage(
                     error,
                     "Unable to send the WhatsApp code. Please try again.",
                 ),
@@ -196,7 +184,7 @@ const LoginScreen = ({ onSwitchToRegister }: LoginScreenProps) => {
             });
         } catch (error) {
             setFeedback({
-                message: getErrorMessage(
+                message: getAuthErrorMessage(
                     error,
                     "Unable to verify the code. Please try again.",
                 ),
