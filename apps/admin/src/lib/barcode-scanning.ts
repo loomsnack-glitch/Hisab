@@ -1,5 +1,7 @@
 import type { InactiveProductCode, ProductResponseDTO } from "@repo/types";
 
+import { getProductCardAction, type ProductCardInteractionContext } from "./product-card-interaction";
+
 export type ProductCodeScanResult =
     | { kind: "product"; product: ProductResponseDTO; productCode: string }
     | { kind: "inactive"; productCode: string; productName: string }
@@ -32,6 +34,43 @@ export const formatScanDiagnostics = (diagnostics: ScanDiagnostic[]) =>
         )
         .join("\n");
 
+export type ScanToCartIntent =
+    | { kind: "empty" }
+    | { kind: "unknown"; productCode: string }
+    | { kind: "inactive"; productCode: string; productName: string }
+    | { kind: "ambiguous"; productCode: string }
+    | { kind: "unavailable"; product: ProductResponseDTO; productCode: string }
+    | { kind: "add"; product: ProductResponseDTO; productCode: string; retry: boolean }
+    | { kind: "customize"; product: ProductResponseDTO; productCode: string }
+    | { kind: "configure"; product: ProductResponseDTO; productCode: string };
+
+export const resolveScanToCartIntent = (
+    productCode: string,
+    products: ProductResponseDTO[],
+    inactiveProductCodes: InactiveProductCode[],
+    actionContext: ProductCardInteractionContext | ((product: ProductResponseDTO) => ProductCardInteractionContext) = {},
+): ScanToCartIntent => {
+    if (productCode.length === 0) {
+        return { kind: "empty" };
+    }
+
+    const result = resolveProductCodeScan(productCode, products, inactiveProductCodes);
+    if (result.kind !== "product") {
+        return result;
+    }
+
+    const context = typeof actionContext === "function" ? actionContext(result.product) : actionContext;
+    const action = getProductCardAction(result.product, context);
+    if (action === "disabled" || action === "loading") {
+        return { kind: "unavailable", product: result.product, productCode: result.productCode };
+    }
+    if (action === "add" || action === "retry") {
+        return { kind: "add", product: result.product, productCode: result.productCode, retry: action === "retry" };
+    }
+
+    return { kind: action, product: result.product, productCode: result.productCode };
+};
+
 export const resolveProductCodeScan = (
     productCode: string,
     products: ProductResponseDTO[],
@@ -56,6 +95,13 @@ export const resolveProductCodeScan = (
 
     return { kind: "unknown", productCode };
 };
+
+export const isEditableFocusTarget = (element: Element | null) =>
+    Boolean(
+        element?.closest(
+            'input, textarea, select, [contenteditable="true"], [role="combobox"], [role="textbox"]',
+        ),
+    );
 
 export const shouldCaptureDirectBarcodeScan = (input: {
     enabled: boolean;

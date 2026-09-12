@@ -17,7 +17,7 @@ import {
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { formatCurrency } from "@/lib/format";
 import {
   composerFieldsFromSoldAmount,
@@ -92,7 +92,7 @@ const CustomSellingQuantityDialog = ({
             <span className="text-xs text-muted-foreground">
               {defaults.defaultHint}
             </span>
-            <ProductPriceDisplay
+            <PriceDisplay
               price={product.price}
               discount={product.discount}
               size="sm"

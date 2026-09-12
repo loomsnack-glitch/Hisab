@@ -27,7 +27,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Pencil, PlusCircle, Puzzle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertAddOnDialog from "@/components/catalog/upsert-add-on-dialog";
 import { formatDateTime } from "@/lib/format";
@@ -203,7 +203,7 @@ const ManageAddOnsDialog = ({ organizationId, trigger }: ManageAddOnsDialogProps
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3.5">
-                                                <ProductPriceDisplay
+                                                <PriceDisplay
                                                     price={addOn.price}
                                                     discount={addOn.discount}
                                                     size="sm"

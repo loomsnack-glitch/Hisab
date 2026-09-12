@@ -1,11 +1,10 @@
 import { cn } from "@repo/ui/lib/utils";
+import { formatCurrency, formatDiscountPercentage, getDiscountedPrice } from "@repo/ui/lib/money";
 
-import { formatCurrency, formatDiscountPercentage } from "@/lib/format";
-
-type ProductPriceDisplayProps = {
+export type PriceDisplayProps = {
     price: number | string;
     discount?: number | string | null;
-  size?: "xs" | "sm" | "md" | "lg";
+    size?: "xs" | "sm" | "md" | "lg";
     align?: "left" | "center" | "right";
     /** Color for the price when there is no discount */
     singleTone?: "foreground" | "primary";
@@ -15,11 +14,11 @@ type ProductPriceDisplayProps = {
 };
 
 const sizeStyles = {
-  xs: {
-    original: "text-[9px]",
-    discounted: "text-[11px] font-extrabold",
-    single: "text-[11px] font-bold",
-  },
+    xs: {
+        original: "text-[9px]",
+        discounted: "text-[11px] font-extrabold",
+        single: "text-[11px] font-bold",
+    },
     sm: {
         original: "text-[11px]",
         discounted: "text-sm font-extrabold",
@@ -37,17 +36,9 @@ const sizeStyles = {
     },
 } as const;
 
-export const getDiscountedPrice = (
-    price: number | string,
-    discount?: number | string | null,
-) => {
-    const originalPrice = Number(price ?? 0);
-    const discountAmount = Number(discount ?? 0);
+export { getDiscountedPrice };
 
-    return Math.max(0, originalPrice - discountAmount);
-};
-
-const ProductPriceDisplay = ({
+export function PriceDisplay({
     price,
     discount,
     size = "md",
@@ -55,7 +46,7 @@ const ProductPriceDisplay = ({
     singleTone = "primary",
     compact = false,
     className,
-}: ProductPriceDisplayProps) => {
+}: PriceDisplayProps) {
     const originalPrice = Number(price ?? 0);
     const discountAmount = Number(discount ?? 0);
     const hasDiscount = discountAmount > 0;
@@ -63,11 +54,11 @@ const ProductPriceDisplay = ({
     const discountPercentage = formatDiscountPercentage(discountAmount, originalPrice);
     const styles = sizeStyles[size];
     const alignClass =
-    align === "center"
-      ? "text-center items-center"
-      : align === "right"
-        ? "text-right items-end"
-        : "text-left items-start";
+        align === "center"
+            ? "text-center items-center"
+            : align === "right"
+              ? "text-right items-end"
+              : "text-left items-start";
 
     if (!hasDiscount) {
         return (
@@ -88,12 +79,7 @@ const ProductPriceDisplay = ({
     if (compact) {
         return (
             <div className={cn("flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5", alignClass, className)}>
-                <span
-                    className={cn(
-                        styles.discounted,
-                        "text-foreground tabular-nums tracking-tight leading-none",
-                    )}
-                >
+                <span className={cn(styles.discounted, "text-foreground tabular-nums tracking-tight leading-none")}>
                     {formatCurrency(finalPrice)}
                 </span>
                 <span
@@ -114,7 +100,7 @@ const ProductPriceDisplay = ({
     }
 
     return (
-    <div className={cn("flex flex-col gap-0.5", alignClass, className)}>
+        <div className={cn("flex flex-col gap-0.5", alignClass, className)}>
             <span
                 className={cn(
                     styles.original,
@@ -138,6 +124,6 @@ const ProductPriceDisplay = ({
             ) : null}
         </div>
     );
-};
+}
 
-export default ProductPriceDisplay;
+export default PriceDisplay;

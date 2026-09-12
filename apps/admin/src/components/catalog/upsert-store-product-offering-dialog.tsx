@@ -23,7 +23,7 @@ import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Package2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { catalogKeys } from "@/lib/query-keys";
 
 const decimalAmountPattern = /^\d+(\.\d*)?$/;
@@ -200,7 +200,7 @@ const UpsertStoreProductOfferingDialog = ({
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
                         <span className="text-xs font-medium text-muted-foreground">Organization</span>
-                        <ProductPriceDisplay
+                        <PriceDisplay
                             price={orgDefaultPrice}
                             discount={orgDefaultDiscount}
                             size="sm"

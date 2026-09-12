@@ -16,7 +16,7 @@ import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageAddOnsDialog from "@/components/catalog/manage-add-ons-dialog";
 import ManageCategoriesDialog from "@/components/catalog/manage-categories-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 
@@ -352,7 +352,7 @@ const CatalogSection = ({ organizationId }: CatalogSectionProps) => {
 
                                             <div className="flex shrink-0 items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/30">
                                                 <div className="flex flex-col items-start">
-                                                    <ProductPriceDisplay
+                                                    <PriceDisplay
                                                         price={product.price}
                                                         discount={product.discount}
                                                         size="sm"

@@ -168,7 +168,7 @@ import ConfigureComboDialog, {
 } from "@/components/billing/configure-combo-dialog";
 import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import CommercialAccessDenied from "@/components/commercial-access-denied";
@@ -3868,7 +3868,7 @@ const BillingPage = ({
                                                             </p>
                                                             <div className="flex items-end justify-between gap-2">
                                                                 <div className="min-w-0">
-                                                                    <ProductPriceDisplay
+                                                                    <PriceDisplay
                                                                         price={product.price}
                                                                         discount={product.discount}
                                                                         size="sm"
@@ -4586,7 +4586,7 @@ const BillingPage = ({
                                                                 <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-foreground">
                                                                     {item.name}
                                                                 </p>
-                                                                <ProductPriceDisplay
+                                                                <PriceDisplay
                                                                     price={item.unitPrice}
                                                                     discount={item.unitDiscount}
                                                                     size="xs"

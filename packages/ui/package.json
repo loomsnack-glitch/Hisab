@@ -59,6 +59,8 @@
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
     "./components/*": "./src/components/*.tsx",
+    "./components/billing": "./src/components/billing/index.ts",
+    "./components/billing/*": "./src/components/billing/*",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }

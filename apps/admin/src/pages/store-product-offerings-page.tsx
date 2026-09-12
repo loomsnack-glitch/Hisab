@@ -34,7 +34,7 @@ import { Eye, EyeOff, Package2, Pencil, RefreshCw, Search, X } from "lucide-reac
 import { toast } from "sonner";
 import { cn } from "@repo/ui/lib/utils";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertStoreProductOfferingDialog from "@/components/catalog/upsert-store-product-offering-dialog";
@@ -390,7 +390,7 @@ const StoreProductOfferingsPage = () => {
 
                                 <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
                                     <div className="flex min-w-0 flex-col items-start gap-0.5">
-                                        <ProductPriceDisplay
+                                        <PriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
                                             size="sm"

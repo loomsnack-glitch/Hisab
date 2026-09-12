@@ -18,7 +18,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Pencil, Puzzle, RefreshCw, Search, X } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
 import UpsertStoreAddOnOfferingDialog from "@/components/catalog/upsert-store-add-on-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
@@ -250,7 +250,7 @@ const StoreAddOnOfferingsPage = () => {
 
                                 <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
                                     <div className="flex min-w-0 flex-col items-start gap-0.5">
-                                        <ProductPriceDisplay
+                                        <PriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
                                             size="sm"

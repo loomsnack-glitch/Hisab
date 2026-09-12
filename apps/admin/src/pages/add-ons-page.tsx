@@ -23,7 +23,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Pencil, PlusCircle, Puzzle, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertAddOnDialog from "@/components/catalog/upsert-add-on-dialog";
 import { catalogKeys } from "@/lib/query-keys";
@@ -242,7 +242,7 @@ const AddOnsPage = () => {
 
                                     <div className="mt-3 flex items-end justify-between gap-2 border-t border-border/40 pt-2.5">
                                         <div className="flex min-w-0 flex-col items-start gap-0.5">
-                                            <ProductPriceDisplay
+                                            <PriceDisplay
                                                 price={addOn.price}
                                                 discount={addOn.discount}
                                                 size="sm"

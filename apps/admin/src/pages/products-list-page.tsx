@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
     getCategories,
     getProducts,
@@ -14,6 +14,7 @@ import { Input } from "@repo/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { cn } from "@repo/ui/lib/utils";
 import {
     Barcode,
@@ -41,10 +42,14 @@ import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
 import { catalogKeys } from "@/lib/query-keys";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
+import {
+    dequeueUnknownProductCode,
+    enqueueUnknownProductCode,
+    listUnknownProductCodeQueue,
+} from "@/lib/barcode-link-queue";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
@@ -149,6 +154,7 @@ const ProductFilterOptions = ({
 
 const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
@@ -158,6 +164,8 @@ const ProductsListPage = () => {
     const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
     const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
     const [addComboDialogOpen, setAddComboDialogOpen] = useState(false);
+    const [linkingProductCode, setLinkingProductCode] = useState<string | null>(null);
+    const [pendingLinkQueue, setPendingLinkQueue] = useState(() => listUnknownProductCodeQueue(organizationId));
     const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
     const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
     const categoriesQuery = useQuery({
@@ -182,6 +190,24 @@ const ProductsListPage = () => {
 
     const defaultCategoryIdForNewProduct =
         selectedCategoryFilter !== "all" ? selectedCategoryFilter : undefined;
+
+    useEffect(() => {
+        const incomingCode = searchParams.get("linkProductCode")?.trim();
+        if (!organizationId || !incomingCode) {
+            setPendingLinkQueue(listUnknownProductCodeQueue(organizationId));
+            return;
+        }
+
+        setPendingLinkQueue(
+            enqueueUnknownProductCode({
+                organizationId,
+                productCode: incomingCode,
+            }),
+        );
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("linkProductCode");
+        setSearchParams(nextParams, { replace: true });
+    }, [organizationId, searchParams, setSearchParams]);
 
     const activeFilterCount = statusFilters.length + addOnsFilters.length;
     const draftFilterCount = draftStatusFilters.length + draftAddOnsFilters.length;
@@ -531,6 +557,46 @@ const ProductsListPage = () => {
 
     return (
         <div className="space-y-3">
+            {pendingLinkQueue.length > 0 ? (
+                <div
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
+                    role="status"
+                >
+                    <p className="font-semibold text-foreground">Unknown Product Codes waiting to be linked</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Cashiers queued these values without changing the catalog. Assign a code to an existing Product, or create one.
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                        {pendingLinkQueue.map((request) => (
+                            <li key={`${request.productCode}-${request.queuedAt}`} className="flex flex-wrap items-center gap-2">
+                                <code className="rounded-md bg-background/70 px-1.5 py-0.5 text-xs">{request.productCode}</code>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 rounded-md px-2.5 text-xs"
+                                    onClick={() => {
+                                        setLinkingProductCode(request.productCode);
+                                        setAddProductDialogOpen(true);
+                                    }}
+                                >
+                                    Link to Product
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 rounded-md px-2.5 text-xs"
+                                    onClick={() =>
+                                        setPendingLinkQueue(dequeueUnknownProductCode(organizationId, request.productCode))
+                                    }
+                                >
+                                    Dismiss
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
 
             {/* Search, Filters, View Switcher & Actions bar */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -874,7 +940,7 @@ const ProductsListPage = () => {
 
                                 <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
                                     <div className="flex flex-col items-start gap-0.5 min-w-0">
-                                        <ProductPriceDisplay
+                                        <PriceDisplay
                                             price={product.price}
                                             discount={product.discount}
                                             size="sm"
@@ -901,8 +967,14 @@ const ProductsListPage = () => {
                 organizationId={organizationId}
                 categories={categories}
                 defaultCategoryId={defaultCategoryIdForNewProduct}
+                initialProductCode={linkingProductCode ?? undefined}
                 open={addProductDialogOpen}
-                onOpenChange={setAddProductDialogOpen}
+                onOpenChange={(open) => {
+                    setAddProductDialogOpen(open);
+                    if (!open) {
+                        setLinkingProductCode(null);
+                    }
+                }}
                 trigger={null}
             />
 

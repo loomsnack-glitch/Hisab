@@ -2,7 +2,7 @@ import type { ProductResponseDTO } from "@repo/types";
 
 export type ProductCardAction = "add" | "customize" | "configure" | "loading" | "retry" | "disabled";
 
-type ProductCardInteractionContext = {
+export type ProductCardInteractionContext = {
     hasAddOns?: boolean;
     comboAvailable?: boolean;
     comboHasSettings?: boolean;

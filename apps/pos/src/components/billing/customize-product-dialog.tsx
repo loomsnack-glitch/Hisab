@@ -10,7 +10,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Check, Minus, Plus } from "lucide-react";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -93,7 +93,7 @@ const CustomizeProductDialog = ({
                     </DialogTitle>
                     <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-muted-foreground">Base price</span>
-                        <ProductPriceDisplay
+                        <PriceDisplay
                             price={product.price}
                             discount={product.discount}
                             size="sm"
@@ -150,7 +150,7 @@ const CustomizeProductDialog = ({
                                                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                                                     <div className="inline-flex min-w-0 items-start gap-0.5">
                                                         <span>+</span>
-                                                        <ProductPriceDisplay
+                                                        <PriceDisplay
                                                             price={attachment.addOn.price}
                                                             discount={attachment.addOn.discount}
                                                             size="xs"

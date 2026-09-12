@@ -33,7 +33,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Link2, Puzzle } from "lucide-react";
 import { toast } from "sonner";
 
-import ProductPriceDisplay from "@/components/catalog/product-price-display";
+import { PriceDisplay } from "@repo/ui/components/price-display";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import { catalogKeys } from "@/lib/query-keys";
 
@@ -301,7 +301,7 @@ const ManageProductAddOnsDialog = ({
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <ProductPriceDisplay
+                                                        <PriceDisplay
                                                             price={attachment.addOn.price}
                                                             discount={attachment.addOn.discount}
                                                             size="sm"

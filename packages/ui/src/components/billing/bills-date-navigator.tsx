@@ -161,9 +161,7 @@ export function BillsDateNavigator({
                             aria-label={`Change date filter, currently ${label}`}
                             className={cn(
                                 "inline-flex h-9 max-w-full min-w-0 items-center gap-1.5 rounded-full border bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-muted/60",
-                                isSingleDay
-                                    ? "border-primary/25 text-foreground"
-                                    : "border-border/60 text-foreground",
+                                isSingleDay ? "border-primary/25 text-foreground" : "border-border/60 text-foreground",
                             )}
                         >
                             <Calendar
@@ -174,17 +172,12 @@ export function BillsDateNavigator({
                             />
                             <span className="truncate">{label}</span>
                             {!isSingleDay ? (
-                                <span className="shrink-0 text-[10px] font-normal text-muted-foreground">
-                                    range
-                                </span>
+                                <span className="shrink-0 text-[10px] font-normal text-muted-foreground">range</span>
                             ) : null}
                         </button>
                     }
                 />
-                <PopoverContent
-                    align="center"
-                    className="w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden p-3"
-                >
+                <PopoverContent align="center" className="w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden p-3">
                     {popoverContent}
                 </PopoverContent>
             </Popover>

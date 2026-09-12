@@ -70,6 +70,7 @@ type UpsertProductDialogProps = {
   categories: CategoryDTO[];
   product?: ProductResponseDTO;
   defaultCategoryId?: string;
+  initialProductCode?: string;
   trigger?: React.ReactElement | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -226,6 +227,7 @@ const UpsertProductDialog = ({
   categories,
   product,
   defaultCategoryId,
+  initialProductCode,
   trigger,
   open,
   onOpenChange,
@@ -321,6 +323,7 @@ const UpsertProductDialog = ({
           ...defaultValues,
           categoryId: resolveDefaultCategoryId(),
           unitId: pieceUnitId,
+          productCode: initialProductCode ?? "",
         });
         setLabelProfileForm(emptyLabelProfileForm);
       }
@@ -332,6 +335,7 @@ const UpsertProductDialog = ({
               ...defaultValues,
               categoryId: resolveDefaultCategoryId(),
               unitId: pieceUnitId,
+              productCode: initialProductCode ?? "",
             },
       );
       setSelectedFile(null);
@@ -344,7 +348,7 @@ const UpsertProductDialog = ({
       setReleasedInternalCode("");
       setLabelProfileForm(emptyLabelProfileForm);
     }
-  }, [categories, defaultCategoryId, dialogOpen, form, pieceUnitId, product]);
+  }, [categories, defaultCategoryId, dialogOpen, form, initialProductCode, pieceUnitId, product]);
 
   const categoryOptions = useMemo(
     () =>

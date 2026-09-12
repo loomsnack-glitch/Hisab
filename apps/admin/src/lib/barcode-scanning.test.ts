@@ -7,6 +7,7 @@ import {
     formatScanDiagnostics,
     incrementPlainProductQuantity,
     resolveProductCodeScan,
+    resolveScanToCartIntent,
     SCAN_DIAGNOSTIC_LIMIT,
     shouldCaptureDirectBarcodeScan,
 } from "./barcode-scanning";
@@ -75,6 +76,32 @@ describe("barcode scanning", () => {
         if (result.kind === "product") {
             expect(getProductCardAction(result.product, { hasAddOns: true })).toBe("customize");
         }
+    });
+
+    test("maps scan results onto add, configure, and reject intents for the billing panel", () => {
+        expect(resolveScanToCartIntent("0012345678905", [product()], [])).toMatchObject({
+            kind: "add",
+            productCode: "0012345678905",
+            retry: false,
+        });
+        expect(resolveScanToCartIntent("0012345678905", [product()], [], { hasAddOns: true }).kind).toBe("customize");
+        expect(
+            resolveScanToCartIntent("0012345678905", [product({ productType: "combo" })], [], {
+                comboAvailable: true,
+                comboHasSettings: true,
+            }).kind,
+        ).toBe("configure");
+        expect(resolveScanToCartIntent("not-configured", [product()], []).kind).toBe("unknown");
+        expect(
+            resolveScanToCartIntent("inactive-code", [product()], [
+                { productCode: "inactive-code", productName: "Retired milk" },
+            ]),
+        ).toEqual({
+            kind: "inactive",
+            productCode: "inactive-code",
+            productName: "Retired milk",
+        });
+        expect(resolveScanToCartIntent("", [product()], []).kind).toBe("empty");
     });
 
     test("does not capture direct scanner input while normal fields or dialogs own focus", () => {
