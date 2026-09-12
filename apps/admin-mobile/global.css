@@ -14,4 +14,9 @@
   --color-admin-border-dark: #475569;
   --color-admin-primary: #2563eb;
   --color-admin-primary-foreground: #ffffff;
+  --color-admin-danger: #dc2626;
+  --color-admin-danger-surface: #fef2f2;
+  --color-admin-success: #16a34a;
+  --color-admin-success-surface: #f0fdf4;
+  --color-admin-info-surface: #eff6ff;
 }

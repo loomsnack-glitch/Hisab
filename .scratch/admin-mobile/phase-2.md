@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 2: Auth UI Foundation
 
-Status: subphase 2.1 completed with follow-up — ready for 2.2
+Status: subphase 2.2 completed with follow-up — ready for 2.3
 
 ## User-facing outcome
 
@@ -89,6 +89,69 @@ Subphase review:
 - Spec: implementation is limited to the approved visual shell; login, registration, OTP, session, and organization behavior remain excluded.
 
 Next subphase: 2.2 Auth controls and feedback.
+
+## Subphase 2.2 plan — Auth controls and feedback
+
+### Scope
+
+- Add app-owned text/password fields, phone-number input, six-digit OTP input, primary/secondary buttons, and inline feedback components.
+- Reuse `@repo/types` phone normalization and country metadata so visual controls do not invent an auth contract.
+- Cover disabled/loading, validation-error, informational, success, and retryable-error presentation through props only.
+- Keep all controls controlled and independent from React Query, auth mutations, session state, and navigation.
+
+### Acceptance criteria
+
+- Each control has a small app-owned prop interface suitable for React Hook Form integration in Phase 2.3 and auth behavior wiring later.
+- Phone input emits normalized values and provides a native country-code picker without browser APIs.
+- OTP input accepts digits only and caps input at six digits.
+- Password input supports an accessible show/hide affordance without exposing the value by default.
+- Buttons prevent interaction while disabled or loading and expose accessible states.
+- Feedback distinguishes recoverable errors from neutral or success messages.
+- No API request, auth mutation, session write, or POS import is added.
+
+### Dependencies and public seams
+
+- Subphase 2.1 `AuthShell` and existing Uniwind semantic Admin tokens.
+- `@repo/types` phone helpers and `PHONE_COUNTRIES` metadata.
+- Native React Native `TextInput`, `Pressable`, `Modal`, `FlatList`, and `ActivityIndicator`.
+- These controls are the reusable seam consumed by static compositions in 2.3.
+
+### Verification
+
+- `bun run --cwd apps/admin-mobile check-types`
+- `git diff --check`
+- Read-only boundary scan for POS imports and browser-only APIs.
+- Android build, emulator, device, and runtime visual checks remain deferred under repository `AGENTS.md`.
+
+### Risks and rollback
+
+- Keep form controls controlled and avoid embedding validation or API behavior that belongs to later phases.
+- Keep country selection behavior local to the phone control and preserve the normalized shared value contract.
+- Revert only the 2.2 control files if the implementation needs adjustment; leave the committed 2.1 shell checkpoint intact.
+
+### 2.2 implementation record
+
+Status: completed with follow-up
+
+- Added app-owned `AuthField`, `PhoneNumberField`, `OtpField`, `AuthButton`, and `AuthFeedback` components.
+- Reused shared phone normalization and country metadata from `@repo/types`.
+- Added password visibility, six-digit numeric filtering, native country selection, loading/disabled button states, and error/info/success feedback tones.
+- Added Admin auth danger, success, and info semantic tokens to `global.css`.
+- Kept all components controlled and independent from API, auth mutations, session state, navigation, and POS storage.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `git diff --check` — passed.
+- Admin mobile boundary scan for browser APIs and POS imports/session identifiers — passed; only the intentional Phase 1 shared storage-provider setup remains.
+- Native build, emulator, device, and runtime visual validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: controls use app-owned React Native seams, shared type helpers, controlled props, and no second UI kit or browser API.
+- Spec: controls cover the planned form, OTP, loading, validation, and recoverable-feedback presentation without implementing auth behavior.
+
+Next subphase: 2.3 Static auth compositions.
 
 ## Phase-level non-goals
 
