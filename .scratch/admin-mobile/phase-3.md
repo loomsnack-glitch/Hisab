@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 3: Auth Infrastructure
 
-Status: subphase 3.1 completed with follow-up — ready for 3.2
+Status: subphase 3.2 completed with follow-up — ready for 3.3
 
 ## User-facing outcome
 
@@ -83,6 +83,69 @@ Subphase review:
 - Spec: the store cannot represent signed-in without a user and keeps token persistence in the previously approved secure adapter boundary.
 
 Next subphase: 3.2 Bootstrap and persistence.
+
+## Subphase 3.2 plan — Bootstrap and persistence
+
+### Scope
+
+- Add an Admin-owned bootstrap hook that hydrates the shared auth-token seam from the dedicated Keychain adapter.
+- Call `userAuthenticate` only after token hydration confirms a token exists.
+- Set the authenticated Admin user only from a successful `GET /auth` response containing a user.
+- Clear an absent, rejected, or malformed session token and return to signed-out state.
+- Add a loading/status boundary to the root navigator while bootstrap is checking and a non-dashboard placeholder for a restored signed-in session until 3.3 adds protected navigation.
+
+### Acceptance criteria
+
+- Cold start with no stored token reaches signed-out/public auth state without calling `GET /auth`.
+- Cold start with a stored token remains checking until `GET /auth` succeeds or rejects.
+- A successful authenticated response hydrates the Admin user in memory without duplicating the JWT in Zustand.
+- A rejected or user-less response clears the Admin JWT and returns to signed-out state.
+- Bootstrap is idempotent per mounted root and does not create an effect/update loop.
+- No POS session, Device Login, Owner User, login mutation, registration mutation, or Organization behavior is added.
+
+### Dependencies and public seams
+
+- Subphase 3.1 Admin auth store and `adminAuthKeys.me`.
+- Phase 1 Admin Keychain adapter and shared `hydrateAuthToken`, `clearAuthToken`, and `userAuthenticate` methods.
+- Existing TanStack Query provider and root navigator.
+- A small status screen is an interim seam; Phase 3.3 will replace the signed-in placeholder with protected navigation.
+
+### Verification
+
+- `bun run --cwd apps/admin-mobile check-types`
+- Focused bootstrap decision test(s) that do not require native Keychain or network runtime.
+- `git diff --check`
+- Read-only boundary scan for POS imports and duplicate token/session stores.
+
+### Risks and rollback
+
+- Never call `GET /auth` before token hydration completes.
+- Treat all non-success or user-less bootstrap responses as signed-out and clear only the Admin token.
+- Do not claim protected navigation is complete until 3.3.
+
+### 3.2 implementation record
+
+Status: completed with follow-up
+
+- Added `useAdminAuthBootstrap` to hydrate the Admin JWT, conditionally call `userAuthenticate`, hydrate the Admin user, and clear rejected/user-less sessions.
+- Added `resolveBootstrapUser` as a pure response decision seam with focused tests.
+- Added a root loading/status screen and routed signed-out users to the Phase 2 public auth preview.
+- Routed a restored signed-in session to an explicit non-dashboard placeholder until 3.3 adds protected navigation.
+- Kept token persistence behind the existing Admin Keychain adapter and avoided duplicate session storage.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun test apps/admin-mobile/src/store/auth-state.test.ts apps/admin-mobile/src/hooks/use-admin-auth-bootstrap.test.ts` — 7 passed.
+- `git diff --check` — passed.
+- Admin mobile boundary scan found no POS session, Device Login, Owner User, browser, or duplicate storage imports.
+
+Subphase review:
+
+- Standards: bootstrap is isolated in a hook, query identity is app-owned, response interpretation is pure-testable, and the root navigator has an explicit loading boundary.
+- Spec: no token is trusted before `GET /auth`; absent/rejected sessions are cleared; protected workspace behavior remains deferred to 3.3.
+
+Next subphase: 3.3 Logout and protected navigation.
 
 ## Phase-level non-goals
 
