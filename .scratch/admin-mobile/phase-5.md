@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 5: Registration
 
-Status: in progress — subphase 5.1 completed with follow-up; 5.2 next
+Status: in progress — subphase 5.2 completed with follow-up; 5.3 next
 
 ## User-facing outcome
 
@@ -84,6 +84,31 @@ Subphase review:
 - Spec: the first three approved registration steps are real, while OTP verification and session handoff remain isolated for 5.2.
 
 Next subphase: 5.2 Registration OTP/session.
+
+## 5.2 implementation record
+
+Status: completed with follow-up
+
+- Added the registration WhatsApp OTP verification and resend flow using the shared `register` service.
+- Added the approved five-minute expiry countdown and separate 30-second resend cooldown, with expired-code recovery.
+- Added a pure registration-session response seam and tests requiring both User and JWT before authentication.
+- Persisted the verified Admin JWT through the dedicated Keychain adapter, updated the Admin auth store, and seeded the Admin auth query cache.
+- Kept registration WhatsApp-only and did not add SMS/email fallback or Organization creation.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Focused Admin auth suite — 14 passed across bootstrap, auth-state, login-session, registration-session, and OTP timing tests.
+- `git diff --check` — passed.
+- Registration boundary scan found no POS, Device Login, Owner User, browser, or alternate OTP-channel dependencies.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: registration shares the existing schema, service, secure storage, and native component seams; passwords are never stored in app state beyond form lifetime.
+- Spec: OTP request, verification, expiry, resend, recoverable errors, and protected-route handoff are implemented without assuming an Organization exists.
+
+Next subphase: 5.3 Registration integration review.
 
 ## Phase-level non-goals
 

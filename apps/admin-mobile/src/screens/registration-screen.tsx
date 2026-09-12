@@ -1,15 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
-import { register as registerUser } from "@repo/services";
-import { RegisterFormSchema, type RegisterFormJSON } from "@repo/types";
+import { register as registerUser, setAuthToken } from "@repo/services";
+import {
+    formatPhoneDisplay,
+    RegisterFormSchema,
+    type RegisterFormJSON,
+} from "@repo/types";
 import AuthButton from "../components/auth/auth-button";
 import AuthFeedback from "../components/auth/auth-feedback";
 import AuthField from "../components/auth/auth-field";
 import AuthShell from "../components/auth/auth-shell";
 import OtpField from "../components/auth/otp-field";
 import PhoneNumberField from "../components/auth/phone-number-field";
+import { adminAuthKeys } from "../lib/auth-keys";
+import { resolveRegistrationSession } from "../lib/registration-session";
+import {
+    createOtpTiming,
+    formatOtpCountdown,
+    getRemainingSeconds,
+} from "../lib/otp-timing";
+import { useAdminAuthActions } from "../store/auth.store";
 
 type RegistrationScreenProps = {
     onSwitchToLogin: () => void;
@@ -54,10 +67,34 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
     const [step, setStep] = useState<RegistrationStep>("phone");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
+    const [otpTiming, setOtpTiming] = useState<{
+        expiresAt: number;
+        resendAvailableAt: number;
+    } | null>(null);
+    const [now, setNow] = useState(() => Date.now());
+    const { setAuthenticated } = useAdminAuthActions();
+    const queryClient = useQueryClient();
     const form = useForm<RegisterFormJSON>({
         resolver: zodResolver(RegisterFormSchema),
         defaultValues,
     });
+
+    useEffect(() => {
+        if (!otpTiming) {
+            return undefined;
+        }
+
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, [otpTiming]);
+
+    const otpExpiresIn = otpTiming
+        ? getRemainingSeconds(otpTiming.expiresAt, now)
+        : 0;
+    const resendAvailableIn = otpTiming
+        ? getRemainingSeconds(otpTiming.resendAvailableAt, now)
+        : 0;
+    const otpExpired = step === "otp" && otpExpiresIn === 0;
 
     const validateAndAdvance = async () => {
         setFeedback(null);
@@ -106,10 +143,21 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
             }
 
             if (response.data?.nextRequestType === "otp-verification") {
+                const issuedAt = Date.now();
                 form.setValue("requestType", "otp-verification");
                 form.setValue("otp", "");
+                setOtpTiming(createOtpTiming(issuedAt));
+                setNow(issuedAt);
                 setStep("otp");
                 setFeedback(response.message || "Verification code sent on WhatsApp.");
+                return;
+            }
+
+            const session = resolveRegistrationSession(response);
+            if (session) {
+                await setAuthToken(session.token);
+                setAuthenticated(session.user);
+                queryClient.setQueryData(adminAuthKeys.me, response);
                 return;
             }
 
@@ -123,11 +171,94 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
         }
     };
 
+    const submitOtp: SubmitHandler<RegisterFormJSON> = async (values) => {
+        if (otpExpired) {
+            setFeedback("This code has expired. Request a new code to continue.");
+            return;
+        }
+
+        setFeedback(null);
+        setIsSubmitting(true);
+        try {
+            const response = await registerUser({
+                ...values,
+                requestType: "otp-verification",
+            });
+
+            if (response.status === "error") {
+                setFeedback(response.message || "The verification code could not be accepted.");
+                return;
+            }
+
+            if (response.data?.nextRequestType === "otp-verification") {
+                const issuedAt = Date.now();
+                setOtpTiming(createOtpTiming(issuedAt));
+                setNow(issuedAt);
+                form.setValue("otp", "");
+                setFeedback(response.message || "A new verification code was sent on WhatsApp.");
+                return;
+            }
+
+            const session = resolveRegistrationSession(response);
+            if (!session) {
+                setFeedback("Registration did not return a valid session. Please try again.");
+                return;
+            }
+
+            await setAuthToken(session.token);
+            setAuthenticated(session.user);
+            queryClient.setQueryData(adminAuthKeys.me, response);
+        } catch (error) {
+            setFeedback(
+                getErrorMessage(error, "Unable to verify your account. Please try again."),
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const resendOtp = async () => {
+        if (resendAvailableIn > 0 || isSubmitting) {
+            return;
+        }
+
+        setFeedback(null);
+        setIsSubmitting(true);
+        try {
+            const response = await registerUser({
+                ...form.getValues(),
+                requestType: "otp-verification",
+                resendOTP: "phoneOTP",
+            });
+
+            if (response.status === "error") {
+                setFeedback(response.message || "Unable to resend the verification code.");
+                return;
+            }
+
+            const issuedAt = Date.now();
+            setOtpTiming(createOtpTiming(issuedAt));
+            setNow(issuedAt);
+            form.setValue("otp", "");
+            setFeedback(response.message || "A new verification code was sent on WhatsApp.");
+        } catch (error) {
+            setFeedback(
+                getErrorMessage(error, "Unable to resend the verification code. Please try again."),
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const goBack = () => {
         setFeedback(null);
         if (step === "phone") {
             onSwitchToLogin();
             return;
+        }
+
+        if (step === "otp") {
+            setOtpTiming(null);
         }
 
         setStep((current) => {
@@ -315,7 +446,7 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
     return (
         <AuthShell
             title="Verify your phone"
-            subtitle="The WhatsApp verification step will be completed next."
+            subtitle={`We sent a 6-digit code to WhatsApp at ${formatPhoneDisplay(form.getValues("phone"))}.`}
             stepLabel={stepLabel}
             currentStep={4}
             totalSteps={TOTAL_STEPS}
@@ -332,12 +463,33 @@ const RegistrationScreen = ({ onSwitchToLogin }: RegistrationScreenProps) => {
                         />
                     )}
                 />
-                {feedback ? <AuthFeedback message={feedback} tone="info" /> : null}
+                <Text className="text-center text-sm font-medium text-admin-muted dark:text-admin-muted-dark">
+                    {otpExpired
+                        ? "Code expired"
+                        : `Code expires in ${formatOtpCountdown(otpExpiresIn)}`}
+                </Text>
+                {feedback ? <AuthFeedback message={feedback} /> : null}
                 <AuthButton
-                    label="Continue"
-                    disabled
-                    onPress={() => undefined}
+                    label="Create Admin account"
+                    loading={isSubmitting}
+                    disabled={otpExpired}
+                    onPress={form.handleSubmit(submitOtp)}
                 />
+                {resendAvailableIn > 0 ? (
+                    <Text className="text-center text-sm text-admin-muted dark:text-admin-muted-dark">
+                        Resend code in {resendAvailableIn}s
+                    </Text>
+                ) : (
+                    <Pressable
+                        onPress={resendOtp}
+                        accessibilityRole="button"
+                        className="items-center"
+                    >
+                        <Text className="text-sm font-semibold text-admin-primary">
+                            Resend verification code
+                        </Text>
+                    </Pressable>
+                )}
                 <Pressable
                     onPress={goBack}
                     accessibilityRole="button"
