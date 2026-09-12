@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 6: Organization Landing
 
-Status: in progress — subphase 6.1 completed with follow-up; 6.2 next
+Status: in progress — subphase 6.2 completed with follow-up; 6.3 next
 
 ## User-facing outcome
 
@@ -68,6 +68,30 @@ Subphase review:
 - Spec: zero/one/multiple policy is represented without prematurely adding dashboard or business modules.
 
 Next subphase: 6.2 First-Organization setup.
+
+## 6.2 implementation record
+
+Status: completed with follow-up
+
+- Added the zero-Organization setup form using `CreateOrganizationSchema`, React Hook Form, and the shared `createOrganization` service.
+- Added native validation, lowercase username input, pending state, recoverable service errors, and invalid-response handling.
+- Transitioned to the newly created Organization workspace landing and invalidated the Admin Organization query for consistency.
+- Kept Organization creation authenticated and separate from registration/POS credentials.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Organization routing, auth-state, and bootstrap tests — 10 passed.
+- `git diff --check` — passed.
+- Setup boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage dependency.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: the form uses the shared Organization schema/service and existing native auth controls; no duplicate API client was added.
+- Spec: zero Organizations now have an explicit first-workspace setup path without adding dashboard or business modules.
+
+Next subphase: 6.3 Picker and workspace landing.
 
 ## Phase-level non-goals
 
