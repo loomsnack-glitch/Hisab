@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 5: Registration
 
-Status: planned — subphase 5.1 ready
+Status: in progress — subphase 5.1 completed with follow-up; 5.2 next
 
 ## User-facing outcome
 
@@ -60,6 +60,30 @@ Allow a new Admin user to create an account through the approved four-step nativ
 - Never persist a password or incomplete session response.
 - Do not claim registration completed until the OTP/session response is valid.
 - Do not create or infer an Organization from registration.
+
+### 5.1 implementation record
+
+Status: completed with follow-up
+
+- Replaced the registration preview host with a native React Hook Form flow for phone, profile, and password steps.
+- Reused `RegisterFormSchema`, `RegisterFormJSON`, and the shared `register` service with pending and recoverable error handling.
+- Entered the fourth step only after the backend returned `nextRequestType: "otp-verification"`; no User session is persisted before OTP verification.
+- Kept the four-step progress shell and registration-to-login navigation in the Admin mobile boundary.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Focused Admin auth suite — 12 passed.
+- `git diff --check` — passed.
+- Registration source boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage dependencies.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: form state and validation use the existing native/shared seams; no duplicate registration client or secret persistence was introduced.
+- Spec: the first three approved registration steps are real, while OTP verification and session handoff remain isolated for 5.2.
+
+Next subphase: 5.2 Registration OTP/session.
 
 ## Phase-level non-goals
 
