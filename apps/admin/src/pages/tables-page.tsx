@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  horizontalListSortingStrategy,
+  SortableContext,
+} from "@dnd-kit/sortable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import {
@@ -24,7 +34,7 @@ import {
   Armchair,
   Check,
   LayoutGrid,
-  Pencil,
+  ListOrdered,
   Plus,
   RefreshCw,
   Store,
@@ -37,8 +47,10 @@ import ServiceTableCard, {
   ServiceTableTile,
 } from "@/components/table-service/service-table-card";
 import ServiceAreaActionsMenu from "@/components/table-service/service-area-actions-menu";
+import SortableLayoutItem from "@/components/table-service/sortable-layout-item";
 import UpsertServiceAreaDialog from "@/components/table-service/upsert-service-area-dialog";
 import UpsertServiceTableDialog from "@/components/table-service/upsert-service-table-dialog";
+import { resolveSameListMove, useLayoutDndSensors } from "@/lib/layout-dnd";
 import { groupServiceTablesByArea } from "@/lib/service-area-tables";
 import {
   buildTableLayoutPersistPlan,
@@ -74,8 +86,9 @@ const TablesWorkspace = () => {
   const [isSavingLayout, setIsSavingLayout] = useState(false);
   const [baseline, setBaseline] = useState<TableLayoutDraft | null>(null);
   const [draft, setDraft] = useState<TableLayoutDraft | null>(null);
-  const areaDragIndexRef = useRef<number | null>(null);
+  const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
   const areaDidDragRef = useRef(false);
+  const areaSensors = useLayoutDndSensors();
 
   const organizationQuery = useQuery({
     queryKey: organizationKeys.detail(organizationId),
@@ -120,6 +133,7 @@ const TablesWorkspace = () => {
     setBaseline(null);
     setDraft(null);
     setIsSavingLayout(false);
+    setActiveAreaId(null);
   };
 
   const startLayoutEdit = () => {
@@ -135,6 +149,7 @@ const TablesWorkspace = () => {
     setBaseline(null);
     setDraft(null);
     setIsSavingLayout(false);
+    setActiveAreaId(null);
   }, [effectiveStoreId]);
 
   useEffect(() => {
@@ -226,6 +241,75 @@ const TablesWorkspace = () => {
 
   const tableCountLabel = (count: number) =>
     `${count} table${count === 1 ? "" : "s"}`;
+  const activeArea = activeAreaId
+    ? (layoutAreas.find((area) => area.id === activeAreaId) ?? null)
+    : null;
+
+  const handleAreaDragEnd = (event: DragEndEvent) => {
+    setActiveAreaId(null);
+    const { delta } = event;
+    if (Math.abs(delta.x) > 4 || Math.abs(delta.y) > 4) {
+      areaDidDragRef.current = true;
+    }
+    const move = resolveSameListMove(
+      layoutAreas.map((area) => area.id),
+      String(event.active.id),
+      event.over ? String(event.over.id) : null,
+    );
+    if (!move) return;
+    setDraft((current) =>
+      current ? moveDraftArea(current, move.fromIndex, move.toIndex) : current,
+    );
+  };
+
+  const renderAreaFilterChip = (
+    area: (typeof layoutAreas)[number],
+    options?: { overlay?: boolean },
+  ) => {
+    const isActive = areaFilter === area.id;
+    const chip = (
+      <Button
+        variant={isActive ? "default" : "outline"}
+        className={cn(
+          "h-8.5 shrink-0 rounded-full px-4 text-xs font-medium",
+          options?.overlay
+            ? "cursor-grabbing shadow-md"
+            : isEditing
+              ? "cursor-grab"
+              : "cursor-pointer transition-all",
+          isActive
+            ? "border-primary bg-primary text-primary-foreground shadow-xs shadow-primary/20"
+            : "border-border/60 bg-card/50 text-muted-foreground hover:border-border/80 hover:bg-card hover:text-foreground",
+        )}
+        aria-label={`Filter by ${area.title}, ${tableCountLabel(tableCountByAreaId.get(area.id) ?? 0)}`}
+        onClick={() => {
+          if (areaDidDragRef.current) {
+            areaDidDragRef.current = false;
+            return;
+          }
+          setAreaFilter(area.id);
+        }}
+      >
+        {area.title}
+        <span className={filterPillCountClassName(isActive)}>
+          {tableCountByAreaId.get(area.id) ?? 0}
+        </span>
+      </Button>
+    );
+
+    if (!isEditing || options?.overlay) return chip;
+
+    return (
+      <SortableLayoutItem
+        id={area.id}
+        sortableType="area"
+        data={{ kind: "area" }}
+        className="shrink-0"
+      >
+        {chip}
+      </SortableLayoutItem>
+    );
+  };
 
   const confirmLayoutEdit = async () => {
     if (!draft || !baseline) return;
@@ -344,16 +428,33 @@ const TablesWorkspace = () => {
   const selectedStoreName = workspaceStore.name;
   const scrollRowClassName =
     "flex items-center gap-1.5 overflow-x-auto py-0 scrollbar-none";
+  const filterBarClassName = cn(
+    "relative sticky top-0 z-20 -mx-3.5 -mt-3 px-3.5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8",
+    "border-b border-border/50 bg-background pb-2",
+    "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-3 before:bg-background",
+  );
+  const layoutActionDockClassName =
+    "fixed right-4 z-50 bottom-[calc(var(--pos-mobile-nav-height)+1rem)] lg:bottom-6";
+  const showRearrangeFab =
+    !isEditing &&
+    !tablesQuery.isPending &&
+    !areasQuery.isPending &&
+    !areasError &&
+    tablesQuery.data?.status !== "error";
 
   return (
     <div
-      className="space-y-3"
+      className="space-y-2"
       data-testid="tables-page"
       data-admin-workspace="store"
     >
-      <div className="flex items-center gap-2">
-        <div className={cn(scrollRowClassName, "min-w-0 flex-1")}>
-          {isEditing ? null : (
+      <div
+        className={filterBarClassName}
+        data-testid="tables-area-filter-bar"
+      >
+        <div className="flex items-center gap-2">
+        {!isEditing ? (
+          <div className="shrink-0">
             <UpsertServiceAreaDialog
               organizationId={organizationId}
               storeId={effectiveStoreId}
@@ -362,13 +463,15 @@ const TablesWorkspace = () => {
                   type="button"
                   variant="outline"
                   aria-label="Add area"
-                  className="h-8.5 w-8.5 shrink-0 rounded-full border-border/60 bg-card/50 p-0 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                  className="h-8.5 w-8.5 rounded-full border-border/60 bg-card/50 p-0 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
                 >
                   <Plus className="size-4" />
                 </Button>
               }
             />
-          )}
+          </div>
+        ) : null}
+        <div className={cn(scrollRowClassName, "min-w-0 flex-1")}>
           <Button
             variant={areaFilter === "all" ? "default" : "outline"}
             className={cn(
@@ -385,69 +488,41 @@ const TablesWorkspace = () => {
               {layoutTables.length}
             </span>
           </Button>
-          {layoutAreas.map((area, index) => (
-            <span
-              key={area.id}
-              draggable={isEditing}
+          {isEditing ? (
+            <DndContext
+              sensors={areaSensors}
+              collisionDetection={closestCenter}
+              autoScroll={false}
               onDragStart={(event) => {
-                if (!isEditing) return;
-                areaDragIndexRef.current = index;
                 areaDidDragRef.current = false;
-                event.dataTransfer.effectAllowed = "move";
+                setActiveAreaId(String(event.active.id));
               }}
-              onDragOver={(event) => {
-                if (!isEditing || areaDragIndexRef.current === null) return;
-                event.preventDefault();
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (!isEditing || areaDragIndexRef.current === null) return;
-                const fromIndex = areaDragIndexRef.current;
-                if (fromIndex !== index) {
-                  areaDidDragRef.current = true;
-                  setDraft((current) =>
-                    current
-                      ? moveDraftArea(current, fromIndex, index)
-                      : current,
-                  );
-                }
-                areaDragIndexRef.current = null;
-              }}
-              onDragEnd={() => {
-                areaDragIndexRef.current = null;
-              }}
-              className={
-                isEditing
-                  ? "shrink-0 cursor-grab active:cursor-grabbing"
-                  : "shrink-0"
-              }
+              onDragEnd={handleAreaDragEnd}
+              onDragCancel={() => setActiveAreaId(null)}
             >
-              <Button
-                variant={areaFilter === area.id ? "default" : "outline"}
-                className={cn(
-                  "h-8.5 shrink-0 rounded-full px-4 text-xs font-medium transition-all cursor-pointer",
-                  areaFilter === area.id
-                    ? "border-primary bg-primary text-primary-foreground shadow-xs shadow-primary/20"
-                    : "border-border/60 bg-card/50 text-muted-foreground hover:border-border/80 hover:bg-card hover:text-foreground",
-                )}
-                aria-label={`Filter by ${area.title}, ${tableCountLabel(tableCountByAreaId.get(area.id) ?? 0)}`}
-                onClick={() => {
-                  if (areaDidDragRef.current) {
-                    areaDidDragRef.current = false;
-                    return;
-                  }
-                  setAreaFilter(area.id);
-                }}
-              >
-                {area.title}
-                <span
-                  className={filterPillCountClassName(areaFilter === area.id)}
+              <div className="flex shrink-0 items-center gap-1.5">
+                <SortableContext
+                  items={layoutAreas.map((area) => area.id)}
+                  strategy={horizontalListSortingStrategy}
                 >
-                  {tableCountByAreaId.get(area.id) ?? 0}
-                </span>
-              </Button>
-            </span>
-          ))}
+                  {layoutAreas.map((area) => (
+                    <Fragment key={area.id}>
+                      {renderAreaFilterChip(area)}
+                    </Fragment>
+                  ))}
+                </SortableContext>
+              </div>
+              <DragOverlay dropAnimation={null}>
+                {activeArea
+                  ? renderAreaFilterChip(activeArea, { overlay: true })
+                  : null}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            layoutAreas.map((area) => (
+              <Fragment key={area.id}>{renderAreaFilterChip(area)}</Fragment>
+            ))
+          )}
           {showUnassignedFilter ? (
             <Button
               variant={areaFilter === "unassigned" ? "default" : "outline"}
@@ -469,42 +544,6 @@ const TablesWorkspace = () => {
             </Button>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {isEditing ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                aria-label="Cancel layout edits"
-                disabled={isSavingLayout}
-                className="h-8.5 rounded-full px-3 text-xs font-medium"
-                onClick={exitLayoutEdit}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                aria-label="Confirm layout"
-                disabled={isSavingLayout}
-                className="h-8.5 rounded-full px-3 text-xs font-medium"
-                onClick={() => void confirmLayoutEdit()}
-              >
-                <Check className="size-3.5" />
-                Confirm
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              aria-label="Rearrange layout"
-              className="h-8.5 rounded-full px-3 text-xs font-medium"
-              onClick={startLayoutEdit}
-            >
-              <Pencil className="size-3.5" />
-              Rearrange
-            </Button>
-          )}
         </div>
       </div>
 
@@ -544,7 +583,13 @@ const TablesWorkspace = () => {
           </CardContent>
         </Card>
       ) : tableGroups.length > 0 ? (
-        <div className="transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
+        <div
+          className={
+            isEditing
+              ? undefined
+              : "animate-in fade-in-40 slide-in-from-bottom-2"
+          }
+        >
           <ServiceTableAreaSections
             groups={tableGroups}
             gridClassName="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10"
@@ -556,9 +601,13 @@ const TablesWorkspace = () => {
                   : current,
               );
             }}
-            renderTable={(table) =>
+            renderTable={(table, options) =>
               isEditing ? (
-                <ServiceTableTile table={table} />
+                <ServiceTableTile
+                  table={table}
+                  showDragHandle
+                  isGrabbed={options?.isGrabbed}
+                />
               ) : (
                 <ServiceTableCard
                   organizationId={organizationId}
@@ -668,6 +717,49 @@ const TablesWorkspace = () => {
           </CardContent>
         </Card>
       )}
+      {showRearrangeFab ? (
+        <Button
+          type="button"
+          variant="outline"
+          aria-label="Rearrange layout"
+          onClick={startLayoutEdit}
+          className={cn(
+            layoutActionDockClassName,
+            "size-12 rounded-2xl border-border/60 bg-card/95 p-0 text-muted-foreground shadow-lg shadow-black/10 backdrop-blur-sm hover:border-primary/40 hover:bg-card hover:text-primary",
+          )}
+        >
+          <ListOrdered className="size-5" />
+        </Button>
+      ) : null}
+      {isEditing ? (
+        <div
+          className={cn(
+            layoutActionDockClassName,
+            "flex items-center gap-1.5 rounded-2xl border border-border/60 bg-card/95 p-1.5 shadow-lg shadow-black/10 backdrop-blur-sm",
+          )}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            aria-label="Cancel layout edits"
+            disabled={isSavingLayout}
+            className="h-9 rounded-xl px-3 text-xs font-medium"
+            onClick={exitLayoutEdit}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            aria-label="Confirm layout"
+            disabled={isSavingLayout}
+            className="h-9 rounded-xl px-3 text-xs font-medium"
+            onClick={() => void confirmLayoutEdit()}
+          >
+            <Check className="size-3.5" />
+            Confirm
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 };

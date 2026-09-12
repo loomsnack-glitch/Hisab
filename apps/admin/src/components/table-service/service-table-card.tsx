@@ -2,25 +2,46 @@ import { useState } from "react";
 import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Sheet, SheetContent, SheetTitle } from "@repo/ui/components/sheet";
-import { Pencil, Trash2, Users } from "lucide-react";
+import { cn } from "@repo/ui/lib/utils";
+import { GripVertical, Pencil, Trash2, Users } from "lucide-react";
 
 import DeleteServiceTableDialog from "@/components/table-service/delete-service-table-dialog";
 import UpsertServiceTableDialog from "@/components/table-service/upsert-service-table-dialog";
 
 type ServiceTableTileProps = {
   table: ServiceTableDTO;
+  showDragHandle?: boolean;
+  isGrabbed?: boolean;
 };
 
-export const ServiceTableTile = ({ table }: ServiceTableTileProps) => (
+export const ServiceTableTile = ({
+  table,
+  showDragHandle = false,
+  isGrabbed = false,
+}: ServiceTableTileProps) => (
   <div
     role="listitem"
     aria-label={`Table ${table.tableLabel}`}
-    className="group relative flex aspect-square min-h-24 w-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-card p-2 text-center shadow-2xs transition-colors duration-200 hover:border-border hover:bg-card/95"
+    data-grabbed={isGrabbed ? "true" : undefined}
+    className={cn(
+      "group relative flex aspect-square min-h-24 w-full flex-col items-center justify-center rounded-2xl border p-2 text-center transition-[box-shadow,transform,background-color,border-color] duration-150",
+      isGrabbed
+        ? "scale-[1.03] border-primary/70 bg-primary/8 shadow-lg shadow-primary/15 ring-2 ring-primary/40"
+        : "border-border/60 bg-card shadow-2xs hover:border-border hover:bg-card/95",
+    )}
   >
+    {showDragHandle ? (
+      <span
+        className="absolute top-1.5 right-1.5 text-muted-foreground/55"
+        aria-hidden="true"
+      >
+        <GripVertical className="size-3.5" />
+      </span>
+    ) : null}
     {table.capacity !== null ? (
       <Badge
         variant="outline"
-        className="absolute top-1.5 left-1.5 z-10 rounded-full border-border/60 bg-card/90 px-1.5 py-0 text-[10px] font-semibold text-muted-foreground shadow-xs backdrop-blur-sm"
+        className="absolute top-1.5 left-1.5 rounded-full border-border/60 bg-card/90 px-1.5 py-0 text-[10px] font-semibold text-muted-foreground shadow-xs"
       >
         <Users className="size-3" />
         {table.capacity}

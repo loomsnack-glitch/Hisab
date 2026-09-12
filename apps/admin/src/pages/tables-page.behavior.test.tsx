@@ -32,7 +32,9 @@ const {
   serviceAreaKeys,
   serviceTableKeys,
 } = await import("@/lib/query-keys");
+import { renderToStaticMarkup } from "react-dom/server";
 import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
+import { ServiceTableTile } from "@/components/table-service/service-table-card";
 
 afterEach(cleanup);
 
@@ -181,6 +183,62 @@ describe("Admin Service Table layout editing", () => {
     expect(screen.getByLabelText("Table T1")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add area" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Confirm layout" })).toBeNull();
+  });
+
+  test("keeps Add area outside the scroll row and uses a floating Rearrange control", () => {
+    renderTables([assignedTable]);
+
+    const addAreaButton = screen.getByRole("button", { name: "Add area" });
+    const rearrangeButton = screen.getByRole("button", { name: "Rearrange layout" });
+    const filterBar = screen.getByTestId("tables-area-filter-bar");
+
+    expect(addAreaButton.closest(".overflow-x-auto")).toBeNull();
+    expect(rearrangeButton.className).toContain("fixed");
+    expect(rearrangeButton.className).toContain("z-50");
+    expect(filterBar.className).toContain("sticky");
+    expect(filterBar.className).toContain("top-0");
+    expect(filterBar.className).toContain("z-20");
+  });
+
+  test("shows Cancel and Confirm in the same floating dock while rearranging", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Rearrange layout" }));
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel layout edits" });
+    const confirmButton = screen.getByRole("button", { name: "Confirm layout" });
+    const actionDock = cancelButton.parentElement;
+
+    expect(screen.queryByRole("button", { name: "Rearrange layout" })).toBeNull();
+    expect(actionDock).toBeTruthy();
+    expect(actionDock?.className).toContain("fixed");
+    expect(actionDock?.className).toContain("z-50");
+    expect(confirmButton.parentElement).toBe(actionDock);
+  });
+
+  test("highlights a grabbed table tile for drag feedback", () => {
+    const markup = renderToStaticMarkup(
+      <ServiceTableTile table={assignedTable} showDragHandle isGrabbed />,
+    );
+
+    expect(markup).toContain('data-grabbed="true"');
+    expect(markup).toContain("ring-primary/40");
+  });
+
+  test("uses pointer sortable reorder in Rearrange instead of native HTML drag", () => {
+    renderTables([assignedTable]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Rearrange layout" }));
+
+    expect(document.querySelector("[draggable='true']")).toBeNull();
+    expect(
+      screen.getByLabelText("Table T1").closest("[data-sortable='table']"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Filter by Patio, 1 table" })
+        .closest("[data-sortable='area']"),
+    ).toBeTruthy();
   });
 
   test("shows only the filtered area and its tables", () => {

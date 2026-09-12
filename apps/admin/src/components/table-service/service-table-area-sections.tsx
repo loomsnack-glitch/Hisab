@@ -1,12 +1,28 @@
-import { Fragment, useRef, type MutableRefObject, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 
 import type { ServiceAreaTableGroup } from "@/lib/service-area-tables";
+import { resolveSameListMove, useLayoutDndSensors } from "@/lib/layout-dnd";
 import { cn } from "@repo/ui/lib/utils";
+
+import SortableLayoutItem from "@/components/table-service/sortable-layout-item";
+
+export type ServiceTableRenderOptions = {
+  isGrabbed?: boolean;
+};
 
 type ServiceTableAreaSectionsProps<T extends { id: string }> = {
   groups: ServiceAreaTableGroup<T>[];
   gridClassName: string;
-  renderTable: (table: T) => ReactNode;
+  renderTable: (table: T, options?: ServiceTableRenderOptions) => ReactNode;
   renderHeading?: (group: ServiceAreaTableGroup<T>) => ReactNode;
   renderHeadingAction?: (group: ServiceAreaTableGroup<T>) => ReactNode;
   compact?: boolean;
@@ -24,9 +40,36 @@ const ServiceTableAreaSections = <T extends { id: string }>({
   tablesDraggable = false,
   onMoveTable,
 }: ServiceTableAreaSectionsProps<T>) => {
-  const dragRef = useRef<{ areaKey: string; index: number } | null>(null);
+  const sensors = useLayoutDndSensors();
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const activeTable = activeTableId
+    ? (groups.flatMap((group) => group.tables).find((table) => table.id === activeTableId) ?? null)
+    : null;
 
-  return (
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveTableId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveTableId(null);
+    if (!onMoveTable) return;
+
+    const activeAreaId = readAreaId(event.active.data.current);
+    const overAreaId = readAreaId(event.over?.data.current);
+    if (activeAreaId === undefined || activeAreaId !== overAreaId) return;
+
+    const group = groups.find((entry) => entry.areaId === activeAreaId);
+    if (!group) return;
+
+    const move = resolveSameListMove(
+      group.tables.map((table) => table.id),
+      String(event.active.id),
+      event.over ? String(event.over.id) : null,
+    );
+    if (move) onMoveTable(group.areaId, move.fromIndex, move.toIndex);
+  };
+
+  const sections = (
     <div
       data-testid="service-table-simple-grid"
       className={compact ? "space-y-5" : "space-y-8"}
@@ -91,14 +134,33 @@ const ServiceTableAreaSections = <T extends { id: string }>({
               gridClassName={gridClassName}
               renderTable={renderTable}
               tablesDraggable={tablesDraggable}
-              dragRef={dragRef}
-              onMoveTable={onMoveTable}
             />
           )}
         </section>
         );
       })}
     </div>
+  );
+
+  if (!tablesDraggable) return sections;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={sameAreaCollision}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveTableId(null)}
+    >
+      {sections}
+      <DragOverlay dropAnimation={null}>
+        {activeTable ? (
+          <div className="cursor-grabbing touch-none">
+            {renderTable(activeTable, { isGrabbed: true })}
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 };
 
@@ -107,8 +169,6 @@ type TableGroupGridProps<T extends { id: string }> = {
   gridClassName: string;
   renderTable: (table: T) => ReactNode;
   tablesDraggable: boolean;
-  dragRef: MutableRefObject<{ areaKey: string; index: number } | null>;
-  onMoveTable?: (areaId: string | null, fromIndex: number, toIndex: number) => void;
 };
 
 const TableGroupGrid = <T extends { id: string }>({
@@ -116,48 +176,53 @@ const TableGroupGrid = <T extends { id: string }>({
   gridClassName,
   renderTable,
   tablesDraggable,
-  dragRef,
-  onMoveTable,
 }: TableGroupGridProps<T>) => {
-  const areaKey = group.areaId ?? "unassigned";
-
-  return (
+  const items = group.tables.map((table) => table.id);
+  const grid = (
     <div className={gridClassName}>
-      {group.tables.map((table, index) => (
-        <div
-          key={table.id}
-          draggable={tablesDraggable}
-          onDragStart={(event) => {
-            if (!tablesDraggable) return;
-            if ((event.target as HTMLElement | null)?.closest("button")) {
-              event.preventDefault();
-              return;
-            }
-            dragRef.current = { areaKey, index };
-            event.dataTransfer.effectAllowed = "move";
-          }}
-          onDragOver={(event) => {
-            if (!tablesDraggable) return;
-            if (dragRef.current?.areaKey !== areaKey) return;
-            event.preventDefault();
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            if (!tablesDraggable || !onMoveTable || !dragRef.current) return;
-            if (dragRef.current.areaKey !== areaKey) return;
-            onMoveTable(group.areaId, dragRef.current.index, index);
-            dragRef.current = null;
-          }}
-          onDragEnd={() => {
-            dragRef.current = null;
-          }}
-          className={tablesDraggable ? "cursor-grab active:cursor-grabbing" : undefined}
-        >
-          <Fragment>{renderTable(table)}</Fragment>
-        </div>
-      ))}
+      {group.tables.map((table) =>
+        tablesDraggable ? (
+          <SortableLayoutItem
+            key={table.id}
+            id={table.id}
+            sortableType="table"
+            data={{ kind: "table", areaId: group.areaId }}
+          >
+            {renderTable(table)}
+          </SortableLayoutItem>
+        ) : (
+          <div key={table.id}>
+            <Fragment>{renderTable(table)}</Fragment>
+          </div>
+        ),
+      )}
     </div>
   );
+
+  if (!tablesDraggable) return grid;
+
+  return (
+    <SortableContext items={items} strategy={rectSortingStrategy}>
+      {grid}
+    </SortableContext>
+  );
+};
+
+const readAreaId = (data: unknown): string | null | undefined => {
+  if (!data || typeof data !== "object" || !("areaId" in data)) return undefined;
+  const areaId = data.areaId;
+  if (areaId === null || typeof areaId === "string") return areaId;
+  return undefined;
+};
+
+const sameAreaCollision: CollisionDetection = (args) => {
+  const areaId = readAreaId(args.active.data.current);
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (container) => readAreaId(container.data.current) === areaId,
+    ),
+  });
 };
 
 export default ServiceTableAreaSections;
