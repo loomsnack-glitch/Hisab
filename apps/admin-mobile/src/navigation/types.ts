@@ -1,3 +1,3 @@
 export type RootStackParamList = {
-    Foundation: undefined;
+    AuthPreview: undefined;
 };

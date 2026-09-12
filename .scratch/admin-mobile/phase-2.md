@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 2: Auth UI Foundation
 
-Status: subphase 2.2 completed with follow-up — ready for 2.3
+Status: completed with follow-up
 
 ## User-facing outcome
 
@@ -142,6 +142,7 @@ Status: completed with follow-up
 Verification:
 
 - `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun run --cwd apps/admin-mobile test` — no tests found; UI behavior remains pending native visual validation and later auth behavior tests.
 - `git diff --check` — passed.
 - Admin mobile boundary scan for browser APIs and POS imports/session identifiers — passed; only the intentional Phase 1 shared storage-provider setup remains.
 - Native build, emulator, device, and runtime visual validation remain pending under repository `AGENTS.md`.
@@ -152,6 +153,81 @@ Subphase review:
 - Spec: controls cover the planned form, OTP, loading, validation, and recoverable-feedback presentation without implementing auth behavior.
 
 Next subphase: 2.3 Static auth compositions.
+
+## Subphase 2.3 plan — Static auth compositions
+
+### Scope
+
+- Add local-only login and registration preview screens under the app-owned auth screen boundary.
+- Compose password login, WhatsApp OTP request/verification, and the four registration steps from the 2.1 shell and 2.2 controls.
+- Add local validation, step navigation, retry/resend presentation, and representative feedback states without calling `@repo/services`.
+- Make the preview reachable from the existing root navigator so the phase output has an app-owned visual host.
+
+### Acceptance criteria
+
+- Login preview shows phone/password mode, WhatsApp OTP mode, OTP verification, validation errors, and a recoverable informational state.
+- Registration preview shows phone, profile, password, and OTP steps with progress metadata and local back/continue transitions.
+- Forms use the reusable controls rather than duplicating their visual or input behavior.
+- Preview actions never create a session, send an OTP, mutate the backend, or persist data.
+- Root navigation remains a single app-owned preview route with no protected/authenticated behavior.
+- No POS imports, Device Login, browser APIs, or web-only components are introduced.
+
+### Dependencies and public seams
+
+- Subphase 2.1 `AuthShell` and subphase 2.2 controls.
+- Existing Phase 1 root navigator; only the temporary foundation route/component is replaced by the auth preview host.
+- React Native local state only; actual auth hooks and mutations belong to Phases 3–5.
+
+### Verification
+
+- `bun run --cwd apps/admin-mobile check-types`
+- `git diff --check`
+- Read-only boundary scan for POS imports, browser-only APIs, auth service calls, and storage writes.
+- Android build, emulator, device, and runtime visual checks remain deferred under repository `AGENTS.md`.
+
+### Risks and rollback
+
+- Keep preview-only copy explicit so it cannot be mistaken for a working auth flow.
+- Do not add timers or fake network loading that could obscure later mutation behavior.
+- Keep the preview host replaceable when Phase 3 introduces real auth bootstrap and navigation state.
+
+### 2.3 implementation record
+
+Status: completed with follow-up
+
+- Added the local-only `AuthPreviewScreen` host and root navigation route.
+- Added password and WhatsApp OTP login previews, including OTP verification, local validation, retry/resend presentation, and explicit preview feedback.
+- Added four registration previews: phone, profile, password, and OTP verification, with local back/continue transitions and progress metadata.
+- Composed every preview from the reusable 2.1 shell and 2.2 controls.
+- Kept all preview actions free of API calls, auth mutations, storage writes, session state, and POS dependencies.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `git diff --check` — passed.
+- Admin mobile boundary scan for browser APIs, POS imports, auth service calls, and storage writes — passed with no matches in the Phase 2 screens/components/navigation.
+- Native build, emulator, device, and runtime visual validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: preview screens use app-owned React Native components and local state, keep the navigation seam small, and avoid browser/runtime-specific code.
+- Spec: the approved login, WhatsApp OTP, registration-step, validation, and feedback states are composed without prematurely implementing authentication behavior.
+
+## Phase 2 completion review
+
+Phase 2 is complete with the native-runtime follow-up. The reusable shell, controls, feedback states, and static login/registration compositions are committed and ready for Phase 3 auth infrastructure wiring.
+
+Phase commits:
+
+- `15251fb feat(admin-mobile): add auth shell foundation`
+- `e2d7fad feat(admin-mobile): add auth form controls`
+- The current Phase 2.3 commit records the static compositions and this phase completion state.
+
+Deferred validation:
+
+- Android build, emulator, physical-device, and runtime visual validation remain release follow-ups because repository `AGENTS.md` prohibits those commands while planned POS mobile phases remain incomplete.
+
+Next phase: Phase 3 Auth infrastructure.
 
 ## Phase-level non-goals
 
