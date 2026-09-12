@@ -2,7 +2,7 @@
 
 Status: Phase 1 foundation completed with follow-up; authentication not started
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 ## Scope
 
@@ -43,6 +43,12 @@ Approved post-registration behavior: zero Organizations open first-Organization 
 The shared auth-token boundary accepts an async storage adapter. POS uses encrypted MMKV with a Keychain/Android Keystore-protected key plus POS Device session data. Admin should use a separate secure Keychain namespace for its User JWT and must not reuse POS session storage.
 
 Approved session storage: Admin JWT in a dedicated `react-native-keychain` service/account namespace; MMKV is reserved for non-sensitive preferences and POS storage is not reused.
+
+## Review follow-up resolved
+
+Admin mobile uses a separate stable installation ID as the shared API's `X-Device-Id` correlation header for login/registration OTP requests. It is not a POS Device credential, POS session, or authorization grant.
+
+The native UI source of truth is recorded in Phase 0: Admin web AuthShell, auth CSS, phone/OTP fields, login page, and registration page.
 
 ## Verification policy
 

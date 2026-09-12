@@ -1,4 +1,5 @@
 import "./global.css";
+import "./src/lib/admin-storage";
 
 import { StatusBar } from "expo-status-bar";
 

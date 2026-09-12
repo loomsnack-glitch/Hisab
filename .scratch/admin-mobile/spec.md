@@ -73,6 +73,7 @@ The app will audit and then reuse the existing user-authenticated contract:
 - The first Admin mobile auth release will use English UI; Gujarati and Hindi remain a later localization scope.
 - The Admin JWT will be stored with `react-native-keychain` in a dedicated service/account namespace; MMKV is reserved for non-sensitive preferences.
 - POS Device credentials and POS session records must never be reused by Admin mobile.
+- Admin mobile will persist a separate non-secret Admin installation ID and send it as `X-Device-Id` for OTP request/verification correlation; this identifier is not a POS Device credential or POS session.
 - Registration and login validation remain aligned with the shared Zod schemas.
 - The mobile API base URL is configured through the Expo public environment boundary.
 - Authentication headers/storage must be isolated from POS Device authentication.
@@ -92,4 +93,4 @@ The app will audit and then reuse the existing user-authenticated contract:
 
 ## Open decisions
 
-There are no remaining product decisions for the limited auth MVP. Keychain accessibility/security options and any contract mismatch are implementation-time validation gates.
+There are no remaining product decisions for the limited auth MVP. Keychain accessibility/security options are implementation-time validation gates.

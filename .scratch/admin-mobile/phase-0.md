@@ -19,6 +19,7 @@ Produce a safe, implementation-ready blueprint for a new Ganatri Admin mobile ap
 - The existing web Admin sends an authenticated user without a starred Organization to `/organizations`, where the user can create or select an Organization.
 - The shared services package exposes a pluggable async auth-token storage adapter. The POS implementation stores its token in encrypted MMKV with an encryption key protected by Keychain/Android Keystore, alongside POS Device session data.
 - Admin needs only the user JWT and must use a separate storage namespace; it must not reuse the POS storage module or persist POS Device identifiers/session records.
+- The backend keys login/registration OTPs by `deviceId`. Native requests cannot depend on the browser `deviceId` cookie, so Admin requires a stable, separate installation ID sent as `X-Device-Id` on OTP requests and verification.
 - Repository domain documentation separates Ganatri Admin user authentication from Ganatri POS Device authentication and Ganatri Console Owner User authentication.
 - The current branch was clean at the start of planning; existing POS work remains preserved and out of scope.
 
@@ -49,7 +50,7 @@ Trace the shared service methods, schemas, API base URL, token/session persisten
 
 ### 0.4 Auth UX and organization landing decision
 
-Map native screens and all loading, validation, network, OTP, and session states. Resolve what happens after registration when the user has zero, one, or multiple Organizations.
+Map native screens and all loading, validation, network, OTP, and session states. Record the approved zero/one/multiple Organization behavior and the separate Admin installation-ID requirement.
 
 ## Acceptance criteria
 
@@ -80,6 +81,10 @@ Map native screens and all loading, validation, network, OTP, and session states
 - Reusing web-only UI components directly in React Native.
 - Adding overlapping libraries because the POS foundation already contains similar capabilities.
 
+## Resolved contract follow-up
+
+The Admin app will configure the shared `@repo/services` device-ID provider with a dedicated Admin installation ID. It will be persisted independently from the POS storage module and sent only as the request-correlation header required by the existing auth middleware. It does not grant Store Device access and must not be called or treated as a POS Device credential.
+
 ## Contract implication for the approved flow
 
 Registration should not promise an Organization dashboard immediately. The current backend contract and web Admin behavior support routing a newly registered user with no Organization to an Organization setup/picker experience. The approved mobile behavior is a dedicated first-Organization setup screen for zero Organizations, direct opening for one Organization, and the Organization picker for multiple Organizations.
@@ -95,6 +100,19 @@ Registration should not promise an Organization dashboard immediately. The curre
 ## Session storage recommendation
 
 Use `react-native-keychain` directly for the Admin JWT with a dedicated service/account namespace. Use MMKV only for non-sensitive Admin preferences. This is the smallest secure boundary for an app that has no POS Device session, avoids mixing trust domains, and fits the shared async auth-token adapter. The exact Keychain accessibility/security options will be validated during implementation.
+
+## UI source of truth
+
+The native auth UI will be adapted from these existing Admin web references:
+
+- `apps/admin/src/components/auth/auth-shell.tsx` — shell composition, branding, responsive hierarchy, theme treatment, and auth artwork intent.
+- `apps/admin/src/components/auth/auth.css` — auth-specific visual rules.
+- `apps/admin/src/components/auth/phone-number-field.tsx` — phone field behavior and validation presentation.
+- `apps/admin/src/components/auth/otp-field.tsx` — OTP input behavior and resend presentation.
+- `apps/admin/src/pages/login-page.tsx` — password/OTP login states and service payloads.
+- `apps/admin/src/pages/register-page.tsx` — four-step registration states and service payloads.
+
+React Native will reuse the visual decisions and shared auth contract, not import web-only components directly.
 
 ## Phase 0 exit review
 
