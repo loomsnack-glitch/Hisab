@@ -1,6 +1,6 @@
 # Ganatri Admin Mobile — Planning Status
 
-Status: Phase 6 planned — subphase 6.1 ready
+Status: Phase 6 in progress — subphase 6.1 completed with follow-up; 6.2 next
 
 Last updated: 2026-09-13
 
@@ -25,7 +25,7 @@ Create a new Android-first Ganatri Admin mobile app with the Admin web portal's 
 | 3. Auth infrastructure | Completed with follow-up | Auth state, bootstrap, persistence, logout, and protected/public navigation are committed; native runtime validation remains pending. |
 | 4. Login | Completed with follow-up | Password and WhatsApp OTP login are committed; native validation remains pending. |
 | 5. Registration | Completed with follow-up | Four-step registration and WhatsApp OTP/session handoff are committed; native validation remains pending. |
-| 6. Organization landing | Planned — 6.1 ready | Zero/one/multiple Organization routing and the first authenticated destination are next. |
+| 6. Organization landing | In progress — 6.1 completed with follow-up | Organization query/routing seam is committed; first-Organization setup is next. |
 | 7. Auth release gate | Not started | Depends on all previous phases. |
 
 ## Current decision gates

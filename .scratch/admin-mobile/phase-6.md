@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 6: Organization Landing
 
-Status: planned — subphase 6.1 ready
+Status: in progress — subphase 6.1 completed with follow-up; 6.2 next
 
 ## User-facing outcome
 
@@ -45,6 +45,29 @@ After Admin authentication, route the user to the correct first destination base
 - Admin typecheck and pure routing tests.
 - `git diff --check` and boundary scan.
 - No native build, emulator, device, or runtime-start command under repository `AGENTS.md`.
+
+### 6.1 implementation record
+
+Status: completed with follow-up
+
+- Added Admin-owned Organization query keys and a pure `resolveOrganizationLanding` seam for zero, one, and multiple Organizations.
+- Replaced the protected placeholder root with an Organization query boundary using shared `getOrganizations` and native loading/error states.
+- Kept sign-out available through loading, error, and temporary landing states while setup and picker interactions remain in later subphases.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- Organization routing, auth-state, and bootstrap tests — 10 passed.
+- `git diff --check` — passed.
+- Boundary scan found no POS, Device Login, Owner User, browser, or ordinary-storage dependency.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: Organization state is fetched through TanStack Query and routing policy is isolated in a pure helper.
+- Spec: zero/one/multiple policy is represented without prematurely adding dashboard or business modules.
+
+Next subphase: 6.2 First-Organization setup.
 
 ## Phase-level non-goals
 
