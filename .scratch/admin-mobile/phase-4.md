@@ -1,6 +1,6 @@
 # Admin Mobile — Phase 4: Login
 
-Status: subphase 4.1 completed with follow-up — ready for 4.2
+Status: in progress — subphase 4.2 completed with follow-up; ready for 4.3
 
 ## User-facing outcome
 
@@ -88,6 +88,47 @@ Subphase review:
 
 Next subphase: 4.2 WhatsApp OTP login.
 
+## Subphase 4.2 plan — WhatsApp OTP login
+
+### Scope
+
+- Extend the real Admin login screen with WhatsApp OTP request and verification.
+- Use the shared `LoginFormSchema` and `userLogin` request types for `otp-info` and `otp-verification`.
+- Display the backend-approved five-minute OTP expiry countdown.
+- Keep the existing 30-second resend cooldown separate from the five-minute expiry window.
+- Support expired-code recovery by requesting a new OTP; do not fall back to SMS or email.
+- Persist the returned JWT and enter the Phase 3 protected route on successful verification.
+
+### Acceptance criteria
+
+- A valid phone can request a WhatsApp OTP and enter verification state only after the service indicates `otp-verification`.
+- OTP input is six digits and is validated by the shared Zod schema before verification.
+- The UI displays five minutes from the issued challenge and disables verification after expiry.
+- Resend is disabled for 30 seconds, then requests a fresh challenge and resets the five-minute expiry window.
+- Expired or invalid OTP errors remain recoverable on the verification screen.
+- No SMS/email fallback or POS/Owner User behavior is added.
+
+### Dependencies and public seams
+
+- 4.1 real login screen, session handoff, and Admin auth cache.
+- Phase 2 `OtpField`, `AuthButton`, `AuthFeedback`, and `PhoneNumberField`.
+- Shared `LoginFormSchema` and `userLogin`.
+- A pure OTP timing helper for deterministic expiry/cooldown tests.
+
+### Verification
+
+- `bun run --cwd apps/admin-mobile check-types`
+- Focused OTP timing and login-response tests.
+- `git diff --check`
+- Read-only boundary scan for channel fallback, POS imports, and duplicate auth storage.
+- No Android build, emulator, device, or runtime-start commands during this phase work.
+
+### Risks and rollback
+
+- Client countdown is presentation/recovery guidance; server expiry remains authoritative.
+- A resend creates a new challenge and must reset both the displayed expiry and resend cooldown.
+- Do not retain stale OTP state when switching back to password or changing the phone number.
+
 ## Phase-level non-goals
 
 - Registration.
@@ -96,6 +137,30 @@ Next subphase: 4.2 WhatsApp OTP login.
 - SMS/email OTP fallback.
 - Backend or shared auth-contract changes unless a separately approved incompatibility is found.
 - Android build, emulator, physical-device, or release validation.
+
+## Subphase 4.2 implementation record
+
+Status: completed with follow-up
+
+- Added WhatsApp OTP request and six-digit verification to the real Admin login screen.
+- Added the approved five-minute client countdown and separate 30-second resend cooldown, with deterministic timing helpers.
+- Added expired-code recovery, resend reset behavior, recoverable service errors, and method switching that clears stale OTP state.
+- Reused the shared `LoginFormSchema`, `userLogin`, secure Admin JWT handoff, auth store, and Admin query cache; no SMS or email fallback was added.
+
+Verification:
+
+- `bun run --cwd apps/admin-mobile check-types` — passed.
+- `bun test apps/admin-mobile/src/lib/login-session.test.ts apps/admin-mobile/src/lib/otp-timing.test.ts` — 5 passed.
+- `git diff --check` — passed.
+- Admin login boundary scan found no POS, Device Login, Owner User, browser, ordinary-storage, or SMS/email fallback imports.
+- Native build, emulator, device, and runtime validation remain pending under repository `AGENTS.md`.
+
+Subphase review:
+
+- Standards: OTP timing is isolated in a pure helper, while screen state uses the existing Admin auth and native UI seams.
+- Spec: request, verification, cooldown, expiry, recovery, and successful session handoff are covered without adding registration, Organization, dashboard, or channel fallback behavior.
+
+Next subphase: 4.3 Login integration review.
 
 ## Phase completion gate
 
