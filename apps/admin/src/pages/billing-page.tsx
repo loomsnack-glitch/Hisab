@@ -54,6 +54,7 @@ import type {
 } from "@repo/types";
 import { normalizePhoneNumber, overlayActiveStoreProductOfferings, inactiveProductCodesWithoutActiveOffering } from "@repo/types";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
+import { getStoreListPath } from "@/lib/store-routes";
 import {
     BillingWorkspaceLayout,
     clampSalesDateToLatest,
@@ -63,6 +64,8 @@ import {
     type BillsDatePreset,
 } from "@repo/ui/components/billing";
 import { Button } from "@repo/ui/components/button";
+import { Card, CardContent } from "@repo/ui/components/card";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@repo/ui/components/empty";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -74,9 +77,10 @@ import {
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MonitorSmartphone, PlusCircle, Receipt, Store } from "lucide-react";
 import { toast } from "sonner";
 
+import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 import CustomerDirectory from "@/components/customers/customer-directory";
 import { BillingBillsPanel } from "@/components/billing/billing-bills-panel";
 import { BillingCartAside } from "@/components/billing/billing-cart-aside";
@@ -2058,45 +2062,119 @@ const BillingPage = ({
 
     if (!isDeviceMode && (organizationQuery.isError || organizationQuery.data?.status === "error" || !organization)) {
         return (
-            <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
-                <p className="font-display text-2xl font-semibold text-foreground">Billing workspace unavailable</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    {organizationQuery.data?.message ||
-                        (organizationQuery.error as { message?: string })?.message ||
-                        "This organization could not be loaded."}
-                </p>
-                <Button variant="outline" className="mt-4 rounded-full" render={<Link to="/organizations" />}>
-                    Back to organizations
-                </Button>
+            <div className="flex min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-2rem)] flex-col lg:min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-4rem)]">
+                <Card className="my-auto w-full border-border/60 bg-card/80 shadow-xl shadow-black/5">
+                    <CardContent className="p-0">
+                        <Empty className="rounded-2xl border-0 py-10 sm:py-12">
+                            <EmptyHeader>
+                                <div className="mb-1 flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive ring-1 ring-destructive/15">
+                                    <Receipt className="size-6" />
+                                </div>
+                                <EmptyTitle className="font-display text-xl sm:text-2xl">
+                                    Billing workspace unavailable
+                                </EmptyTitle>
+                                <EmptyDescription className="max-w-md">
+                                    {organizationQuery.data?.message ||
+                                        (organizationQuery.error as { message?: string })?.message ||
+                                        "This organization could not be loaded."}
+                                </EmptyDescription>
+                            </EmptyHeader>
+                            <EmptyContent>
+                                <Button variant="outline" className="rounded-full" render={<Link to="/organizations" />}>
+                                    Back to organizations
+                                </Button>
+                            </EmptyContent>
+                        </Empty>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
 
     if (!selectedStore && organizationStores.length === 0) {
+        const storeSetupSteps = [
+            { icon: Store, label: "Create a store branch for this organization" },
+            { icon: MonitorSmartphone, label: "Register POS devices for checkout" },
+            { icon: Receipt, label: "Return here to start billing sales" },
+        ] as const;
+
         return (
-            <div className="space-y-6">
+            <div
+                className="relative flex min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-2rem)] flex-col lg:min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-4rem)]"
+                data-testid="billing-no-store-empty-state"
+            >
+                <div className="pointer-events-none absolute inset-x-0 top-8 h-48 overflow-hidden opacity-60">
+                    <div className="absolute left-1/2 top-0 h-40 w-72 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+                </div>
+
                 <Button
                     variant="ghost"
-                    className="rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                    className="relative z-10 w-fit rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                     render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
                 >
                     <ArrowLeft className="size-4" />
                     Back to organization
                 </Button>
 
-                <div className="rounded-2xl border border-border/60 bg-card/80 p-8 shadow-xl shadow-black/5">
-                    <h1 className="font-display text-3xl font-semibold text-foreground">
-                        Add a store before starting billing.
-                    </h1>
-                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                        Billing is store-scoped. Once a store exists, this screen becomes the POS billing surface.
-                    </p>
-                    <Button
-                        className="mt-4 rounded-full"
-                        render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
-                    >
-                        Go to store setup
-                    </Button>
+                <div className="relative z-10 flex flex-1 items-center justify-center pb-8 pt-4">
+                    <Card className="w-full max-w-2xl border-border/60 bg-card/85 shadow-xl shadow-black/5 backdrop-blur-sm">
+                        <CardContent className="p-0">
+                            <Empty className="rounded-2xl border-0 px-6 py-10 sm:px-10 sm:py-12">
+                                <EmptyHeader className="max-w-lg">
+                                    <div className="mb-1 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                                        <Store className="size-6" />
+                                    </div>
+                                    <EmptyTitle className="font-display text-xl sm:text-2xl">
+                                        Add a store before starting billing
+                                    </EmptyTitle>
+                                    <EmptyDescription className="max-w-md text-sm/relaxed">
+                                        Billing is store-scoped. Once you add a branch, this screen becomes your POS
+                                        billing workspace for sales, drafts, and payments.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+
+                                <ol className="mt-2 flex w-full max-w-md flex-col gap-2 text-left">
+                                    {storeSetupSteps.map((step, index) => {
+                                        const StepIcon = step.icon;
+
+                                        return (
+                                            <li
+                                                key={step.label}
+                                                className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/25 px-3 py-2.5 text-sm"
+                                            >
+                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary ring-1 ring-border/60">
+                                                    <StepIcon className="size-3.5" />
+                                                </span>
+                                                <span className="min-w-0 flex-1 text-foreground">{step.label}</span>
+                                                <span className="text-xs font-semibold tabular-nums text-muted-foreground/70">
+                                                    {index + 1}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ol>
+
+                                <EmptyContent className="mt-5 flex flex-wrap justify-center gap-2">
+                                    <CreateStoreDialog
+                                        organizationId={organizationId}
+                                        trigger={
+                                            <Button className="rounded-full bg-primary px-5 text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90">
+                                                <PlusCircle className="size-4" />
+                                                Add your first store
+                                            </Button>
+                                        }
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        className="rounded-full"
+                                        render={<Link to={getStoreListPath(organizationId)} />}
+                                    >
+                                        Go to store setup
+                                    </Button>
+                                </EmptyContent>
+                            </Empty>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         );
