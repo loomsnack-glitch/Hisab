@@ -182,9 +182,31 @@ export const vesuTomatoOffering: StoreVendorItemOfferingDTO = {
 export { getOrganizationByIdForUser, getStoresByOrganizationId, getStoreById, resolveFeatureEntitlement };
 
 export const getVendorsByOrganizationId = mock(async () => [freshFarmsVendor, millersVendor]);
+export const getVendorsPageByOrganizationId = mock(async () => ({
+    vendors: [freshFarmsVendor, millersVendor],
+    pageInfo: {
+        hasMore: false,
+        nextCursor: null,
+        totalCount: 2,
+        page: 1,
+        pageSize: 15,
+        totalPages: 1,
+    },
+}));
 export const getVendorById = mock(async () => freshFarmsVendor);
 export const getUnitById = mock(async () => kilogramUnit);
 export const getVendorItemsByOrganizationId = mock(async () => [tomatoItem, millersTomatoItem, onionItem]);
+export const getVendorItemsPageByOrganizationId = mock(async () => ({
+    vendorItems: [tomatoItem, millersTomatoItem, onionItem],
+    pageInfo: {
+        hasMore: false,
+        nextCursor: null,
+        totalCount: 3,
+        page: 1,
+        pageSize: 15,
+        totalPages: 1,
+    },
+}));
 export const getVendorItemById = mock(async () => tomatoItem);
 
 type CreateVendorRepoArg = {
@@ -288,10 +310,12 @@ export const updateStoreVendorItemOfferingRepo = mock(async (data: Pick<StoreVen
 
 export const vendorsRepositoryModule = {
     getVendorsByOrganizationId,
+    getVendorsPageByOrganizationId,
     getVendorById,
     createVendor: createVendorRepo,
     updateVendor: updateVendorRepo,
     getVendorItemsByOrganizationId,
+    getVendorItemsPageByOrganizationId,
     getVendorItemById,
     getVendorItemsByVendorId,
     createVendorItem: createVendorItemRepo,

@@ -193,7 +193,7 @@ const StoreVendorAvailabilitiesPage = () => {
                                 <Button
                                     variant="outline"
                                     className="rounded-full"
-                                    render={<Link to={`/organizations/${organizationId}/vendors`} />}
+                                    render={<Link to={`/organizations/${organizationId}/vendors/list`} />}
                                 >
                                     Organization vendors
                                 </Button>

@@ -34,6 +34,26 @@ describe("isFullWidthDashboardPath", () => {
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/customers",
             ),
         ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/money-accounts",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/vendors",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/vendors/list",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/vendors/items",
+            ),
+        ).toBe(true);
     });
 
     test("keeps the centered container for other organization routes", () => {

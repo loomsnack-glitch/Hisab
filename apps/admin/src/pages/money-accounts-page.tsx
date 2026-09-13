@@ -6,79 +6,18 @@ import {
     MONEY_ACCOUNT_SCOPE_LABELS,
     MONEY_ACCOUNT_TYPE_LABELS,
     type MoneyAccountDTO,
-    type MoneyAccountScope,
-    type MoneyAccountType,
 } from "@repo/types";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
-import { cn } from "@repo/ui/lib/utils";
-import { LayoutGrid, Pencil, PlusCircle, RefreshCw, Search, Table as TableIcon, Wallet, X } from "lucide-react";
+import { Pencil, Plus, PlusCircle, RefreshCw, Search, Wallet, X } from "lucide-react";
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertMoneyAccountDialog from "@/components/money-accounts/upsert-money-account-dialog";
-import { formatCurrency, formatDateTime } from "@/lib/format";
-import {
-    readListViewPreference,
-    writeListViewPreference,
-    type ListViewMode,
-} from "@/lib/list-view-preferences";
+import { formatCurrency } from "@/lib/format";
 import { moneyAccountKeys, organizationKeys } from "@/lib/query-keys";
-import { PremiumTable, type ColumnDef } from "@repo/ui/components/premium-table";
-
-const MONEY_ACCOUNTS_LIST_VIEW_KEY = "money-accounts";
-
-const MoneyAccountTypeBadge = ({ type }: { type: MoneyAccountType }) => (
-    <Badge variant="outline" className="rounded-full">
-        {MONEY_ACCOUNT_TYPE_LABELS[type]}
-    </Badge>
-);
-
-const MoneyAccountScopeBadge = ({ scope }: { scope: MoneyAccountScope }) => (
-    <Badge variant="outline" className="rounded-full">
-        {MONEY_ACCOUNT_SCOPE_LABELS[scope]}
-    </Badge>
-);
-
-const ViewModeToggle = ({
-    viewMode,
-    onViewModeChange,
-}: {
-    viewMode: ListViewMode;
-    onViewModeChange: (mode: ListViewMode) => void;
-}) => (
-    <div className="flex items-center p-1 rounded-full border border-border/60 bg-card/80 shrink-0">
-        <Button
-            variant={viewMode === "card" ? "default" : "ghost"}
-            size="icon"
-            className={cn(
-                "h-7 w-7 rounded-full transition-all",
-                viewMode === "card" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground",
-            )}
-            onClick={() => onViewModeChange("card")}
-            aria-label="Card view"
-            aria-pressed={viewMode === "card"}
-        >
-            <LayoutGrid className="size-3.5" />
-        </Button>
-        <Button
-            variant={viewMode === "table" ? "default" : "ghost"}
-            size="icon"
-            className={cn(
-                "h-7 w-7 rounded-full transition-all",
-                viewMode === "table" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground",
-            )}
-            onClick={() => onViewModeChange("table")}
-            aria-label="Table view"
-            aria-pressed={viewMode === "table"}
-        >
-            <TableIcon className="size-3.5" />
-        </Button>
-    </div>
-);
 
 type MoneyAccountCardProps = {
     account: MoneyAccountDTO;
@@ -139,15 +78,7 @@ const MoneyAccountCard = ({ account, organizationId, storeLabel }: MoneyAccountC
 
 const MoneyAccountsPage = () => {
     const { organizationId = "" } = useParams();
-    const [viewMode, setViewMode] = useState<ListViewMode>(
-        () => readListViewPreference(MONEY_ACCOUNTS_LIST_VIEW_KEY) ?? "card",
-    );
-    const [cardSearchQuery, setCardSearchQuery] = useState("");
-
-    const handleViewModeChange = useCallback((mode: ListViewMode) => {
-        setViewMode(mode);
-        writeListViewPreference(MONEY_ACCOUNTS_LIST_VIEW_KEY, mode);
-    }, []);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const moneyAccountsQuery = useQuery({
         queryKey: moneyAccountKeys.list(organizationId),
@@ -191,8 +122,8 @@ const MoneyAccountsPage = () => {
     );
 
     const filteredMoneyAccounts = useMemo(() => {
-        if (!cardSearchQuery.trim()) return moneyAccounts;
-        const query = cardSearchQuery.toLowerCase().trim();
+        if (!searchQuery.trim()) return moneyAccounts;
+        const query = searchQuery.toLowerCase().trim();
         return moneyAccounts.filter((account) =>
             account.name.toLowerCase().includes(query)
             || MONEY_ACCOUNT_TYPE_LABELS[account.type].toLowerCase().includes(query)
@@ -200,165 +131,7 @@ const MoneyAccountsPage = () => {
             || storeNameFor(account).toLowerCase().includes(query)
             || (account.notes ?? "").toLowerCase().includes(query),
         );
-    }, [cardSearchQuery, moneyAccounts, storeNameFor]);
-
-    const columns = useMemo<ColumnDef<MoneyAccountDTO>[]>(() => [
-        {
-            id: "name",
-            header: "Account",
-            accessor: (account) => (
-                <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Wallet className="size-3.5" />
-                    </div>
-                    <div className="min-w-0">
-                        <span className="font-medium text-foreground">{account.name}</span>
-                        {account.notes ? (
-                            <p className="text-xs text-muted-foreground truncate">{account.notes}</p>
-                        ) : null}
-                        {account.hasMovements ? (
-                            <p className="text-xs text-muted-foreground">
-                                Type, availability, Store, and Opening Balance are locked
-                            </p>
-                        ) : null}
-                        {account.status === "inactive" && account.hasMovements ? (
-                            <p className="text-xs text-muted-foreground">
-                                Inactive. Historic Movements remain visible.
-                            </p>
-                        ) : null}
-                    </div>
-                </div>
-            ),
-            sortable: true,
-            getSortValue: (account) => account.name,
-        },
-        {
-            id: "type",
-            header: "Type",
-            accessor: (account) => <MoneyAccountTypeBadge type={account.type} />,
-            sortable: true,
-            getSortValue: (account) => MONEY_ACCOUNT_TYPE_LABELS[account.type],
-            filterOptions: Object.entries(MONEY_ACCOUNT_TYPE_LABELS).map(([value, label]) => ({
-                label,
-                value,
-            })),
-            getFilterValue: (account) => account.type,
-        },
-        {
-            id: "scope",
-            header: "Scope",
-            accessor: (account) => <MoneyAccountScopeBadge scope={account.scope} />,
-            sortable: true,
-            getSortValue: (account) => MONEY_ACCOUNT_SCOPE_LABELS[account.scope],
-            filterOptions: Object.entries(MONEY_ACCOUNT_SCOPE_LABELS).map(([value, label]) => ({
-                label,
-                value,
-            })),
-            getFilterValue: (account) => account.scope,
-        },
-        {
-            id: "store",
-            header: "Store",
-            accessor: (account) => (
-                <span className="text-sm text-muted-foreground">
-                    {storeLabelFor(account)}
-                </span>
-            ),
-            sortable: true,
-            getSortValue: (account) => storeNameFor(account),
-            filterOptions: stores.map((store) => ({
-                label: store.name,
-                value: store.id,
-            })),
-            getFilterValue: (account) => account.storeId ?? "",
-        },
-        {
-            id: "openingBalance",
-            header: "Opening Balance",
-            accessor: (account) => (
-                <div>
-                    <p className="text-sm tabular-nums">{formatCurrency(account.openingBalance)}</p>
-                    <p className="text-[11px] text-muted-foreground">Starting amount</p>
-                </div>
-            ),
-            sortable: true,
-            getSortValue: (account) => account.openingBalance,
-        },
-        {
-            id: "balance",
-            header: "Calculated balance",
-            accessor: (account) => (
-                <div>
-                    <p className="text-sm font-medium tabular-nums">{formatCurrency(account.balance)}</p>
-                    <p className="text-[11px] text-muted-foreground">Opening plus tracked Payments</p>
-                </div>
-            ),
-            sortable: true,
-            getSortValue: (account) => account.balance,
-        },
-        {
-            id: "status",
-            header: "Status",
-            accessor: (account) => <ProductStatusBadge status={account.status} />,
-            sortable: true,
-            getSortValue: (account) => account.status,
-            filterOptions: [
-                { label: "Active", value: "active" },
-                { label: "Inactive", value: "inactive" },
-            ],
-            getFilterValue: (account) => account.status,
-        },
-        {
-            id: "updatedAt",
-            header: "Updated",
-            accessor: (account) => formatDateTime(account.updatedAt),
-            sortable: true,
-            getSortValue: (account) => String(account.updatedAt),
-        },
-    ], [storeLabelFor, storeNameFor, stores]);
-
-    const renderActions = (account: MoneyAccountDTO) => (
-        <div className="flex flex-wrap items-center gap-2">
-            <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                render={<Link to={`/organizations/${organizationId}/money-accounts/${account.id}`} />}
-            >
-                Transactions
-            </Button>
-            <UpsertMoneyAccountDialog
-                organizationId={organizationId}
-                moneyAccount={account}
-                trigger={
-                    <Button variant="outline" size="sm" className="rounded-full">
-                        <Pencil className="size-3" />
-                        Edit
-                    </Button>
-                }
-            />
-        </div>
-    );
-
-    const searchKeys = [
-        (account: MoneyAccountDTO) => account.name,
-        (account: MoneyAccountDTO) => MONEY_ACCOUNT_TYPE_LABELS[account.type],
-        (account: MoneyAccountDTO) => MONEY_ACCOUNT_SCOPE_LABELS[account.scope],
-        (account: MoneyAccountDTO) => storeNameFor(account),
-        (account: MoneyAccountDTO) => account.notes ?? "",
-    ];
-
-    const addMoneyAccountButton = (
-        <UpsertMoneyAccountDialog
-            organizationId={organizationId}
-            trigger={
-                <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs px-4">
-                    <PlusCircle className="size-3.5" />
-                    Add money account
-                </Button>
-            }
-        />
-    );
+    }, [searchQuery, moneyAccounts, storeNameFor]);
 
     if (moneyAccountsQuery.isPending) {
         return (
@@ -420,41 +193,23 @@ const MoneyAccountsPage = () => {
                         </Empty>
                     </CardContent>
                 </Card>
-            ) : viewMode === "table" ? (
-                <PremiumTable
-                    data={moneyAccounts}
-                    columns={columns}
-                    actions={renderActions}
-                    rowIdKey="id"
-                    defaultPageSize={20}
-                    fillAvailableViewport
-                    searchPlaceholder="Search money accounts..."
-                    searchKeys={searchKeys}
-                    infoText={`${moneyAccounts.length} account${moneyAccounts.length === 1 ? "" : "s"}`}
-                    toolbarActions={(
-                        <div className="flex items-center gap-2">
-                            <ViewModeToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
-                            {addMoneyAccountButton}
-                        </div>
-                    )}
-                />
             ) : (
-                <div className="space-y-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex flex-wrap items-center gap-3 flex-1">
-                            <div className="relative w-full sm:w-[320px] max-w-xs group/search">
+                <>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                            <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
                                 <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                                 <Input
                                     type="text"
                                     placeholder="Search money accounts..."
-                                    value={cardSearchQuery}
-                                    onChange={(event) => setCardSearchQuery(event.target.value)}
-                                    className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
+                                    value={searchQuery}
+                                    onChange={(event) => setSearchQuery(event.target.value)}
+                                    className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary/70 transition-all duration-200 text-sm w-full shadow-2xs"
                                 />
-                                {cardSearchQuery ? (
+                                {searchQuery ? (
                                     <button
                                         type="button"
-                                        onClick={() => setCardSearchQuery("")}
+                                        onClick={() => setSearchQuery("")}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
                                         aria-label="Clear search"
                                     >
@@ -462,15 +217,41 @@ const MoneyAccountsPage = () => {
                                     </button>
                                 ) : null}
                             </div>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                                {filteredMoneyAccounts.length} account{filteredMoneyAccounts.length === 1 ? "" : "s"}
-                            </span>
+
+                            <UpsertMoneyAccountDialog
+                                organizationId={organizationId}
+                                trigger={
+                                    <Button
+                                        type="button"
+                                        aria-label="Add money account"
+                                        className="h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:hidden"
+                                    >
+                                        <Plus className="size-4" />
+                                    </Button>
+                                }
+                            />
                         </div>
-                        <div className="flex items-center gap-2">
-                            <ViewModeToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
-                            {addMoneyAccountButton}
+
+                        <div className="hidden sm:flex flex-wrap items-center gap-2">
+                            <UpsertMoneyAccountDialog
+                                organizationId={organizationId}
+                                trigger={
+                                    <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20">
+                                        <PlusCircle className="size-4" />
+                                        Add money account
+                                    </Button>
+                                }
+                            />
                         </div>
                     </div>
+
+                    {filteredMoneyAccounts.length > 0 && (
+                        <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
+                            <span className="text-xs text-muted-foreground/70">
+                                Showing {filteredMoneyAccounts.length} account{filteredMoneyAccounts.length === 1 ? "" : "s"}
+                            </span>
+                        </div>
+                    )}
 
                     {filteredMoneyAccounts.length === 0 ? (
                         <Card className="border-border/60 bg-card/80 p-6 text-center text-sm text-muted-foreground rounded-2xl">
@@ -488,7 +269,7 @@ const MoneyAccountsPage = () => {
                             ))}
                         </div>
                     )}
-                </div>
+                </>
             )}
         </div>
     );

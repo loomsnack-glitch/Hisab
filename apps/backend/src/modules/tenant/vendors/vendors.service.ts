@@ -13,8 +13,10 @@ import {
     type UpdateStoreVendorAvailabilitySVC,
     type UpdateStoreVendorItemOfferingSVC,
     type VendorItemDTO,
+    type VendorItemListQuery,
     type VendorItemResponse,
     type VendorItemsListResponse,
+    type VendorListQuery,
     type VendorResponse,
     type VendorsListResponse,
     type UpdateVendorItemSVC,
@@ -100,6 +102,7 @@ const normalizeDescription = (description: string | null | undefined): string | 
 export const getVendors = async (
     userId: string,
     organizationId: string,
+    query: VendorListQuery = {},
 ): Promise<ServiceResponse<VendorsListResponse | null>> => {
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
@@ -109,6 +112,17 @@ export const getVendors = async (
     const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
     if (vendorsEntitlementError) {
         return vendorsEntitlementError;
+    }
+
+    const usesPagination = query.page !== undefined || query.limit !== undefined;
+    if (usesPagination) {
+        const result = await vendorsRepository.getVendorsPageByOrganizationId(organizationId, query);
+        return {
+            status: "success",
+            data: result,
+            message: "Vendors fetched successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
     }
 
     const vendors = await vendorsRepository.getVendorsByOrganizationId(organizationId);
@@ -270,6 +284,7 @@ export const updateVendor = async (
 export const getVendorItems = async (
     userId: string,
     organizationId: string,
+    query: VendorItemListQuery = {},
 ): Promise<ServiceResponse<VendorItemsListResponse | null>> => {
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
@@ -279,6 +294,17 @@ export const getVendorItems = async (
     const vendorsEntitlementError = await denyUnlessVendorsEntitled(organizationId);
     if (vendorsEntitlementError) {
         return vendorsEntitlementError;
+    }
+
+    const usesPagination = query.page !== undefined || query.limit !== undefined;
+    if (usesPagination) {
+        const result = await vendorsRepository.getVendorItemsPageByOrganizationId(organizationId, query);
+        return {
+            status: "success",
+            data: result,
+            message: "Vendor Items fetched successfully",
+            code: STATUS_CODES.SUCCESS,
+        };
     }
 
     const vendorItems = await vendorsRepository.getVendorItemsByOrganizationId(organizationId);

@@ -15,6 +15,10 @@ import {
   UpdateVendorSchema,
   VendorDTOSchema,
   VendorItemDTOSchema,
+  VendorItemListQuerySchema,
+  VendorListQuerySchema,
+  serializeVendorItemListQueryParams,
+  serializeVendorListQueryParams,
 } from "./vendors.schema";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -200,6 +204,51 @@ describe("Vendor contracts", () => {
     }
   });
 
+  test("vendor list queries accept search, status filters, and offset pagination", () => {
+    const fromArray = VendorListQuerySchema.safeParse({
+      search: "farms",
+      statuses: ["active", "inactive"],
+      page: 2,
+      limit: 15,
+    });
+    const fromCsv = VendorListQuerySchema.safeParse({
+      search: "  farms  ",
+      statuses: "active,inactive",
+      page: "1",
+      limit: "10",
+    });
+
+    expect(fromArray.success).toBe(true);
+    expect(fromCsv.success).toBe(true);
+    if (fromArray.success) {
+      expect(fromArray.data.statuses).toEqual(["active", "inactive"]);
+      expect(fromArray.data.page).toBe(2);
+      expect(fromArray.data.limit).toBe(15);
+    }
+    if (fromCsv.success) {
+      expect(fromCsv.data.search).toBe("farms");
+      expect(fromCsv.data.statuses).toEqual(["active", "inactive"]);
+      expect(fromCsv.data.page).toBe(1);
+      expect(fromCsv.data.limit).toBe(10);
+    }
+  });
+
+  test("serializes vendor list status filters as a csv query param", () => {
+    expect(
+      serializeVendorListQueryParams({
+        search: "farms",
+        statuses: ["active", "inactive"],
+        page: 1,
+        limit: 15,
+      }),
+    ).toEqual({
+      search: "farms",
+      statuses: "active,inactive",
+      page: 1,
+      limit: 15,
+    });
+  });
+
   test("rejects a Vendor DTO with an invalid organization id", () => {
     const result = VendorDTOSchema.safeParse({
       id: vendorId,
@@ -222,6 +271,57 @@ const vendorItemId = "44444444-4444-4444-8444-444444444444";
 const onionItemId = "77777777-7777-4777-8777-777777777777";
 
 describe("Vendor Item contracts", () => {
+  test("vendor item list queries accept search, status, vendor, and offset pagination", () => {
+    const fromArray = VendorItemListQuerySchema.safeParse({
+      search: "tomato",
+      statuses: ["active", "inactive"],
+      vendorIds: [vendorId],
+      page: 2,
+      limit: 25,
+    });
+    const fromCsv = VendorItemListQuerySchema.safeParse({
+      search: "  tomato  ",
+      statuses: "active,inactive",
+      vendorIds: vendorId,
+      page: "1",
+      limit: "50",
+    });
+
+    expect(fromArray.success).toBe(true);
+    expect(fromCsv.success).toBe(true);
+    if (fromArray.success) {
+      expect(fromArray.data.statuses).toEqual(["active", "inactive"]);
+      expect(fromArray.data.vendorIds).toEqual([vendorId]);
+      expect(fromArray.data.page).toBe(2);
+      expect(fromArray.data.limit).toBe(25);
+    }
+    if (fromCsv.success) {
+      expect(fromCsv.data.search).toBe("tomato");
+      expect(fromCsv.data.statuses).toEqual(["active", "inactive"]);
+      expect(fromCsv.data.vendorIds).toEqual([vendorId]);
+      expect(fromCsv.data.page).toBe(1);
+      expect(fromCsv.data.limit).toBe(50);
+    }
+  });
+
+  test("serializes vendor item list filters as csv query params", () => {
+    expect(
+      serializeVendorItemListQueryParams({
+        search: "tomato",
+        statuses: ["active"],
+        vendorIds: [vendorId],
+        page: 1,
+        limit: 50,
+      }),
+    ).toEqual({
+      search: "tomato",
+      statuses: "active",
+      vendorIds: vendorId,
+      page: 1,
+      limit: 50,
+    });
+  });
+
   test("create Vendor Item requires a Vendor, Unit, name, and non-negative two-decimal price", () => {
     const result = CreateVendorItemSchema.safeParse({
       vendorId,

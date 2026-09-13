@@ -8,6 +8,8 @@ import type {
     StoreVendorItemOfferingsListResponse,
     VendorItemResponse,
     VendorItemsListResponse,
+    VendorItemListQuery,
+    VendorListQuery,
     VendorResponse,
     VendorsListResponse,
     UpdateStoreVendorAvailabilityJSON,
@@ -15,13 +17,17 @@ import type {
     UpdateVendorItemJSON,
     UpdateVendorJSON,
 } from "@repo/types";
+import { serializeVendorItemListQueryParams, serializeVendorListQueryParams } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
 export const getVendors = async (
     organizationId: string,
+    query?: VendorListQuery,
 ): Promise<ServiceResponse<VendorsListResponse | null>> => {
     try {
-        const response = await api.get(`/organizations/${organizationId}/vendors`);
+        const response = await api.get(`/organizations/${organizationId}/vendors`, {
+            params: serializeVendorListQueryParams(query),
+        });
         return response.data;
     } catch (error) {
         return handleApiError(error);
@@ -67,9 +73,12 @@ export const updateVendor = async (
 
 export const getVendorItems = async (
     organizationId: string,
+    query?: VendorItemListQuery,
 ): Promise<ServiceResponse<VendorItemsListResponse | null>> => {
     try {
-        const response = await api.get(`/organizations/${organizationId}/vendor-items`);
+        const response = await api.get(`/organizations/${organizationId}/vendor-items`, {
+            params: serializeVendorItemListQueryParams(query),
+        });
         return response.data;
     } catch (error) {
         return handleApiError(error);

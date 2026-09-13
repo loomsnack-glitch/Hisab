@@ -2,10 +2,15 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, } from "lucide-
 import { type Table } from '@tanstack/react-table';
 import { cn } from "@repo/ui/lib/utils";
 
+import { TABLE_PAGE_SIZE_OPTIONS } from "@repo/ui/lib/table-pagination";
+
 import { Button } from "./button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "./select";
 
-const pageOptions = [10, 25, 50, 100];
+export { createTablePaginationState, DEFAULT_TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS } from "@repo/ui/lib/table-pagination";
+export type { TablePageSize } from "@repo/ui/lib/table-pagination";
+
+const pageOptions = [...TABLE_PAGE_SIZE_OPTIONS];
 
 interface PaginationProps<TData> { table: Table<TData>; maxPageNumbers?: number }
 function Pagination<TData>({ table, maxPageNumbers = 5 }: PaginationProps<TData>) {
@@ -71,21 +76,18 @@ interface DataTablePaginationProps<TData> {
 export function DataTablePagination<TData>({ table, count, countLabel = "rows", customPerPageOptions, className }: DataTablePaginationProps<TData>) {
     if (!table) return null;
     const perPageOptions = customPerPageOptions || pageOptions;
-    const pageIndex = table.getState().pagination.pageIndex;
-    const pageSize = table.getState().pagination.pageSize;
     const totalCount = count ?? table.getFilteredRowModel().rows.length;
-    const rangeStart = totalCount === 0 ? 0 : pageIndex * pageSize + 1;
-    const rangeEnd = Math.min((pageIndex + 1) * pageSize, totalCount);
 
     return (
-        <div className={cn("flex flex-col md:flex-row items-center justify-between px-2 pb-4 space-y-2 md:space-y-0", className)}>
-            <div className="text-xs md:text-sm text-muted-foreground text-center md:text-left">
-                showing {rangeStart} to {rangeEnd} of {totalCount} {countLabel}
-            </div>
-            <div className="flex flex-row items-center space-y-0 space-x-4 lg:space-x-8">
+        <div className={cn("flex items-center justify-between gap-2 overflow-x-auto px-2 pb-3 md:pb-4", className)}>
+            <p className="shrink-0 text-xs text-muted-foreground whitespace-nowrap md:text-sm">
+                {totalCount.toLocaleString()} {countLabel}
+            </p>
+            <div className="flex shrink-0 items-center gap-2 sm:gap-4 lg:gap-8">
                 <div className="flex items-center gap-x-2">
-                    <p className="text-xs md:text-sm font-medium m-0 hidden md:block">Rows per page</p>
+                    <p className="m-0 hidden text-xs font-medium md:block md:text-sm">Rows per page</p>
                     <Select
+                        modal={false}
                         value={`${table?.getState().pagination.pageSize}`}
                         onValueChange={(value) => {
                             table?.setPageSize(Number(value));
@@ -94,7 +96,7 @@ export function DataTablePagination<TData>({ table, count, countLabel = "rows", 
                         <SelectTrigger className="h-8 !w-[70px]">
                             <SelectValue />
                         </SelectTrigger>
-                        <SelectContent side="top">
+                        <SelectContent side="top" align="start" alignItemWithTrigger={false}>
                             {perPageOptions.map((pageSize) => (
                                 <SelectItem key={pageSize} value={`${pageSize}`}>
                                     {pageSize}
@@ -103,14 +105,14 @@ export function DataTablePagination<TData>({ table, count, countLabel = "rows", 
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="flex items-center space-x-1 md:space-x-2">
-                    <div className="hidden md:flex w-[100px] items-center justify-center text-sm font-medium">
+                <div className="flex items-center gap-1 md:gap-2">
+                    <div className="hidden w-[100px] items-center justify-center text-sm font-medium md:flex">
                         Page {table?.getState().pagination.pageIndex + 1} of{" "}
                         {table?.getPageCount()}
                     </div>
                     <Button
                         variant="outline"
-                        className='p-1'
+                        className="hidden p-1 sm:inline-flex"
                         onClick={() => table?.setPageIndex(0)}
                         disabled={!table?.getCanPreviousPage()}
                     >
@@ -138,7 +140,7 @@ export function DataTablePagination<TData>({ table, count, countLabel = "rows", 
                     </Button>
                     <Button
                         variant="outline"
-                        className='p-1'
+                        className="hidden p-1 sm:inline-flex"
                         onClick={() => table?.setPageIndex(table?.getPageCount() - 1)}
                         disabled={!table?.getCanNextPage()}
                     >

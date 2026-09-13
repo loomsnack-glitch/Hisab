@@ -29,7 +29,11 @@ import ReportsPage from "@/pages/reports-page";
 import AppearancePage from "@/pages/appearance-page";
 import TablesPage from "@/pages/tables-page";
 import UnitsPage from "@/pages/units-page";
-import VendorsPage from "@/pages/vendors-page";
+import VendorsPage, {
+    VendorItemsTabPage,
+    VendorsIndexRedirect,
+    VendorsListPage,
+} from "@/pages/vendors-page";
 import PurchasesPage from "@/pages/purchases-page";
 import PurchaseDetailPage from "@/pages/purchase-detail-page";
 import ExpensesPage from "@/pages/expenses-page";
@@ -196,7 +200,11 @@ const App = () => {
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/expense-categories" element={<Navigate to="../expenses?tab=categories" replace />} />
-                                <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />
+                                <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />}>
+                                    <Route index element={<VendorsIndexRedirect />} />
+                                    <Route path="list" element={<VendorsListPage />} />
+                                    <Route path="items" element={<VendorItemsTabPage />} />
+                                </Route>
                                 <Route path="/organizations/:organizationId/purchases" element={<PurchasesPage />} />
                                 <Route path="/organizations/:organizationId/purchases/:purchaseId" element={<PurchaseDetailPage />} />
                                 <Route path="/organizations/:organizationId/expenses" element={<ExpensesPage />} />

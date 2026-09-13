@@ -18,6 +18,7 @@ describe("Organization Vendor routes", () => {
     beforeEach(() => {
         harness.getOrganizationByIdForUser.mockClear();
         harness.getVendorsByOrganizationId.mockClear();
+        harness.getVendorsPageByOrganizationId.mockClear();
         harness.getVendorById.mockClear();
         harness.createVendorRepo.mockClear();
         harness.createStoreVendorAvailabilityRepo.mockClear();
@@ -70,6 +71,20 @@ describe("Organization Vendor routes", () => {
         const body = await response.json();
         expect(body.data.vendors).toHaveLength(2);
         expect(body.data.vendors.some((vendor: { name: string }) => vendor.name === "Fresh Farms")).toBe(true);
+    });
+
+    test("lists a page of Organization Vendors for an authenticated administrator", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendors?page=1&limit=15&search=Fresh&statuses=active`,
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.vendors).toHaveLength(2);
+        expect(body.data.pageInfo.totalCount).toBe(2);
+        expect(body.data.pageInfo.page).toBe(1);
+        expect(body.data.pageInfo.pageSize).toBe(15);
+        expect(harness.getVendorsPageByOrganizationId).toHaveBeenCalled();
     });
 
     test("creates a Vendor at the Organization administrator seam", async () => {
@@ -206,6 +221,7 @@ describe("Organization Vendor Item routes", () => {
         harness.getVendorById.mockClear();
         harness.getUnitById.mockClear();
         harness.getVendorItemsByOrganizationId.mockClear();
+        harness.getVendorItemsPageByOrganizationId.mockClear();
         harness.getVendorItemById.mockClear();
         harness.createVendorRepo.mockClear();
         harness.updateVendorRepo.mockClear();
@@ -257,6 +273,20 @@ describe("Organization Vendor Item routes", () => {
         const body = await response.json();
         expect(body.data.vendorItems).toHaveLength(3);
         expect(body.data.vendorItems.filter((item: { name: string }) => item.name === "Tomato")).toHaveLength(2);
+    });
+
+    test("lists a page of Organization Vendor Items for an authenticated administrator", async () => {
+        const response = await vendorsRoutes.request(
+            `http://localhost/${harness.organizationId}/vendor-items?page=1&limit=15&search=Tomato&statuses=active&vendorIds=${harness.vendorId}`,
+        );
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.data.vendorItems).toHaveLength(3);
+        expect(body.data.pageInfo.totalCount).toBe(3);
+        expect(body.data.pageInfo.page).toBe(1);
+        expect(body.data.pageInfo.pageSize).toBe(15);
+        expect(harness.getVendorItemsPageByOrganizationId).toHaveBeenCalled();
     });
 
     test("creates a Vendor Item at the Organization administrator seam", async () => {

@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v6";
 import { RouterProvider, createBrowserRouter, createRoutesFromElements, Route } from "react-router-dom";
 
 import "@repo/ui/app.css";
@@ -24,7 +25,9 @@ const router = createBrowserRouter(
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <Providers>
-            <RouterProvider router={router} />
+            <NuqsAdapter>
+                <RouterProvider router={router} />
+            </NuqsAdapter>
         </Providers>
     </StrictMode>,
 );

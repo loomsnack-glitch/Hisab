@@ -173,7 +173,11 @@ export const expenseKeys = {
 export const vendorKeys = {
   all: ["vendors"] as const,
   list: (organizationId: string) => [...vendorKeys.all, organizationId] as const,
+  paged: (organizationId: string, query: Record<string, unknown>) =>
+    [...vendorKeys.all, organizationId, "paged", query] as const,
   items: (organizationId: string) => [...vendorKeys.all, organizationId, "items"] as const,
+  pagedItems: (organizationId: string, query: Record<string, unknown>) =>
+    [...vendorKeys.all, organizationId, "items", "paged", query] as const,
   storeAvailabilities: (organizationId: string, storeId: string) =>
     [...vendorKeys.all, "store-availabilities", organizationId, storeId] as const,
   storeItemOfferings: (organizationId: string, storeId: string) =>

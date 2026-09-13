@@ -1,8 +1,10 @@
+import { sql } from "bun";
 import { pg } from "@/config/db";
 import { snakeToCamel } from "@/utils/case";
 import { camelToSnakeSql } from "@/utils/case-sql";
-import type {
-    CreateStoreVendorAvailabilityREPO,
+import {
+    DEFAULT_TABLE_PAGE_SIZE,
+    type CreateStoreVendorAvailabilityREPO,
     CreateStoreVendorItemOfferingREPO,
     CreateVendorItemREPO,
     CreateVendorREPO,
@@ -10,6 +12,9 @@ import type {
     StoreVendorItemOfferingDTO,
     VendorDTO,
     VendorItemDTO,
+    VendorItemListQuery,
+    VendorListPageInfo,
+    VendorListQuery,
     UpdateStoreVendorItemOfferingREPO,
     UpdateVendorItemREPO,
     UpdateVendorREPO,
@@ -40,6 +45,72 @@ export const getVendorsByOrganizationId = async (
     `;
 
     return results.map((result: Record<string, unknown>) => mapVendor(result));
+};
+
+const buildVendorSearchClause = (search: string) => {
+    if (!search) {
+        return sql``;
+    }
+
+    const searchPattern = `%${search}%`;
+    return sql`AND (
+        v.name ILIKE ${searchPattern}
+        OR COALESCE(v.description, '') ILIKE ${searchPattern}
+    )`;
+};
+
+const buildVendorStatusClause = (statuses: Array<"active" | "inactive">) => {
+    if (statuses.length === 0 || statuses.length >= 2) {
+        return sql``;
+    }
+
+    return sql`AND v.status = ${statuses[0]}`;
+};
+
+export const getVendorsPageByOrganizationId = async (
+    organizationId: string,
+    query: VendorListQuery,
+): Promise<{
+    vendors: VendorDTO[];
+    pageInfo: VendorListPageInfo;
+}> => {
+    const search = query.search?.trim() ?? "";
+    const statuses = query.statuses ?? [];
+    const page = query.page ?? 1;
+    const limit = query.limit ?? DEFAULT_TABLE_PAGE_SIZE;
+    const offset = (page - 1) * limit;
+    const searchClause = buildVendorSearchClause(search);
+    const statusClause = buildVendorStatusClause(statuses);
+
+    const results = await pg`
+        SELECT v.*, COUNT(*) OVER() AS total_count
+        FROM vendors v
+        WHERE v.organization_id = ${organizationId}
+          ${searchClause}
+          ${statusClause}
+        ORDER BY lower(v.name) ASC
+        LIMIT ${limit}
+        OFFSET ${offset}
+    `;
+
+    const vendors = results.map((result: Record<string, unknown>) => {
+        const { total_count: _totalCount, ...vendorRow } = result;
+        return mapVendor(vendorRow);
+    });
+    const totalCount = Number(results[0]?.total_count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    return {
+        vendors,
+        pageInfo: {
+            hasMore: offset + vendors.length < totalCount,
+            nextCursor: null,
+            totalCount,
+            page,
+            pageSize: limit,
+            totalPages,
+        },
+    };
 };
 
 export const getVendorById = async (
@@ -103,6 +174,91 @@ export const getVendorItemsByOrganizationId = async (
     `;
 
     return results.map((result: Record<string, unknown>) => mapVendorItem(result));
+};
+
+const buildVendorItemSearchClause = (search: string) => {
+    if (!search) {
+        return sql``;
+    }
+
+    const searchPattern = `%${search}%`;
+    return sql`AND (
+        vendor_items.name ILIKE ${searchPattern}
+        OR vendors.name ILIKE ${searchPattern}
+        OR COALESCE(units.name, '') ILIKE ${searchPattern}
+        OR COALESCE(units.label, '') ILIKE ${searchPattern}
+    )`;
+};
+
+const buildVendorItemStatusClause = (statuses: Array<"active" | "inactive">) => {
+    if (statuses.length === 0 || statuses.length >= 2) {
+        return sql``;
+    }
+
+    return sql`AND vendor_items.status = ${statuses[0]}`;
+};
+
+const buildVendorItemVendorIdsClause = (vendorIds: string[]) => {
+    if (vendorIds.length === 0) {
+        return sql``;
+    }
+
+    return sql`AND vendor_items.vendor_id IN ${sql(vendorIds)}`;
+};
+
+export const getVendorItemsPageByOrganizationId = async (
+    organizationId: string,
+    query: VendorItemListQuery,
+): Promise<{
+    vendorItems: VendorItemDTO[];
+    pageInfo: VendorListPageInfo;
+}> => {
+    const search = query.search?.trim() ?? "";
+    const statuses = query.statuses ?? [];
+    const vendorIds = query.vendorIds ?? [];
+    const page = query.page ?? 1;
+    const limit = query.limit ?? DEFAULT_TABLE_PAGE_SIZE;
+    const offset = (page - 1) * limit;
+    const searchClause = buildVendorItemSearchClause(search);
+    const statusClause = buildVendorItemStatusClause(statuses);
+    const vendorIdsClause = buildVendorItemVendorIdsClause(vendorIds);
+
+    const results = await pg`
+        SELECT vendor_items.*, COUNT(*) OVER() AS total_count
+        FROM vendor_items
+        INNER JOIN vendors
+            ON vendors.id = vendor_items.vendor_id
+           AND vendors.organization_id = vendor_items.organization_id
+        LEFT JOIN units
+            ON units.id = vendor_items.unit_id
+           AND units.organization_id = vendor_items.organization_id
+        WHERE vendor_items.organization_id = ${organizationId}
+          ${searchClause}
+          ${statusClause}
+          ${vendorIdsClause}
+        ORDER BY lower(vendors.name) ASC, lower(vendor_items.name) ASC
+        LIMIT ${limit}
+        OFFSET ${offset}
+    `;
+
+    const vendorItems = results.map((result: Record<string, unknown>) => {
+        const { total_count: _totalCount, ...vendorItemRow } = result;
+        return mapVendorItem(vendorItemRow);
+    });
+    const totalCount = Number(results[0]?.total_count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    return {
+        vendorItems,
+        pageInfo: {
+            hasMore: offset + vendorItems.length < totalCount,
+            nextCursor: null,
+            totalCount,
+            page,
+            pageSize: limit,
+            totalPages,
+        },
+    };
 };
 
 export const getVendorItemById = async (

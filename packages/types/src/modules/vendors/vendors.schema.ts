@@ -8,6 +8,83 @@ export const VENDOR_ITEM_NAME_MAX_LENGTH = 255;
 
 export const VendorStatusSchema = z.enum(["active", "inactive"]);
 
+const vendorListArrayQueryPreprocess = (value: unknown) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+};
+
+const vendorListLimitSchema = z.coerce
+  .number({ error: "Limit must be a number" })
+  .int("Limit must be a whole number")
+  .min(1, "Limit must be at least 1")
+  .max(100, "Limit must be at most 100");
+
+export const VendorStatusesQuerySchema = z.preprocess(
+  vendorListArrayQueryPreprocess,
+  z.array(VendorStatusSchema).optional(),
+);
+
+export const VendorListQuerySchema = z.object({
+  search: z
+    .string()
+    .trim()
+    .max(255, "Search must be at most 255 characters")
+    .optional(),
+  statuses: VendorStatusesQuerySchema,
+  page: z.coerce.number().int().min(1).optional(),
+  limit: vendorListLimitSchema.optional(),
+});
+
+export const VendorListPageInfoSchema = z.object({
+  hasMore: z.boolean(),
+  nextCursor: z.string().nullable(),
+  totalCount: z.number().int().min(0),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).optional(),
+  totalPages: z.number().int().min(0).optional(),
+});
+
+export type SerializedVendorListQueryParams<
+  T extends {
+    statuses?: readonly string[];
+  },
+> = Omit<T, "statuses"> & {
+  statuses?: string;
+};
+
+export const serializeVendorListQueryParams = <
+  T extends {
+    statuses?: readonly string[];
+  },
+>(
+  query?: T,
+): SerializedVendorListQueryParams<T> | undefined => {
+  if (!query) {
+    return undefined;
+  }
+
+  const { statuses, ...queryWithoutArrayFilters } = query;
+
+  return {
+    ...queryWithoutArrayFilters,
+    ...(statuses?.length ? { statuses: statuses.join(",") } : {}),
+  };
+};
+
 const vendorNameSchema = z
   .string()
   .trim()
@@ -64,6 +141,59 @@ export const UpdateVendorSchema = z
   );
 
 export const VendorItemStatusSchema = z.enum(["active", "inactive"]);
+
+export const VendorItemStatusesQuerySchema = z.preprocess(
+  vendorListArrayQueryPreprocess,
+  z.array(VendorItemStatusSchema).optional(),
+);
+
+export const VendorItemVendorIdsQuerySchema = z.preprocess(
+  vendorListArrayQueryPreprocess,
+  z.array(z.uuid("Invalid vendor id")).optional(),
+);
+
+export const VendorItemListQuerySchema = z.object({
+  search: z
+    .string()
+    .trim()
+    .max(255, "Search must be at most 255 characters")
+    .optional(),
+  statuses: VendorItemStatusesQuerySchema,
+  vendorIds: VendorItemVendorIdsQuerySchema,
+  page: z.coerce.number().int().min(1).optional(),
+  limit: vendorListLimitSchema.optional(),
+});
+
+export type SerializedVendorItemListQueryParams<
+  T extends {
+    statuses?: readonly string[];
+    vendorIds?: readonly string[];
+  },
+> = Omit<T, "statuses" | "vendorIds"> & {
+  statuses?: string;
+  vendorIds?: string;
+};
+
+export const serializeVendorItemListQueryParams = <
+  T extends {
+    statuses?: readonly string[];
+    vendorIds?: readonly string[];
+  },
+>(
+  query?: T,
+): SerializedVendorItemListQueryParams<T> | undefined => {
+  if (!query) {
+    return undefined;
+  }
+
+  const { statuses, vendorIds, ...queryWithoutArrayFilters } = query;
+
+  return {
+    ...queryWithoutArrayFilters,
+    ...(statuses?.length ? { statuses: statuses.join(",") } : {}),
+    ...(vendorIds?.length ? { vendorIds: vendorIds.join(",") } : {}),
+  };
+};
 
 const vendorItemNameSchema = z
   .string()

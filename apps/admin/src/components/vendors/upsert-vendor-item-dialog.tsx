@@ -34,7 +34,10 @@ type UpsertVendorItemDialogProps = {
     vendors: VendorDTO[];
     units: UnitDTO[];
     vendorItem?: VendorItemDTO;
-    trigger?: ReactElement;
+    defaultVendorId?: string;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    trigger?: ReactElement | null;
 };
 
 const decimalAmountPattern = /^\d+(\.\d{0,2})?$/;
@@ -83,9 +86,20 @@ const UpsertVendorItemDialog = ({
     vendors,
     units,
     vendorItem,
+    defaultVendorId,
+    open,
+    onOpenChange,
     trigger,
 }: UpsertVendorItemDialogProps) => {
-    const [open, setOpen] = useState(false);
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+    const isControlled = open !== undefined;
+    const dialogOpen = isControlled ? open : uncontrolledOpen;
+    const setDialogOpen = (nextOpen: boolean) => {
+        if (!isControlled) {
+            setUncontrolledOpen(nextOpen);
+        }
+        onOpenChange?.(nextOpen);
+    };
     const queryClient = useQueryClient();
     const isEditMode = Boolean(vendorItem);
 
@@ -95,20 +109,23 @@ const UpsertVendorItemDialog = ({
     });
 
     useEffect(() => {
-        if (!open) {
-            form.reset(
-                vendorItem
-                    ? {
-                        vendorId: vendorItem.vendorId,
-                        name: vendorItem.name,
-                        unitId: vendorItem.unitId,
-                        defaultPurchasePrice: String(vendorItem.defaultPurchasePrice),
-                        status: vendorItem.status,
-                    }
-                    : defaultValues,
-            );
-        }
-    }, [form, open, vendorItem]);
+        if (!dialogOpen) return;
+
+        form.reset(
+            vendorItem
+                ? {
+                    vendorId: vendorItem.vendorId,
+                    name: vendorItem.name,
+                    unitId: vendorItem.unitId,
+                    defaultPurchasePrice: String(vendorItem.defaultPurchasePrice),
+                    status: vendorItem.status,
+                }
+                : {
+                    ...defaultValues,
+                    vendorId: defaultVendorId ?? "",
+                },
+        );
+    }, [defaultVendorId, dialogOpen, form, vendorItem]);
 
     const vendorOptions = useMemo(
         () =>
@@ -151,7 +168,7 @@ const UpsertVendorItemDialog = ({
             if (response.status === "success") {
                 toast.success(response.message);
                 queryClient.invalidateQueries({ queryKey: vendorKeys.all });
-                setOpen(false);
+                setDialogOpen(false);
                 form.reset(defaultValues);
                 return;
             }
@@ -173,20 +190,22 @@ const UpsertVendorItemDialog = ({
         });
     };
 
-    const title = isEditMode ? "Edit item" : "Add item";
+    const title = isEditMode ? "Edit vendor item" : "Create vendor item";
 
     return (
-        <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-            <DialogTrigger
-                render={
-                    trigger ?? (
-                        <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
-                            {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
-                            {isEditMode ? "Edit" : "Add item"}
-                        </Button>
-                    )
-                }
-            />
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen} disablePointerDismissal>
+            {trigger !== null ? (
+                <DialogTrigger
+                    render={
+                        trigger ?? (
+                            <Button variant={isEditMode ? "outline" : "default"} className="rounded-full">
+                                {isEditMode ? <Pencil className="size-4" /> : <Plus className="size-4" />}
+                                {isEditMode ? "Edit" : "Add item"}
+                            </Button>
+                        )
+                    }
+                />
+            ) : null}
             <DialogContent className="sm:max-w-md">
                 <DialogHeader icon={<Package className="size-5" />} title={title} />
 
@@ -201,7 +220,7 @@ const UpsertVendorItemDialog = ({
                                     <ReactSelect
                                         options={vendorOptions}
                                         isDisabled={isEditMode}
-                                        placeholder="Select a Vendor"
+                                        placeholder=""
                                         value={vendorOptions.find((option) => option.value === field.value) ?? null}
                                         onChange={(option) => field.onChange(option?.value ?? "")}
                                         classNames={{
@@ -217,11 +236,7 @@ const UpsertVendorItemDialog = ({
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Item name</FieldLabel>
                         <FieldContent>
-                            <Input
-                                className="h-11 rounded-xl"
-                                placeholder="e.g. Tomato"
-                                {...form.register("name")}
-                            />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
@@ -235,7 +250,7 @@ const UpsertVendorItemDialog = ({
                                 <FieldContent>
                                     <ReactSelect
                                         options={unitOptions}
-                                        placeholder="Select an active Unit"
+                                        placeholder=""
                                         value={unitOptions.find((option) => option.value === field.value) ?? null}
                                         onChange={(option) => field.onChange(option?.value ?? "")}
                                         classNames={{
@@ -254,7 +269,6 @@ const UpsertVendorItemDialog = ({
                             <Input
                                 className="h-11 rounded-xl"
                                 inputMode="decimal"
-                                placeholder="0.00"
                                 value={form.watch("defaultPurchasePrice")}
                                 onChange={(event) => {
                                     form.setValue("defaultPurchasePrice", sanitizeTwoDecimalInput(event.target.value), {
@@ -266,33 +280,36 @@ const UpsertVendorItemDialog = ({
                         </FieldContent>
                     </Field>
 
-                    <Controller
-                        control={form.control}
-                        name="status"
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel required>Status</FieldLabel>
-                                <FieldContent>
-                                    <ReactSelect
-                                        options={statusSelectOptions}
-                                        value={
-                                            statusSelectOptions.find(
-                                                (option) => option.value === (field.value ?? "active"),
-                                            ) ?? null
-                                        }
-                                        onChange={(option) => field.onChange(option?.value ?? "active")}
-                                        classNames={{
-                                            control: () => "!min-h-11 rounded-xl",
-                                        }}
-                                    />
-                                    <FieldError errors={[fieldState.error]} />
-                                </FieldContent>
-                            </Field>
-                        )}
-                    />
+                    {isEditMode && (
+                        <Controller
+                            control={form.control}
+                            name="status"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldContent>
+                                        <ReactSelect
+                                            options={statusSelectOptions}
+                                            placeholder=""
+                                            value={
+                                                statusSelectOptions.find(
+                                                    (option) => option.value === (field.value ?? "active"),
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "active")}
+                                            classNames={{
+                                                control: () => "!min-h-11 rounded-xl",
+                                            }}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
+                    )}
 
                     <DialogFooter>
-                        <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
+                        <Button type="button" variant="outline" className="rounded-xl" onClick={() => setDialogOpen(false)}>
                             Cancel
                         </Button>
                         <Button
@@ -302,7 +319,7 @@ const UpsertVendorItemDialog = ({
                         >
                             {mutation.isPending
                                 ? isEditMode ? "Saving..." : "Creating..."
-                                : isEditMode ? "Save changes" : "Add item"}
+                                : isEditMode ? "Save changes" : "Create vendor item"}
                         </Button>
                     </DialogFooter>
                 </form>

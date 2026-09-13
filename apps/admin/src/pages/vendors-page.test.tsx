@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { UnitDTO, VendorDTO, VendorItemDTO } from "@repo/types";
 
 import { unitKeys, purchaseKeys, vendorKeys } from "@/lib/query-keys";
 import { formatCurrency } from "@/lib/format";
-import VendorsPage from "@/pages/vendors-page";
+import VendorsPage, { VendorItemsTabPage, VendorsListPage } from "@/pages/vendors-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const now = new Date("2026-08-31T12:00:00.000Z");
@@ -119,17 +120,74 @@ const cabbage: VendorItemDTO = {
     updatedAt: now,
 };
 
+const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
+
+const filtersFromPath = (path: string) => {
+    const params = new URLSearchParams(searchFromPath(path));
+    const search = params.get("search")?.trim() || undefined;
+    const statuses = params.get("statuses")?.split(",").filter(Boolean);
+    const vendorIds = params.get("vendorIds")?.split(",").filter(Boolean);
+    return { search, statuses, vendorIds };
+};
+
 const seedVendors = (
     queryClient: QueryClient,
     result: "success" | "error" | "empty",
     vendors: VendorDTO[],
+    query: { search?: string; statuses?: string[] } = {},
 ) => {
-    queryClient.setQueryData(vendorKeys.list(organizationId), {
+    const statusFilter = query.statuses?.length ? query.statuses : ["active"];
+    const allVendors = result === "empty" ? [] : vendors;
+    const pagedVendors = allVendors.filter((vendor) => {
+        if (!statusFilter.includes(vendor.status)) return false;
+        if (!query.search?.trim()) return true;
+        const search = query.search.trim().toLowerCase();
+        return vendor.name.toLowerCase().includes(search)
+            || (vendor.description ?? "").toLowerCase().includes(search);
+    });
+    const listPayload = {
         status: result === "error" ? "error" : "success",
-        data: result === "error" ? null : { vendors: result === "empty" ? [] : vendors },
+        data: result === "error"
+            ? null
+            : { vendors: allVendors },
         message: result === "error" ? "Vendors could not be loaded right now." : "Vendors fetched successfully",
         code: result === "error" ? 500 : 200,
-    });
+    };
+    const pagedPayload = {
+        status: result === "error" ? "error" : "success",
+        data: result === "error"
+            ? null
+            : {
+                vendors: pagedVendors,
+                pageInfo: {
+                    hasMore: false,
+                    nextCursor: null,
+                    totalCount: pagedVendors.length,
+                    page: 1,
+                    pageSize: 50,
+                    totalPages: 1,
+                },
+            },
+        message: result === "error" ? "Vendors could not be loaded right now." : "Vendors fetched successfully",
+        code: result === "error" ? 500 : 200,
+    };
+    queryClient.setQueryData(vendorKeys.list(organizationId), listPayload);
+    const pagedQuery = {
+        search: query.search,
+        statuses: statusFilter,
+        page: 1,
+        limit: 50,
+    };
+    queryClient.setQueryData(
+        vendorKeys.paged(organizationId, {
+            search: undefined,
+            statuses: ["active"],
+            page: 1,
+            limit: 50,
+        }),
+        pagedPayload,
+    );
+    queryClient.setQueryData(vendorKeys.paged(organizationId, pagedQuery), pagedPayload);
 };
 
 const seedUnits = (queryClient: QueryClient) => {
@@ -145,7 +203,46 @@ const seedItems = (
     queryClient: QueryClient,
     result: "success" | "error" | "empty",
     vendorItems: VendorItemDTO[],
+    query: { search?: string; statuses?: string[]; vendorIds?: string[] } = {},
 ) => {
+    const pagedItems = result === "empty" ? [] : vendorItems.filter((item) => item.status === "active");
+    const payload = {
+        status: result === "error" ? "error" : "success",
+        data: result === "error"
+            ? null
+            : {
+                vendorItems: pagedItems,
+                pageInfo: {
+                    hasMore: false,
+                    nextCursor: null,
+                    totalCount: pagedItems.length,
+                    page: 1,
+                    pageSize: 50,
+                    totalPages: 1,
+                },
+            },
+        message: result === "error" ? "Vendor Items could not be loaded right now." : "Vendor Items fetched successfully",
+        code: result === "error" ? 500 : 200,
+    };
+    queryClient.setQueryData(vendorKeys.items(organizationId), payload);
+    const pagedQuery = {
+        search: query.search,
+        statuses: query.statuses?.length ? query.statuses : ["active"],
+        vendorIds: query.vendorIds?.length ? query.vendorIds : undefined,
+        page: 1,
+        limit: 50,
+    };
+    queryClient.setQueryData(
+        vendorKeys.pagedItems(organizationId, {
+            search: undefined,
+            statuses: ["active"],
+            vendorIds: undefined,
+            page: 1,
+            limit: 50,
+        }),
+        payload,
+    );
+    queryClient.setQueryData(vendorKeys.pagedItems(organizationId, pagedQuery), payload);
     queryClient.setQueryData(vendorKeys.items(organizationId), {
         status: result === "error" ? "error" : "success",
         data: result === "error" ? null : { vendorItems: result === "empty" ? [] : vendorItems },
@@ -157,13 +254,14 @@ const seedItems = (
 const renderVendorsPage = (
     result: "pending" | "success" | "error" | "empty" = "success",
     vendors: VendorDTO[] = [freshFarms, millers],
-    path = `/organizations/${organizationId}/vendors`,
+    path = `/organizations/${organizationId}/vendors/list`,
     itemsResult: "pending" | "success" | "error" | "empty" = "success",
     vendorItems: VendorItemDTO[] = [tomato, millersTomato, onion, cabbage],
 ) => {
     const queryClient = new QueryClient();
+    const urlFilters = filtersFromPath(path);
     if (result !== "pending") {
-        seedVendors(queryClient, result, vendors);
+        seedVendors(queryClient, result, vendors, urlFilters);
         queryClient.setQueryData(purchaseKeys.list(organizationId), {
             status: "success",
             data: {
@@ -177,43 +275,53 @@ const renderVendorsPage = (
         });
     }
     if (itemsResult !== "pending") {
-        seedItems(queryClient, itemsResult, vendorItems);
+        seedItems(queryClient, itemsResult, vendorItems, urlFilters);
         seedUnits(queryClient);
     }
 
     return renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <MemoryRouter initialEntries={[path]}>
-                <Routes>
-                    <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />} />
-                </Routes>
-            </MemoryRouter>
+            <NuqsTestingAdapter searchParams={searchFromPath(path)}>
+                <MemoryRouter initialEntries={[path]}>
+                    <Routes>
+                        <Route path="/organizations/:organizationId/vendors" element={<VendorsPage />}>
+                            <Route path="list" element={<VendorsListPage />} />
+                            <Route path="items" element={<VendorItemsTabPage />} />
+                        </Route>
+                    </Routes>
+                </MemoryRouter>
+            </NuqsTestingAdapter>
         </QueryClientProvider>,
     );
 };
 
-const itemsPath = `/organizations/${organizationId}/vendors?tab=items`;
+const itemsPath = `/organizations/${organizationId}/vendors/items`;
 
 describe("Admin Vendors page", () => {
-    test("opens the default Vendors tab with search, status, and no delete command", () => {
+    test("opens the default Vendors tab with active-only filter, search, status, and no delete command", () => {
         const markup = renderVendorsPage();
 
         expect(markup).toContain("data-testid=\"vendors-page\"");
         expect(markup).toContain("data-testid=\"vendors-directory\"");
         expect(markup).toContain("aria-label=\"Vendors navigation tabs\"");
+        expect(markup).toContain(`/organizations/${organizationId}/vendors/list`);
+        expect(markup).toContain(`/organizations/${organizationId}/vendors/items`);
         expect(markup).toContain("Vendors");
         expect(markup).toContain("Items");
         expect(markup).toContain("Fresh Farms");
         expect(markup).toContain("Daily produce supplier");
-        expect(markup).toContain("Miller Spices");
+        expect(markup).not.toContain("Miller Spices");
         expect(markup).toContain("Add vendor");
         expect(markup).toContain("Search vendors...");
         expect(markup).toContain("Status");
         expect(markup).toContain("Outstanding");
         expect(markup).toContain(formatCurrency(106.5));
-        expect(markup).toContain("active");
-        expect(markup).toContain("inactive");
+        expect(markup).toContain("1 vendor");
+        expect(markup).toContain("Rows per page");
+        expect(markup).toContain("Active");
         expect(markup).toContain("Edit");
+        expect(markup).toContain(`View 3 items for ${freshFarms.name}`);
+        expect(markup).toContain(`/organizations/${organizationId}/vendors/items?vendorIds=${freshFarms.id}`);
         expect(markup).not.toContain("Delete");
         expect(markup).not.toContain("No vendor items yet");
         expect(markup).not.toContain("Add item");
@@ -240,17 +348,27 @@ describe("Admin Vendors page", () => {
         expect(markup).toContain("No vendors yet");
         expect(markup).toContain("Add vendor");
     });
+
+    test("reads search and status filters from the list URL", () => {
+        const markup = renderVendorsPage(
+            "success",
+            [freshFarms],
+            `/organizations/${organizationId}/vendors/list?search=Fresh&statuses=active`,
+        );
+
+        expect(markup).toContain("value=\"Fresh\"");
+        expect(markup).toContain("Search vendors...");
+        expect(markup).toContain("Fresh Farms");
+    });
 });
 
 describe("Admin Vendor Items tab", () => {
-    test("groups Vendor Items by Vendor, defaults to active Items, and has no delete command", () => {
+    test("lists Vendor Items in a flat table, defaults to active Items, and has no delete command", () => {
         const markup = renderVendorsPage("success", [freshFarms, millers], itemsPath);
 
         expect(markup).toContain("data-testid=\"vendor-items-catalogue-tab\"");
         expect(markup).toContain("data-testid=\"vendor-items-catalogue\"");
-        expect(markup).toContain("data-testid=\"vendor-item-group\"");
-        expect(markup).toContain("aria-label=\"Fresh Farms items\"");
-        expect(markup).toContain("aria-label=\"Miller Spices items\"");
+        expect(markup).not.toContain("data-testid=\"vendor-item-group\"");
         expect(markup).toContain("Fresh Farms");
         expect(markup).toContain("Miller Spices");
         expect(markup).toContain("Tomato");
@@ -259,8 +377,12 @@ describe("Admin Vendor Items tab", () => {
         expect(markup).toContain("Crate (crt, inactive)");
         expect(markup).toContain("Search items...");
         expect(markup).toContain("aria-label=\"Item status\"");
+        expect(markup).toContain("aria-label=\"Vendor\"");
+        expect(markup.indexOf(">Item</th>")).toBeGreaterThan(-1);
+        expect(markup.indexOf(">Item</th>")).toBeLessThan(markup.indexOf(">Vendor</th>"));
         expect(markup).toContain("Add item");
         expect(markup).toContain("Edit");
+        expect(markup).toContain("items");
         expect(markup).not.toContain("Onion");
         expect(markup).not.toContain("Delete");
         expect(markup).not.toContain("vendor-items-placeholder");
@@ -300,8 +422,27 @@ describe("Admin Vendor Items tab", () => {
             [millersTomato],
         );
 
-        expect(markup).toContain("Miller Spices items");
+        expect(markup).toContain("Miller Spices");
         expect(markup).toContain("Tomato");
         expect(markup).not.toContain("Onion");
+    });
+
+    test("applies the Vendor filter from the items URL", () => {
+        const markup = renderVendorsPage(
+            "success",
+            [freshFarms, millers],
+            `${itemsPath}?vendorIds=${freshFarms.id}`,
+            "success",
+            [tomato],
+        );
+
+        expect(markup).toContain("data-testid=\"vendor-items-catalogue\"");
+        expect(markup).toContain("Tomato");
+        expect(markup).toContain("Fresh Farms");
+        expect(markup).toContain(formatCurrency(40.5));
+        expect(markup).not.toContain("Cabbage");
+        expect(markup).not.toContain(formatCurrency(55));
+        expect(markup).toContain("Add item");
+        expect(markup.indexOf(">Item</th>")).toBeLessThan(markup.indexOf(">Vendor</th>"));
     });
 });

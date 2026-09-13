@@ -8,7 +8,10 @@ import type {
   StoreVendorItemOfferingResponseDTOSchema,
   VendorDTOSchema,
   VendorItemDTOSchema,
+  VendorItemListQuerySchema,
   VendorItemStatusSchema,
+  VendorListPageInfoSchema,
+  VendorListQuerySchema,
   VendorStatusSchema,
   UpdateStoreVendorAvailabilitySchema,
   UpdateStoreVendorItemOfferingSchema,
@@ -18,6 +21,8 @@ import type {
 
 export type VendorStatus = z.infer<typeof VendorStatusSchema>;
 export type VendorDTO = z.infer<typeof VendorDTOSchema>;
+export type VendorListQuery = z.infer<typeof VendorListQuerySchema>;
+export type VendorListPageInfo = z.infer<typeof VendorListPageInfoSchema>;
 
 export type CreateVendorJSON = z.infer<typeof CreateVendorSchema>;
 export type CreateVendorSVC = CreateVendorJSON;
@@ -37,6 +42,7 @@ export type UpdateVendorREPO = Pick<
 
 export type VendorsListResponse = {
   vendors: VendorDTO[];
+  pageInfo?: VendorListPageInfo;
 };
 
 export type VendorResponse = {
@@ -45,6 +51,8 @@ export type VendorResponse = {
 
 export type VendorItemStatus = z.infer<typeof VendorItemStatusSchema>;
 export type VendorItemDTO = z.infer<typeof VendorItemDTOSchema>;
+export type VendorItemListQuery = z.infer<typeof VendorItemListQuerySchema>;
+export type VendorItemListPageInfo = VendorListPageInfo;
 
 export type CreateVendorItemJSON = z.infer<typeof CreateVendorItemSchema>;
 export type CreateVendorItemSVC = CreateVendorItemJSON;
@@ -77,6 +85,7 @@ export type UpdateVendorItemREPO = Pick<
 
 export type VendorItemsListResponse = {
   vendorItems: VendorItemDTO[];
+  pageInfo?: VendorItemListPageInfo;
 };
 
 export type VendorItemResponse = {

@@ -103,6 +103,12 @@ describe("Admin mobile navigation", () => {
       true,
     );
     expect(
+      vendors?.isActive(`/organizations/${organizationId}/vendors/list`),
+    ).toBe(true);
+    expect(
+      vendors?.isActive(`/organizations/${organizationId}/vendors/items`),
+    ).toBe(true);
+    expect(
       isAdminMoreDestinationActive(
         `/organizations/${organizationId}/vendors`,
         withOrg,

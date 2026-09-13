@@ -19,7 +19,9 @@ import {
     getVendorItemById,
     getVendorItemsByOrganizationId,
     getVendorItemsByVendorId,
+    getVendorItemsPageByOrganizationId,
     getVendorsByOrganizationId,
+    getVendorsPageByOrganizationId,
     inactiveCrateUnit,
     inactiveUnitId,
     inactiveVendorId,
@@ -58,9 +60,11 @@ describe("Organization Vendor service", () => {
         getStoresByOrganizationId.mockClear();
         resolveFeatureEntitlement.mockClear();
         getVendorsByOrganizationId.mockClear();
+        getVendorsPageByOrganizationId.mockClear();
         getVendorById.mockClear();
         getUnitById.mockClear();
         getVendorItemsByOrganizationId.mockClear();
+        getVendorItemsPageByOrganizationId.mockClear();
         getVendorItemById.mockClear();
         createVendorRepo.mockClear();
         updateVendorRepo.mockClear();
@@ -143,6 +147,24 @@ describe("Organization Vendor service", () => {
         expect(response.data?.vendors.some((vendor) => vendor.name === "Fresh Farms" && vendor.status === "active")).toBe(true);
         expect(response.data?.vendors.some((vendor) => vendor.name === "Miller Spices" && vendor.status === "inactive")).toBe(true);
         expect(getVendorsByOrganizationId).toHaveBeenCalledWith(organizationId);
+    });
+
+    test("lists a page of Organization Vendors with search and status filters", async () => {
+        const query = { search: "Fresh", statuses: ["active"] as const, page: 1, limit: 15 };
+        const response = await vendorsService.getVendors(userId, organizationId, query);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.vendors).toHaveLength(2);
+        expect(response.data?.pageInfo).toEqual({
+            hasMore: false,
+            nextCursor: null,
+            totalCount: 2,
+            page: 1,
+            pageSize: 15,
+            totalPages: 1,
+        });
+        expect(getVendorsPageByOrganizationId).toHaveBeenCalledWith(organizationId, query);
+        expect(getVendorsByOrganizationId).not.toHaveBeenCalled();
     });
 
     test("denies Vendor listing when the user is not a member of the Organization", async () => {
@@ -298,6 +320,7 @@ describe("Organization Vendor Item service", () => {
         getVendorById.mockClear();
         getUnitById.mockClear();
         getVendorItemsByOrganizationId.mockClear();
+        getVendorItemsPageByOrganizationId.mockClear();
         getVendorItemById.mockClear();
         createVendorRepo.mockClear();
         updateVendorRepo.mockClear();
@@ -320,6 +343,17 @@ describe("Organization Vendor Item service", () => {
         getVendorById.mockResolvedValue(freshFarmsVendor);
         getUnitById.mockResolvedValue(kilogramUnit);
         getVendorItemsByOrganizationId.mockResolvedValue([tomatoItem, millersTomatoItem, onionItem]);
+        getVendorItemsPageByOrganizationId.mockResolvedValue({
+            vendorItems: [tomatoItem, millersTomatoItem],
+            pageInfo: {
+                hasMore: false,
+                nextCursor: null,
+                totalCount: 2,
+                page: 1,
+                pageSize: 15,
+                totalPages: 1,
+            },
+        });
         getVendorItemById.mockResolvedValue(tomatoItem);
         createVendorItemRepo.mockImplementation(async (data) => ({
             ...tomatoItem,
@@ -352,6 +386,30 @@ describe("Organization Vendor Item service", () => {
         expect(response.data?.vendorItems.some((item) => item.vendorId === vendorId && item.name === "Tomato")).toBe(true);
         expect(response.data?.vendorItems.some((item) => item.vendorId === inactiveVendorId && item.name === "Tomato")).toBe(true);
         expect(getVendorItemsByOrganizationId).toHaveBeenCalledWith(organizationId);
+    });
+
+    test("lists a page of Organization Vendor Items with search, status, and vendor filters", async () => {
+        const query = {
+            search: "Tomato",
+            statuses: ["active"] as const,
+            vendorIds: [vendorId],
+            page: 1,
+            limit: 15,
+        };
+        const response = await vendorsService.getVendorItems(userId, organizationId, query);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.vendorItems).toHaveLength(2);
+        expect(response.data?.pageInfo).toEqual({
+            hasMore: false,
+            nextCursor: null,
+            totalCount: 2,
+            page: 1,
+            pageSize: 15,
+            totalPages: 1,
+        });
+        expect(getVendorItemsPageByOrganizationId).toHaveBeenCalledWith(organizationId, query);
+        expect(getVendorItemsByOrganizationId).not.toHaveBeenCalled();
     });
 
     test("denies Vendor Item listing when the user is not a member of the Organization", async () => {

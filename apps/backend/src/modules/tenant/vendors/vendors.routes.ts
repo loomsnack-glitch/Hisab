@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { CreateVendorItemSchema, CreateVendorSchema, STATUS_CODES, UpdateStoreVendorAvailabilitySchema, UpdateStoreVendorItemOfferingSchema, UpdateVendorItemSchema, UpdateVendorSchema } from "@repo/types";
+import { CreateVendorItemSchema, CreateVendorSchema, STATUS_CODES, UpdateStoreVendorAvailabilitySchema, UpdateStoreVendorItemOfferingSchema, UpdateVendorItemSchema, UpdateVendorSchema, VendorItemListQuerySchema, VendorListQuerySchema } from "@repo/types";
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { validateSchema } from "@/middlewares/validate";
@@ -29,7 +29,7 @@ export const createVendorsRoutes = (
     const router = new Hono<{ Variables: AppVariables }>();
     router.use("*", authenticate);
 
-    router.get("/:organizationId/vendors", async (c) => {
+    router.get("/:organizationId/vendors", validateSchema("query", VendorListQuerySchema), async (c) => {
         try {
             const organizationId = c.req.param("organizationId");
             const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
@@ -37,7 +37,11 @@ export const createVendorsRoutes = (
                 return c.json(invalidOrganizationId, invalidOrganizationId.code);
             }
 
-            const serviceResponse = await vendorsService.getVendors(c.get("authUser").id, organizationId);
+            const serviceResponse = await vendorsService.getVendors(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("query"),
+            );
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "getVendors", c, error);
@@ -112,7 +116,7 @@ export const createVendorsRoutes = (
         }
     });
 
-    router.get("/:organizationId/vendor-items", async (c) => {
+    router.get("/:organizationId/vendor-items", validateSchema("query", VendorItemListQuerySchema), async (c) => {
         try {
             const organizationId = c.req.param("organizationId");
             const invalidOrganizationId = validateUuidParam(organizationId, "Invalid organization id");
@@ -120,7 +124,11 @@ export const createVendorsRoutes = (
                 return c.json(invalidOrganizationId, invalidOrganizationId.code);
             }
 
-            const serviceResponse = await vendorsService.getVendorItems(c.get("authUser").id, organizationId);
+            const serviceResponse = await vendorsService.getVendorItems(
+                c.get("authUser").id,
+                organizationId,
+                c.req.valid("query"),
+            );
             return handleServiceResponse(c, serviceResponse);
         } catch (error) {
             return handleError(FILE_NAME, "getVendorItems", c, error);

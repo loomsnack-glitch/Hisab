@@ -5,6 +5,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from ".
 import { Checkbox } from "./checkbox"
 import { Input } from "./input"
 import { Button } from "./button"
+import { DEFAULT_TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS } from "@repo/ui/lib/table-pagination";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./select"
 import { Popover, PopoverTrigger, PopoverContent } from "./popover"
 import {
@@ -67,7 +68,7 @@ export function PremiumTable<T>({
   selectable = false,
   onSelectionChange,
   actions,
-  defaultPageSize = 50,
+  defaultPageSize = DEFAULT_TABLE_PAGE_SIZE,
   rowIdKey = "id" as keyof T,
   toolbarActions,
   fullHeight = false,
@@ -664,8 +665,8 @@ export function PremiumTable<T>({
                   <SelectValue className="flex-none min-w-[20px] text-center text-foreground font-bold" />
                   <span className="text-muted-foreground">Row</span>
                 </SelectTrigger>
-                <SelectContent side="top" align="end" className="bg-popover border-border/50 rounded-xl">
-                  {[10, 15, 50, 100].map((size) => (
+                <SelectContent side="top" align="end" alignItemWithTrigger={false} className="bg-popover border-border/50 rounded-xl">
+                  {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
                     <SelectItem
                       key={size}
                       value={String(size)}

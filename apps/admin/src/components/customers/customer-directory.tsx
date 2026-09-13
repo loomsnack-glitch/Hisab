@@ -39,7 +39,7 @@ import { PhoneInput } from "@repo/ui/components/phone-input";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { Spinner } from "@repo/ui/components/spinner";
-import { DataTablePagination } from "@repo/ui/components/table-pagination";
+import { createTablePaginationState, DataTablePagination } from "@repo/ui/components/table-pagination";
 import { cn } from "@repo/ui/lib/utils";
 import {
     ArrowUpDown,
@@ -98,9 +98,6 @@ const customerSortOptions: Array<{ value: CustomerSortOption; label: string }> =
     { value: "highest_due", label: "Highest due" },
     { value: "lowest_due", label: "Lowest due" },
 ];
-
-const CUSTOMER_PAGE_SIZE_OPTIONS = [10, 15, 50, 100] as const;
-const DEFAULT_CUSTOMER_PAGE_SIZE = 15;
 
 const customerPaginationColumns: ColumnDef<CustomerDTO>[] = [{ accessorKey: "id", header: "ID" }];
 
@@ -272,10 +269,7 @@ const CustomerDirectory = ({
     const [draftStatusFilters, setDraftStatusFilters] = useState<CustomerActivityStatus[]>([]);
     const [draftDueFilters, setDraftDueFilters] = useState<CustomerDueOption[]>([]);
     const [draftSortBy, setDraftSortBy] = useState<CustomerSortOption>("newest");
-    const [pagination, setPagination] = useState({
-        pageIndex: 0,
-        pageSize: DEFAULT_CUSTOMER_PAGE_SIZE,
-    });
+    const [pagination, setPagination] = useState(createTablePaginationState);
     const customerLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const currentPage = pagination.pageIndex + 1;
     const pageSize = pagination.pageSize;
@@ -666,27 +660,72 @@ const CustomerDirectory = ({
                         </Button>
                     ) : null}
                 </div>
+            ) : usePagedCustomers ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="hidden min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card md:flex">
+                        <div className="min-h-0 flex-1 overflow-auto">
+                            <table className="min-w-[760px] w-full text-left text-sm">
+                                <thead className="sticky top-0 z-10 border-b border-border/50 bg-card/90 text-xs uppercase tracking-wide text-muted-foreground backdrop-blur-md">
+                                    <tr>
+                                        <th className="px-4 py-3">Customer</th>
+                                        <th className="px-4 py-3">Due</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Added</th>
+                                        <th className="px-4 py-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/60">
+                                    {visibleCustomers.map((customer) => (
+                                        <CustomerTableRow
+                                            key={customer.id}
+                                            customer={customer}
+                                            selected={customer.id === selectedCustomerId}
+                                            showUseAction={Boolean(onUseForOrder)}
+                                            onUse={onUseForOrder}
+                                            onDetails={setDetailsCustomer}
+                                            onEdit={setEditingCustomer}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <DataTablePagination
+                            table={customersTable}
+                            count={totalCustomerCount}
+                            countLabel="customers"
+                            className="shrink-0 border-t border-border/40 bg-card/90 px-4 pt-3.5 backdrop-blur-md"
+                        />
+                    </div>
+
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
+                        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-auto">
+                            {visibleCustomers.map((customer) => (
+                                <CustomerCard
+                                    key={customer.id}
+                                    customer={customer}
+                                    selected={customer.id === selectedCustomerId}
+                                    showUseAction={Boolean(onUseForOrder)}
+                                    onUse={onUseForOrder}
+                                    onDetails={setDetailsCustomer}
+                                    onEdit={setEditingCustomer}
+                                />
+                            ))}
+                        </div>
+
+                        <DataTablePagination
+                            table={customersTable}
+                            count={totalCustomerCount}
+                            countLabel="customers"
+                            className="shrink-0 px-0 pb-0 pt-2"
+                        />
+                    </div>
+                </div>
             ) : (
-                <div
-                    className={cn(
-                        "overflow-hidden rounded-2xl border border-border/70 bg-card",
-                        usePagedCustomers && "flex min-h-0 flex-1 flex-col",
-                    )}
-                >
-                    <div
-                        className={cn(
-                            "hidden md:block",
-                            usePagedCustomers ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto",
-                        )}
-                    >
+                <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+                    <div className="hidden overflow-x-auto md:block">
                         <table className="min-w-[760px] w-full text-left text-sm">
-                            <thead
-                                className={cn(
-                                    "bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground",
-                                    usePagedCustomers &&
-                                        "sticky top-0 z-10 border-b border-border/50 bg-card/90 backdrop-blur-md",
-                                )}
-                            >
+                            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3">Customer</th>
                                     <th className="px-4 py-3">Due</th>
@@ -711,12 +750,7 @@ const CustomerDirectory = ({
                         </table>
                     </div>
 
-                    <div
-                        className={cn(
-                            "grid gap-2 p-2 md:hidden",
-                            usePagedCustomers && "min-h-0 flex-1 overflow-auto",
-                        )}
-                    >
+                    <div className="grid grid-cols-1 gap-2.5 md:hidden">
                         {visibleCustomers.map((customer) => (
                             <CustomerCard
                                 key={customer.id}
@@ -729,16 +763,6 @@ const CustomerDirectory = ({
                             />
                         ))}
                     </div>
-
-                    {usePagedCustomers ? (
-                        <DataTablePagination
-                            table={customersTable}
-                            count={totalCustomerCount}
-                            countLabel="customers"
-                            customPerPageOptions={[...CUSTOMER_PAGE_SIZE_OPTIONS]}
-                            className="shrink-0 border-t border-border/40 bg-card/90 px-4 pt-3.5 backdrop-blur-md"
-                        />
-                    ) : null}
                 </div>
             )}
 

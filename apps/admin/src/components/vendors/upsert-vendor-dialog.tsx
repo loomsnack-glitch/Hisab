@@ -138,7 +138,7 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
         });
     };
 
-    const title = isEditMode ? "Edit vendor" : "Add vendor";
+    const title = isEditMode ? "Edit vendor" : "Create vendor";
 
     return (
         <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
@@ -159,11 +159,7 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
                     <Field data-invalid={!!form.formState.errors.name}>
                         <FieldLabel required>Vendor name</FieldLabel>
                         <FieldContent>
-                            <Input
-                                className="h-11 rounded-xl"
-                                placeholder="e.g. Fresh Farms"
-                                {...form.register("name")}
-                            />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
@@ -173,39 +169,37 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
                             Description <span className="font-normal text-muted-foreground">(optional)</span>
                         </FieldLabel>
                         <FieldContent>
-                            <Textarea
-                                className="min-h-24 rounded-xl"
-                                placeholder="e.g. Daily produce supplier"
-                                {...form.register("description")}
-                            />
+                            <Textarea className="min-h-24 rounded-xl" {...form.register("description")} />
                             <FieldError errors={[form.formState.errors.description]} />
                         </FieldContent>
                     </Field>
 
-                    <Controller
-                        control={form.control}
-                        name="status"
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel required>Status</FieldLabel>
-                                <FieldContent>
-                                    <ReactSelect
-                                        options={statusSelectOptions}
-                                        value={
-                                            statusSelectOptions.find(
-                                                (option) => option.value === (field.value ?? "active"),
-                                            ) ?? null
-                                        }
-                                        onChange={(option) => field.onChange(option?.value ?? "active")}
-                                        classNames={{
-                                            control: () => "!min-h-11 rounded-xl",
-                                        }}
-                                    />
-                                    <FieldError errors={[fieldState.error]} />
-                                </FieldContent>
-                            </Field>
-                        )}
-                    />
+                    {isEditMode && (
+                        <Controller
+                            control={form.control}
+                            name="status"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldContent>
+                                        <ReactSelect
+                                            options={statusSelectOptions}
+                                            value={
+                                                statusSelectOptions.find(
+                                                    (option) => option.value === (field.value ?? "active"),
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "active")}
+                                            classNames={{
+                                                control: () => "!min-h-11 rounded-xl",
+                                            }}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
+                    )}
 
                     <DialogFooter>
                         <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
@@ -218,7 +212,7 @@ const UpsertVendorDialog = ({ organizationId, vendor, trigger }: UpsertVendorDia
                         >
                             {mutation.isPending
                                 ? isEditMode ? "Saving..." : "Creating..."
-                                : isEditMode ? "Save changes" : "Add vendor"}
+                                : isEditMode ? "Save changes" : "Create vendor"}
                         </Button>
                     </DialogFooter>
                 </form>
