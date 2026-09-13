@@ -1,8 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
+import { useQueryStates } from "nuqs";
 import {
     getCustomerLedger,
     getCustomers,
@@ -60,8 +61,10 @@ import { toast } from "sonner";
 
 import CustomerQuickCreateDialog from "@/components/billing/customer-quick-create-dialog";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
+import { customerFilterUrlOptions, customerListFilterParsers } from "@/lib/customer-query-states";
 import { formatCurrency, formatDateOnly, formatDateTime } from "@/lib/format";
 import { billingKeys } from "@/lib/query-keys";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 
 type CustomerDirectoryProps = {
     mode: BillingWorkspaceMode;
@@ -249,20 +252,43 @@ const CustomerEditDialog = ({
     );
 };
 
-const CustomerDirectory = ({
+type CustomerDirectoryViewProps = CustomerDirectoryProps & {
+    searchInput: string;
+    onSearchInputChange: (value: string) => void;
+    onClearSearch: () => void;
+    committedSearch: string;
+    statusFilters: CustomerActivityStatus[];
+    dueFilters: CustomerDueOption[];
+    sortBy: CustomerSortOption;
+    onStatusFiltersChange: (values: CustomerActivityStatus[]) => void;
+    onDueFiltersChange: (values: CustomerDueOption[]) => void;
+    onSortByChange: (value: CustomerSortOption) => void;
+    onResetFilters: () => void;
+    onClearToolbarFilters: () => void;
+    treatActiveStatusAsDefault: boolean;
+};
+
+const CustomerDirectoryView = ({
     mode,
     organizationId,
     storeId,
     selectedCustomerId,
     onUseForOrder,
-    searchValue,
-    onSearchChange,
-}: CustomerDirectoryProps) => {
+    searchInput,
+    onSearchInputChange,
+    onClearSearch,
+    committedSearch,
+    statusFilters,
+    dueFilters,
+    sortBy,
+    onStatusFiltersChange,
+    onDueFiltersChange,
+    onSortByChange,
+    onResetFilters,
+    onClearToolbarFilters,
+    treatActiveStatusAsDefault,
+}: CustomerDirectoryViewProps) => {
     const queryClient = useQueryClient();
-    const [localSearch, setLocalSearch] = useState("");
-    const [statusFilters, setStatusFilters] = useState<CustomerActivityStatus[]>([]);
-    const [dueFilters, setDueFilters] = useState<CustomerDueOption[]>([]);
-    const [sortBy, setSortBy] = useState<CustomerSortOption>("newest");
     const [editingCustomer, setEditingCustomer] = useState<CustomerDTO | null>(null);
     const [detailsCustomer, setDetailsCustomer] = useState<CustomerDTO | null>(null);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -273,9 +299,7 @@ const CustomerDirectory = ({
     const customerLoadMoreRef = useRef<HTMLDivElement | null>(null);
     const currentPage = pagination.pageIndex + 1;
     const pageSize = pagination.pageSize;
-    const search = searchValue ?? localSearch;
-    const deferredSearch = useDeferredValue(search.trim());
-    const setSearch = onSearchChange ?? setLocalSearch;
+    const deferredSearch = useDeferredValue(committedSearch.trim());
     const usePagedCustomers = mode === "admin";
 
     const statusFilterSelection = useMemo(() => new Set(statusFilters), [statusFilters]);
@@ -318,6 +342,7 @@ const CustomerDirectory = ({
             return response;
         },
         enabled: Boolean(organizationId) && usePagedCustomers,
+        placeholderData: keepPreviousData,
     });
 
     const customersInfiniteQuery = useInfiniteQuery({
@@ -397,17 +422,24 @@ const CustomerDirectory = ({
     };
 
     const isLoading = usePagedCustomers
-        ? customersPagedQuery.isPending
+        ? customersPagedQuery.isPending && !customersPagedQuery.data
         : customersInfiniteQuery.isPending;
     const hasError = usePagedCustomers
-        ? customersPagedQuery.isError
+        ? customersPagedQuery.isError || customersPagedQuery.data?.status === "error"
         : customerPages.length === 0 && customersInfiniteQuery.isError;
     const refetchCustomers = usePagedCustomers
         ? customersPagedQuery.refetch
         : customersInfiniteQuery.refetch;
     const toolbarFilterCount = statusFilters.length + dueFilters.length + (sortBy !== "newest" ? 1 : 0);
     const hasToolbarFilters = toolbarFilterCount > 0;
-    const hasActiveFilters = Boolean(search.trim()) || hasToolbarFilters;
+    const hasCustomFilters =
+        Boolean(committedSearch.trim())
+        || dueFilters.length > 0
+        || sortBy !== "newest"
+        || (treatActiveStatusAsDefault
+            ? statusFilters.length !== 1 || statusFilters[0] !== "active"
+            : statusFilters.length > 0);
+    const hasActiveFilters = treatActiveStatusAsDefault ? hasCustomFilters : Boolean(committedSearch.trim()) || hasToolbarFilters;
     const draftFilterCount =
         draftStatusFilters.length + draftDueFilters.length + (draftSortBy !== "newest" ? 1 : 0);
 
@@ -427,17 +459,6 @@ const CustomerDirectory = ({
         );
     };
 
-    const resetFilters = () => {
-        setSearch("");
-        setStatusFilters([]);
-        setDueFilters([]);
-        setSortBy("newest");
-    };
-    const clearToolbarFilters = () => {
-        setStatusFilters([]);
-        setDueFilters([]);
-        setSortBy("newest");
-    };
     const handleMobileFiltersOpenChange = (open: boolean) => {
         if (open) {
             setDraftStatusFilters(statusFilters);
@@ -447,9 +468,9 @@ const CustomerDirectory = ({
         setMobileFiltersOpen(open);
     };
     const applyMobileFilters = () => {
-        setStatusFilters(draftStatusFilters);
-        setDueFilters(draftDueFilters);
-        setSortBy(draftSortBy);
+        onStatusFiltersChange(draftStatusFilters);
+        onDueFiltersChange(draftDueFilters);
+        onSortByChange(draftSortBy);
         setMobileFiltersOpen(false);
     };
 
@@ -499,6 +520,7 @@ const CustomerDirectory = ({
                     ? "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
                     : "space-y-3",
             )}
+            data-testid="customer-directory"
         >
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -526,16 +548,16 @@ const CustomerDirectory = ({
                         <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
                         <Input
                             type="text"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
+                            value={searchInput}
+                            onChange={(event) => onSearchInputChange(event.target.value)}
                             className="h-10 w-full rounded-full border border-border/60 bg-card/60 pl-10 pr-9 text-sm shadow-2xs transition-all duration-200 focus-visible:border-primary/70 focus-visible:ring-2 focus-visible:ring-primary/40"
                             placeholder="Search customers..."
                             aria-label="Search customers"
                         />
-                        {search ? (
+                        {searchInput ? (
                             <button
                                 type="button"
-                                onClick={() => setSearch("")}
+                                onClick={onClearSearch}
                                 className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground cursor-pointer"
                                 aria-label="Clear search"
                             >
@@ -566,7 +588,7 @@ const CustomerDirectory = ({
                             options={customerActivityStatusFilterOptions}
                             selectedValues={statusFilterSelection}
                             onSelectedValuesChange={(values) =>
-                                setStatusFilters(Array.from(values) as CustomerActivityStatus[])
+                                onStatusFiltersChange(Array.from(values) as CustomerActivityStatus[])
                             }
                         />
                         <DataTableFacetedFilter
@@ -575,20 +597,20 @@ const CustomerDirectory = ({
                             options={customerDueFilterOptions}
                             selectedValues={dueFilterSelection}
                             onSelectedValuesChange={(values) =>
-                                setDueFilters(Array.from(values) as CustomerDueOption[])
+                                onDueFiltersChange(Array.from(values) as CustomerDueOption[])
                             }
                         />
                         <DataTableSortFilter
                             title="Sort"
                             icon={ArrowUpDown}
                             value={sortBy}
-                            onValueChange={(value) => setSortBy(value as CustomerSortOption)}
+                            onValueChange={(value) => onSortByChange(value as CustomerSortOption)}
                             options={customerSortOptions}
                         />
                         {hasToolbarFilters ? (
                             <Button
                                 variant="ghost"
-                                onClick={clearToolbarFilters}
+                                onClick={onClearToolbarFilters}
                                 className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-full px-3 text-xs font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive animate-in fade-in slide-in-from-left-2 duration-200"
                             >
                                 <X className="size-3.5" />
@@ -655,7 +677,7 @@ const CustomerDirectory = ({
                         {hasActiveFilters ? "Try a different search or filter." : "Add your first customer to get started."}
                     </p>
                     {hasActiveFilters ? (
-                        <Button type="button" variant="outline" size="sm" className="mt-4 rounded-full" onClick={resetFilters}>
+                        <Button type="button" variant="outline" size="sm" className="mt-4 rounded-full" onClick={onResetFilters}>
                             Clear all filters
                         </Button>
                     ) : null}
@@ -1136,5 +1158,94 @@ const StatusBadge = ({ active }: { active: boolean }) => (
         {active ? "Active" : "Inactive"}
     </span>
 );
+
+const UrlSyncedCustomerDirectory = (props: CustomerDirectoryProps) => {
+    const [{ search, statuses, dues, sort }, setFilters] = useQueryStates(
+        customerListFilterParsers,
+        customerFilterUrlOptions,
+    );
+    const commitSearch = useCallback((nextSearch: string) => setFilters({ search: nextSearch }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(search, commitSearch);
+
+    return (
+        <CustomerDirectoryView
+            {...props}
+            searchInput={searchInput}
+            onSearchInputChange={setSearchInput}
+            onClearSearch={clearSearch}
+            committedSearch={search}
+            statusFilters={statuses}
+            dueFilters={dues}
+            sortBy={sort}
+            onStatusFiltersChange={(values) => {
+                void setFilters({ statuses: values });
+            }}
+            onDueFiltersChange={(values) => {
+                void setFilters({ dues: values });
+            }}
+            onSortByChange={(value) => {
+                void setFilters({ sort: value });
+            }}
+            onResetFilters={() => {
+                clearSearch();
+                void setFilters({ statuses: [], dues: [], sort: "newest" });
+            }}
+            onClearToolbarFilters={() => {
+                void setFilters({ statuses: [], dues: [], sort: "newest" });
+            }}
+            treatActiveStatusAsDefault
+        />
+    );
+};
+
+const LocalFilterCustomerDirectory = ({
+    searchValue,
+    onSearchChange,
+    ...props
+}: CustomerDirectoryProps) => {
+    const [localSearch, setLocalSearch] = useState("");
+    const [statusFilters, setStatusFilters] = useState<CustomerActivityStatus[]>([]);
+    const [dueFilters, setDueFilters] = useState<CustomerDueOption[]>([]);
+    const [sortBy, setSortBy] = useState<CustomerSortOption>("newest");
+    const search = searchValue ?? localSearch;
+    const setSearch = onSearchChange ?? setLocalSearch;
+
+    return (
+        <CustomerDirectoryView
+            {...props}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchInput={search}
+            onSearchInputChange={setSearch}
+            onClearSearch={() => setSearch("")}
+            committedSearch={search}
+            statusFilters={statusFilters}
+            dueFilters={dueFilters}
+            sortBy={sortBy}
+            onStatusFiltersChange={setStatusFilters}
+            onDueFiltersChange={setDueFilters}
+            onSortByChange={setSortBy}
+            onResetFilters={() => {
+                setSearch("");
+                setStatusFilters([]);
+                setDueFilters([]);
+                setSortBy("newest");
+            }}
+            onClearToolbarFilters={() => {
+                setStatusFilters([]);
+                setDueFilters([]);
+                setSortBy("newest");
+            }}
+            treatActiveStatusAsDefault={false}
+        />
+    );
+};
+
+const CustomerDirectory = (props: CustomerDirectoryProps) =>
+    props.mode === "admin" ? (
+        <UrlSyncedCustomerDirectory {...props} />
+    ) : (
+        <LocalFilterCustomerDirectory {...props} />
+    );
 
 export default CustomerDirectory;

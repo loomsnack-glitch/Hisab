@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const VENDOR_SEARCH_DEBOUNCE_MS = 300;
+export const URL_SEARCH_DEBOUNCE_MS = 300;
 
 export const useDebouncedUrlSearch = (
     searchFromUrl: string,
@@ -17,7 +17,7 @@ export const useDebouncedUrlSearch = (
 
         const timeoutId = window.setTimeout(() => {
             void onSearchChange(searchInput);
-        }, VENDOR_SEARCH_DEBOUNCE_MS);
+        }, URL_SEARCH_DEBOUNCE_MS);
 
         return () => window.clearTimeout(timeoutId);
     }, [searchInput, searchFromUrl, onSearchChange]);
