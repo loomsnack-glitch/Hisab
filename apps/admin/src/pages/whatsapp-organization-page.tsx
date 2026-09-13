@@ -17,15 +17,13 @@ import {
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardContent } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
 import { embeddedSignupLoginOptions, readEmbeddedSignupSession } from "@/lib/whatsapp-embedded-signup";
-import WhatsAppTemplateManager from "@/components/organizations/whatsapp-template-manager";
-import WhatsAppLinkManager from "@/components/organizations/whatsapp-link-manager";
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
 import WhatsAppCloudTemplateManager, { type WhatsAppCloudAccountOption } from "@/components/organizations/whatsapp-cloud-template-manager";
 import WhatsAppCloudSafetyCard from "@/components/organizations/whatsapp-cloud-safety-card";
@@ -522,20 +520,9 @@ const WhatsAppOrganizationPage = () => {
                 )}>
                     {activeTab === "templates" ? (
                         <Card className="border-border/60 bg-card/80">
-                            {cloudAccountsForStore.length > 0 ? <CardContent className="p-6">
+                            <CardContent className="p-6">
                                 <WhatsAppCloudTemplateManager organizationId={organizationId} storeId={selectedStore.id} storeName={selectedStore.name} accounts={cloudAccountsForStore} />
-                            </CardContent> : <>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 font-display text-xl"><FileText className="size-5 text-primary" />Templates and links</CardTitle>
-                                    <CardDescription>{`Reusable messages for ${selectedStore.name}. Links are inserted only where you choose.`}</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <WhatsAppLinkManager organizationId={organizationId} store={selectedStore} />
-                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="bill" links={selectedStore.whatsappLinks} />
-                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="due_reminder" links={selectedStore.whatsappLinks} />
-                                    <WhatsAppTemplateManager organizationId={organizationId} storeId={selectedStore.id} kind="promotion" links={selectedStore.whatsappLinks} />
-                                </CardContent>
-                            </>}
+                            </CardContent>
                         </Card>
                     ) : null}
 

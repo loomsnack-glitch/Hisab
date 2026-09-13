@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getWhatsAppCloudTemplateSubmissions,
@@ -1015,9 +1016,28 @@ const WhatsAppCloudTemplateManager = ({
     isInvoiceTemplateKind(kind) && headerFormat === "none";
   if (accounts.length === 0)
     return (
-      <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
-        Assign a connected Cloud account to this Store before creating
-        templates.
+      <div className="w-full space-y-5">
+        <div className="border-b border-border/60 pb-4">
+          <h2 className="font-display text-xl font-semibold tracking-tight">
+            WhatsApp Cloud templates
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Create, submit, and assign approved templates for {storeName}.
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Link a WhatsApp Cloud account to this Store from the Accounts tab
+            before creating templates.
+          </p>
+          <Button
+            variant="outline"
+            className="rounded-full"
+            render={<Link to={`/organizations/${organizationId}/whatsapp/accounts?storeId=${storeId}`} />}
+          >
+            Go to Accounts
+          </Button>
+        </div>
       </div>
     );
   return (

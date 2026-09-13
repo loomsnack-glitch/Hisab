@@ -66,8 +66,31 @@ const orgWhatsAppAccount = {
     updatedAt: now,
 };
 
-const renderAccounts = (options?: { accounts?: typeof orgWhatsAppAccount[] }) => {
-    const queryClient = new QueryClient();
+const businessAccountId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+const cloudAccountSnapshot = {
+    id: orgWhatsAppAccount.id,
+    organizationId,
+    whatsappBusinessAccountId: businessAccountId,
+    wabaId: "123456789012345",
+    phoneNumberId: "109876543210987",
+    verifiedName: "Adajan",
+    status: "connected" as const,
+    qualityRating: "GREEN",
+    messagingLimit: 1_000,
+    lastLimitSyncedAt: now,
+    lastWebhookAt: null,
+    lastGraphApiAt: now,
+    lastErrorCode: null,
+};
+
+const seedWorkspace = (
+    queryClient: QueryClient,
+    options?: {
+        accounts?: typeof orgWhatsAppAccount[];
+        cloudAccounts?: typeof cloudAccountSnapshot[];
+    },
+) => {
     queryClient.setQueryData(["whatsapp-workspace", organizationId, "organization"], organizationResponse);
     queryClient.setQueryData(whatsappKeys.accounts(organizationId), {
         status: "success",
@@ -77,10 +100,48 @@ const renderAccounts = (options?: { accounts?: typeof orgWhatsAppAccount[] }) =>
     });
     queryClient.setQueryData(whatsappKeys.cloudAccounts(organizationId), {
         status: "success",
-        data: { accounts: [] },
+        data: { accounts: options?.cloudAccounts ?? [] },
         message: "WhatsApp Cloud accounts fetched successfully",
         code: 200,
     });
+};
+
+const renderWorkspace = (
+    tab: "accounts" | "templates",
+    options?: {
+        accounts?: typeof orgWhatsAppAccount[];
+        cloudAccounts?: typeof cloudAccountSnapshot[];
+    },
+) => {
+    const queryClient = new QueryClient();
+    seedWorkspace(queryClient, options);
+    if (tab === "templates" && options?.cloudAccounts?.length) {
+        const accountId = options.cloudAccounts[0]!.id;
+        queryClient.setQueryData(whatsappKeys.cloudTemplates(organizationId, accountId), {
+            status: "success",
+            data: { templates: [] },
+            message: "WhatsApp Cloud templates fetched successfully",
+            code: 200,
+        });
+        queryClient.setQueryData(["whatsapp", "cloud-submissions", organizationId, accountId, storeId], {
+            status: "success",
+            data: { submissions: [] },
+            message: "WhatsApp Cloud template submissions fetched successfully",
+            code: 200,
+        });
+        queryClient.setQueryData(["whatsapp", "cloud-template-bindings", organizationId, storeId, businessAccountId], {
+            status: "success",
+            data: { bindings: [] },
+            message: "WhatsApp Cloud template bindings fetched successfully",
+            code: 200,
+        });
+        queryClient.setQueryData(whatsappKeys.publicInvoiceTemplateConfig(organizationId), {
+            status: "success",
+            data: { invoiceTemplateUrl: "https://example.com/invoice" },
+            message: "Public invoice template config fetched successfully",
+            code: 200,
+        });
+    }
 
     const router = createMemoryRouter(
         [
@@ -88,8 +149,12 @@ const renderAccounts = (options?: { accounts?: typeof orgWhatsAppAccount[] }) =>
                 path: "/organizations/:organizationId/whatsapp/accounts",
                 element: <WhatsAppOrganizationPage />,
             },
+            {
+                path: "/organizations/:organizationId/whatsapp/templates",
+                element: <WhatsAppOrganizationPage />,
+            },
         ],
-        { initialEntries: [`/organizations/${organizationId}/whatsapp/accounts`] },
+        { initialEntries: [`/organizations/${organizationId}/whatsapp/${tab}?storeId=${storeId}`] },
     );
 
     return renderToStaticMarkup(
@@ -98,6 +163,9 @@ const renderAccounts = (options?: { accounts?: typeof orgWhatsAppAccount[] }) =>
         </QueryClientProvider>,
     );
 };
+
+const renderAccounts = (options?: { accounts?: typeof orgWhatsAppAccount[] }) =>
+    renderWorkspace("accounts", options);
 
 describe("Organization WhatsApp accounts page", () => {
     test("lets an administrator add a WhatsApp Cloud account", () => {
@@ -115,5 +183,32 @@ describe("Organization WhatsApp accounts page", () => {
         expect(markup).toContain("Not linked to any Store yet");
         expect(markup).toContain("Select a Store to link");
         expect(markup).toContain("Link to Store");
+    });
+});
+
+describe("Organization WhatsApp templates page", () => {
+    test("shows Cloud templates instead of the retired local template editor", () => {
+        const markup = renderWorkspace("templates");
+
+        expect(markup).toContain("WhatsApp Cloud templates");
+        expect(markup).not.toContain("Templates and links");
+        expect(markup).not.toContain("Reusable links");
+        expect(markup).not.toContain("Bill templates");
+        expect(markup).not.toContain("Due reminder templates");
+        expect(markup).not.toContain("Promotion templates");
+        expect(markup).toContain("Link a WhatsApp Cloud account to this Store");
+    });
+
+    test("lets an administrator manage Cloud templates for a linked Store", () => {
+        const markup = renderWorkspace("templates", {
+            accounts: [{ ...orgWhatsAppAccount, assignedStoreIds: [storeId] }],
+            cloudAccounts: [cloudAccountSnapshot],
+        });
+
+        expect(markup).toContain("WhatsApp Cloud templates");
+        expect(markup).toContain("Store defaults");
+        expect(markup).toContain("Cloud template library");
+        expect(markup).not.toContain("Templates and links");
+        expect(markup).not.toContain("Reusable links");
     });
 });
