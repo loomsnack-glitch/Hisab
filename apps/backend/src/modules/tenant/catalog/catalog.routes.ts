@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
     CreateAddOnSchema,
@@ -54,31 +53,11 @@ const validateUuidParam = (value: string, message: string) => {
     return null;
 };
 
-const catalogResourceKeys = new Set([
-    "categories",
-    "products",
-    "bundle-products",
-    "combo-products",
-    "add-ons",
-    "label-templates",
-]);
-
-const requireCatalogProductsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
-
-const catalogProductsEntitlement: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
-    const catalogResource = context.req.param("catalogResource");
-    if (!catalogResource || !catalogResourceKeys.has(catalogResource)) {
-        await next();
-        return;
-    }
-
-    return requireCatalogProductsEntitlement(context, next);
-};
-
 router.use("*", authMiddleware);
-// Scope to catalog resources. `/:organizationId/*` would 403 later `/organizations` mounts such as Store commercial status.
-router.use("/:organizationId/:catalogResource", catalogProductsEntitlement);
-router.use("/:organizationId/:catalogResource/*", catalogProductsEntitlement);
+
+const requireCatalogLabelTemplatesEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+router.use("/:organizationId/label-templates", requireCatalogLabelTemplatesEntitlement);
+router.use("/:organizationId/label-templates/*", requireCatalogLabelTemplatesEntitlement);
 
 router.get("/:organizationId/categories", async (c) => {
     try {

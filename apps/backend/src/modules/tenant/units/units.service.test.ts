@@ -73,6 +73,19 @@ describe("Organization Unit service", () => {
         expect(response.data?.units.some((unit) => unit.kind === "custom" && unit.name === "Crate")).toBe(true);
     });
 
+    test("lists Units without an active Units entitlement", async () => {
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: false,
+            featureKey,
+            evidence: [],
+        }));
+
+        const response = await unitsService.getUnits(userId, organizationId);
+
+        expect(response.status).toBe("success");
+        expect(response.data?.units).toHaveLength(SEEDED_UNITS.length + 1);
+    });
+
     test("denies Unit listing when the user is not a member of the Organization", async () => {
         getOrganizationByIdForUser.mockResolvedValue(null);
 

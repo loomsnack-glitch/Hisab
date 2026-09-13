@@ -65,15 +65,38 @@ describe("Store commercial status among composed organization routes", () => {
         expect(body.data?.commercialStatus?.trial?.eligible).toBe(true);
     });
 
-    test("still forbids Catalog Products requests when no Store in the Organization is entitled", async () => {
+    test("allows Organization Catalog setup when no Store is entitled", async () => {
         const app = composeOrganizationRoutes();
 
-        const response = await app.request(`http://localhost/organizations/${organizationId}/categories`);
-        const body = (await response.json()) as { message?: string };
+        const responses = await Promise.all(
+            ["categories", "products", "add-ons"].map((resource) =>
+                app.request(`http://localhost/organizations/${organizationId}/${resource}`),
+            ),
+        );
+
+        expect(responses.map((response) => response.status)).toEqual([
+            STATUS_CODES.SUCCESS,
+            STATUS_CODES.SUCCESS,
+            STATUS_CODES.SUCCESS,
+        ]);
+
+        const createResponse = await app.request(
+            `http://localhost/organizations/${organizationId}/categories`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: "Prepared before activation" }),
+            },
+        );
+
+        expect(createResponse.status).toBe(STATUS_CODES.CREATED);
+    });
+
+    test("keeps Label Templates gated when no Store is entitled", async () => {
+        const app = composeOrganizationRoutes();
+
+        const response = await app.request(`http://localhost/organizations/${organizationId}/label-templates`);
 
         expect(response.status).toBe(STATUS_CODES.FORBIDDEN);
-        expect(body.message).toBe(
-            "Catalog Products is not available for any Store in this Organization. Review commercial access in Ganatri Admin to purchase or renew access.",
-        );
     });
 });

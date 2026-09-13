@@ -9,7 +9,6 @@ import {
     type UpdateUnitSVC,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
-import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import * as unitsRepository from "./units.repository";
 
 const isUniqueViolation = (error: unknown): boolean =>
@@ -76,11 +75,6 @@ export const getUnits = async (
         return organizationNotFound();
     }
 
-    const unitsEntitlementError = await requireOrganizationFeatureEntitlement(organizationId, "units");
-    if (unitsEntitlementError) {
-        return unitsEntitlementError;
-    }
-
     const units = await unitsRepository.getUnitsByOrganizationId(organizationId);
     return {
         status: "success",
@@ -98,11 +92,6 @@ export const getUnitDetails = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
-    }
-
-    const unitsEntitlementError = await requireOrganizationFeatureEntitlement(organizationId, "units");
-    if (unitsEntitlementError) {
-        return unitsEntitlementError;
     }
 
     const unit = await unitsRepository.getUnitById(organizationId, unitId);
@@ -126,11 +115,6 @@ export const createUnit = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
-    }
-
-    const unitsEntitlementError = await requireOrganizationFeatureEntitlement(organizationId, "units");
-    if (unitsEntitlementError) {
-        return unitsEntitlementError;
     }
 
     if (await tokenAlreadyTaken(organizationId, unitData.name, unitData.label)) {
@@ -181,11 +165,6 @@ export const updateUnit = async (
     const organization = await getOrganizationForUser(organizationId, userId);
     if (!organization) {
         return organizationNotFound();
-    }
-
-    const unitsEntitlementError = await requireOrganizationFeatureEntitlement(organizationId, "units");
-    if (unitsEntitlementError) {
-        return unitsEntitlementError;
     }
 
     const existing = await unitsRepository.getUnitById(organizationId, unitId);
