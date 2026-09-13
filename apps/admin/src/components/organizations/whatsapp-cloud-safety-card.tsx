@@ -19,6 +19,19 @@ import { toast } from "sonner";
 
 type Props = { organizationId: string };
 
+const serviceError = (error: unknown): { code?: unknown; message?: unknown } | null =>
+    typeof error === "object" && error !== null ? error as { code?: unknown; message?: unknown } : null;
+
+export const cloudSafetyErrorMessage = (error: unknown) => {
+    const response = serviceError(error);
+    if (response?.code === 403) {
+        return "Cloud sending controls require WhatsApp access on at least one Store in this Organization. Purchase a plan or add the WhatsApp module to continue.";
+    }
+    return typeof response?.message === "string" && response.message.trim()
+        ? response.message
+        : "Safety status is unavailable. Retry after the backend is ready.";
+};
+
 const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
     const query = useQuery({
         queryKey: whatsappKeys.cloudSafety(organizationId),
@@ -28,6 +41,7 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
         refetchOnWindowFocus: false,
     });
     const safety = query.data?.status === "success" ? query.data.data : null;
+    const safetyError = query.data?.status === "error" ? query.data : query.error;
     const operationsQuery = useQuery({
         queryKey: whatsappKeys.cloudOutbox(organizationId),
         queryFn: () => getWhatsAppCloudOutboxOperations(organizationId),
@@ -83,7 +97,7 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
             </CardHeader>
             <CardContent>
                 {query.isPending ? <p className="text-sm text-muted-foreground">Loading sending safety…</p> : null}
-                {query.isError || query.data?.status === "error" ? <p className="text-sm text-destructive">Safety status is unavailable. Retry after the backend is ready.</p> : null}
+                {query.isError || query.data?.status === "error" ? <p className="text-sm text-destructive">{cloudSafetyErrorMessage(safetyError)}</p> : null}
                 {safety ? (
                     <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
