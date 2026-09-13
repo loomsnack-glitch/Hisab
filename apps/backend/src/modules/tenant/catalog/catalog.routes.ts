@@ -30,6 +30,7 @@ import {
 import { handleError, handleServiceResponse } from "@/helpers/service.helper";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { createOrganizationFeatureEntitlementMiddleware } from "@/modules/tenant/commercial-licensing/organization-feature-entitlement.middleware";
+import { createStoreFeatureEntitlementMiddleware } from "@/modules/tenant/commercial-licensing/store-feature-entitlement.middleware";
 import { validateSchema } from "@/middlewares/validate";
 import type { AppVariables } from "@/types/hono";
 import * as catalogService from "./catalog.service";
@@ -881,10 +882,11 @@ router.delete("/:organizationId/products/:productId/add-on-attachments/:attachme
     }
 });
 
-const requireStoreProductOfferingsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+const requireCatalogCommercialOperationsEntitlement = createOrganizationFeatureEntitlementMiddleware("catalog_products");
+const requireStoreProductOfferingsEntitlement = createStoreFeatureEntitlementMiddleware("catalog_products");
 
-router.use("/:organizationId/store-commercial-operations", requireStoreProductOfferingsEntitlement);
-router.use("/:organizationId/store-commercial-operations/*", requireStoreProductOfferingsEntitlement);
+router.use("/:organizationId/store-commercial-operations", requireCatalogCommercialOperationsEntitlement);
+router.use("/:organizationId/store-commercial-operations/*", requireCatalogCommercialOperationsEntitlement);
 
 router.post(
     "/:organizationId/store-commercial-operations/preview",

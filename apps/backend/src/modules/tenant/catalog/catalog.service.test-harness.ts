@@ -269,7 +269,7 @@ export const storeProductOffering = {
     effectiveDiscount: product.discount,
     isPriceInherited: true,
     isDiscountInherited: true,
-    status: "active" as const,
+    status: "active" as "active" | "inactive",
     createdBy: userId,
     updatedBy: null,
     createdAt: now,
@@ -321,7 +321,9 @@ export const drinksStoreCategoryPresentation = {
 };
 export const getOrganizationByIdForUser = mock(async (): Promise<typeof organization | null> => organization);
 export const getStoresByOrganizationId = mock(async () => [store]);
-export const getStoreById = mock(async () => store);
+export const getStoreById = mock(
+    async (_organizationId: string, _storeId: string): Promise<typeof store | null> => store,
+);
 export const getCategoryById = mock(async () => category);
 export const getCategoriesByOrganizationId = mock(async () => [category]);
 export const categoryNameExistsInOrganization = mock(async () => false);

@@ -13,7 +13,13 @@ import {
 import { Link2, LoaderCircle, Phone, Settings2, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WhatsAppAccountStatusResponseDTO } from "@repo/types";
-import { assignWhatsAppAccount, getWhatsAppAccount, getWhatsAppAccounts, removeWhatsAppAccount } from "@repo/services";
+import {
+    assignWhatsAppAccount,
+    getStoreCommercialStatus,
+    getWhatsAppAccount,
+    getWhatsAppAccounts,
+    removeWhatsAppAccount,
+} from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -22,8 +28,13 @@ import { CustomOption } from "@repo/ui/components/react-select/components";
 import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
-import { whatsappKeys } from "@/lib/query-keys";
+import CatalogAccessPaused from "@/components/commercial/catalog-access-paused";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
+import { featureAccessPausedState } from "@/lib/commercial-access-paused-state";
+import { isQueryCommercialAccessDenied } from "@/lib/commercial-access";
+import { commercialLicenseKeys, whatsappKeys } from "@/lib/query-keys";
+import { getStoreLicensePath } from "@/lib/store-workspace-routes";
+import { adminNestedTabPageHeightClass } from "@/lib/workspace-page-layout";
 
 const cloudStatusLabel: Record<string, string> = {
     connected: "Connected",
@@ -110,6 +121,11 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
         queryFn: () => getWhatsAppAccounts(organizationId),
         enabled: Boolean(organizationId),
     });
+    const commercialStatusQuery = useQuery({
+        queryKey: commercialLicenseKeys.status(organizationId, storeId),
+        queryFn: () => getStoreCommercialStatus(organizationId, storeId),
+        enabled: Boolean(organizationId && storeId),
+    });
     const accountError = accountQuery.error as WhatsAppAccountQueryError | null;
     const isNotLinked = isWhatsAppNotLinkedError(accountError);
     const accountData = isNotLinked
@@ -119,6 +135,15 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
             : accountQuery.data?.data ?? null;
     const account = accountData?.account;
     const failedToLoadAccount = !isNotLinked && accountQuery.isError && !account;
+    const commercialStatus = commercialStatusQuery.data?.status === "success"
+        ? commercialStatusQuery.data.data?.commercialStatus ?? null
+        : null;
+    const commercialAccessDenied = isQueryCommercialAccessDenied(accountQuery)
+        || isQueryCommercialAccessDenied(accountsQuery);
+    const accessState = commercialStatus ? featureAccessPausedState(commercialStatus, "whatsapp") : null;
+    const retryingCommercialAccess = accountQuery.isFetching
+        || accountsQuery.isFetching
+        || commercialStatusQuery.isFetching;
     const accounts = accountsQuery.data?.data?.accounts ?? [];
     const availableAccounts = accounts.filter(candidate =>
         candidate.provider === "cloud_api" && !candidate.assignedStoreIds.includes(storeId),
@@ -179,6 +204,33 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
     const statusLabel = account
         ? cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"
         : null;
+
+    if (
+        !accountQuery.isPending
+        && !accountsQuery.isPending
+        && commercialAccessDenied
+        && accessState
+    ) {
+        return (
+            <div className={adminNestedTabPageHeightClass}>
+                <CatalogAccessPaused
+                    className="h-full min-h-0"
+                    badge={accessState.badge}
+                    title={accessState.title}
+                    message={accessState.description}
+                    actionLabel={accessState.actionLabel}
+                    actionHref={getStoreLicensePath(organizationId, storeId)}
+                    featureIcon={WhatsAppIcon}
+                    retrying={retryingCommercialAccess}
+                    onRetry={() => {
+                        void accountQuery.refetch();
+                        void accountsQuery.refetch();
+                        void commercialStatusQuery.refetch();
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-xl">

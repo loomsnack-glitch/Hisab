@@ -6,6 +6,7 @@ import {
     getCategories,
     getOrganizationDetails,
     getStore,
+    getStoreCommercialStatus,
     getStoreProductOfferings,
 } from "@repo/services";
 import {
@@ -21,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/too
 import { Package2, Pencil, RefreshCw } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
+import CatalogAccessPaused from "@/components/commercial/catalog-access-paused";
 import { PriceDisplay } from "@repo/ui/components/price-display";
 import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
@@ -32,10 +34,14 @@ import {
     storeCatalogListFilterParsers,
     toggleCatalogStatusFilter,
 } from "@/lib/catalog-query-states";
-import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogKeys, commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
+import { isQueryCommercialAccessDenied } from "@/lib/commercial-access";
+import { featureAccessPausedState } from "@/lib/commercial-access-paused-state";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
+import { getStoreLicensePath } from "@/lib/store-workspace-routes";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 
 const EMPTY_CATALOG_ITEMS: never[] = [];
 
@@ -69,6 +75,11 @@ const StoreProductOfferingsPage = () => {
         queryFn: () => getStoreProductOfferings(organizationId, storeId),
         enabled: Boolean(organizationId && storeId),
     });
+    const commercialStatusQuery = useQuery({
+        queryKey: commercialLicenseKeys.status(organizationId, storeId),
+        queryFn: () => getStoreCommercialStatus(organizationId, storeId),
+        enabled: Boolean(organizationId && storeId),
+    });
 
     const organization =
         organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization : null;
@@ -81,6 +92,12 @@ const StoreProductOfferingsPage = () => {
             : EMPTY_CATALOG_ITEMS;
     const offerings =
         offeringsQuery.data?.status === "success" ? offeringsQuery.data.data?.offerings ?? [] : [];
+    const commercialStatus = commercialStatusQuery.data?.status === "success"
+        ? commercialStatusQuery.data.data?.commercialStatus ?? null
+        : null;
+    const offeringsAccessDenied = isQueryCommercialAccessDenied(offeringsQuery);
+    const accessState = commercialStatus ? featureAccessPausedState(commercialStatus, "catalog_products") : null;
+    const retryingCatalogAccess = offeringsQuery.isFetching || commercialStatusQuery.isFetching;
 
     const categoryMap = useMemo(
         () => new Map(categories.map((category) => [category.id, category])),
@@ -183,6 +200,26 @@ const StoreProductOfferingsPage = () => {
                     </Button>
                 </CardContent>
             </Card>
+        );
+    }
+
+    if (offeringsAccessDenied && accessState) {
+        return (
+            <div className={adminWorkspacePageHeightClass}>
+                <CatalogAccessPaused
+                    className="h-full min-h-0"
+                    badge={accessState.badge}
+                    title={accessState.title}
+                    message={accessState.description}
+                    actionLabel={accessState.actionLabel}
+                    actionHref={getStoreLicensePath(organizationId, storeId)}
+                    retrying={retryingCatalogAccess}
+                    onRetry={() => {
+                        void offeringsQuery.refetch();
+                        void commercialStatusQuery.refetch();
+                    }}
+                />
+            </div>
         );
     }
 

@@ -15,13 +15,17 @@ export type AdminOperationalFeatureKey = Extract<
     | "money_account_tracking"
 >;
 
+type FeatureEntitlementDenial = ServiceResponse<null> & {
+    code: typeof STATUS_CODES.FORBIDDEN;
+};
+
 const featureDisplayName = (featureKey: StoreFeatureEntitlementKey): string =>
     SEEDED_COMMERCIAL_FEATURES.find((feature) => feature.key === featureKey)?.displayName ??
     featureKey;
 
 export const featureEntitlementDeniedForStore = (
     featureKey: StoreFeatureEntitlementKey,
-): ServiceResponse<null> => ({
+): FeatureEntitlementDenial => ({
     status: "error",
     message: `${featureDisplayName(featureKey)} is not available for this Store. Review commercial access in Ganatri Admin to purchase or renew access.`,
     data: null,
@@ -30,7 +34,7 @@ export const featureEntitlementDeniedForStore = (
 
 export const featureEntitlementDeniedForOrganization = (
     featureKey: StoreFeatureEntitlementKey,
-): ServiceResponse<null> => ({
+): FeatureEntitlementDenial => ({
     status: "error",
     message: `${featureDisplayName(featureKey)} is not available for any Store in this Organization. Review commercial access in Ganatri Admin to purchase or renew access.`,
     data: null,
@@ -41,7 +45,7 @@ export const requireStoreFeatureEntitlement = async (
     storeId: string,
     featureKey: StoreFeatureEntitlementKey,
     at: Date = new Date(),
-): Promise<ServiceResponse<null> | null> => {
+): Promise<FeatureEntitlementDenial | null> => {
     const decision = await getFeatureEntitlementService().resolveFeatureEntitlement(
         storeId,
         featureKey,
@@ -72,7 +76,7 @@ export const requireOrganizationFeatureEntitlement = async (
     organizationId: string,
     featureKey: StoreFeatureEntitlementKey,
     at: Date = new Date(),
-): Promise<ServiceResponse<null> | null> => {
+): Promise<FeatureEntitlementDenial | null> => {
     const entitledStoreIds = await listEntitledStoreIdsForOrganization(
         organizationId,
         featureKey,

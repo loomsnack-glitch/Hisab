@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
-import { billingKeys, moneyAccountKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
+import { commercialAccessDeniedMessage } from "@/lib/commercial-access";
+import { billingKeys, commercialLicenseKeys, moneyAccountKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
 import { getStoreSettingsPath, getStoreSettingsTabPath, type StoreSettingsTab } from "@/lib/store-workspace-routes";
 import StoreWorkspaceSettingsPage, {
     StoreSettingsFeaturesPage,
@@ -101,11 +102,56 @@ const orgWhatsAppAccount = {
     updatedAt: now,
 };
 
+const noFeatureCommercialStatus = {
+    status: "success" as const,
+    data: {
+        commercialStatus: {
+            storeId,
+            organizationId,
+            timezone: "Asia/Kolkata",
+            baseAccess: null,
+            scheduledSuccessor: null,
+            accessGrants: [],
+            activeAddOns: [],
+            availablePaidPlans: [],
+            availableCoTermAddOns: [],
+            pendingCheckout: null,
+            commercialHistory: [],
+            trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
+            entitlements: { storeId, features: [] },
+        },
+    },
+    message: "Store commercial status fetched successfully",
+    code: 200,
+};
+
+const setQueryError = (
+    queryClient: QueryClient,
+    queryKey: readonly unknown[],
+    message: string,
+    code: number,
+) => {
+    queryClient.setQueryData(queryKey, {
+        status: "error",
+        data: null,
+        message,
+        code,
+    });
+    const query = queryClient.getQueryCache().build(queryClient, { queryKey });
+    query.setState({
+        status: "error",
+        error: { message, data: null, status: "error", code },
+        fetchStatus: "idle",
+    });
+};
+
 const renderSettings = (options?: {
     tab?: StoreSettingsTab;
     whatsappUnlinked?: boolean;
     whatsappLinked?: boolean;
     whatsappAccounts?: typeof orgWhatsAppAccount[];
+    paymentsCommercialDenied?: boolean;
+    whatsappCommercialDenied?: boolean;
     store?: StoreWithDevicesDTO;
 }) => {
     const queryClient = new QueryClient();
@@ -212,6 +258,34 @@ const renderSettings = (options?: {
         message: "WhatsApp accounts fetched successfully",
         code: 200,
     });
+    queryClient.setQueryData(
+        commercialLicenseKeys.status(organizationId, storeId),
+        noFeatureCommercialStatus,
+    );
+
+    if (options?.paymentsCommercialDenied) {
+        setQueryError(
+            queryClient,
+            moneyAccountKeys.list(organizationId),
+            `Money Account Tracking is not available for this Store. ${commercialAccessDeniedMessage}`,
+            403,
+        );
+        setQueryError(
+            queryClient,
+            moneyAccountKeys.paymentRoutes(organizationId, storeId),
+            `Money Account Tracking is not available for this Store. ${commercialAccessDeniedMessage}`,
+            403,
+        );
+    }
+
+    if (options?.whatsappCommercialDenied) {
+        setQueryError(
+            queryClient,
+            whatsappKeys.account(organizationId, storeId),
+            `WhatsApp is not available for this Store. ${commercialAccessDeniedMessage}`,
+            403,
+        );
+    }
 
     const router = createMemoryRouter(
         [
@@ -357,6 +431,32 @@ describe("Store workspace Settings page", () => {
         expect(markup).not.toContain("Store features");
         expect(markup).not.toContain("Store WhatsApp");
         expect(markup).not.toContain("Bill numbering");
+    });
+
+    test("shows catalog access paused UI when payment routing is commercially denied", () => {
+        const markup = renderSettings({ tab: "payments", paymentsCommercialDenied: true });
+
+        expect(markup).toContain('data-testid="catalog-access-paused"');
+        expect(markup).toContain("Payment routing paused");
+        expect(markup).toContain("No plan purchased");
+        expect(markup).toContain("Choose a plan");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/license"`);
+        expect(markup).not.toContain("Money Account Tracking is not available for this Store.");
+        expect(markup).not.toContain("HDFC Current");
+        expect(markup).not.toContain("Collections");
+    });
+
+    test("shows catalog access paused UI when WhatsApp is commercially denied", () => {
+        const markup = renderSettings({ tab: "whatsapp", whatsappCommercialDenied: true });
+
+        expect(markup).toContain('data-testid="catalog-access-paused"');
+        expect(markup).toContain("WhatsApp access paused");
+        expect(markup).toContain("No plan purchased");
+        expect(markup).toContain("Choose a plan");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/license"`);
+        expect(markup).not.toContain("WhatsApp is not available for this Store.");
+        expect(markup).not.toContain("Linked number");
+        expect(markup).not.toContain("Add or manage accounts");
     });
 
     test("shows invoice appearance on the Invoice tab", () => {

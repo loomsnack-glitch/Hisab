@@ -1,0 +1,83 @@
+import type { StoreCommercialStatusDTO } from "@repo/types";
+
+export type CommercialFeatureKey = "catalog_products" | "money_account_tracking" | "whatsapp";
+
+export type CommercialAccessPausedState = {
+    badge: string;
+    title: string;
+    description: string;
+    actionLabel: string;
+};
+
+const FEATURE_COPY: Record<
+    CommercialFeatureKey,
+    { label: string; title: string; missingFromPlan: string; expired: string; noPlan: string }
+> = {
+    catalog_products: {
+        label: "Catalog Products",
+        title: "Catalog access paused",
+        missingFromPlan: "This Store's current access does not include Catalog Products.",
+        expired: "Renew this Store's license to restore its product menu.",
+        noPlan: "This Store's product menu unlocks as soon as it has Catalog access.",
+    },
+    money_account_tracking: {
+        label: "Money Account Tracking",
+        title: "Payment routing paused",
+        missingFromPlan: "This Store's current access does not include Money Account Tracking.",
+        expired: "Renew this Store's license to restore payment routing.",
+        noPlan: "Payment routing unlocks as soon as this Store has Money Account Tracking access.",
+    },
+    whatsapp: {
+        label: "WhatsApp",
+        title: "WhatsApp access paused",
+        missingFromPlan: "This Store's current access does not include WhatsApp.",
+        expired: "Renew this Store's license to restore WhatsApp messaging.",
+        noPlan: "Store WhatsApp unlocks as soon as this Store has messaging access.",
+    },
+};
+
+const isFeatureEntitled = (status: StoreCommercialStatusDTO, featureKey: CommercialFeatureKey) =>
+    status.entitlements.features.some((feature) => feature.key === featureKey);
+
+const hasCommercialAccess = (status: StoreCommercialStatusDTO) =>
+    Boolean(
+        status.baseAccess?.status === "active"
+        || status.activeAddOns.some((addOn) => addOn.status === "active")
+        || status.accessGrants.some((grant) => grant.status === "active"),
+    );
+
+export const featureAccessPausedState = (
+    status: StoreCommercialStatusDTO,
+    featureKey: CommercialFeatureKey,
+): CommercialAccessPausedState | null => {
+    if (isFeatureEntitled(status, featureKey)) {
+        return null;
+    }
+
+    const copy = FEATURE_COPY[featureKey];
+
+    if (hasCommercialAccess(status)) {
+        return {
+            badge: `${copy.label} not included`,
+            title: copy.title,
+            description: copy.missingFromPlan,
+            actionLabel: `Add ${copy.label} access`,
+        };
+    }
+
+    if (status.commercialHistory.some((entry) => entry.kind === "license" && entry.status === "expired")) {
+        return {
+            badge: "License expired",
+            title: copy.title,
+            description: copy.expired,
+            actionLabel: "Renew license",
+        };
+    }
+
+    return {
+        badge: "No plan purchased",
+        title: copy.title,
+        description: copy.noPlan,
+        actionLabel: "Choose a plan",
+    };
+};

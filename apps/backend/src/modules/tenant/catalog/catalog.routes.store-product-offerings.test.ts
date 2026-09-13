@@ -8,6 +8,7 @@ mock.module("@/middlewares/auth.middleware", () => ({
 }));
 
 const harness = await import("./catalog.service.test-harness");
+const { resolveFeatureEntitlement } = await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness");
 
 const { default: catalogRoutes } = await import("./catalog.routes");
 
@@ -18,6 +19,14 @@ describe("Store Product Offering catalog routes", () => {
     beforeEach(() => {
         harness.getOrganizationByIdForUser.mockClear();
         harness.getOrganizationByIdForUser.mockResolvedValue(harness.organization);
+        harness.getStoresByOrganizationId.mockClear();
+        harness.getStoresByOrganizationId.mockResolvedValue([harness.store]);
+        resolveFeatureEntitlement.mockClear();
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: true,
+            featureKey,
+            evidence: [],
+        }));
         harness.getStoreById.mockClear();
         harness.getStoreById.mockResolvedValue(harness.store);
         harness.getProductById.mockClear();
@@ -45,19 +54,61 @@ describe("Store Product Offering catalog routes", () => {
 
     test("lists Store Product Offerings for a Store in the Organization, including inactive ones", async () => {
         harness.getStoreProductOfferingsByStoreId.mockResolvedValue([
-            { ...harness.storeProductOffering, status: "inactive" as "active" | "inactive" },
+            { ...harness.storeProductOffering, status: "inactive" as const },
         ]);
 
         const response = await catalogRoutes.request(offeringsPath);
 
         expect(response.status).toBe(200);
-        const body = await response.json();
+        const body = (await response.json()) as {
+            data: { offerings: Array<{ product: { name: string }; status: string }> };
+        };
         expect(body.data.offerings[0]?.product.name).toBe(harness.product.name);
         expect(body.data.offerings[0]?.status).toBe("inactive");
         expect(harness.getStoreProductOfferingsByStoreId).toHaveBeenCalledWith(
             harness.organizationId,
             harness.store.id,
         );
+    });
+
+    test("does not let another Store's Catalog access unlock this Store's Product Offerings", async () => {
+        const entitledOtherStoreId = "abababab-abab-4aba-8aba-abababababab";
+        harness.getStoresByOrganizationId.mockResolvedValue([
+            { ...harness.store, id: entitledOtherStoreId },
+        ]);
+        resolveFeatureEntitlement.mockImplementation(async (storeId, featureKey) => ({
+            entitled: storeId === entitledOtherStoreId,
+            featureKey,
+            evidence: [],
+        }));
+
+        const response = await catalogRoutes.request(offeringsPath);
+
+        expect(response.status).toBe(403);
+        const body = (await response.json()) as { message: string };
+        expect(body.message).toContain("this Store");
+        expect(harness.getStoreProductOfferingsByStoreId).not.toHaveBeenCalled();
+    });
+
+    test("validates the Organization and Store scope before evaluating Catalog access", async () => {
+        const otherOrganizationId = "abababab-abab-4aba-8aba-abababababab";
+        harness.getStoreById.mockImplementation(async (organizationId, storeId) =>
+            organizationId === harness.organizationId && storeId === harness.store.id
+                ? harness.store
+                : null,
+        );
+        resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+            entitled: false,
+            featureKey,
+            evidence: [],
+        }));
+
+        const response = await catalogRoutes.request(
+            `http://localhost/${otherOrganizationId}/stores/${harness.store.id}/product-offerings`,
+        );
+
+        expect(response.status).toBe(404);
+        expect(resolveFeatureEntitlement).not.toHaveBeenCalled();
     });
 
     test("does not create a Store Product Offering through POST", async () => {

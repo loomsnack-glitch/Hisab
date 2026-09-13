@@ -5,9 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ProductResponseDTO, StoreDTO, StoreProductOfferingResponseDTO, StoreWithDevicesDTO } from "@repo/types";
+import type { ProductResponseDTO, StoreCommercialStatusResponse, StoreDTO, StoreProductOfferingResponseDTO, StoreWithDevicesDTO } from "@repo/types";
 
-import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { catalogKeys, commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { getStoreProductsPath } from "@/lib/store-workspace-routes";
 import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
 
@@ -171,16 +171,100 @@ const storeResponse = (store: StoreDTO) => ({
     code: 200,
 });
 
+const catalogAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        storeId: adajanId,
+        organizationId,
+        timezone: "Asia/Kolkata",
+        baseAccess: null,
+        scheduledSuccessor: null,
+        accessGrants: [],
+        activeAddOns: [],
+        availablePaidPlans: [],
+        availableCoTermAddOns: [],
+        pendingCheckout: null,
+        commercialHistory: [],
+        trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
+        entitlements: {
+            storeId: adajanId,
+            features: [{
+                key: "catalog_products",
+                displayName: "Catalog Products",
+                sources: [{
+                    sourceKind: "store_access_grant",
+                    sourceId: "00000000-0000-4000-8000-000000000001",
+                    moduleKey: "basic_catalog",
+                    moduleDisplayName: "Basic Catalog",
+                    featureDisplayName: "Catalog Products",
+                    startsAt: now,
+                    endsAt: new Date("2026-10-06T00:00:00.000Z"),
+                }],
+            }],
+        },
+    },
+};
+
+const noCatalogAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...catalogAccessStatus.commercialStatus,
+        entitlements: { storeId: adajanId, features: [] },
+    },
+};
+
+const expiredCatalogAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...noCatalogAccessStatus.commercialStatus,
+        commercialHistory: [{
+            kind: "license",
+            id: "00000000-0000-4000-8000-000000000002",
+            occurredAt: new Date("2024-09-06T00:00:00.000Z"),
+            title: "Store License · Basic",
+            detail: "₹999.00 · basic",
+            amountInr: 999,
+            status: "expired",
+        }],
+    },
+};
+
+const catalogMissingFromPlanStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...noCatalogAccessStatus.commercialStatus,
+        baseAccess: {
+            id: "00000000-0000-4000-8000-000000000003",
+            sourceKind: "store_license",
+            planKey: "core",
+            planDisplayName: "Core",
+            planType: "paid",
+            term: { count: 1, unit: "year" },
+            startsAt: now,
+            endsAt: new Date("2027-09-06T00:00:00.000Z"),
+            status: "active",
+        },
+    },
+};
+
 const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
 
-const renderProducts = (path = getStoreProductsPath(organizationId, adajanId)) => {
+const renderProducts = (
+    path = getStoreProductsPath(organizationId, adajanId),
+    options?: {
+        commercialStatus?: StoreCommercialStatusResponse;
+        offeringsResponse?: { status: "error"; data: null; message: string; code: number };
+    },
+) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
     queryClient.setQueryData(organizationKeys.store(organizationId, adajanId), storeResponse(adajan));
-    queryClient.setQueryData(catalogKeys.storeProductOfferings(organizationId, adajanId), {
+    queryClient.setQueryData(catalogKeys.storeProductOfferings(organizationId, adajanId), options?.offeringsResponse ?? {
         status: "success",
         data: { offerings: [offering, inactiveOffering, orgInactiveOffering] },
         message: "Store Product Offerings fetched successfully",
+        code: 200,
+    });
+    queryClient.setQueryData(commercialLicenseKeys.status(organizationId, adajanId), {
+        status: "success",
+        data: options?.commercialStatus ?? catalogAccessStatus,
+        message: "Store commercial status fetched successfully",
         code: 200,
     });
     queryClient.setQueryData(catalogKeys.categories(organizationId), {
@@ -233,6 +317,60 @@ describe("Store Products page", () => {
         expect(markup).not.toContain("Create product");
         expect(markup).not.toContain("Add vendor");
         expect(markup).not.toContain(vesuId);
+    });
+
+    test("directs a Store without Catalog access to choose a license", () => {
+        const markup = renderProducts(getStoreProductsPath(organizationId, adajanId), {
+            commercialStatus: noCatalogAccessStatus,
+            offeringsResponse: {
+                status: "error",
+                data: null,
+                message: "Catalog Products is not available for this Store. Review commercial access in Ganatri Admin to purchase or renew access.",
+                code: 403,
+            },
+        });
+
+        expect(markup).toContain("Catalog access paused");
+        expect(markup).toContain("No plan purchased");
+        expect(markup).toContain("Choose a plan");
+        expect(markup).toContain("Retry access check");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${adajanId}/license"`);
+        expect(markup).not.toContain("View license details");
+        expect(markup).not.toContain("Unable to load products");
+    });
+
+    test("directs a Store with an expired license to renew it", () => {
+        const markup = renderProducts(getStoreProductsPath(organizationId, adajanId), {
+            commercialStatus: expiredCatalogAccessStatus,
+            offeringsResponse: {
+                status: "error",
+                data: null,
+                message: "Catalog Products is not available for this Store. Review commercial access in Ganatri Admin to purchase or renew access.",
+                code: 403,
+            },
+        });
+
+        expect(markup).toContain("License expired");
+        expect(markup).toContain("Renew license");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${adajanId}/license"`);
+        expect(markup).not.toContain("Try again");
+    });
+
+    test("directs a Store whose plan excludes Catalog Products to change access", () => {
+        const markup = renderProducts(getStoreProductsPath(organizationId, adajanId), {
+            commercialStatus: catalogMissingFromPlanStatus,
+            offeringsResponse: {
+                status: "error",
+                data: null,
+                message: "Catalog Products is not available for this Store. Review commercial access in Ganatri Admin to purchase or renew access.",
+                code: 403,
+            },
+        });
+
+        expect(markup).toContain("Catalog Products not included");
+        expect(markup).toContain("Add Catalog Products access");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${adajanId}/license"`);
+        expect(markup).not.toContain("Unable to load products");
     });
 
     test("reads search, store status, and org status filters from the URL", () => {

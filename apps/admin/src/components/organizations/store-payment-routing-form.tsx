@@ -3,6 +3,7 @@ import {
     clearMoneyAccountPaymentRoute,
     getMoneyAccountPaymentRoutes,
     getMoneyAccounts,
+    getStoreCommercialStatus,
     upsertMoneyAccountPaymentRoute,
 } from "@repo/services";
 import {
@@ -21,7 +22,12 @@ import { cn } from "@repo/ui/lib/utils";
 import { CreditCard, Route as RouteIcon, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
-import { moneyAccountKeys } from "@/lib/query-keys";
+import CatalogAccessPaused from "@/components/commercial/catalog-access-paused";
+import { featureAccessPausedState } from "@/lib/commercial-access-paused-state";
+import { isQueryCommercialAccessDenied } from "@/lib/commercial-access";
+import { commercialLicenseKeys, moneyAccountKeys } from "@/lib/query-keys";
+import { getStoreLicensePath } from "@/lib/store-workspace-routes";
+import { adminNestedTabPageHeightClass } from "@/lib/workspace-page-layout";
 
 type StorePaymentRoutingFormProps = {
     organizationId: string;
@@ -73,6 +79,12 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
         enabled: Boolean(organizationId),
     });
 
+    const commercialStatusQuery = useQuery({
+        queryKey: commercialLicenseKeys.status(organizationId, store.id),
+        queryFn: () => getStoreCommercialStatus(organizationId, store.id),
+        enabled: Boolean(organizationId && store.id),
+    });
+
     const routes =
         routesQuery.data?.status === "success" ? routesQuery.data.data?.routes ?? [] : [];
     const moneyAccounts =
@@ -88,6 +100,15 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
     const eligibleAccounts = moneyAccounts.filter(account => isEligibleDestination(account, store.id));
     const accountById = new Map(moneyAccounts.map(account => [account.id, account]));
     const routedCount = [selectedUpiAccountId, selectedCardAccountId].filter(Boolean).length;
+    const commercialStatus = commercialStatusQuery.data?.status === "success"
+        ? commercialStatusQuery.data.data?.commercialStatus ?? null
+        : null;
+    const commercialAccessDenied = isQueryCommercialAccessDenied(routesQuery)
+        || isQueryCommercialAccessDenied(moneyAccountsQuery);
+    const accessState = commercialStatus ? featureAccessPausedState(commercialStatus, "money_account_tracking") : null;
+    const retryingCommercialAccess = routesQuery.isFetching
+        || moneyAccountsQuery.isFetching
+        || commercialStatusQuery.isFetching;
 
     const buildAccountOptions = (selectedId: string): PaymentRouteOption[] => {
         const options = eligibleAccounts.map(account => ({
@@ -208,6 +229,33 @@ const StorePaymentRoutingForm = ({ organizationId, store }: StorePaymentRoutingF
             </div>
         );
     };
+
+    if (
+        !routesQuery.isPending
+        && !moneyAccountsQuery.isPending
+        && commercialAccessDenied
+        && accessState
+    ) {
+        return (
+            <div className={adminNestedTabPageHeightClass}>
+                <CatalogAccessPaused
+                    className="h-full min-h-0"
+                    badge={accessState.badge}
+                    title={accessState.title}
+                    message={accessState.description}
+                    actionLabel={accessState.actionLabel}
+                    actionHref={getStoreLicensePath(organizationId, store.id)}
+                    featureIcon={RouteIcon}
+                    retrying={retryingCommercialAccess}
+                    onRetry={() => {
+                        void routesQuery.refetch();
+                        void moneyAccountsQuery.refetch();
+                        void commercialStatusQuery.refetch();
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-xl">
