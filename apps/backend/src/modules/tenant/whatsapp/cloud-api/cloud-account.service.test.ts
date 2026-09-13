@@ -26,6 +26,19 @@ const {
 } = await import("./cloud-account.service");
 
 describe("Cloud account provisioning service", () => {
+  test("does not complete onboarding after organization access is lost", async () => {
+    const response = await completeCloudAccountProvisioning(userId, organizationId, {}, {
+      organizationAccess: async () => false,
+    });
+
+    expect(response).toMatchObject({
+      status: "error",
+      code: 404,
+      message: "Organization not found",
+      data: null,
+    });
+  });
+
   test("exchanges, validates, subscribes, stores credentials, and persists a safe account", async () => {
     const state = createCloudOnboardingState({
       organizationId,

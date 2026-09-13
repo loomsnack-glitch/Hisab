@@ -44,9 +44,6 @@ type StoreScope =
 const requireWhatsAppStoreEntitlement = (storeId: string) =>
     requireStoreFeatureEntitlement(storeId, "whatsapp");
 
-const requireWhatsAppOrganizationEntitlement = (organizationId: string) =>
-    requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-
 const accountResponse = (
     account: WhatsAppAccountDTO,
     qrImageDataUrl: string | null,
@@ -83,9 +80,6 @@ const getOrganizationAccount = async (
 ): Promise<{ error: string; code: StatusCode } | { account: WhatsAppAccountDTO }> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { error: "Organization not found", code: STATUS_CODES.NOT_FOUND };
-    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
-    if (entitlementError) return { error: entitlementError.message, code: entitlementError.code };
-
     const account = await repository.getAccountById(accountId);
     if (!account || account.organizationId !== organizationId) return { error: "WhatsApp account not found", code: STATUS_CODES.NOT_FOUND };
     return { account };
@@ -115,8 +109,6 @@ export const listAccounts = async (
 ): Promise<ServiceResponse<{ accounts: WhatsAppAccountDTO[] } | null>> => {
     const organization = await organizationRepository.getOrganizationByIdForUser(organizationId, userId);
     if (!organization) return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
-    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
-    if (entitlementError) return entitlementError;
     return {
         status: "success",
         message: "WhatsApp accounts loaded",
@@ -492,7 +484,7 @@ export const getPublicInvoiceTemplateConfig = async (
             code: STATUS_CODES.NOT_FOUND,
         };
     }
-    const entitlementError = await requireWhatsAppOrganizationEntitlement(organizationId);
+    const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
     if (entitlementError) return entitlementError;
     return {
         status: "success",

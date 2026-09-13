@@ -41,7 +41,6 @@ import {
 import { createCloudAuthorizationCodeExchange, createConfiguredCloudClient } from "./cloud-provider";
 import { WhatsAppCloudApiError } from "./cloud-api.client";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
-import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 
 type CloudPhoneRecord = {
   id: string;
@@ -189,8 +188,6 @@ export const manuallyProvisionCloudAccount = async (
     if (!await deps.organizationAccess(organizationId, userId)) {
       return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
-    const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-    if (entitlementError) return entitlementError;
     const wabaId = providerIdInput(input.wabaId, "WABA ID");
     const phoneNumberId = providerIdInput(input.phoneNumberId, "Phone Number ID");
     const accessToken = assertCloudAccessToken(input.accessToken);
@@ -249,6 +246,9 @@ export const completeCloudAccountProvisioning = async (
   let attempt: CloudProvisioningAttemptRecord | null = null;
   let state = createCloudProvisioningState();
   try {
+    if (!await deps.organizationAccess(organizationId, userId)) {
+      return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
     const secret = process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET?.trim() ?? "";
     const verified = verifyCloudOnboardingResult({
       result,
@@ -256,9 +256,6 @@ export const completeCloudAccountProvisioning = async (
       userId,
       secret,
     });
-    const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-    if (entitlementError) return entitlementError;
-
     const idempotencyKey = hashCloudOnboardingNonce(verified.claims.nonce);
     attempt = await deps.getProvisioningAttempt(organizationId, idempotencyKey);
     if (attempt?.state.status === "completed" && attempt.whatsappAccountId) {
@@ -398,8 +395,6 @@ export const listCloudAccountsForOrganization = async (
   if (!await organizationRepository.getOrganizationByIdForUser(organizationId, userId)) {
     return { status: "error", message: "Organization not found", data: { accounts: [] }, code: STATUS_CODES.NOT_FOUND };
   }
-  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-  if (entitlementError) return { ...entitlementError, data: { accounts: [] } };
   return {
     status: "success",
     message: "WhatsApp Cloud accounts fetched successfully",
@@ -416,8 +411,6 @@ export const getCloudAccountForOrganization = async (
   if (!await organizationRepository.getOrganizationByIdForUser(organizationId, userId)) {
     return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
-  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-  if (entitlementError) return entitlementError;
   const account = await getCloudAccountSnapshot(organizationId, accountId);
   return account
     ? { status: "success", message: "WhatsApp Cloud account fetched successfully", data: account, code: STATUS_CODES.SUCCESS }
@@ -436,8 +429,6 @@ export const refreshCloudAccountForOrganization = async (
     if (!await deps.organizationAccess(organizationId, userId)) {
       return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
-    const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-    if (entitlementError) return entitlementError;
     const snapshot = await deps.getSnapshot(organizationId, accountId);
     snapshotForError = snapshot;
     if (!snapshot) {
@@ -510,8 +501,6 @@ export const revokeCloudAccountForOrganization = async (
     if (!await deps.organizationAccess(organizationId, userId)) {
       return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
     }
-    const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-    if (entitlementError) return entitlementError;
     const snapshot = await deps.getSnapshot(organizationId, accountId);
     if (!snapshot) return { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
     const binding = await deps.getCredentialBinding(organizationId, accountId);

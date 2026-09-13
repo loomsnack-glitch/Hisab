@@ -12,9 +12,10 @@ mock.module("@/modules/tenant/organization/organization.repository", () => ({
   getStoreById: async () => ({ id: storeId, organizationId, name: "Adajan" }),
 }));
 
-await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
-  (module) => module.ensureFeatureEntitlementMock(),
+const { ensureFeatureEntitlementMock, resolveFeatureEntitlement } = await import(
+  "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness",
 );
+await ensureFeatureEntitlementMock();
 const {
   archiveCloudTemplateBindingForStore,
   listCloudTemplatesForAccount,
@@ -43,6 +44,11 @@ const accountSnapshot = {
 describe("Cloud template synchronization service", () => {
   test("discovers provider templates with an in-memory credential and upserts normalized assets", async () => {
     let upserted: unknown[] = [];
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: false,
+      featureKey,
+      evidence: [],
+    }));
     const response = await syncCloudTemplatesForAccount(userId, organizationId, accountId, {
       organizationAccess: async () => true,
       getAccount: async () => accountSnapshot,
@@ -67,6 +73,11 @@ describe("Cloud template synchronization service", () => {
       listSubmissions: async () => [],
       updateSubmission: async () => null,
     });
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: true,
+      featureKey,
+      evidence: [],
+    }));
     expect(response.status).toBe("success");
     expect(upserted).toHaveLength(1);
     expect(response.data?.templates[0]?.status).toBe("approved");

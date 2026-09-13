@@ -122,7 +122,7 @@ const accountNotFound = <T>(): ServiceResponse<T | null> => ({
   code: STATUS_CODES.NOT_FOUND,
 });
 
-const requireWhatsAppOrganization = async (
+const requireOrganizationAccess = async (
   organizationAccess: CloudTemplateServiceDependencies["organizationAccess"],
   organizationId: string,
   userId: string,
@@ -130,6 +130,16 @@ const requireWhatsAppOrganization = async (
   if (!await organizationAccess(organizationId, userId)) {
     return { status: "error" as const, message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
   }
+  return null;
+};
+
+const requireWhatsAppOrganization = async (
+  organizationAccess: CloudTemplateServiceDependencies["organizationAccess"],
+  organizationId: string,
+  userId: string,
+) => {
+  const organizationDenial = await requireOrganizationAccess(organizationAccess, organizationId, userId);
+  if (organizationDenial) return organizationDenial;
   return requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
 };
 
@@ -155,7 +165,7 @@ export const syncCloudTemplatesForAccount = async (
 ): Promise<ServiceResponse<{ templates: WhatsAppCloudTemplateAssetDTO[] } | null>> => {
   const deps = { ...dependencies(), ...injected };
   try {
-    const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    const organizationDenial = await requireOrganizationAccess(deps.organizationAccess, organizationId, userId);
     if (organizationDenial) return organizationDenial;
     const account = await deps.getAccount(organizationId, accountId);
     if (!account || !account.wabaId) return accountNotFound();

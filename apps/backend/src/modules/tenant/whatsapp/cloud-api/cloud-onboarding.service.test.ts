@@ -31,9 +31,10 @@ mock.module("./cloud-onboarding.repository", () => ({
   createCloudOnboardingStateRecord,
 }));
 
-await import("@/modules/tenant/commercial-licensing/feature-entitlement.test-harness").then(
-  (module) => module.ensureFeatureEntitlementMock(),
+const { ensureFeatureEntitlementMock, resolveFeatureEntitlement } = await import(
+  "@/modules/tenant/commercial-licensing/feature-entitlement.test-harness"
 );
+await ensureFeatureEntitlementMock();
 
 const { startCloudOnboarding } = await import("./cloud-onboarding.service");
 
@@ -44,7 +45,13 @@ describe("Cloud onboarding service", () => {
   beforeEach(() => {
     getOrganizationByIdForUser.mockClear();
     createCloudOnboardingStateRecord.mockClear();
+    resolveFeatureEntitlement.mockClear();
     getOrganizationByIdForUser.mockResolvedValue(organization);
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: true,
+      featureKey,
+      evidence: [],
+    }));
     process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET =
       "local-test-secret-that-is-long-enough-32";
   });
@@ -79,6 +86,22 @@ describe("Cloud onboarding service", () => {
     expect((response.data as { state: string }).state).not.toBe(
       persisted?.nonce,
     );
+  });
+
+  test("starts Meta onboarding without an active WhatsApp entitlement", async () => {
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
+      entitled: false,
+      featureKey,
+      evidence: [],
+    }));
+
+    const response = await startCloudOnboarding(USER_ID, ORGANIZATION_ID);
+
+    expect(response).toMatchObject({
+      status: "success",
+      code: 201,
+      data: { state: expect.any(String) },
+    });
   });
 
   test("reports missing state-secret configuration without exposing internals", async () => {

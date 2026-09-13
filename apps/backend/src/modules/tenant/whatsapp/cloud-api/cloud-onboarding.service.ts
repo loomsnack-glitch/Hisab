@@ -4,7 +4,6 @@ import {
   type WhatsAppCloudOnboardingStateResponseDTO,
 } from "@repo/types";
 import * as organizationRepository from "@/modules/tenant/organization/organization.repository";
-import { requireOrganizationFeatureEntitlement } from "@/modules/tenant/commercial-licensing/feature-entitlement-guard";
 import {
   CloudOnboardingStateError,
   createCloudOnboardingState,
@@ -31,9 +30,6 @@ export const startCloudOnboarding = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  const entitlementError = await requireOrganizationFeatureEntitlement(organizationId, "whatsapp");
-  if (entitlementError) return entitlementError;
-
   try {
     const secret = onboardingStateSecret();
     const state = createCloudOnboardingState({
