@@ -23,9 +23,10 @@ import { catalogKeys } from "@/lib/query-keys";
 type DeleteCategoryButtonProps = {
     organizationId: string;
     category: CategoryDTO;
+    trigger?: React.ReactElement;
 };
 
-const DeleteCategoryButton = ({ organizationId, category }: DeleteCategoryButtonProps) => {
+const DeleteCategoryButton = ({ organizationId, category, trigger }: DeleteCategoryButtonProps) => {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
 
@@ -51,10 +52,12 @@ const DeleteCategoryButton = ({ organizationId, category }: DeleteCategoryButton
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger
                 render={
-                    <Button variant="destructive" size="sm" className="rounded-full">
-                        <Trash2 className="size-4" />
-                        Delete
-                    </Button>
+                    trigger ?? (
+                        <Button variant="destructive" size="sm" className="rounded-full">
+                            <Trash2 className="size-4" />
+                            Delete
+                        </Button>
+                    )
                 }
             />
             <AlertDialogContent>

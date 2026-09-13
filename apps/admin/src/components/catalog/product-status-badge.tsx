@@ -10,7 +10,7 @@ type ProductStatusBadgeProps = {
 
 const statusClassNames: Record<ProductStatus, string> = {
     active: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    inactive: "border-border/60 bg-muted/40 text-muted-foreground",
+    inactive: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
 };
 
 const ProductStatusBadge = ({ status }: ProductStatusBadgeProps) => {

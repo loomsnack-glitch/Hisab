@@ -24,6 +24,7 @@ import {
   type CategoryDTO,
   type NutritionRow,
   type ProductResponseDTO,
+  type ProductStatus,
   type UnitDTO,
 } from "@repo/types";
 import { z } from "zod";
@@ -159,6 +160,11 @@ const defaultValues: UpsertProductFormInput = {
   defaultSellingQuantity: "1",
   allowCustomSellingQuantity: false,
 };
+
+const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
+  label: status.charAt(0).toUpperCase() + status.slice(1),
+  value: status,
+}));
 
 const productFormValues = (product: ProductResponseDTO): UpsertProductFormInput => ({
   categoryId: product.categoryId,
@@ -532,7 +538,7 @@ const UpsertProductDialog = ({
             ...payloadBase,
             price: Number(data.price),
             discount: Number(data.discount ?? 0),
-            status: product.status,
+            status: data.status as ProductStatus,
           }
         : {
             ...payloadBase,
@@ -559,6 +565,9 @@ const UpsertProductDialog = ({
         });
         queryClient.invalidateQueries({
           queryKey: catalogKeys.products(organizationId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: catalogKeys.storeProductOfferingOverrideSummary(organizationId),
         });
         setCodeChangeConfirmationOpen(false);
         setPendingPayload(null);
@@ -896,6 +905,37 @@ const UpsertProductDialog = ({
                       )}
                     />
                   </div>
+
+                  {isEditMode ? (
+                    <Controller
+                      control={form.control}
+                      name="status"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={fieldState.invalid}>
+                          <FieldLabel required>Status</FieldLabel>
+                          <FieldContent>
+                            <ReactSelect
+                              options={statusSelectOptions}
+                              value={
+                                statusSelectOptions.find(
+                                  (option) =>
+                                    option.value === (field.value ?? "active"),
+                                ) ?? null
+                              }
+                              onChange={(option) =>
+                                field.onChange(option?.value ?? "active")
+                              }
+                              classNames={{
+                                control: () =>
+                                  "!min-h-10 rounded-xl border-border/60 bg-background/50 text-sm",
+                              }}
+                            />
+                            <FieldError errors={[fieldState.error]} />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    />
+                  ) : null}
 
                   <Controller
                     control={form.control}

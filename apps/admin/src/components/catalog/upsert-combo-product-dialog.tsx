@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
+import { Controller, useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createComboProduct, getComboProduct, updateComboProduct } from "@repo/services";
-import { type CategoryDTO, type CreateComboProductJSON, type ProductResponseDTO } from "@repo/types";
+import {
+    ProductStatusSchema,
+    type CategoryDTO,
+    type CreateComboProductJSON,
+    type ProductResponseDTO,
+    type ProductStatus,
+} from "@repo/types";
 import { z } from "zod";
 import { Button } from "@repo/ui/components/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@repo/ui/components/dialog";
@@ -33,6 +39,7 @@ const comboFormSchema = z.object({
     name: z.string().trim().min(1, "Name is required"),
     price: z.coerce.number().min(0, "Price must be 0 or more"),
     discount: z.coerce.number().min(0).default(0),
+    status: ProductStatusSchema.optional(),
     choiceGroups: z.array(z.object({
         name: z.string().trim().min(1, "Group name is required"),
         minSelections: whole,
@@ -63,8 +70,14 @@ const defaultValues: FormInput = {
     name: "",
     price: 0,
     discount: 0,
+    status: "inactive",
     choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
+
+const statusSelectOptions = ProductStatusSchema.options.map((status) => ({
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    value: status,
+}));
 
 const UpsertComboProductDialog = ({
     organizationId,
@@ -121,6 +134,7 @@ const UpsertComboProductDialog = ({
             name: product.name,
             price: Number(product.price),
             discount: Number(product.discount),
+            status: product.status,
             choiceGroups: details?.choiceGroups.map((group) => ({
                 name: group.name,
                 minSelections: group.minSelections,
@@ -138,6 +152,9 @@ const UpsertComboProductDialog = ({
             if (response.status !== "success") { toast.error(response.message); return; }
             toast.success(response.message);
             queryClient.invalidateQueries({ queryKey: catalogKeys.products(organizationId) });
+            queryClient.invalidateQueries({
+                queryKey: catalogKeys.storeProductOfferingOverrideSummary(organizationId),
+            });
             setDialogOpen(false);
         },
         onError: (error: { message?: string }) => toast.error(error.message ?? "Unable to save Combo"),
@@ -174,7 +191,7 @@ const UpsertComboProductDialog = ({
                     priceAdjustment: Number(option.priceAdjustment),
                 })),
             })),
-            ...(isEdit ? {} : { status: "inactive" as const }),
+            status: (isEdit ? values.status : "inactive") as ProductStatus,
         });
     };
 
@@ -202,6 +219,32 @@ const UpsertComboProductDialog = ({
                     <Field className="min-w-0"><FieldLabel required>Combo name</FieldLabel><FieldContent><Input {...form.register("name")} /><FieldError errors={[form.formState.errors.name]} /></FieldContent></Field>
                     <Field className="min-w-0"><FieldLabel required>Base price ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("price")} /><FieldError errors={[form.formState.errors.price]} /></FieldContent></Field>
                     <Field className="min-w-0"><FieldLabel>Discount ₹</FieldLabel><FieldContent><Input type="number" min="0" step="0.01" {...form.register("discount")} /><FieldError errors={[form.formState.errors.discount]} /></FieldContent></Field>
+                    {isEdit ? (
+                        <Controller
+                            control={form.control}
+                            name="status"
+                            render={({ field, fieldState }) => (
+                                <Field className="min-w-0 sm:col-span-2" data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Status</FieldLabel>
+                                    <FieldContent>
+                                        <ReactSelect
+                                            options={statusSelectOptions}
+                                            value={
+                                                statusSelectOptions.find(
+                                                    (option) => option.value === (field.value ?? "active"),
+                                                ) ?? null
+                                            }
+                                            onChange={(option) => field.onChange(option?.value ?? "active")}
+                                            classNames={{
+                                                control: () => "!min-h-11 rounded-xl",
+                                            }}
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
+                    ) : null}
                 </div>
                 <div className="space-y-3">
                     <div className="flex items-center justify-between"><p className="font-medium">Choice groups</p><Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", minSelections: 1, maxSelections: 1, options: [] })}><Plus className="size-3.5" />Add group</Button></div>

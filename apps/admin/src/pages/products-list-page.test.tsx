@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ProductResponseDTO } from "@repo/types";
 
 import { catalogKeys } from "@/lib/query-keys";
@@ -56,7 +57,9 @@ const retiredCake: ProductResponseDTO = {
     status: "inactive",
 };
 
-const renderProducts = () => {
+const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
+
+const renderProducts = (path = `/organizations/${organizationId}/products/list`) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(catalogKeys.categories(organizationId), {
         status: "success",
@@ -77,34 +80,44 @@ const renderProducts = () => {
         code: 200,
     });
 
-    const router = createMemoryRouter(
-        [
-            {
-                path: "/organizations/:organizationId/products/list",
-                element: <ProductsListPage />,
-            },
-        ],
-        { initialEntries: [`/organizations/${organizationId}/products/list`] },
-    );
-
     return renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <NuqsTestingAdapter searchParams={searchFromPath(path)}>
+                <MemoryRouter initialEntries={[path]}>
+                    <Routes>
+                        <Route path="/organizations/:organizationId/products/list" element={<ProductsListPage />} />
+                    </Routes>
+                </MemoryRouter>
+            </NuqsTestingAdapter>
         </QueryClientProvider>,
     );
 };
 
 describe("Organization products page", () => {
-    test("lists compact prices and only labels inactive Catalog Products", () => {
+    test("defaults to active Catalog Products and compact prices", () => {
         const markup = renderProducts();
 
         expect(markup).toContain("Burger");
-        expect(markup).toContain("Retired Cake");
-        expect(markup).toContain("Mark inactive Burger");
-        expect(markup).toContain("Mark active Retired Cake");
-        expect(markup).toContain("Inactive");
+        expect(markup).not.toContain("Retired Cake");
+        expect(markup).toContain('aria-label="Edit Burger"');
+        expect(markup).toContain("Search products...");
+        expect(markup).toContain("Status");
         expect(markup).not.toContain("Org default");
         expect(markup).not.toContain("Save ");
         expect(markup).not.toContain("Effective price");
+    });
+
+    test("reads search and status filters from the URL", () => {
+        const markup = renderProducts(
+            `/organizations/${organizationId}/products/list?search=Cake&statuses=inactive`,
+        );
+
+        expect(markup).toContain("value=\"Cake\"");
+        expect(markup).toContain("Retired Cake");
+        expect(markup).not.toContain(">Burger<");
+        expect(markup).toContain("Inactive");
+        expect(markup).toContain('aria-label="Edit Retired Cake"');
+        expect(markup).not.toContain("Mark inactive Burger");
+        expect(markup).not.toContain("Mark active Retired Cake");
     });
 });

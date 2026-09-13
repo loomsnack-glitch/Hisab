@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
     getCategories,
@@ -35,14 +36,19 @@ import {
     X,
 } from "lucide-react";
 
-import ToggleProductStatusButton from "@/components/catalog/toggle-product-status-button";
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
+import {
+    catalogFilterUrlOptions,
+    catalogListFilterParsers,
+    type CatalogStatusFilter,
+} from "@/lib/catalog-query-states";
 import { catalogKeys } from "@/lib/query-keys";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 import { catalogSellingQuantityLabel } from "@repo/types";
 import { canOfferProductLabelPrint } from "@/lib/internal-label-printing";
 import {
@@ -156,9 +162,13 @@ const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
-    const [searchQuery, setSearchQuery] = useState("");
+    const [{ search: searchQuery, statuses: statusFilters }, setFilters] = useQueryStates(
+        catalogListFilterParsers,
+        catalogFilterUrlOptions,
+    );
+    const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(searchQuery, commitSearch);
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
-    const [statusFilters, setStatusFilters] = useState<string[]>([]);
     const [addOnsFilters, setAddOnsFilters] = useState<string[]>([]);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
@@ -213,9 +223,11 @@ const ProductsListPage = () => {
     const draftFilterCount = draftStatusFilters.length + draftAddOnsFilters.length;
 
     const toggleStatusFilter = (value: string) => {
-        setStatusFilters((prev) =>
-            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
-        );
+        void setFilters((current) => ({
+            statuses: current.statuses.includes(value as CatalogStatusFilter)
+                ? current.statuses.filter((item) => item !== value)
+                : [...current.statuses, value as CatalogStatusFilter],
+        }));
     };
 
     const toggleAddOnsFilter = (value: string) => {
@@ -237,7 +249,7 @@ const ProductsListPage = () => {
     };
 
     const clearAllFilters = () => {
-        setStatusFilters([]);
+        void setFilters({ statuses: [] });
         setAddOnsFilters([]);
     };
 
@@ -255,7 +267,7 @@ const ProductsListPage = () => {
     };
 
     const applyMobileFilters = () => {
-        setStatusFilters(draftStatusFilters);
+        void setFilters({ statuses: draftStatusFilters as CatalogStatusFilter[] });
         setAddOnsFilters(draftAddOnsFilters);
         setMobileFiltersOpen(false);
     };
@@ -547,11 +559,6 @@ const ProductsListPage = () => {
                     <TooltipContent>Edit product</TooltipContent>
                 </Tooltip>
             ) : null}
-
-            <ToggleProductStatusButton
-                organizationId={organizationId}
-                product={product}
-            />
         </>
     );
 
@@ -626,20 +633,20 @@ const ProductsListPage = () => {
                         <Input
                             type="text"
                             placeholder="Search products..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
                             className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary/70 transition-all duration-200 text-sm w-full shadow-2xs"
                         />
-                        {searchQuery && (
+                        {searchInput ? (
                             <button
                                 type="button"
-                                onClick={() => setSearchQuery("")}
+                                onClick={clearSearch}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                                 aria-label="Clear search"
                             >
                                 <X className="size-3.5" />
                             </button>
-                        )}
+                        ) : null}
                     </div>
 
                     <Button
@@ -686,7 +693,7 @@ const ProductsListPage = () => {
                                 options={STATUS_FILTER_OPTIONS}
                                 selectedValues={statusFilters}
                                 onChange={toggleStatusFilter}
-                                onClear={() => setStatusFilters([])}
+                                onClear={() => void setFilters({ statuses: [] })}
                             />
                         </PopoverContent>
                     </Popover>
@@ -849,20 +856,30 @@ const ProductsListPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No products found</EmptyTitle>
                                 <EmptyDescription>
-                                    {searchQuery || selectedCategoryFilter !== "all" || statusFilters.length > 0 || addOnsFilters.length > 0
+                                    {products.length > 0
+                                        || Boolean(searchQuery.trim())
+                                        || selectedCategoryFilter !== "all"
+                                        || addOnsFilters.length > 0
+                                        || statusFilters.length !== 1
+                                        || statusFilters[0] !== "active"
                                         ? "Try adjusting your search query, category, status, or add-on filters."
                                         : "Add your first product to start building the catalog."}
                                 </EmptyDescription>
                             </EmptyHeader>
-                            {searchQuery || selectedCategoryFilter !== "all" || statusFilters.length > 0 || addOnsFilters.length > 0 ? (
+                            {products.length > 0
+                                || Boolean(searchQuery.trim())
+                                || selectedCategoryFilter !== "all"
+                                || addOnsFilters.length > 0
+                                || statusFilters.length !== 1
+                                || statusFilters[0] !== "active" ? (
                                 <EmptyContent>
                                     <Button
                                         variant="outline"
                                         className="rounded-full"
                                         onClick={() => {
-                                            setSearchQuery("");
+                                            clearSearch();
                                             setSelectedCategoryFilter("all");
-                                            setStatusFilters([]);
+                                            void setFilters({ statuses: [] });
                                             setAddOnsFilters([]);
                                         }}
                                     >
@@ -894,9 +911,8 @@ const ProductsListPage = () => {
                                 key={product.id}
                                 className={cn(
                                     "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
-                                    product.status === "inactive" && "opacity-[0.82] hover:opacity-100",
                                     product.status === "inactive"
-                                        ? "border-border/50 bg-muted/20"
+                                        ? "border-border/60 bg-card/65 hover:border-border/70 hover:bg-card/80"
                                         : "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95",
                                 )}
                             >
