@@ -53,7 +53,6 @@ import type {
     UpdateDraftSaleJSON,
 } from "@repo/types";
 import { normalizePhoneNumber, overlayActiveStoreProductOfferings, inactiveProductCodesWithoutActiveOffering } from "@repo/types";
-import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { getStoreListPath } from "@/lib/store-routes";
 import {
     BillingWorkspaceLayout,
@@ -77,7 +76,7 @@ import {
     AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowLeft, MonitorSmartphone, PlusCircle, Receipt, Store } from "lucide-react";
+import { PlusCircle, Receipt, Store } from "lucide-react";
 import { toast } from "sonner";
 
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
@@ -2092,12 +2091,6 @@ const BillingPage = ({
     }
 
     if (!selectedStore && organizationStores.length === 0) {
-        const storeSetupSteps = [
-            { icon: Store, label: "Create a store branch for this organization" },
-            { icon: MonitorSmartphone, label: "Register POS devices for checkout" },
-            { icon: Receipt, label: "Return here to start billing sales" },
-        ] as const;
-
         return (
             <div
                 className="relative flex min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-2rem)] flex-col lg:min-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-4rem)]"
@@ -2107,16 +2100,7 @@ const BillingPage = ({
                     <div className="absolute left-1/2 top-0 h-40 w-72 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
                 </div>
 
-                <Button
-                    variant="ghost"
-                    className="relative z-10 w-fit rounded-full px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    render={<Link to={getOrganizationWorkspacePath(organizationId)} />}
-                >
-                    <ArrowLeft className="size-4" />
-                    Back to organization
-                </Button>
-
-                <div className="relative z-10 flex flex-1 items-center justify-center pb-8 pt-4">
+                <div className="relative z-10 flex flex-1 items-center justify-center px-4 pb-8 pt-4 sm:px-6">
                     <Card className="w-full max-w-2xl border-border/60 bg-card/85 shadow-xl shadow-black/5 backdrop-blur-sm">
                         <CardContent className="p-0">
                             <Empty className="rounded-2xl border-0 px-6 py-10 sm:px-10 sm:py-12">
@@ -2125,34 +2109,9 @@ const BillingPage = ({
                                         <Store className="size-6" />
                                     </div>
                                     <EmptyTitle className="font-display text-xl sm:text-2xl">
-                                        Add a store before starting billing
+                                        No store to view billing
                                     </EmptyTitle>
-                                    <EmptyDescription className="max-w-md text-sm/relaxed">
-                                        Billing is store-scoped. Once you add a branch, this screen becomes your POS
-                                        billing workspace for sales, drafts, and payments.
-                                    </EmptyDescription>
                                 </EmptyHeader>
-
-                                <ol className="mt-2 flex w-full max-w-md flex-col gap-2 text-left">
-                                    {storeSetupSteps.map((step, index) => {
-                                        const StepIcon = step.icon;
-
-                                        return (
-                                            <li
-                                                key={step.label}
-                                                className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/25 px-3 py-2.5 text-sm"
-                                            >
-                                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary ring-1 ring-border/60">
-                                                    <StepIcon className="size-3.5" />
-                                                </span>
-                                                <span className="min-w-0 flex-1 text-foreground">{step.label}</span>
-                                                <span className="text-xs font-semibold tabular-nums text-muted-foreground/70">
-                                                    {index + 1}
-                                                </span>
-                                            </li>
-                                        );
-                                    })}
-                                </ol>
 
                                 <EmptyContent className="mt-5 flex flex-wrap justify-center gap-2">
                                     <CreateStoreDialog
