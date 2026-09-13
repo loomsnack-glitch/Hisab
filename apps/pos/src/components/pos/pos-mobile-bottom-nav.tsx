@@ -76,7 +76,7 @@ const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemE
             </nav>
 
             <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-                <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
+                <SheetContent side="bottom" className="rounded-t-2xl px-4 pt-3 data-[side=bottom]:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                     <SheetHeader className="px-0 pb-2 pt-0 text-left">
                         <SheetTitle className="font-display text-lg">All pages</SheetTitle>
                     </SheetHeader>

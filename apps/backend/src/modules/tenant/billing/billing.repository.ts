@@ -200,6 +200,49 @@ export const updateCustomer = async (
     return result ? mapRow<CustomerDTO>(result) : null;
 };
 
+const resolveCustomerListFilters = (query: CustomerListQuery) => {
+    const activityStatuses = [...(query.statuses ?? [])];
+    const dueFilters = [...(query.dues ?? [])];
+
+    if (activityStatuses.length === 0 && query.status) {
+        if (query.status === "active" || query.status === "inactive") {
+            activityStatuses.push(query.status);
+        } else if (query.status === "due" && dueFilters.length === 0) {
+            dueFilters.push("has_due");
+        } else if (query.status === "no_due" && dueFilters.length === 0) {
+            dueFilters.push("no_due");
+        }
+    }
+
+    if (dueFilters.length === 0 && query.due && query.due !== "all") {
+        dueFilters.push(query.due);
+    }
+
+    return { activityStatuses, dueFilters };
+};
+
+const buildCustomerActivityStatusClause = (
+    activityStatuses: Array<"active" | "inactive">,
+) => {
+    if (activityStatuses.length === 0 || activityStatuses.length >= 2) {
+        return sql``;
+    }
+
+    return activityStatuses[0] === "active"
+        ? sql`AND c.is_active = TRUE`
+        : sql`AND c.is_active = FALSE`;
+};
+
+const buildCustomerDueClause = (dueFilters: Array<"has_due" | "no_due">) => {
+    if (dueFilters.length === 0 || dueFilters.length >= 2) {
+        return sql``;
+    }
+
+    return dueFilters[0] === "has_due"
+        ? sql`AND c.balance > 0`
+        : sql`AND c.balance = 0`;
+};
+
 export const getCustomersByOrganizationId = async (
     organizationId: string,
     query: CustomerListQuery,
@@ -209,6 +252,9 @@ export const getCustomersByOrganizationId = async (
         hasMore: boolean;
         nextCursor: string | null;
         totalCount: number;
+        page?: number;
+        pageSize?: number;
+        totalPages?: number;
     };
 }> => {
     const search = query.search?.trim() ?? "";
@@ -217,9 +263,13 @@ export const getCustomersByOrganizationId = async (
   const normalizedPhonePattern = normalizedPhoneSearch
     ? `%${normalizedPhoneSearch}%`
     : "";
-    const status = query.status ?? "all";
+    const { activityStatuses, dueFilters } = resolveCustomerListFilters(query);
     const sort = query.sort ?? "newest";
     const limit = query.limit ?? 50;
+    const usesOffsetPagination = !query.cursor;
+    const page = usesOffsetPagination ? (query.page ?? 1) : 1;
+    const offset = usesOffsetPagination ? (page - 1) * limit : 0;
+    const fetchLimit = usesOffsetPagination ? limit : limit + 1;
     const cursor = query.cursor ? decodeCustomerCursor(query.cursor) : null;
     const activeCursor = cursor?.sort === sort ? cursor : null;
     const normalizedPhoneSearchClause = normalizedPhoneSearch
@@ -232,13 +282,8 @@ export const getCustomersByOrganizationId = async (
               ${normalizedPhoneSearchClause}
           )`
         : sql``;
-    const statusClause = {
-        all: sql``,
-        active: sql`AND c.is_active = TRUE`,
-        inactive: sql`AND c.is_active = FALSE`,
-        due: sql`AND c.balance > 0`,
-        no_due: sql`AND c.balance = 0`,
-    }[status];
+    const activityStatusClause = buildCustomerActivityStatusClause(activityStatuses);
+    const dueClause = buildCustomerDueClause(dueFilters);
     const cursorClause = !activeCursor
         ? sql``
         : sort === "newest"
@@ -285,7 +330,8 @@ export const getCustomersByOrganizationId = async (
             FROM customers c
             WHERE c.organization_id = ${organizationId}
               ${searchClause}
-              ${statusClause}
+              ${activityStatusClause}
+              ${dueClause}
         )
         SELECT
             c.*,
@@ -294,7 +340,8 @@ export const getCustomersByOrganizationId = async (
         WHERE TRUE
           ${cursorClause}
         ORDER BY ${orderClause}
-        LIMIT ${limit + 1}
+        LIMIT ${fetchLimit}
+        ${usesOffsetPagination ? sql`OFFSET ${offset}` : sql``}
     `;
 
   const customersWithCursor: Array<CustomerDTO & { cursorCreatedAt: string }> =
@@ -312,19 +359,25 @@ export const getCustomersByOrganizationId = async (
   const customers = customersWithCursor.map(
     ({ cursorCreatedAt: _cursorCreatedAt, ...customer }) => customer,
   );
-    const hasMore = results.length > limit;
-    const lastCustomer = customersWithCursor.at(-1);
     const totalCount = Number(results[0]?.total_count ?? 0);
+    const hasMore = usesOffsetPagination
+        ? offset + customers.length < totalCount
+        : results.length > limit;
+    const lastCustomer = customersWithCursor.at(-1);
+    const totalPages = usesOffsetPagination ? Math.max(1, Math.ceil(totalCount / limit)) : undefined;
 
     return {
         customers,
         pageInfo: {
             hasMore,
       nextCursor:
-        hasMore && lastCustomer
+        !usesOffsetPagination && hasMore && lastCustomer
           ? encodeCustomerCursor(lastCustomer, sort)
           : null,
             totalCount,
+            ...(usesOffsetPagination
+                ? { page, pageSize: limit, totalPages }
+                : {}),
         },
     };
 };

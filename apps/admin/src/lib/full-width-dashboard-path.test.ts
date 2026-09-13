@@ -29,14 +29,14 @@ describe("isFullWidthDashboardPath", () => {
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/units",
             ),
         ).toBe(true);
-    });
-
-    test("keeps the centered container for other organization routes", () => {
         expect(
             isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/customers",
             ),
-        ).toBe(false);
+        ).toBe(true);
+    });
+
+    test("keeps the centered container for other organization routes", () => {
         expect(
             isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/settings",

@@ -130,7 +130,6 @@ const UpsertUnitDialog = ({ organizationId, unit, trigger }: UpsertUnitDialogPro
                         <FieldContent>
                             <Input
                                 className="h-11 rounded-xl"
-                                placeholder="e.g. Crate"
                                 readOnly={isPredefined}
                                 disabled={isPredefined}
                                 {...form.register("name")}
@@ -144,7 +143,6 @@ const UpsertUnitDialog = ({ organizationId, unit, trigger }: UpsertUnitDialogPro
                         <FieldContent>
                             <Input
                                 className="h-11 rounded-xl"
-                                placeholder="e.g. crt"
                                 readOnly={isPredefined}
                                 disabled={isPredefined}
                                 {...form.register("label")}

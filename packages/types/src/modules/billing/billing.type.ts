@@ -12,8 +12,10 @@ import type {
   CreateCustomerSchema,
   CreateDraftSaleSchema,
   CreatePaymentSchema,
+  CustomerActivityStatusSchema,
   CustomerDTOSchema,
   CustomerLedgerEntryDTOSchema,
+  CustomerDueOptionSchema,
   CustomerDueSalesResponseSchema,
   CustomerListPageInfoSchema,
   CustomerListQuerySchema,
@@ -126,6 +128,9 @@ export type UpdateCustomerREPO = Pick<
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
 export type CustomerListStatus = NonNullable<CustomerListQuery["status"]>;
+export type CustomerDueFilter = NonNullable<CustomerListQuery["due"]>;
+export type CustomerActivityStatus = z.infer<typeof CustomerActivityStatusSchema>;
+export type CustomerDueOption = z.infer<typeof CustomerDueOptionSchema>;
 export type CustomerSort = z.infer<typeof CustomerSortSchema>;
 export type CustomerListPageInfo = z.infer<typeof CustomerListPageInfoSchema>;
 export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;

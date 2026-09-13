@@ -1,3 +1,4 @@
+import { serializeCustomerListQueryParams } from "@repo/types";
 import type {
   AddOnsListResponse,
   CategoriesListResponse,
@@ -310,7 +311,9 @@ export const getPosCustomers = async (
   params?: CustomerListQuery,
 ): Promise<ServiceResponse<CustomersListResponse | null>> => {
   try {
-    const response = await api.get("/pos/customers", { params });
+    const response = await api.get("/pos/customers", {
+      params: serializeCustomerListQueryParams(params),
+    });
     return response.data;
   } catch (error) {
     return handleApiError(error);

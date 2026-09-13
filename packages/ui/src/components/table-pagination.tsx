@@ -63,22 +63,24 @@ function Pagination<TData>({ table, maxPageNumbers = 5 }: PaginationProps<TData>
 interface DataTablePaginationProps<TData> {
     table: Table<TData>;
     count?: number;
+    countLabel?: string;
     customPerPageOptions?: number[];
     className?: string;
 }
 
-export function DataTablePagination<TData>({ table, count, customPerPageOptions, className }: DataTablePaginationProps<TData>) {
+export function DataTablePagination<TData>({ table, count, countLabel = "rows", customPerPageOptions, className }: DataTablePaginationProps<TData>) {
     if (!table) return null;
     const perPageOptions = customPerPageOptions || pageOptions;
+    const pageIndex = table.getState().pagination.pageIndex;
+    const pageSize = table.getState().pagination.pageSize;
+    const totalCount = count ?? table.getFilteredRowModel().rows.length;
+    const rangeStart = totalCount === 0 ? 0 : pageIndex * pageSize + 1;
+    const rangeEnd = Math.min((pageIndex + 1) * pageSize, totalCount);
 
     return (
         <div className={cn("flex flex-col md:flex-row items-center justify-between px-2 pb-4 space-y-2 md:space-y-0", className)}>
-            <div className="text-xs md:text-sm text-muted-foreground hidden md:block">
-                showing {
-                    table?.getState().pagination.pageIndex * table?.getState().pagination.pageSize + 1
-                } to {
-                    table?.getState().pagination.pageIndex * table?.getState().pagination.pageSize + table?.getState().pagination.pageSize
-                } of {count || table.getFilteredRowModel().rows.length} rows
+            <div className="text-xs md:text-sm text-muted-foreground text-center md:text-left">
+                showing {rangeStart} to {rangeEnd} of {totalCount} {countLabel}
             </div>
             <div className="flex flex-row items-center space-y-0 space-x-4 lg:space-x-8">
                 <div className="flex items-center gap-x-2">

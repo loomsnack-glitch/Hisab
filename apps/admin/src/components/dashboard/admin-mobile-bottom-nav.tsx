@@ -84,7 +84,7 @@ const AdminMobileBottomNav = ({
             <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
                 <SheetContent
                     side="bottom"
-                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pt-4"
                 >
                     <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
                         <SheetTitle className="sr-only">Pages and workspace</SheetTitle>
@@ -96,7 +96,7 @@ const AdminMobileBottomNav = ({
                         ) : null}
                     </SheetHeader>
 
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 pb-4 pt-4">
                         <div className="space-y-5 px-6">
                             {groupedSections.map((section) => {
                                 const items = section.items.filter((destination) => destination.id !== "organizations");

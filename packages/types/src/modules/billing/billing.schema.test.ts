@@ -3,6 +3,7 @@ import {
     AddOnSalesRollupsResponseSchema,
     CommitSaleSchema,
     CustomerListQuerySchema,
+    serializeCustomerListQueryParams,
     CompleteSaleSchema,
     PaymentMethodSchema,
     ProductSalesSummaryAdminQuerySchema,
@@ -55,13 +56,48 @@ describe("Configured sale billing contracts", () => {
     test("customer list queries support server-side filters and cursors", () => {
         const result = CustomerListQuerySchema.safeParse({
             search: "alice",
-            status: "due",
+            statuses: ["active"],
+            dues: ["has_due"],
             sort: "highest_due",
             cursor: "encoded-customer-cursor",
             limit: 40,
         });
 
         expect(result.success).toBe(true);
+    });
+
+    test("customer list queries accept multi-select status and due filters", () => {
+        const fromArray = CustomerListQuerySchema.safeParse({
+            statuses: ["active", "inactive"],
+            dues: ["has_due", "no_due"],
+        });
+        const fromCsv = CustomerListQuerySchema.safeParse({
+            statuses: "active,inactive",
+            dues: "has_due,no_due",
+        });
+
+        expect(fromArray.success).toBe(true);
+        expect(fromCsv.success).toBe(true);
+        if (fromArray.success && fromCsv.success) {
+            expect(fromArray.data.statuses).toEqual(["active", "inactive"]);
+            expect(fromArray.data.dues).toEqual(["has_due", "no_due"]);
+            expect(fromCsv.data.statuses).toEqual(["active", "inactive"]);
+            expect(fromCsv.data.dues).toEqual(["has_due", "no_due"]);
+        }
+    });
+
+    test("customer list query params serialize multi-select filters for HTTP", () => {
+        const params = serializeCustomerListQueryParams({
+            statuses: ["active", "inactive"],
+            dues: ["has_due"],
+            sort: "newest",
+        });
+
+        expect(params).toEqual({
+            statuses: "active,inactive",
+            dues: "has_due",
+            sort: "newest",
+        });
     });
 
     test("sale number settings are fixed to financial-year bills with daily token and KOT numbers", () => {

@@ -8,15 +8,14 @@ import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
     DialogTrigger,
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { PhoneInput } from "@repo/ui/components/phone-input";
+import { User } from "lucide-react";
 import { toast } from "sonner";
 
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
@@ -87,23 +86,14 @@ const CustomerQuickCreateDialog = ({
     return (
         <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
             {trigger ? <DialogTrigger render={trigger} /> : null}
-            <DialogContent className="max-w-md rounded-[28px] border-border/70 bg-background/95 p-6 shadow-2xl backdrop-blur-xl">
-                <DialogHeader className="space-y-2">
-                    <DialogTitle className="font-display text-2xl font-semibold">Quick customer add</DialogTitle>
-                    <DialogDescription>
-                        Create a customer without leaving the billing flow. Use this for credit bills and repeat buyers.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader icon={<User className="size-5" />} title="Create customer" />
 
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
                     <Field data-invalid={!!form.formState.errors.name}>
-                        <FieldLabel required>Name</FieldLabel>
+                        <FieldLabel required>Customer name</FieldLabel>
                         <FieldContent>
-                            <Input
-                                className="h-11 rounded-2xl"
-                                placeholder="Customer name"
-                                {...form.register("name")}
-                            />
+                            <Input className="h-11 rounded-xl" {...form.register("name")} />
                             <FieldError errors={[form.formState.errors.name]} />
                         </FieldContent>
                     </Field>
@@ -116,11 +106,10 @@ const CustomerQuickCreateDialog = ({
                                 name="phone"
                                 render={({ field }) => (
                                     <PhoneInput
-                                        className="h-11 rounded-2xl border"
+                                        className="h-11 rounded-xl border"
                                         value={field.value || undefined}
                                         onChange={(value: string | undefined) => field.onChange(value ?? "")}
                                         onBlur={field.onBlur}
-                                        placeholder="Optional phone number"
                                     />
                                 )}
                             />
@@ -128,10 +117,13 @@ const CustomerQuickCreateDialog = ({
                         </FieldContent>
                     </Field>
 
-                    <DialogFooter className="pt-2">
+                    <DialogFooter>
+                        <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
                         <Button
                             type="submit"
-                            className="rounded-2xl"
+                            className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
                             disabled={createCustomerMutation.isPending}
                         >
                             {createCustomerMutation.isPending ? "Creating..." : "Create customer"}

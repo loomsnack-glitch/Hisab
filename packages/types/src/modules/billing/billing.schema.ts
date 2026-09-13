@@ -404,6 +404,42 @@ export const CustomerListStatusSchema = z.enum([
   "due",
   "no_due",
 ]);
+export const CustomerActivityStatusSchema = z.enum(["active", "inactive"]);
+export const CustomerDueFilterSchema = z.enum([
+  "all",
+  "has_due",
+  "no_due",
+]);
+export const CustomerDueOptionSchema = z.enum(["has_due", "no_due"]);
+
+const customerListArrayQueryPreprocess = (value: unknown) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+};
+
+export const CustomerActivityStatusesQuerySchema = z.preprocess(
+  customerListArrayQueryPreprocess,
+  z.array(CustomerActivityStatusSchema).optional(),
+);
+export const CustomerDueOptionsQuerySchema = z.preprocess(
+  customerListArrayQueryPreprocess,
+  z.array(CustomerDueOptionSchema).optional(),
+);
+
 export const CustomerSortSchema = z.enum([
   "newest",
   "oldest",
@@ -420,10 +456,45 @@ export const CustomerListQuerySchema = z.object({
     .max(255, "Search must be at most 255 characters")
     .optional(),
   status: CustomerListStatusSchema.optional(),
+  due: CustomerDueFilterSchema.optional(),
+  statuses: CustomerActivityStatusesQuerySchema,
+  dues: CustomerDueOptionsQuerySchema,
   sort: CustomerSortSchema.optional(),
+  page: z.coerce.number().int().min(1).optional(),
   cursor: z.string().trim().max(2048, "Cursor is too long").optional(),
   limit: positiveIntLimitSchema.optional(),
 });
+
+export type SerializedCustomerListQueryParams<
+  T extends {
+    statuses?: readonly string[];
+    dues?: readonly string[];
+  },
+> = Omit<T, "statuses" | "dues"> & {
+  statuses?: string;
+  dues?: string;
+};
+
+export const serializeCustomerListQueryParams = <
+  T extends {
+    statuses?: readonly string[];
+    dues?: readonly string[];
+  },
+>(
+  query?: T,
+): SerializedCustomerListQueryParams<T> | undefined => {
+  if (!query) {
+    return undefined;
+  }
+
+  const { statuses, dues, ...queryWithoutArrayFilters } = query;
+
+  return {
+    ...queryWithoutArrayFilters,
+    ...(statuses?.length ? { statuses: statuses.join(",") } : {}),
+    ...(dues?.length ? { dues: dues.join(",") } : {}),
+  };
+};
 
 export const SaleItemAddOnInputSchema = z.object({
   addOnId: z.uuid("Invalid add-on id"),
@@ -607,6 +678,9 @@ export const CustomerListPageInfoSchema = z.object({
   hasMore: z.boolean(),
   nextCursor: z.string().nullable(),
   totalCount: z.number().int().min(0),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).optional(),
+  totalPages: z.number().int().min(0).optional(),
 });
 
 export const ParentScopedAddOnSalesRollupDTOSchema = z.object({

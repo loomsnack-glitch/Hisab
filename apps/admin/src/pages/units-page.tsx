@@ -583,7 +583,7 @@ const UnitsPage = () => {
                     <Sheet open={mobileFiltersOpen} onOpenChange={handleMobileFiltersOpenChange}>
                         <SheetContent
                             side="bottom"
-                            className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pb-0 pt-4 sm:hidden"
+                            className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pt-4 sm:hidden"
                         >
                             <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
                                 <div className="flex items-center justify-between gap-3">
@@ -625,7 +625,7 @@ const UnitsPage = () => {
                                 </div>
                             </div>
 
-                            <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                            <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4">
                                 <Button
                                     type="button"
                                     onClick={applyMobileFilters}
