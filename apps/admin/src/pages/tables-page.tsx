@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import {
   getOrganizationDetails,
+  getStoreCommercialStatus,
   getServiceAreas,
   getServiceTables,
   reorderServiceAreas,
@@ -41,7 +42,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import CatalogAccessPaused from "@/components/commercial/catalog-access-paused";
 import UnderDevelopment from "@/components/under-development";
+import { isQueryCommercialAccessDenied } from "@/lib/commercial-access";
+import { tableServiceAccessPausedState } from "@/lib/commercial-access-paused-state";
 import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
 import ServiceTableCard, {
@@ -71,11 +75,13 @@ import {
   tableServiceUnavailableMessage,
 } from "@/lib/table-service-availability";
 import {
+  commercialLicenseKeys,
   organizationKeys,
   serviceAreaKeys,
   serviceTableKeys,
 } from "@/lib/query-keys";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
+import { getStoreLicensePath } from "@/lib/store-workspace-routes";
 
 type AreaFilter = "all" | "unassigned" | string;
 
@@ -118,6 +124,11 @@ const TablesWorkspace = () => {
     queryFn: () => getServiceAreas(organizationId, effectiveStoreId),
     enabled: Boolean(organizationId && effectiveStoreId),
   });
+  const commercialStatusQuery = useQuery({
+    queryKey: commercialLicenseKeys.status(organizationId, effectiveStoreId),
+    queryFn: () => getStoreCommercialStatus(organizationId, effectiveStoreId),
+    enabled: Boolean(organizationId && effectiveStoreId),
+  });
   const areas =
     areasQuery.data?.status === "success"
       ? (areasQuery.data.data?.areas ?? [])
@@ -128,6 +139,18 @@ const TablesWorkspace = () => {
       : areasQuery.isError
         ? "Service areas could not be loaded"
         : null;
+  const commercialStatus =
+    commercialStatusQuery.data?.status === "success"
+      ? commercialStatusQuery.data.data?.commercialStatus ?? null
+      : null;
+  const tableServiceCommercialDenied =
+    isQueryCommercialAccessDenied(tablesQuery)
+    || isQueryCommercialAccessDenied(areasQuery);
+  const tableServiceAccessState = commercialStatus
+    ? tableServiceAccessPausedState(commercialStatus)
+    : null;
+  const retryingTableServiceAccess =
+    tablesQuery.isFetching || areasQuery.isFetching || commercialStatusQuery.isFetching;
 
   const exitLayoutEdit = () => {
     setIsEditing(false);
@@ -423,6 +446,28 @@ const TablesWorkspace = () => {
           </Empty>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (tableServiceCommercialDenied && tableServiceAccessState) {
+    return (
+      <div className={adminWorkspacePageHeightClass} data-testid="tables-page">
+        <CatalogAccessPaused
+          className="h-full"
+          badge={tableServiceAccessState.badge}
+          title={tableServiceAccessState.title}
+          message={tableServiceAccessState.description}
+          actionLabel={tableServiceAccessState.actionLabel}
+          actionHref={getStoreLicensePath(organizationId, effectiveStoreId)}
+          featureIcon={Armchair}
+          retrying={retryingTableServiceAccess}
+          onRetry={() => {
+            void tablesQuery.refetch();
+            void areasQuery.refetch();
+            void commercialStatusQuery.refetch();
+          }}
+        />
+      </div>
     );
   }
 

@@ -36,7 +36,10 @@ const FEATURE_COPY: Record<
     },
 };
 
-const isFeatureEntitled = (status: StoreCommercialStatusDTO, featureKey: CommercialFeatureKey) =>
+const isFeatureEntitled = (
+    status: StoreCommercialStatusDTO,
+    featureKey: StoreCommercialStatusDTO["entitlements"]["features"][number]["key"],
+) =>
     status.entitlements.features.some((feature) => feature.key === featureKey);
 
 const hasCommercialAccess = (status: StoreCommercialStatusDTO) =>
@@ -78,6 +81,48 @@ export const featureAccessPausedState = (
         badge: "No plan purchased",
         title: copy.title,
         description: copy.noPlan,
+        actionLabel: "Choose a plan",
+    };
+};
+
+const TABLE_SERVICE_FEATURE_KEYS = ["table_management", "kot_system"] as const;
+const TABLE_SERVICE_FEATURE_LABELS: Record<(typeof TABLE_SERVICE_FEATURE_KEYS)[number], string> = {
+    table_management: "Table Management",
+    kot_system: "KOT System",
+};
+
+export const tableServiceAccessPausedState = (
+    status: StoreCommercialStatusDTO,
+): CommercialAccessPausedState | null => {
+    const missingFeatures = TABLE_SERVICE_FEATURE_KEYS.filter((featureKey) =>
+        !isFeatureEntitled(status, featureKey),
+    );
+    if (missingFeatures.length === 0) return null;
+
+    if (hasCommercialAccess(status)) {
+        return {
+            badge: "Table Service not included",
+            title: "Table service paused",
+            description: `This Store's current access does not include ${missingFeatures
+                .map((featureKey) => TABLE_SERVICE_FEATURE_LABELS[featureKey])
+                .join(" and ")}.`,
+            actionLabel: "Add Table Service access",
+        };
+    }
+
+    if (status.commercialHistory.some((entry) => entry.kind === "license" && entry.status === "expired")) {
+        return {
+            badge: "License expired",
+            title: "Table service paused",
+            description: "Renew this Store's license to restore Table Service.",
+            actionLabel: "Renew license",
+        };
+    }
+
+    return {
+        badge: "No plan purchased",
+        title: "Table service paused",
+        description: "Table Service unlocks as soon as this Store has Table Management and KOT System access.",
         actionLabel: "Choose a plan",
     };
 };

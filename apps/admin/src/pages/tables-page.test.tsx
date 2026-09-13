@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ServiceAreaDTO, ServiceTableDTO } from "@repo/types";
 
+import { commercialAccessDeniedMessage } from "@/lib/commercial-access";
 import {
+  commercialLicenseKeys,
   organizationKeys,
   serviceAreaKeys,
   serviceTableKeys,
@@ -14,6 +16,29 @@ import TablesPage from "@/pages/tables-page";
 const organizationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const now = new Date("2026-08-16T12:00:00.000Z");
+
+const noTableServiceCommercialStatus = {
+  status: "success" as const,
+  data: {
+    commercialStatus: {
+      storeId,
+      organizationId,
+      timezone: "Asia/Kolkata",
+      baseAccess: null,
+      scheduledSuccessor: null,
+      accessGrants: [],
+      activeAddOns: [],
+      availablePaidPlans: [],
+      availableCoTermAddOns: [],
+      pendingCheckout: null,
+      commercialHistory: [],
+      trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
+      entitlements: { storeId, features: [] },
+    },
+  },
+  message: "Store commercial status fetched successfully",
+  code: 200,
+};
 
 const table: ServiceTableDTO = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -54,6 +79,7 @@ const renderAdminTables = (
   tables: ServiceTableDTO[],
   path = `/organizations/${organizationId}/workspaces/${storeId}/tables`,
   areaResult: "success" | "error" = "success",
+  options?: { tableCommercialDenied?: boolean },
 ) => {
   const queryClient = new QueryClient();
   queryClient.setQueryData(organizationKeys.detail(organizationId), {
@@ -86,10 +112,12 @@ const renderAdminTables = (
     code: 200,
   });
   queryClient.setQueryData(serviceTableKeys.store(organizationId, storeId), {
-    status: "success",
-    data: { tables },
-    message: "Service tables fetched successfully",
-    code: 200,
+    status: options?.tableCommercialDenied ? "error" : "success",
+    data: options?.tableCommercialDenied ? null : { tables },
+    message: options?.tableCommercialDenied
+      ? `Table Management is not available for this Store. ${commercialAccessDeniedMessage}`
+      : "Service tables fetched successfully",
+    code: options?.tableCommercialDenied ? 403 : 200,
   });
   queryClient.setQueryData(serviceAreaKeys.store(organizationId, storeId), {
     status: areaResult,
@@ -100,6 +128,10 @@ const renderAdminTables = (
         : "Service areas unavailable",
     code: areaResult === "success" ? 200 : 500,
   });
+  queryClient.setQueryData(
+    commercialLicenseKeys.status(organizationId, storeId),
+    noTableServiceCommercialStatus,
+  );
 
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
@@ -153,6 +185,22 @@ describe("Admin Service Table setup", () => {
     expect(markup).toContain("Service areas unavailable");
     expect(markup).not.toContain("Unassigned");
     expect(markup).not.toContain("Table T1");
+  });
+
+  test("shows paused access when Table Service is commercially denied", () => {
+    const markup = renderAdminTables(
+      [table],
+      `/organizations/${organizationId}/workspaces/${storeId}/tables`,
+      "success",
+      { tableCommercialDenied: true },
+    );
+
+    expect(markup).toContain('data-testid="catalog-access-paused"');
+    expect(markup).toContain("Table service paused");
+    expect(markup).toContain("No plan purchased");
+    expect(markup).toContain("Choose a plan");
+    expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/license"`);
+    expect(markup).not.toContain("Unable to load tables");
   });
 
   test("ignores the retired Areas tab query and keeps the table grid", () => {

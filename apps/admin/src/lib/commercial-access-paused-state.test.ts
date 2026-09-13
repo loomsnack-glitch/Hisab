@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { StoreCommercialStatusDTO } from "@repo/types";
 
-import { featureAccessPausedState } from "@/lib/commercial-access-paused-state";
+import { featureAccessPausedState, tableServiceAccessPausedState } from "@/lib/commercial-access-paused-state";
 
 const now = new Date("2026-09-06T00:00:00.000Z");
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -75,5 +75,52 @@ describe("featureAccessPausedState", () => {
             description: "Renew this Store's license to restore WhatsApp messaging.",
             actionLabel: "Renew license",
         });
+    });
+
+    test("requires both Table Management and KOT System for Table Service", () => {
+        expect(
+            tableServiceAccessPausedState({
+                ...baseStatus,
+                baseAccess: {
+                    id: "00000000-0000-4000-8000-000000000003",
+                    sourceKind: "store_license",
+                    planKey: "core",
+                    planDisplayName: "Core",
+                    planType: "paid",
+                    term: { count: 1, unit: "year" },
+                    startsAt: now,
+                    endsAt: new Date("2027-09-06T00:00:00.000Z"),
+                    status: "active",
+                },
+                entitlements: {
+                    storeId,
+                    features: [{
+                        key: "table_management",
+                        displayName: "Table Management",
+                        sources: [],
+                    }],
+                },
+            }),
+        ).toEqual({
+            badge: "Table Service not included",
+            title: "Table service paused",
+            description: "This Store's current access does not include KOT System.",
+            actionLabel: "Add Table Service access",
+        });
+    });
+
+    test("does not pause Table Service when both required features are entitled", () => {
+        expect(
+            tableServiceAccessPausedState({
+                ...baseStatus,
+                entitlements: {
+                    storeId,
+                    features: [
+                        { key: "table_management", displayName: "Table Management", sources: [] },
+                        { key: "kot_system", displayName: "KOT System", sources: [] },
+                    ],
+                },
+            }),
+        ).toBeNull();
     });
 });
