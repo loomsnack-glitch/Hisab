@@ -36,7 +36,7 @@ const FEATURE_COPY: Record<
     },
 };
 
-const isFeatureEntitled = (
+export const isStoreFeatureEntitled = (
     status: StoreCommercialStatusDTO,
     featureKey: StoreCommercialStatusDTO["entitlements"]["features"][number]["key"],
 ) =>
@@ -53,7 +53,7 @@ export const featureAccessPausedState = (
     status: StoreCommercialStatusDTO,
     featureKey: CommercialFeatureKey,
 ): CommercialAccessPausedState | null => {
-    if (isFeatureEntitled(status, featureKey)) {
+    if (isStoreFeatureEntitled(status, featureKey)) {
         return null;
     }
 
@@ -95,7 +95,7 @@ export const tableServiceAccessPausedState = (
     status: StoreCommercialStatusDTO,
 ): CommercialAccessPausedState | null => {
     const missingFeatures = TABLE_SERVICE_FEATURE_KEYS.filter((featureKey) =>
-        !isFeatureEntitled(status, featureKey),
+        !isStoreFeatureEntitled(status, featureKey),
     );
     if (missingFeatures.length === 0) return null;
 

@@ -81,6 +81,7 @@ export type VisibleAdminNavArgs = {
   organizationId?: string;
   storeId?: string;
   hasOrganization: boolean;
+  tableManagementEnabled?: boolean;
 };
 
 const adminDestinationDefs: AdminNavDestinationDef[] = [
@@ -310,12 +311,17 @@ const resolveDestinations = ({
   organizationId = "",
   storeId,
   hasOrganization,
+  tableManagementEnabled = false,
 }: VisibleAdminNavArgs): AdminNavDestination[] =>
   adminDestinationDefs
     .filter((destination) =>
       storeId
         ? storeWorkspaceDestinationIds.has(destination.id)
         : !destination.storeWorkspaceOnly,
+    )
+    .filter(
+      (destination) =>
+        destination.id !== "tables" || !storeId || tableManagementEnabled,
     )
     .filter(
       (destination) =>

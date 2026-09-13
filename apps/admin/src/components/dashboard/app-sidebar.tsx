@@ -1,24 +1,20 @@
 import { useMemo } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
     ChevronLeft,
     ChevronRight,
 } from "lucide-react";
-import { getOrganizations } from "@repo/services";
 import { Button } from "@repo/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
 import { cn } from "@repo/ui/lib/utils";
 
-import { getSidebarHomePath, resolveDefaultOrgId } from "@/lib/default-org-path";
-import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
-import { organizationKeys } from "@/lib/query-keys";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { AdminWorkspaceSwitcherFromRoute } from "@/components/dashboard/admin-workspace-switcher";
 import {
     getGroupedAdminMainDestinations,
     type AdminNavDestination,
 } from "@/components/dashboard/admin-nav-items";
+import { useAdminNavArgs, useAdminSidebarHomePath } from "@/components/dashboard/use-admin-nav-args";
 
 const SIDEBAR_STORAGE_KEY = "hisab_sidebar_collapsed";
 
@@ -54,40 +50,22 @@ const AppSidebar = ({
 }: AppSidebarProps) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { organizationId } = useParams();
 
     const goTo = (to: string) => {
         navigate(to);
         onNavigate?.();
     };
 
-    const organizationsQuery = useQuery({
-        queryKey: organizationKeys.list(),
-        queryFn: getOrganizations,
-    });
-
-    const organizations = useMemo(
-        () => (organizationsQuery.data?.status === "success" ? organizationsQuery.data.data?.organizations ?? [] : []),
-        [organizationsQuery.data],
-    );
-
-    const effectiveOrgId = organizationId || resolveDefaultOrgId(organizations) || "";
-    const homePath = getSidebarHomePath(organizations, organizationId, location.pathname);
+    const homePath = useAdminSidebarHomePath();
+    const navArgs = useAdminNavArgs();
 
     const expandedNavRowClass = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3";
     const expandedNavRowClassNoTrail = "grid h-10 w-full grid-cols-[18px_minmax(0,1fr)] items-center gap-3 px-3";
     const collapsedNavRowClass = "relative mx-auto flex h-10 w-10 items-center justify-center";
 
-    const hasOrganization = organizations.length > 0 && Boolean(effectiveOrgId);
-    const storeWorkspace = parseStoreWorkspacePath(location.pathname);
     const groupedSections = useMemo(
-        () =>
-            getGroupedAdminMainDestinations({
-                hasOrganization,
-                organizationId: effectiveOrgId,
-                storeId: storeWorkspace?.storeId,
-            }),
-        [hasOrganization, effectiveOrgId, storeWorkspace?.storeId],
+        () => getGroupedAdminMainDestinations(navArgs),
+        [navArgs.organizationId, navArgs.storeId, navArgs.hasOrganization, navArgs.tableManagementEnabled],
     );
 
     const renderNavItem = (item: AdminNavDestination, badge?: number) => {

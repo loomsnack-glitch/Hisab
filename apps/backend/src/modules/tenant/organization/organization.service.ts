@@ -594,17 +594,39 @@ export const updateStore = async (
     }
   }
 
+  const nextKotSystemEnabled =
+    storeData.kotSystemEnabled === undefined
+      ? store.kotSystemEnabled
+      : storeData.kotSystemEnabled;
+  const nextTableManagementEnabled =
+    storeData.tableManagementEnabled === undefined
+      ? store.tableManagementEnabled
+      : storeData.tableManagementEnabled;
   const nextMoneyAccountTrackingEnabled =
     storeData.moneyAccountTrackingEnabled === undefined
       ? store.moneyAccountTrackingEnabled
       : storeData.moneyAccountTrackingEnabled;
-  if (nextMoneyAccountTrackingEnabled && !store.moneyAccountTrackingEnabled) {
-    const moneyAccountTrackingEntitlementError = await requireStoreFeatureEntitlement(
-      storeId,
-      "money_account_tracking",
-    );
-    if (moneyAccountTrackingEntitlementError) {
-      return moneyAccountTrackingEntitlementError;
+
+  if (nextTableManagementEnabled && !nextKotSystemEnabled) {
+    return {
+      status: "error",
+      message: "Table Management requires KOT System.",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
+  const featureEnablements = [
+    [nextKotSystemEnabled, store.kotSystemEnabled, "kot_system"],
+    [nextTableManagementEnabled, store.tableManagementEnabled, "table_management"],
+    [nextMoneyAccountTrackingEnabled, store.moneyAccountTrackingEnabled, "money_account_tracking"],
+  ] as const;
+  for (const [nextEnabled, currentlyEnabled, featureKey] of featureEnablements) {
+    if (nextEnabled && !currentlyEnabled) {
+      const entitlementError = await requireStoreFeatureEntitlement(storeId, featureKey);
+      if (entitlementError) {
+        return entitlementError;
+      }
     }
   }
 
@@ -629,14 +651,8 @@ export const updateStore = async (
         ? (store.socialMediaLink ?? null)
         : normalizeOptionalText(storeData.socialMediaLink),
     whatsappLinks: storeData.whatsappLinks ?? store.whatsappLinks,
-    kotSystemEnabled:
-      storeData.kotSystemEnabled === undefined
-        ? store.kotSystemEnabled
-        : storeData.kotSystemEnabled,
-    tableManagementEnabled:
-      storeData.tableManagementEnabled === undefined
-        ? store.tableManagementEnabled
-        : storeData.tableManagementEnabled,
+    kotSystemEnabled: nextKotSystemEnabled,
+    tableManagementEnabled: nextTableManagementEnabled,
     moneyAccountTrackingEnabled: nextMoneyAccountTrackingEnabled,
     updatedBy: userId,
   });

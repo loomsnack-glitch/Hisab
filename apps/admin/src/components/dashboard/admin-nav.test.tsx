@@ -247,7 +247,7 @@ describe("Admin mobile navigation", () => {
 
   test("shows only Store-scoped destinations when a Store workspace is selected", () => {
     const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-    const withStore = { ...withOrg, storeId };
+    const withStore = { ...withOrg, storeId, tableManagementEnabled: true };
     const products = getVisibleAdminWorkspaceDestinations(withStore).find(
       (destination) => destination.id === "products",
     );
@@ -388,6 +388,23 @@ describe("Admin mobile navigation", () => {
       "license",
       "billing",
       "tables",
+    ]);
+  });
+
+  test("hides Tables from the Store workspace sidebar when Table Management is off", () => {
+    const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const withStore = { ...withOrg, storeId, tableManagementEnabled: false };
+    const destinationIds = getVisibleAdminWorkspaceDestinations(withStore).map(
+      (destination) => destination.id,
+    );
+    const sections = getGroupedAdminMainDestinations(withStore);
+
+    expect(destinationIds).not.toContain("tables");
+    expect(sections[1]?.items.map((item) => item.id)).toEqual([
+      "devices",
+      "settings",
+      "license",
+      "billing",
     ]);
   });
 

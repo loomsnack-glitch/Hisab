@@ -14,7 +14,7 @@ import AdminMobileBottomNav from "@/components/dashboard/admin-mobile-bottom-nav
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getSidebarHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
 import { isFullWidthDashboardPath } from "@/lib/full-width-dashboard-path";
-import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import { useAdminNavArgs } from "@/components/dashboard/use-admin-nav-args";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
 import { getPosLoginUrl } from "@/lib/pos-origin";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -113,6 +113,7 @@ const DashboardLayout = () => {
     const isBillingPage = location.pathname.includes("/billing");
     const usesMobileShellScroll = !isWhatsAppMessageHistory && !isBillingPage;
     const isFullWidthPage = isFullWidthDashboardPath(location.pathname);
+    const adminNavArgs = useAdminNavArgs();
     const accountOrganization = organizationId && selectedOrganization
         ? { id: organizationId, name: selectedOrganization.name }
         : null;
@@ -205,9 +206,7 @@ const DashboardLayout = () => {
                     </main>
                     {isPickerPage ? null : (
                         <AdminMobileBottomNav
-                            organizationId={organizationId || ""}
-                            storeId={parseStoreWorkspacePath(location.pathname)?.storeId}
-                            hasOrganization={Boolean(organizationId)}
+                            {...adminNavArgs}
                             activeOrgName={selectedOrganizationName}
                         />
                     )}

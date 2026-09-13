@@ -8,7 +8,7 @@ import type { StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
 import { commercialAccessDeniedMessage } from "@/lib/commercial-access";
 import { billingKeys, commercialLicenseKeys, moneyAccountKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
-import { getStoreSettingsPath, getStoreSettingsTabPath, type StoreSettingsTab } from "@/lib/store-workspace-routes";
+import { getStoreLicensePath, getStoreSettingsPath, getStoreSettingsTabPath, type StoreSettingsTab } from "@/lib/store-workspace-routes";
 import StoreWorkspaceSettingsPage, {
     StoreSettingsFeaturesPage,
     StoreSettingsGeneralPage,
@@ -102,28 +102,63 @@ const orgWhatsAppAccount = {
     updatedAt: now,
 };
 
-const noFeatureCommercialStatus = {
+const commercialStatusPayload = {
+    storeId,
+    organizationId,
+    timezone: "Asia/Kolkata",
+    baseAccess: null,
+    scheduledSuccessor: null,
+    accessGrants: [],
+    activeAddOns: [],
+    availablePaidPlans: [],
+    availableCoTermAddOns: [],
+    pendingCheckout: null,
+    commercialHistory: [],
+    trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
+    entitlements: { storeId, features: [] as Array<{
+        key: string;
+        displayName: string;
+        sources: Array<{
+            sourceKind: "store_license";
+            sourceId: string;
+            moduleKey: string;
+            moduleDisplayName: string;
+            featureDisplayName: string;
+            startsAt: Date;
+            endsAt: Date;
+        }>;
+    }> },
+};
+
+const entitledFeature = (key: string, displayName: string) => ({
+    key,
+    displayName,
+    sources: [{
+        sourceKind: "store_license" as const,
+        sourceId: "00000000-0000-4000-8000-000000000001",
+        moduleKey: "restaurant_operations",
+        moduleDisplayName: "Restaurant Operations",
+        featureDisplayName: displayName,
+        startsAt: now,
+        endsAt: new Date("2027-09-07T03:19:00.000Z"),
+    }],
+});
+
+const commercialStatusResponse = (
+    entitlements: typeof commercialStatusPayload.entitlements.features = [],
+) => ({
     status: "success" as const,
     data: {
         commercialStatus: {
-            storeId,
-            organizationId,
-            timezone: "Asia/Kolkata",
-            baseAccess: null,
-            scheduledSuccessor: null,
-            accessGrants: [],
-            activeAddOns: [],
-            availablePaidPlans: [],
-            availableCoTermAddOns: [],
-            pendingCheckout: null,
-            commercialHistory: [],
-            trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
-            entitlements: { storeId, features: [] },
+            ...commercialStatusPayload,
+            entitlements: { storeId, features: entitlements },
         },
     },
     message: "Store commercial status fetched successfully",
     code: 200,
-};
+});
+
+const noFeatureCommercialStatus = commercialStatusResponse();
 
 const setQueryError = (
     queryClient: QueryClient,
@@ -153,6 +188,7 @@ const renderSettings = (options?: {
     paymentsCommercialDenied?: boolean;
     whatsappCommercialDenied?: boolean;
     store?: StoreWithDevicesDTO;
+    commercialStatus?: typeof noFeatureCommercialStatus;
 }) => {
     const queryClient = new QueryClient();
     const storeForPage = options?.store ?? store;
@@ -260,7 +296,7 @@ const renderSettings = (options?: {
     });
     queryClient.setQueryData(
         commercialLicenseKeys.status(organizationId, storeId),
-        noFeatureCommercialStatus,
+        options?.commercialStatus ?? noFeatureCommercialStatus,
     );
 
     if (options?.paymentsCommercialDenied) {
@@ -421,6 +457,77 @@ describe("Store workspace Settings page", () => {
         expect(markup).not.toContain("Payment routing");
         expect(markup).not.toContain("Reviews and social");
         expect(markup).not.toContain("Edit store");
+    });
+
+    test("marks optional Store features as not included when the Store has no Feature Entitlement", () => {
+        const markup = renderSettings({ tab: "features" });
+
+        expect(markup).toContain('data-testid="store-feature-kot-system" data-included="false" data-locked="true"');
+        expect(markup).toContain('data-testid="store-feature-table-management" data-included="false" data-locked="true"');
+        expect(markup).toContain('data-testid="store-feature-money-account-tracking" data-included="false" data-locked="true"');
+        expect(markup).toContain("Not included");
+        expect(markup).toContain("This Store&#x27;s current access does not include KOT System.");
+        expect(markup).toContain("This Store&#x27;s current access does not include Table Management.");
+        expect(markup).toContain("This Store&#x27;s current access does not include Money Account Tracking.");
+        expect(markup).toContain(`aria-label="Add KOT system access"`);
+        expect(markup).toContain(`href="${getStoreLicensePath(organizationId, storeId)}"`);
+        expect(markup).not.toContain('data-included="true"');
+    });
+
+    test("lets the Store enable only the optional features included in its current access", () => {
+        const markup = renderSettings({
+            tab: "features",
+            commercialStatus: commercialStatusResponse([
+                entitledFeature("kot_system", "KOT System"),
+                entitledFeature("money_account_tracking", "Money Account Tracking"),
+            ]),
+        });
+
+        expect(markup).toContain('data-testid="store-feature-kot-system" data-included="true" data-locked="false"');
+        expect(markup).toContain('data-testid="store-feature-table-management" data-included="false" data-locked="true"');
+        expect(markup).toContain('data-testid="store-feature-money-account-tracking" data-included="true" data-locked="false"');
+        expect(markup).toContain("Included");
+        expect(markup).toContain("Not included");
+        expect(markup).toContain("This Store&#x27;s current access does not include Table Management.");
+        expect(markup).toContain(`aria-label="Add Table management access"`);
+        expect(markup).not.toContain("This Store&#x27;s current access does not include KOT System.");
+        expect(markup).not.toContain("This Store&#x27;s current access does not include Money Account Tracking.");
+    });
+
+    test("lets the Store turn off an optional feature that is no longer included", () => {
+        const markup = renderSettings({
+            tab: "features",
+            store: { ...store, tableManagementEnabled: true },
+        });
+
+        expect(markup).toContain('data-testid="store-feature-table-management" data-included="false" data-locked="false"');
+        expect(markup).toContain("This Store&#x27;s current access does not include Table Management.");
+        expect(markup).toContain(`aria-label="Add Table management access"`);
+    });
+
+    test("keeps Table Management locked when KOT System is not included", () => {
+        const markup = renderSettings({
+            tab: "features",
+            commercialStatus: commercialStatusResponse([
+                entitledFeature("table_management", "Table Management"),
+            ]),
+        });
+
+        expect(markup).toContain('data-testid="store-feature-kot-system" data-included="false" data-locked="true"');
+        expect(markup).toContain('data-testid="store-feature-table-management" data-included="true" data-locked="true"');
+    });
+
+    test("lets Table Management be turned on when KOT System is included even if it is currently off", () => {
+        const markup = renderSettings({
+            tab: "features",
+            commercialStatus: commercialStatusResponse([
+                entitledFeature("kot_system", "KOT System"),
+                entitledFeature("table_management", "Table Management"),
+            ]),
+        });
+
+        expect(markup).toContain('data-testid="store-feature-kot-system" data-included="true" data-locked="false"');
+        expect(markup).toContain('data-testid="store-feature-table-management" data-included="true" data-locked="false"');
     });
 
     test("shows payment routing on the Payments tab", () => {
