@@ -297,6 +297,7 @@ const storeWorkspaceDestinationIds = new Set([
 
 const organizationWorkspaceNavLabelSuffixIds = new Set([
   "reports",
+  "vendors",
   "money-accounts",
   "purchases",
   "expenses",

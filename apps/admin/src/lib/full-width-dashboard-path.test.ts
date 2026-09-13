@@ -36,6 +36,11 @@ describe("isFullWidthDashboardPath", () => {
         ).toBe(true);
         expect(
             isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/vendors",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/billing",
             ),
         ).toBe(true);
@@ -67,6 +72,21 @@ describe("isFullWidthDashboardPath", () => {
         expect(
             isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/vendors/items",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/purchases",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/expenses",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/reports",
             ),
         ).toBe(true);
     });
