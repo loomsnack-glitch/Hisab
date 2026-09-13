@@ -1,35 +1,48 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import {
     getOrganizationDetails,
+    getProducts,
     getStore,
     getStoreCategoryPresentations,
     reorderStoreCategoryPresentations,
-    updateStoreCategoryPresentation,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Spinner } from "@repo/ui/components/spinner";
-import { Switch } from "@repo/ui/components/switch";
-import { ListOrdered, RefreshCw, Search, Tags, X } from "lucide-react";
-import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
+import { ListOrdered, Pencil, RefreshCw, Tags } from "lucide-react";
 
 import CategoryStatusBadge from "@/components/catalog/category-status-badge";
+import CatalogStatusFilterBar from "@/components/catalog/catalog-status-filter-bar";
 import ReorderListDialog from "@/components/catalog/reorder-list-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
+import UpsertStoreCategoryPresentationDialog from "@/components/catalog/upsert-store-category-presentation-dialog";
+import {
+    catalogFilterUrlOptions,
+    storeCatalogListFilterParsers,
+    toggleCatalogStatusFilter,
+} from "@/lib/catalog-query-states";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
+
+const EMPTY_CATALOG_ITEMS: never[] = [];
 
 const StoreCategoryPresentationsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
     const queryClient = useQueryClient();
-    const [searchQuery, setSearchQuery] = useState("");
+    const [{ search: searchQuery, statuses: statusFilters, orgStatuses: orgStatusFilters }, setFilters] = useQueryStates(
+        storeCatalogListFilterParsers,
+        catalogFilterUrlOptions,
+    );
+    const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(searchQuery, commitSearch);
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -46,6 +59,11 @@ const StoreCategoryPresentationsPage = () => {
         queryFn: () => getStoreCategoryPresentations(organizationId, storeId),
         enabled: Boolean(organizationId && storeId),
     });
+    const productsQuery = useQuery({
+        queryKey: catalogKeys.products(organizationId),
+        queryFn: () => getProducts(organizationId),
+        enabled: Boolean(organizationId),
+    });
 
     const organization =
         organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization : null;
@@ -56,50 +74,67 @@ const StoreCategoryPresentationsPage = () => {
         presentationsQuery.data?.status === "success"
             ? presentationsQuery.data.data?.presentations ?? []
             : [];
+    const products =
+        productsQuery.data?.status === "success"
+            ? productsQuery.data.data?.products ?? EMPTY_CATALOG_ITEMS
+            : EMPTY_CATALOG_ITEMS;
+
+    const productsByCategoryId = useMemo(() => {
+        const grouped = new Map<string, typeof products>();
+        for (const product of products) {
+            const existing = grouped.get(product.categoryId) ?? [];
+            existing.push(product);
+            grouped.set(product.categoryId, existing);
+        }
+        return grouped;
+    }, [products]);
 
     const reorderItems = useMemo(
         () =>
-            presentations.map((presentation) => ({
-                id: presentation.categoryId,
-                name: presentation.category.name,
-                description: presentation.visible ? "Visible in POS browse menu" : "Hidden from POS browse menu",
-                leading: <Tags className="size-4 shrink-0 text-primary" />,
-            })),
-        [presentations],
+            presentations.map((presentation) => {
+                const productCount = productsByCategoryId.get(presentation.categoryId)?.length ?? 0;
+                return {
+                    id: presentation.categoryId,
+                    name: presentation.category.name,
+                    description: `${productCount} product${productCount === 1 ? "" : "s"}`,
+                    leading: <Tags className="size-4 shrink-0 text-primary" />,
+                };
+            }),
+        [presentations, productsByCategoryId],
     );
 
     const filteredPresentations = useMemo(() => {
-        if (!searchQuery.trim()) {
-            return presentations;
-        }
-        const query = searchQuery.toLowerCase().trim();
-        return presentations.filter((presentation) =>
-            presentation.category.name.toLowerCase().includes(query),
-        );
-    }, [presentations, searchQuery]);
-
-    const visibilityMutation = useMutation({
-        mutationFn: ({
-            presentationId,
-            visible,
-        }: {
-            presentationId: string;
-            visible: boolean;
-        }) => updateStoreCategoryPresentation(organizationId, storeId, presentationId, { visible }),
-        onSuccess: (response) => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
+        return presentations.filter((presentation) => {
+            const storeStatus = presentation.visible ? "active" : "inactive";
+            if (statusFilters.length > 0 && !statusFilters.includes(storeStatus)) {
+                return false;
             }
-            toast.success(response.message);
-            queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeCategoryPresentations(organizationId, storeId),
-            });
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to update this category");
-        },
-    });
+            if (orgStatusFilters.length > 0 && !orgStatusFilters.includes(presentation.category.status)) {
+                return false;
+            }
+            if (!searchQuery.trim()) {
+                return true;
+            }
+            return presentation.category.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+        });
+    }, [presentations, searchQuery, statusFilters, orgStatusFilters]);
+
+    const toggleStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            statuses: toggleCatalogStatusFilter(current.statuses, value),
+        }));
+    };
+
+    const toggleOrgStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            orgStatuses: toggleCatalogStatusFilter(current.orgStatuses, value),
+        }));
+    };
+
+    const resetFilters = () => {
+        clearSearch();
+        void setFilters({ statuses: [], orgStatuses: [] });
+    };
 
     const saveCategoryOrder = async (categoryIds: string[]) => {
         const response = await reorderStoreCategoryPresentations(organizationId, storeId, { categoryIds });
@@ -111,7 +146,12 @@ const StoreCategoryPresentationsPage = () => {
         return response;
     };
 
-    if (organizationQuery.isPending || storeQuery.isPending || presentationsQuery.isPending) {
+    if (
+        organizationQuery.isPending ||
+        storeQuery.isPending ||
+        presentationsQuery.isPending ||
+        productsQuery.isPending
+    ) {
         return (
             <div className="flex min-h-[40vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
@@ -222,27 +262,20 @@ const StoreCategoryPresentationsPage = () => {
                 </Card>
             ) : (
                 <>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
-                            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
-                            <Input
-                                type="text"
-                                placeholder="Search categories..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchQuery("")}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                                    aria-label="Clear search"
-                                >
-                                    <X className="size-3.5" />
-                                </button>
-                            )}
-                        </div>
+                    <CatalogStatusFilterBar
+                        searchPlaceholder="Search categories..."
+                        searchInput={searchInput}
+                        onSearchInputChange={setSearchInput}
+                        onClearSearch={clearSearch}
+                        statusFilters={statusFilters}
+                        onToggleStatus={toggleStatusFilter}
+                        onSetStatuses={(statuses) => void setFilters({ statuses })}
+                        orgStatusFilters={orgStatusFilters}
+                        onToggleOrgStatus={toggleOrgStatusFilter}
+                        onSetOrgStatuses={(orgStatuses) => void setFilters({ orgStatuses })}
+                        filterAriaLabel="Filter categories"
+                        mobileSheetTitle="Filter categories"
+                    >
                         {presentations.length > 1 ? (
                             <ReorderListDialog
                                 title="Rearrange categories"
@@ -259,72 +292,96 @@ const StoreCategoryPresentationsPage = () => {
                                 }
                             />
                         ) : null}
-                    </div>
+                    </CatalogStatusFilterBar>
+
+                    {filteredPresentations.length > 0 ? (
+                        <div className="flex items-center px-1 py-0.5">
+                            <span className="text-xs text-muted-foreground/70">
+                                Showing {filteredPresentations.length} categor{filteredPresentations.length === 1 ? "y" : "ies"}
+                            </span>
+                        </div>
+                    ) : null}
 
                     {filteredPresentations.length === 0 ? (
-                        <Card className="border-border/60 bg-card/80 shadow-md">
-                            <CardContent className="pt-6">
-                                <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
-                                    <EmptyHeader>
-                                        <EmptyMedia variant="icon">
-                                            <Tags />
-                                        </EmptyMedia>
-                                        <EmptyTitle>No categories found</EmptyTitle>
-                                        <EmptyDescription>Try adjusting your search query.</EmptyDescription>
-                                    </EmptyHeader>
-                                </Empty>
-                            </CardContent>
+                        <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
+                            <p>No categories match your search or filters.</p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-4 rounded-full"
+                                onClick={resetFilters}
+                            >
+                                Clear all filters
+                            </Button>
                         </Card>
                     ) : (
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                    {filteredPresentations.map((presentation) => (
-                        <Card
-                            key={presentation.id}
-                            className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
-                        >
-                            <div className="flex items-start justify-between gap-2.5">
-                                <div className="flex min-w-0 items-center gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                        <Tags className="size-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            <h2 className="font-display text-sm font-semibold text-foreground">
-                                                {presentation.category.name}
-                                            </h2>
-                                            <CategoryStatusBadge status={presentation.category.status} />
-                                            {!presentation.visible ? (
-                                                <Badge variant="outline" className="rounded-full text-[11px] px-2 py-0">
-                                                    Hidden in POS menu
-                                                </Badge>
-                                            ) : null}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {filteredPresentations.map((presentation) => {
+                                const categoryProducts = productsByCategoryId.get(presentation.categoryId) ?? [];
+                                const storeStatus = presentation.visible ? "active" : "inactive";
 
-                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-2.5">
-                                <Label
-                                    htmlFor={`category-visible-${presentation.id}`}
-                                    className="text-xs font-medium text-muted-foreground"
-                                >
-                                    Visible in POS menu
-                                </Label>
-                                <Switch
-                                    id={`category-visible-${presentation.id}`}
-                                    checked={presentation.visible}
-                                    disabled={visibilityMutation.isPending}
-                                    onCheckedChange={(checked) =>
-                                        visibilityMutation.mutate({
-                                            presentationId: presentation.id,
-                                            visible: checked,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </Card>
-                    ))}
-                </div>
+                                return (
+                                    <Card
+                                        key={presentation.id}
+                                        className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
+                                    >
+                                        <div className="flex items-center justify-between gap-2.5">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                                    <Tags className="size-4" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h4 className="font-display text-sm font-semibold text-foreground truncate">
+                                                        {presentation.category.name}
+                                                    </h4>
+                                                </div>
+                                            </div>
+                                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                                                {presentation.category.status !== "active" ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="rounded-full border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                                                    >
+                                                        Inactive in org
+                                                    </Badge>
+                                                ) : null}
+                                                <CategoryStatusBadge status={storeStatus} />
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2.5">
+                                            <Badge variant="outline" className="rounded-full text-[11px] px-2.5 py-0.5">
+                                                {categoryProducts.length} product{categoryProducts.length === 1 ? "" : "s"}
+                                            </Badge>
+
+                                            <div className="flex items-center gap-0.5">
+                                                <Tooltip>
+                                                    <TooltipTrigger render={<span className="inline-flex" />}>
+                                                        <UpsertStoreCategoryPresentationDialog
+                                                            organizationId={organizationId}
+                                                            storeId={storeId}
+                                                            presentation={presentation}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    aria-label={`Edit ${presentation.category.name}`}
+                                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                                                >
+                                                                    <Pencil className="size-3.5" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>Edit category</TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                );
+                            })}
+                        </div>
                     )}
                 </>
             )}

@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ProductResponseDTO, StoreDTO, StoreProductOfferingResponseDTO, StoreWithDevicesDTO } from "@repo/types";
 
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
@@ -170,7 +171,9 @@ const storeResponse = (store: StoreDTO) => ({
     code: 200,
 });
 
-const renderProducts = () => {
+const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
+
+const renderProducts = (path = getStoreProductsPath(organizationId, adajanId)) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
     queryClient.setQueryData(organizationKeys.store(organizationId, adajanId), storeResponse(adajan));
@@ -187,38 +190,35 @@ const renderProducts = () => {
         code: 200,
     });
 
-    const router = createMemoryRouter(
-        [
-            {
-                path: "/organizations/:organizationId/workspaces/:storeId/products",
-                element: <StoreProductOfferingsPage />,
-            },
-        ],
-        { initialEntries: [getStoreProductsPath(organizationId, adajanId)] },
-    );
-
     return renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <NuqsTestingAdapter searchParams={searchFromPath(path)}>
+                <MemoryRouter initialEntries={[path]}>
+                    <Routes>
+                        <Route
+                            path="/organizations/:organizationId/workspaces/:storeId/products"
+                            element={<StoreProductOfferingsPage />}
+                        />
+                    </Routes>
+                </MemoryRouter>
+            </NuqsTestingAdapter>
         </QueryClientProvider>,
     );
 };
 
 describe("Store Products page", () => {
-    test("lists every Organization Catalog Product with this Store's price and status", () => {
+    test("defaults to active Store offerings and lists this Store's price and status", () => {
         const markup = renderProducts();
 
         expect(markup).toContain("Products");
         expect(markup).toContain("Burger");
-        expect(markup).toContain("Seasonal Wrap");
-        expect(markup).toContain("Retired Cake");
+        expect(markup).not.toContain("Seasonal Wrap");
+        expect(markup).not.toContain("Retired Cake");
         expect(markup).toContain("Search products...");
+        expect(markup).toContain("Status");
+        expect(markup).toContain("Org status");
         expect(markup).toContain("Mains");
-        expect(markup).toContain("Inactive");
-        expect(markup).toContain("Inactive in org");
-        expect(markup).toContain("Edit price for Burger");
-        expect(markup).toContain("Mark inactive Burger");
-        expect(markup).toContain("Mark active Seasonal Wrap");
+        expect(markup).toContain("Edit Burger");
         expect(markup).toContain("Store price");
         expect(markup).not.toContain("Effective price");
         expect(markup).not.toContain("Inherits Organization defaults");
@@ -233,6 +233,29 @@ describe("Store Products page", () => {
         expect(markup).not.toContain("Create product");
         expect(markup).not.toContain("Add vendor");
         expect(markup).not.toContain(vesuId);
+    });
+
+    test("reads search, store status, and org status filters from the URL", () => {
+        const markup = renderProducts(
+            `${getStoreProductsPath(organizationId, adajanId)}?search=Wrap&statuses=inactive`,
+        );
+
+        expect(markup).toContain("value=\"Wrap\"");
+        expect(markup).toContain("Seasonal Wrap");
+        expect(markup).not.toContain(">Burger<");
+        expect(markup).toContain("Edit Seasonal Wrap");
+        expect(markup).toContain("Inactive");
+    });
+
+    test("defaults org status to active and can show inactive org products from the URL", () => {
+        const markup = renderProducts(
+            `${getStoreProductsPath(organizationId, adajanId)}?orgStatuses=inactive`,
+        );
+
+        expect(markup).toContain("Retired Cake");
+        expect(markup).toContain("Inactive in org");
+        expect(markup).not.toContain(">Burger<");
+        expect(markup).not.toContain("Seasonal Wrap");
     });
 
     test("registers a Store workspace products route without replacing Organization catalog routes", () => {

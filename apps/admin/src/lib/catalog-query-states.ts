@@ -16,3 +16,16 @@ export const catalogListFilterParsers = {
     search: searchParser,
     statuses: statusListParser.withDefault(["active"]),
 };
+
+export const storeCatalogListFilterParsers = {
+    ...catalogListFilterParsers,
+    orgStatuses: statusListParser.withDefault(["active"]),
+};
+
+export const toggleCatalogStatusFilter = (
+    current: readonly CatalogStatusFilter[],
+    value: string,
+): CatalogStatusFilter[] => {
+    const next = value as CatalogStatusFilter;
+    return current.includes(next) ? current.filter((item) => item !== next) : [...current, next];
+};

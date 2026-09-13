@@ -194,7 +194,7 @@ const UpsertStoreAddOnOfferingDialog = ({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Puzzle className="size-5" />}
-                    title="Edit price"
+                    title="Edit add-on"
                     subtitle={offering.addOn.name}
                 />
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>

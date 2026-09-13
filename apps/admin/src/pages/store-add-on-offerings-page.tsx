@@ -1,28 +1,33 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import {
     getOrganizationDetails,
     getStore,
     getStoreAddOnOfferings,
 } from "@repo/services";
-import {
-    getStoreProductOfferingAvailability,
-    isStoreProductOfferingPriceInherited,
-} from "@repo/types";
+import { isStoreProductOfferingPriceInherited } from "@repo/types";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
-import { Spinner } from "@repo/ui/components/spinner";
-import { Pencil, Puzzle, RefreshCw, Search, X } from "lucide-react";
-import { cn } from "@repo/ui/lib/utils";
-
 import { PriceDisplay } from "@repo/ui/components/price-display";
-import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-status-badge";
+import { Spinner } from "@repo/ui/components/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
+import { Pencil, Puzzle, RefreshCw } from "lucide-react";
+
+import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import UpsertStoreAddOnOfferingDialog from "@/components/catalog/upsert-store-add-on-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
+import CatalogStatusFilterBar from "@/components/catalog/catalog-status-filter-bar";
+import {
+    catalogFilterUrlOptions,
+    storeCatalogListFilterParsers,
+    toggleCatalogStatusFilter,
+} from "@/lib/catalog-query-states";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
 
@@ -30,7 +35,12 @@ const EMPTY_OFFERINGS: never[] = [];
 
 const StoreAddOnOfferingsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
-    const [searchQuery, setSearchQuery] = useState("");
+    const [{ search: searchQuery, statuses: statusFilters, orgStatuses: orgStatusFilters }, setFilters] = useQueryStates(
+        storeCatalogListFilterParsers,
+        catalogFilterUrlOptions,
+    );
+    const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(searchQuery, commitSearch);
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -57,12 +67,36 @@ const StoreAddOnOfferingsPage = () => {
         offeringsQuery.data?.status === "success" ? offeringsQuery.data.data?.offerings ?? EMPTY_OFFERINGS : EMPTY_OFFERINGS;
 
     const filteredOfferings = useMemo(() => {
-        if (!searchQuery.trim()) {
-            return offerings;
-        }
-        const query = searchQuery.toLowerCase().trim();
-        return offerings.filter((offering) => offering.addOn.name.toLowerCase().includes(query));
-    }, [offerings, searchQuery]);
+        return offerings.filter((offering) => {
+            if (statusFilters.length > 0 && !statusFilters.includes(offering.status)) {
+                return false;
+            }
+            if (orgStatusFilters.length > 0 && !orgStatusFilters.includes(offering.addOn.status)) {
+                return false;
+            }
+            if (!searchQuery.trim()) {
+                return true;
+            }
+            return offering.addOn.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+        });
+    }, [offerings, searchQuery, statusFilters, orgStatusFilters]);
+
+    const toggleStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            statuses: toggleCatalogStatusFilter(current.statuses, value),
+        }));
+    };
+
+    const toggleOrgStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            orgStatuses: toggleCatalogStatusFilter(current.orgStatuses, value),
+        }));
+    };
+
+    const resetFilters = () => {
+        clearSearch();
+        void setFilters({ statuses: [], orgStatuses: [] });
+    };
 
     if (organizationQuery.isPending || storeQuery.isPending || offeringsQuery.isPending) {
         return (
@@ -148,26 +182,20 @@ const StoreAddOnOfferingsPage = () => {
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
-            <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
-                <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
-                <Input
-                    type="text"
-                    placeholder="Search add-ons..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
-                />
-                {searchQuery && (
-                    <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                        aria-label="Clear search"
-                    >
-                        <X className="size-3.5" />
-                    </button>
-                )}
-            </div>
+            <CatalogStatusFilterBar
+                searchPlaceholder="Search add-ons..."
+                searchInput={searchInput}
+                onSearchInputChange={setSearchInput}
+                onClearSearch={clearSearch}
+                statusFilters={statusFilters}
+                onToggleStatus={toggleStatusFilter}
+                onSetStatuses={(statuses) => void setFilters({ statuses })}
+                orgStatusFilters={orgStatusFilters}
+                onToggleOrgStatus={toggleOrgStatusFilter}
+                onSetOrgStatuses={(orgStatuses) => void setFilters({ orgStatuses })}
+                filterAriaLabel="Filter add-ons"
+                mobileSheetTitle="Filter add-ons"
+            />
 
             {offerings.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
@@ -195,98 +223,104 @@ const StoreAddOnOfferingsPage = () => {
                     </CardContent>
                 </Card>
             ) : filteredOfferings.length === 0 ? (
-                <Card className="border-border/60 bg-card/80 shadow-md">
-                    <CardContent className="pt-6">
-                        <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
-                            <EmptyHeader>
-                                <EmptyMedia variant="icon">
-                                    <Puzzle />
-                                </EmptyMedia>
-                                <EmptyTitle>No add-ons found</EmptyTitle>
-                                <EmptyDescription>Try adjusting your search query.</EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    </CardContent>
+                <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
+                    <p>No add-ons match your search or filters.</p>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 rounded-full"
+                        onClick={resetFilters}
+                    >
+                        Clear all filters
+                    </Button>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2">
-                    {filteredOfferings.map((offering) => {
-                        const addOn = offering.addOn;
-                        const availability = getStoreProductOfferingAvailability({
-                            status: offering.status,
-                            product: { status: addOn.status },
-                        });
-                        const priceInherited = isStoreProductOfferingPriceInherited(offering);
+                <>
+                    <div className="flex items-center px-1 py-0.5">
+                        <span className="text-xs text-muted-foreground/70">
+                            Showing {filteredOfferings.length} add-on{filteredOfferings.length === 1 ? "" : "s"}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {filteredOfferings.map((offering) => {
+                            const addOn = offering.addOn;
+                            const priceInherited = isStoreProductOfferingPriceInherited(offering);
 
-                        return (
-                            <Card
-                                key={offering.id}
-                                className={cn(
-                                    "group relative flex flex-col justify-between rounded-2xl border p-3.5 sm:p-4 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
-                                    availability === "sellable"
-                                        ? "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95"
-                                        : "border-border/50 bg-muted/20 opacity-[0.82] hover:opacity-100",
-                                )}
-                            >
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/40 bg-primary/10 text-primary ring-1 ring-black/5 dark:ring-white/5 transition-transform duration-200 group-hover:scale-[1.02]">
-                                        <Puzzle className="size-6 text-primary" />
-                                    </div>
-
-                                    <div className="min-w-0 flex-1">
-                                        <h4 className="font-semibold text-sm sm:text-[15px] text-foreground line-clamp-2 break-words leading-snug">
-                                            {addOn.name}
-                                        </h4>
-                                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                                            <StoreOfferingAvailabilityBadge
-                                                offering={{
-                                                    status: offering.status,
-                                                    product: { status: addOn.status },
-                                                }}
-                                            />
+                            return (
+                                <Card
+                                    key={offering.id}
+                                    className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
+                                >
+                                    <div className="flex items-center justify-between gap-2.5">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                                <Puzzle className="size-4" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-display text-sm font-semibold text-foreground truncate">
+                                                    {addOn.name}
+                                                </h4>
+                                            </div>
+                                        </div>
+                                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                                            {addOn.status !== "active" ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                                                >
+                                                    Inactive in org
+                                                </Badge>
+                                            ) : null}
+                                            <ProductStatusBadge status={offering.status} />
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
-                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
-                                        <PriceDisplay
-                                            price={offering.effectivePrice}
-                                            discount={offering.effectiveDiscount}
-                                            size="sm"
-                                            align="left"
-                                            singleTone="foreground"
-                                            compact
-                                        />
-                                        {!priceInherited ? (
-                                            <p className="text-[11px] font-medium text-muted-foreground/80">
-                                                Store price
-                                            </p>
-                                        ) : null}
-                                    </div>
+                                    <div className="mt-3 flex items-end justify-between gap-2 border-t border-border/40 pt-2.5">
+                                        <div className="flex min-w-0 flex-col items-start gap-0.5">
+                                            <PriceDisplay
+                                                price={offering.effectivePrice}
+                                                discount={offering.effectiveDiscount}
+                                                size="sm"
+                                                align="left"
+                                                singleTone="foreground"
+                                                compact
+                                            />
+                                            {!priceInherited ? (
+                                                <p className="text-[11px] font-medium text-muted-foreground/80">
+                                                    Store price
+                                                </p>
+                                            ) : null}
+                                        </div>
 
-                                    <div className="flex items-center gap-0.5 shrink-0">
-                                        <UpsertStoreAddOnOfferingDialog
-                                            organizationId={organizationId}
-                                            storeId={storeId}
-                                            offering={offering}
-                                            trigger={
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    aria-label={`Edit price for ${addOn.name}`}
-                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
-                                                >
-                                                    <Pencil className="size-3.5" />
-                                                </Button>
-                                            }
-                                        />
+                                        <div className="flex items-center gap-0.5">
+                                            <Tooltip>
+                                                <TooltipTrigger render={<span className="inline-flex" />}>
+                                                    <UpsertStoreAddOnOfferingDialog
+                                                        organizationId={organizationId}
+                                                        storeId={storeId}
+                                                        offering={offering}
+                                                        trigger={
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                aria-label={`Edit ${addOn.name}`}
+                                                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                                            >
+                                                                <Pencil className="size-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                </TooltipTrigger>
+                                                <TooltipContent>Edit add-on</TooltipContent>
+                                            </Tooltip>
+                                        </div>
                                     </div>
-                                </div>
-                            </Card>
-                        );
-                    })}
-                </div>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </>
             )}
         </div>
     );

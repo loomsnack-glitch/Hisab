@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useQueryStates } from "nuqs";
 import {
     getCategories,
     getOrganizationDetails,
     getStore,
     getStoreProductOfferings,
-    updateStoreProductOffering,
 } from "@repo/services";
 import {
     catalogSellingQuantityLabel,
@@ -14,24 +14,11 @@ import {
     isStoreProductOfferingPriceInherited,
 } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogMedia,
-    AlertDialogTitle,
-} from "@repo/ui/components/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
-import { Eye, EyeOff, Package2, Pencil, RefreshCw, Search, X } from "lucide-react";
-import { toast } from "sonner";
+import { Package2, Pencil, RefreshCw } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
 import { PriceDisplay } from "@repo/ui/components/price-display";
@@ -39,13 +26,14 @@ import { StoreOfferingAvailabilityBadge } from "@/components/catalog/product-sta
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertStoreProductOfferingDialog from "@/components/catalog/upsert-store-product-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
+import CatalogStatusFilterBar from "@/components/catalog/catalog-status-filter-bar";
 import {
-    markCatalogProductStatusForStoreLabel,
-    markCatalogProductStatusLabel,
-    markCatalogProductStatusProgress,
-    markCatalogProductStatusTitle,
-} from "@/lib/catalog-product-status-copy";
+    catalogFilterUrlOptions,
+    storeCatalogListFilterParsers,
+    toggleCatalogStatusFilter,
+} from "@/lib/catalog-query-states";
 import { catalogKeys, organizationKeys } from "@/lib/query-keys";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { resolveNamedStoreInOrganization } from "@/lib/store-scope";
 
@@ -53,15 +41,13 @@ const EMPTY_CATALOG_ITEMS: never[] = [];
 
 const StoreProductOfferingsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
-    const queryClient = useQueryClient();
-    const [searchQuery, setSearchQuery] = useState("");
+    const [{ search: searchQuery, statuses: statusFilters, orgStatuses: orgStatusFilters }, setFilters] = useQueryStates(
+        storeCatalogListFilterParsers,
+        catalogFilterUrlOptions,
+    );
+    const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(searchQuery, commitSearch);
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
-    const [confirmStatusTarget, setConfirmStatusTarget] = useState<{
-        offeringId: string;
-        productName: string;
-        nextStatus: "active" | "inactive";
-        catalogInactive: boolean;
-    } | null>(null);
 
     const organizationQuery = useQuery({
         queryKey: organizationKeys.detail(organizationId),
@@ -114,6 +100,12 @@ const StoreProductOfferingsPage = () => {
             if (selectedCategoryFilter !== "all" && offering.product.categoryId !== selectedCategoryFilter) {
                 return false;
             }
+            if (statusFilters.length > 0 && !statusFilters.includes(offering.status)) {
+                return false;
+            }
+            if (orgStatusFilters.length > 0 && !orgStatusFilters.includes(offering.product.status)) {
+                return false;
+            }
             if (searchQuery.trim()) {
                 const query = searchQuery.toLowerCase().trim();
                 const productName = offering.product.name.toLowerCase();
@@ -122,31 +114,25 @@ const StoreProductOfferingsPage = () => {
             }
             return true;
         });
-    }, [offerings, selectedCategoryFilter, searchQuery, categoryMap]);
+    }, [offerings, selectedCategoryFilter, statusFilters, orgStatusFilters, searchQuery, categoryMap]);
 
-    const statusMutation = useMutation({
-        mutationFn: ({
-            offeringId,
-            status,
-        }: {
-            offeringId: string;
-            status: "active" | "inactive";
-        }) => updateStoreProductOffering(organizationId, storeId, offeringId, { status }),
-        onSuccess: (response) => {
-            if (response.status !== "success") {
-                toast.error(response.message);
-                return;
-            }
-            toast.success(response.message);
-            queryClient.invalidateQueries({
-                queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
-            });
-            setConfirmStatusTarget(null);
-        },
-        onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Unable to update this product");
-        },
-    });
+    const toggleStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            statuses: toggleCatalogStatusFilter(current.statuses, value),
+        }));
+    };
+
+    const toggleOrgStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            orgStatuses: toggleCatalogStatusFilter(current.orgStatuses, value),
+        }));
+    };
+
+    const resetFilters = () => {
+        clearSearch();
+        setSelectedCategoryFilter("all");
+        void setFilters({ statuses: [], orgStatuses: [] });
+    };
 
     if (organizationQuery.isPending || storeQuery.isPending || categoriesQuery.isPending || offeringsQuery.isPending) {
         return (
@@ -235,28 +221,20 @@ const StoreProductOfferingsPage = () => {
             {/* Store Catalog Navigation Tabs */}
             <StoreCatalogTabs organizationId={organizationId} storeId={storeId} />
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
-                    <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
-                    <Input
-                        type="text"
-                        placeholder="Search products..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
-                    />
-                    {searchQuery && (
-                        <button
-                            type="button"
-                            onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                            aria-label="Clear search"
-                        >
-                            <X className="size-3.5" />
-                        </button>
-                    )}
-                </div>
-            </div>
+            <CatalogStatusFilterBar
+                searchPlaceholder="Search products..."
+                searchInput={searchInput}
+                onSearchInputChange={setSearchInput}
+                onClearSearch={clearSearch}
+                statusFilters={statusFilters}
+                onToggleStatus={toggleStatusFilter}
+                onSetStatuses={(statuses) => void setFilters({ statuses })}
+                orgStatusFilters={orgStatusFilters}
+                onToggleOrgStatus={toggleOrgStatusFilter}
+                onSetOrgStatuses={(orgStatuses) => void setFilters({ orgStatuses })}
+                filterAriaLabel="Filter products"
+                mobileSheetTitle="Filter products"
+            />
 
             {categories.length > 0 && (
                 <div className="flex items-center gap-1.5 overflow-x-auto py-0 scrollbar-none">
@@ -327,9 +305,14 @@ const StoreProductOfferingsPage = () => {
                                 </EmptyMedia>
                                 <EmptyTitle>No products found</EmptyTitle>
                                 <EmptyDescription>
-                                    Try adjusting your search query or category filter.
+                                    Try adjusting your search query, category, or status filters.
                                 </EmptyDescription>
                             </EmptyHeader>
+                            <EmptyContent>
+                                <Button variant="outline" className="rounded-full" onClick={resetFilters}>
+                                    Clear all filters
+                                </Button>
+                            </EmptyContent>
                         </Empty>
                     </CardContent>
                 </Card>
@@ -342,17 +325,16 @@ const StoreProductOfferingsPage = () => {
                         const categoryName = categoryMap.get(offering.product.categoryId)?.name ?? "Unknown";
                         const product = offering.product;
                         const availability = getStoreProductOfferingAvailability(offering);
-                        const isLocallyActive = offering.status === "active";
                         const priceInherited = isStoreProductOfferingPriceInherited(offering);
 
                         return (
                             <Card
                                 key={offering.id}
                                 className={cn(
-                                    "group relative flex flex-col justify-between rounded-2xl border p-3.5 sm:p-4 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
+                                    "group relative flex flex-col justify-between rounded-2xl border p-3 sm:p-3.5 shadow-2xs transition-all duration-200 min-w-0 hover:shadow-md",
                                     availability === "sellable"
                                         ? "border-border/60 bg-card/70 hover:border-primary/30 hover:bg-card/95"
-                                        : "border-border/50 bg-muted/20 opacity-[0.82] hover:opacity-100",
+                                        : "border-border/60 bg-card/65 hover:border-border/70 hover:bg-card/80",
                                 )}
                             >
                                 <div className="flex items-start gap-3 min-w-0">
@@ -365,31 +347,34 @@ const StoreProductOfferingsPage = () => {
                                                 loading="lazy"
                                             />
                                         ) : (
-                                            <Package2 className="size-6 text-muted-foreground/50" />
+                                            <Package2 className="size-6 sm:size-7 text-muted-foreground/50" />
                                         )}
                                     </div>
 
-                                    <div className="min-w-0 flex-1">
-                                        <h4 className="font-semibold text-sm sm:text-[15px] text-foreground line-clamp-2 break-words leading-snug">
-                                            {product.name}
-                                        </h4>
-                                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                                            <span className="font-medium text-muted-foreground/90">{categoryName}</span>
-                                            {product.productType !== "single" && (
-                                                <ProductTypeBadge productType={product.productType} />
-                                            )}
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <Tooltip>
+                                            <TooltipTrigger render={<div className="min-w-0" />}>
+                                                <h4 className="font-display text-sm sm:text-[15px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-primary line-clamp-2 break-words">
+                                                    {product.name}
+                                                </h4>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="max-w-xs text-xs">
+                                                {product.name}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+                                            <span className="text-[11px] sm:text-xs font-medium capitalize text-muted-foreground">
+                                                {categoryName}
+                                            </span>
+                                            <ProductTypeBadge productType={product.productType} />
                                             <StoreOfferingAvailabilityBadge offering={offering} />
-                                            {product.productType === "single" && product.activeAddOnCount ? (
-                                                <span className="text-[11px] text-muted-foreground/80">
-                                                    {product.activeAddOnCount} add-on{product.activeAddOnCount === 1 ? "" : "s"}
-                                                </span>
-                                            ) : null}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 mt-3">
-                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
+                                <div className="flex items-end justify-between gap-2 pt-2.5 mt-2.5 border-t border-border/40 min-w-0">
+                                    <div className="flex flex-col items-start gap-0.5 min-w-0">
                                         <PriceDisplay
                                             price={offering.effectivePrice}
                                             discount={offering.effectiveDiscount}
@@ -398,66 +383,32 @@ const StoreProductOfferingsPage = () => {
                                             singleTone="foreground"
                                             compact
                                         />
-                                        <p className="text-[11px] font-medium text-muted-foreground/80">
+                                        <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground/80">
                                             {catalogSellingQuantityLabel(product)}
                                             {priceInherited ? "" : " · Store price"}
-                                        </p>
+                                        </span>
                                     </div>
 
                                     <div className="flex items-center gap-0.5 shrink-0">
-                                        <UpsertStoreProductOfferingDialog
-                                            organizationId={organizationId}
-                                            storeId={store.id}
-                                            offering={offering}
-                                            trigger={
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    aria-label={`Edit price for ${product.name}`}
-                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
-                                                >
-                                                    <Pencil className="size-3.5" />
-                                                </Button>
-                                            }
-                                        />
                                         <Tooltip>
                                             <TooltipTrigger render={<span className="inline-flex" />}>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    aria-label={
-                                                        isLocallyActive
-                                                            ? `${markCatalogProductStatusLabel("inactive")} ${product.name}`
-                                                            : `${markCatalogProductStatusLabel("active")} ${product.name}`
+                                                <UpsertStoreProductOfferingDialog
+                                                    organizationId={organizationId}
+                                                    storeId={store.id}
+                                                    offering={offering}
+                                                    trigger={
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            aria-label={`Edit ${product.name}`}
+                                                            className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                                        >
+                                                            <Pencil className="size-3.5" />
+                                                        </Button>
                                                     }
-                                                    className={cn(
-                                                        "h-8 w-8 rounded-lg cursor-pointer touch-manipulation focus-visible:ring-2",
-                                                        isLocallyActive
-                                                            ? "text-muted-foreground hover:bg-muted/80 hover:text-foreground focus-visible:ring-primary/40"
-                                                            : "text-emerald-500 hover:bg-emerald-500/15 hover:text-emerald-400 focus-visible:ring-emerald-500/40",
-                                                    )}
-                                                    disabled={statusMutation.isPending}
-                                                    onClick={() =>
-                                                        setConfirmStatusTarget({
-                                                            offeringId: offering.id,
-                                                            productName: product.name,
-                                                            nextStatus: isLocallyActive ? "inactive" : "active",
-                                                            catalogInactive: product.status !== "active",
-                                                        })
-                                                    }
-                                                >
-                                                    {statusMutation.isPending && statusMutation.variables?.offeringId === offering.id ? (
-                                                        <Spinner className="size-3.5" />
-                                                    ) : isLocallyActive ? (
-                                                        <EyeOff className="size-3.5" />
-                                                    ) : (
-                                                        <Eye className="size-3.5 text-emerald-400" />
-                                                    )}
-                                                </Button>
+                                                />
                                             </TooltipTrigger>
-                                            <TooltipContent>
-                                                {markCatalogProductStatusForStoreLabel(isLocallyActive ? "inactive" : "active")}
-                                            </TooltipContent>
+                                            <TooltipContent>Edit product</TooltipContent>
                                         </Tooltip>
                                     </div>
                                 </div>
@@ -466,74 +417,6 @@ const StoreProductOfferingsPage = () => {
                     })}
                 </div>
             )}
-
-            {/* Status Change Confirmation Alert Dialog */}
-            <AlertDialog
-                open={Boolean(confirmStatusTarget)}
-                onOpenChange={(open) => {
-                    if (!open && !statusMutation.isPending) {
-                        setConfirmStatusTarget(null);
-                    }
-                }}
-            >
-                <AlertDialogContent>
-                    {confirmStatusTarget && (
-                        <>
-                            <AlertDialogHeader>
-                                <AlertDialogMedia
-                                    className={
-                                        confirmStatusTarget.nextStatus === "active"
-                                            ? "bg-emerald-500/15 text-emerald-500"
-                                            : "bg-muted/80 text-muted-foreground"
-                                    }
-                                >
-                                    {confirmStatusTarget.nextStatus === "active" ? (
-                                        <Eye className="size-5 text-emerald-500" />
-                                    ) : (
-                                        <EyeOff className="size-5 text-muted-foreground" />
-                                    )}
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                    {markCatalogProductStatusTitle(
-                                        confirmStatusTarget.productName,
-                                        confirmStatusTarget.nextStatus,
-                                    )}
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    {confirmStatusTarget.nextStatus === "active"
-                                        ? confirmStatusTarget.catalogInactive
-                                            ? `"${confirmStatusTarget.productName}" will be marked active for ${store.name}, but it stays off the menu until the Organization catalog product is active.`
-                                            : `"${confirmStatusTarget.productName}" will be marked active for ${store.name} and will be available for customers.`
-                                        : `"${confirmStatusTarget.productName}" will be marked inactive for ${store.name} and will no longer appear in this store's active menu.`}
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={statusMutation.isPending} className="rounded-xl">
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    className={cn(
-                                        "rounded-xl shadow-sm",
-                                        confirmStatusTarget.nextStatus === "active"
-                                            ? "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-                                            : "bg-primary text-primary-foreground hover:bg-primary/90",
-                                    )}
-                                    isLoading={statusMutation.isPending}
-                                    loadingText={markCatalogProductStatusProgress(confirmStatusTarget.nextStatus)}
-                                    onClick={() =>
-                                        statusMutation.mutate({
-                                            offeringId: confirmStatusTarget.offeringId,
-                                            status: confirmStatusTarget.nextStatus,
-                                        })
-                                    }
-                                >
-                                    {markCatalogProductStatusLabel(confirmStatusTarget.nextStatus)}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </>
-                    )}
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 };

@@ -194,7 +194,7 @@ const UpsertStoreProductOfferingDialog = ({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader
                     icon={<Package2 className="size-5" />}
-                    title="Edit price"
+                    title="Edit product"
                     subtitle={offering.product.name}
                 />
                 <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
