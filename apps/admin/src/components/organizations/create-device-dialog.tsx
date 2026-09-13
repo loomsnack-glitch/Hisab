@@ -15,7 +15,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { PasswordInput } from "@repo/ui/components/password-input";
-import { MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
+import { MonitorSmartphone, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
@@ -34,7 +34,14 @@ type CreateDeviceDialogProps = {
 
 const defaultValues: CreateStoreDeviceJSON = { name: "", loginUsername: "", deviceSecret: "" };
 
-const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, storeName, deviceNumber, trigger }: CreateDeviceDialogProps) => {
+const CreateDeviceDialog = ({
+    organizationId,
+    organizationUsername,
+    storeId,
+    storeName,
+    deviceNumber,
+    trigger,
+}: CreateDeviceDialogProps) => {
     const [open, setOpen] = useState(false);
     const [setupOpen, setSetupOpen] = useState(false);
     const [setupDevice, setSetupDevice] = useState<StoreDeviceDTO | null>(null);
@@ -45,9 +52,6 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
         defaultValues,
     });
 
-    const deviceName = form.watch("name");
-    const deviceLoginUsername = form.watch("loginUsername");
-
     const createMutation = useMutation({
         mutationFn: (data: CreateStoreDeviceJSON) => createStoreDevice(organizationId, storeId, data),
         onSuccess: (response) => {
@@ -57,7 +61,7 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                 setOpen(false);
                 setSetupDevice(response.data.device);
                 setSetupOpen(true);
-                toast.success("Device created. POS setup details are ready.");
+                toast.success(response.message);
                 return;
             }
 
@@ -82,7 +86,7 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
                     if (response.status === "success") {
                         result = true;
                     }
-                } catch (err) {
+                } catch {
                     result = false;
                 }
             })();
@@ -120,129 +124,83 @@ const CreateDeviceDialog = ({ organizationId, organizationUsername, storeId, sto
     return (
         <>
             <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
-            <DialogTrigger
-                render={
-                    trigger ?? (
-                        <Button size="sm" variant="outline" className="rounded-full">
-                            <Plus className="size-4" />
-                            Add device
-                        </Button>
-                    )
-                }
-            />
-            <DialogContent className="relative overflow-hidden sm:max-w-md border-border/80 shadow-2xl backdrop-blur-md">
-                <DialogHeader
-                    icon={<MonitorSmartphone className="size-5 transition-transform duration-300" />}
-                    title="Add device"
+                <DialogTrigger
+                    render={
+                        trigger ?? (
+                            <Button size="sm" variant="outline" className="rounded-full">
+                                <Plus className="size-4" />
+                                Add device
+                            </Button>
+                        )
+                    }
                 />
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader icon={<MonitorSmartphone className="size-5" />} title="Add device" />
 
-                <form className="space-y-4 pt-3" onSubmit={form.handleSubmit(onSubmit)}>
-                    <Field data-invalid={!!form.formState.errors.name}>
-                        <div className="flex items-center justify-between">
-                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
-                                Device name
-                            </FieldLabel>
-                            <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
-                                {(deviceName ?? "").length}/255
-                            </span>
-                        </div>
-                        <FieldContent>
-                            <Input
-                                variant="ringShadow"
-                                className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
-                                maxLength={255}
-                                placeholder="e.g. Counter 1, Front Desk"
-                                {...form.register("name")}
-                            />
-                            <FieldError errors={[form.formState.errors.name]} />
-                        </FieldContent>
-                    </Field>
+                    <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
+                        <Field data-invalid={!!form.formState.errors.name}>
+                            <FieldLabel required>Device name</FieldLabel>
+                            <FieldContent>
+                                <Input className="h-11 rounded-xl" maxLength={255} {...form.register("name")} />
+                                <FieldError errors={[form.formState.errors.name]} />
+                            </FieldContent>
+                        </Field>
 
-                    <Field data-invalid={!!form.formState.errors.loginUsername}>
-                        <div className="flex items-center justify-between">
-                            <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
-                                Device username
-                            </FieldLabel>
-                            <span className="text-[10px] font-medium text-muted-foreground/50 mb-1.5 tabular-nums select-none">
-                                {(deviceLoginUsername ?? "").length}/64
-                            </span>
-                        </div>
-                        <FieldContent>
-                            <Input
-                                variant="ringShadow"
-                                className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner font-mono text-sm"
-                                maxLength={64}
-                                placeholder="e.g. counter1"
-                                {...form.register("loginUsername")}
-                            />
-                            <FieldError errors={[form.formState.errors.loginUsername]} />
-                            <p className="text-[11px] text-muted-foreground">
-                                This username identifies this device when opening POS.
-                            </p>
-                        </FieldContent>
-                    </Field>
+                        <Field data-invalid={!!form.formState.errors.loginUsername}>
+                            <FieldLabel required>Device username</FieldLabel>
+                            <FieldContent>
+                                <Input
+                                    className="h-11 rounded-xl font-mono text-sm"
+                                    maxLength={64}
+                                    {...form.register("loginUsername")}
+                                />
+                                <FieldError errors={[form.formState.errors.loginUsername]} />
+                            </FieldContent>
+                        </Field>
 
-                    <Controller
-                        control={form.control}
-                        name="deviceSecret"
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80" required>
-                                    Device secret
-                                </FieldLabel>
-                                <FieldContent>
-                                    <PasswordInput
-                                        variant="ringShadow"
-                                        className="h-11 rounded-xl border border-border/60 bg-muted/20 px-3.5 hover:bg-muted/30 focus:bg-background focus:border-primary/80 transition-all duration-200 shadow-inner"
-                                        placeholder="Choose a secure secret"
-                                        visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
-                                        value={field.value ?? ""}
-                                        onChange={field.onChange}
-                                        onBlur={field.onBlur}
-                                        name={field.name}
-                                        ref={field.ref}
-                                        autoComplete="new-password"
-                                    />
-                                    <FieldError errors={[fieldState.error]} />
-                                </FieldContent>
-                            </Field>
-                        )}
-                    />
+                        <Controller
+                            control={form.control}
+                            name="deviceSecret"
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                    <FieldLabel required>Device secret</FieldLabel>
+                                    <FieldContent>
+                                        <PasswordInput
+                                            className="h-11 rounded-xl"
+                                            visibilityLabel={{ show: "Show device secret", hide: "Hide device secret" }}
+                                            value={field.value ?? ""}
+                                            onChange={field.onChange}
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            ref={field.ref}
+                                            autoComplete="new-password"
+                                        />
+                                        <FieldError errors={[fieldState.error]} />
+                                    </FieldContent>
+                                </Field>
+                            )}
+                        />
 
-                    <div className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-                        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <p>This secret is stored securely. You can reveal it later from the device list.</p>
-                    </div>
-
-                    <DialogFooter className="mt-4 border-t border-border/30">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            className="mr-auto rounded-xl px-5 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
-                            onClick={() => form.reset(defaultValues)}
-                            disabled={createMutation.isPending}
-                        >
-                            Clear
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-xl px-5 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
-                            onClick={() => handleOpenChange(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            className="rounded-xl px-5 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold transition-all duration-200"
-                            disabled={createMutation.isPending}
-                        >
-                            {createMutation.isPending ? "Creating..." : "Create device"}
-                        </Button>
-                    </DialogFooter>
-                </form>
-                {AlertDialogComponent}
-            </DialogContent>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() => handleOpenChange(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                                disabled={createMutation.isPending}
+                            >
+                                {createMutation.isPending ? "Creating..." : "Create device"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                    {AlertDialogComponent}
+                </DialogContent>
             </Dialog>
 
             {setupDevice ? (

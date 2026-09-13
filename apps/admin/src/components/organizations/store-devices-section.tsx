@@ -1,13 +1,40 @@
+import { useCallback, useMemo, useState } from "react";
+import { useQueryStates } from "nuqs";
 import type { StoreWithDevicesDTO } from "@repo/types";
 import { Button } from "@repo/ui/components/button";
+import { Card } from "@repo/ui/components/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { ExternalLink, MonitorSmartphone, PlusCircle } from "lucide-react";
+import { Input } from "@repo/ui/components/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@repo/ui/components/tooltip";
+import { cn } from "@repo/ui/lib/utils";
+import {
+    Check,
+    CircleCheck,
+    ExternalLink,
+    Filter,
+    MonitorSmartphone,
+    MoreHorizontal,
+    Plus,
+    PlusCircle,
+    Search,
+    X,
+} from "lucide-react";
 
 import CreateDeviceDialog from "@/components/organizations/create-device-dialog";
 import DeviceActionsMenu from "@/components/organizations/device-actions-menu";
 import DeviceStatusBadge from "@/components/organizations/device-status-badge";
+import {
+    DEVICE_STATUSES,
+    deviceFilterUrlOptions,
+    deviceListFilterParsers,
+    toggleDeviceStatusFilter,
+    type DeviceStatusFilter,
+} from "@/lib/device-query-states";
 import { formatDateTime } from "@/lib/format";
 import { getPosLoginUrl } from "@/lib/pos-origin";
+import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
 
 type StoreDevicesSectionProps = {
     organizationId: string;
@@ -15,31 +42,152 @@ type StoreDevicesSectionProps = {
     store: StoreWithDevicesDTO;
 };
 
-const StoreDevicesSection = ({ organizationId, organizationUsername, store }: StoreDevicesSectionProps) => {
-    return (
-        <section className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h3 className="font-display text-lg font-semibold text-foreground">Devices</h3>
-                    <p className="text-sm text-muted-foreground">POS terminals registered to this store.</p>
-                </div>
-                <CreateDeviceDialog
-                    organizationId={organizationId}
-                    organizationUsername={organizationUsername}
-                    storeId={store.id}
-                    storeName={store.name}
-                    deviceNumber={store.devices.length + 1}
-                    trigger={
-                        <Button variant="outline" className="rounded-full h-9 text-xs sm:h-10 sm:text-sm px-3.5 sm:px-4">
-                            <PlusCircle className="size-3.5 sm:size-4" />
-                            Add device
-                        </Button>
-                    }
-                />
-            </div>
+const STATUS_FILTER_OPTIONS = DEVICE_STATUSES.map((status) => ({
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    value: status,
+}));
 
-            {store.devices.length === 0 ? (
-                <Empty className="rounded-2xl border border-dashed border-border bg-background/60">
+type DeviceStatusFilterOptionsProps = {
+    selectedValues: readonly string[];
+    onChange: (value: string) => void;
+    onClear: () => void;
+    variant?: "popover" | "sheet";
+};
+
+const DeviceStatusFilterOptions = ({
+    selectedValues,
+    onChange,
+    onClear,
+    variant = "popover",
+}: DeviceStatusFilterOptionsProps) => {
+    const isSheet = variant === "sheet";
+
+    return (
+        <div className={cn("space-y-1", isSheet && "space-y-2")}>
+            <div className={cn("flex items-center justify-between gap-3", isSheet ? "px-1 py-1" : "px-2 py-1")}>
+                <div className="flex min-w-0 items-center gap-2">
+                    {isSheet ? (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <CircleCheck className="size-4" />
+                        </span>
+                    ) : (
+                        <CircleCheck className="size-3.5 shrink-0 text-muted-foreground/70" />
+                    )}
+                    <p
+                        className={cn(
+                            isSheet
+                                ? "text-sm font-semibold text-foreground"
+                                : "text-[10px] font-bold uppercase tracking-wider text-muted-foreground",
+                        )}
+                    >
+                        Status
+                    </p>
+                </div>
+                {selectedValues.length > 0 ? (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        className={cn(
+                            "shrink-0 font-semibold text-primary hover:underline cursor-pointer",
+                            isSheet ? "text-sm" : "text-[10px]",
+                        )}
+                    >
+                        Clear
+                    </button>
+                ) : (
+                    <span className={cn("invisible shrink-0 font-semibold", isSheet ? "text-sm" : "text-[10px]")}>
+                        Clear
+                    </span>
+                )}
+            </div>
+            {STATUS_FILTER_OPTIONS.map((option) => {
+                const isChecked = selectedValues.includes(option.value);
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onChange(option.value)}
+                        className={cn(
+                            "flex w-full items-center gap-3 rounded-lg text-left font-medium hover:bg-muted/50 cursor-pointer",
+                            isSheet ? "px-2 py-2.5 text-sm" : "gap-2 px-2 py-1.5 text-xs",
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                "flex items-center justify-center rounded-[4px] border border-muted-foreground/35 transition-colors",
+                                isChecked ? "bg-primary text-primary-foreground border-primary" : "bg-transparent",
+                                isSheet ? "size-5" : "size-4",
+                            )}
+                        >
+                            {isChecked ? <Check className={cn("stroke-[3]", isSheet ? "size-3.5" : "size-3")} /> : null}
+                        </div>
+                        <span className="truncate">{option.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
+const StoreDevicesSection = ({ organizationId, organizationUsername, store }: StoreDevicesSectionProps) => {
+    const [{ search: searchQuery, statuses: statusFilters }, setFilters] = useQueryStates(
+        deviceListFilterParsers,
+        deviceFilterUrlOptions,
+    );
+    const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
+    const { searchInput, setSearchInput, clearSearch } = useDebouncedUrlSearch(searchQuery, commitSearch);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
+
+    const filteredDevices = useMemo(() => {
+        return store.devices.filter((device) => {
+            if (statusFilters.length > 0 && !statusFilters.includes(device.status)) {
+                return false;
+            }
+            if (!searchQuery.trim()) {
+                return true;
+            }
+            const query = searchQuery.toLowerCase().trim();
+            return (
+                device.name.toLowerCase().includes(query) ||
+                device.loginUsername.toLowerCase().includes(query)
+            );
+        });
+    }, [store.devices, searchQuery, statusFilters]);
+
+    const toggleStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            statuses: toggleDeviceStatusFilter(current.statuses, value),
+        }));
+    };
+
+    const resetFilters = () => {
+        clearSearch();
+        void setFilters({ statuses: [] });
+    };
+
+    const handleMobileFiltersOpenChange = (open: boolean) => {
+        if (open) {
+            setDraftStatusFilters([...statusFilters]);
+        }
+        setMobileFiltersOpen(open);
+    };
+
+    const renderAddDeviceDialog = (trigger: React.ReactElement) => (
+        <CreateDeviceDialog
+            organizationId={organizationId}
+            organizationUsername={organizationUsername}
+            storeId={store.id}
+            storeName={store.name}
+            deviceNumber={store.devices.length + 1}
+            trigger={trigger}
+        />
+    );
+
+    if (store.devices.length === 0) {
+        return (
+            <div className="space-y-3" data-testid="store-devices-section">
+                <Empty className="rounded-2xl border border-dashed border-border bg-background/60 py-10">
                     <EmptyHeader>
                         <EmptyMedia variant="icon">
                             <MonitorSmartphone />
@@ -51,164 +199,296 @@ const StoreDevicesSection = ({ organizationId, organizationUsername, store }: St
                         </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
-                        <CreateDeviceDialog
-                            organizationId={organizationId}
-                            organizationUsername={organizationUsername}
-                            storeId={store.id}
-                            storeName={store.name}
-                            deviceNumber={store.devices.length + 1}
-                        />
+                        {renderAddDeviceDialog(
+                            <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20">
+                                <PlusCircle className="size-3.5" />
+                                Add device
+                            </Button>,
+                        )}
                     </EmptyContent>
                 </Empty>
-            ) : (
-                <>
-                    <div className="hidden xl:block overflow-x-auto rounded-2xl border border-border/60">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-border/50 bg-muted/20 text-left text-muted-foreground">
-                                    <th className="px-4 py-3 font-medium">Device</th>
-                                    <th className="px-4 py-3 font-medium">Status</th>
-                                    <th className="px-4 py-3 font-medium">Last seen</th>
-                                    <th className="px-4 py-3 font-medium">Created</th>
-                                    <th className="px-4 py-3 font-medium">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/40">
-                                {store.devices.map((device, index) => (
-                                    <tr
-                                        key={device.id}
-                                        className={`transition-colors duration-150 hover:bg-muted/30 ${index % 2 === 0 ? "" : "bg-muted/10"}`}
-                                    >
-                                        <td className="px-4 py-3.5">
-                                            <div>
-                                                <p className="font-medium text-foreground">{device.name}</p>
-                                                <div className="mt-1 flex items-center gap-1">
-                                                    <code className="break-all font-mono text-xs text-muted-foreground">
-                                                        {device.loginUsername}
-                                                    </code>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            <DeviceStatusBadge status={device.status} />
-                                        </td>
-                                        <td className="px-4 py-3.5 text-muted-foreground">
-                                            {formatDateTime(device.lastSeenAt)}
-                                        </td>
-                                        <td className="px-4 py-3.5 text-muted-foreground">
-                                            {formatDateTime(device.createdAt)}
-                                        </td>
-                                        <td className="px-4 py-3.5">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                {device.status !== "active" ? (
-                                                    <span className="text-xs text-red-600 dark:text-red-400 font-medium whitespace-nowrap">
-                                                        {device.status === "revoked" ? "Revoked" : "Inactive"} — POS login disabled
-                                                    </span>
-                                                ) : (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="rounded-full"
-                                                        render={
-                                                            <a
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                href={getPosLoginUrl({
-                                                                    organizationUsername,
-                                                                    deviceUsername: device.loginUsername,
-                                                                })}
-                                                            />
-                                                        }
-                                                    >
-                                                        <ExternalLink className="size-4" />
-                                                        Open POS
-                                                    </Button>
-                                                )}
-                                                <DeviceActionsMenu
-                                                    organizationId={organizationId}
-                                                    organizationUsername={organizationUsername}
-                                                    storeId={store.id}
-                                                    device={device}
-                                                />
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3" data-testid="store-devices-section">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleMobileFiltersOpenChange(true)}
+                        aria-label="Filter devices"
+                        className={cn(
+                            "relative h-10 w-10 shrink-0 rounded-full border-border/60 bg-card/60 p-0 shadow-2xs sm:hidden",
+                            statusFilters.length > 0
+                                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                : "text-muted-foreground",
+                        )}
+                    >
+                        <Filter className="size-4" />
+                        {statusFilters.length > 0 ? (
+                            <span className="absolute top-0.5 right-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold leading-none text-primary-foreground ring-2 ring-card">
+                                {statusFilters.length}
+                            </span>
+                        ) : null}
+                    </Button>
+
+                    <div className="relative flex-1 min-w-[180px] max-w-sm group/search">
+                        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within/search:text-primary" />
+                        <Input
+                            type="text"
+                            placeholder="Search devices..."
+                            value={searchInput}
+                            onChange={(event) => setSearchInput(event.target.value)}
+                            className="pl-10 pr-9 h-10 rounded-full border border-border/60 bg-card/60 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/60 transition-all duration-200 text-sm w-full shadow-2xs"
+                        />
+                        {searchInput ? (
+                            <button
+                                type="button"
+                                onClick={clearSearch}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted/80 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                                aria-label="Clear search"
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        ) : null}
                     </div>
 
-                    <div className="block xl:hidden space-y-3">
-                        {store.devices.map((device) => (
-                            <div
-                                key={device.id}
-                                className="rounded-2xl border border-border/60 bg-card p-4 space-y-3"
-                            >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="font-medium text-foreground truncate">{device.name}</p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            Last seen: {formatDateTime(device.lastSeenAt)}
-                                        </p>
-                                    </div>
-                                    <DeviceStatusBadge status={device.status} className="shrink-0" />
-                                </div>
+                    {renderAddDeviceDialog(
+                        <Button
+                            type="button"
+                            aria-label="Add device"
+                            className="h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-primary-foreground shadow-xs shadow-primary/20 hover:bg-primary/90 sm:hidden"
+                        >
+                            <Plus className="size-4" />
+                        </Button>,
+                    )}
 
-                                {device.status !== "active" && (
-                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
-                                        {device.status === "revoked" ? "Revoked" : "Inactive"} — POS login disabled
-                                    </div>
-                                )}
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        statusFilters.length > 0
+                                            ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                            : "text-muted-foreground",
+                                    )}
+                                >
+                                    <CircleCheck
+                                        className={cn(
+                                            "size-3.5 transition-colors",
+                                            statusFilters.length > 0
+                                                ? "text-primary stroke-[2.5]"
+                                                : "text-muted-foreground/70",
+                                        )}
+                                    />
+                                    <span>Status</span>
+                                    {statusFilters.length > 0 ? (
+                                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground animate-in zoom-in duration-200">
+                                            {statusFilters.length}
+                                        </span>
+                                    ) : null}
+                                </Button>
+                            }
+                        />
+                        <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
+                            <DeviceStatusFilterOptions
+                                selectedValues={statusFilters}
+                                onChange={toggleStatusFilter}
+                                onClear={() => void setFilters({ statuses: [] })}
+                            />
+                        </PopoverContent>
+                    </Popover>
 
-                                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+                    {statusFilters.length > 0 ? (
+                        <Button
+                            variant="ghost"
+                            onClick={() => void setFilters({ statuses: [] })}
+                            className="hidden sm:flex h-9 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive text-xs font-semibold gap-1.5 px-3 shrink-0 cursor-pointer animate-in fade-in slide-in-from-left-2 duration-200"
+                        >
+                            <X className="size-3.5" />
+                            <span>Clear Filters</span>
+                        </Button>
+                    ) : null}
+                </div>
+
+                <div className="hidden sm:flex flex-wrap items-center gap-2">
+                    {renderAddDeviceDialog(
+                        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20">
+                            <PlusCircle className="size-3.5" />
+                            Add device
+                        </Button>,
+                    )}
+                </div>
+            </div>
+
+            {filteredDevices.length > 0 ? (
+                <div className="flex items-center px-1 py-0.5">
+                    <span className="text-xs text-muted-foreground/70">
+                        Showing {filteredDevices.length} device{filteredDevices.length === 1 ? "" : "s"}
+                    </span>
+                </div>
+            ) : null}
+
+            {filteredDevices.length === 0 ? (
+                <Card className="border-border/60 bg-card/80 p-6 text-center text-xs text-muted-foreground rounded-2xl">
+                    <p>No devices match your search or filters.</p>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 rounded-full"
+                        onClick={resetFilters}
+                    >
+                        Clear all filters
+                    </Button>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filteredDevices.map((device) => (
+                        <Card
+                            key={device.id}
+                            className="rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs transition-all hover:border-primary/25 hover:bg-card"
+                        >
+                            <div className="flex items-center justify-between gap-2.5">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                        <MonitorSmartphone className="size-4" />
+                                    </div>
                                     <div className="min-w-0">
-                                        <p className="text-xs text-muted-foreground">Device username</p>
-                                        <code className="break-all font-mono text-sm text-foreground">
+                                        <h4 className="font-display text-sm font-semibold text-foreground truncate">
+                                            {device.name}
+                                        </h4>
+                                        <code className="block truncate font-mono text-[11px] text-muted-foreground">
                                             {device.loginUsername}
                                         </code>
                                     </div>
                                 </div>
+                                <DeviceStatusBadge status={device.status} className="shrink-0 rounded-full" />
+                            </div>
 
-                                <p className="text-xs text-muted-foreground">
-                                    Created {formatDateTime(device.createdAt)}
+                            {device.status !== "active" ? (
+                                <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">
+                                    {device.status === "revoked" ? "Revoked" : "Inactive"} — POS login disabled
                                 </p>
+                            ) : null}
 
-                                <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-2 pt-1">
-                                    {device.status === "active" && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="rounded-full"
-                                            render={
-                                                <a
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    href={getPosLoginUrl({
-                                                        organizationUsername,
-                                                        deviceUsername: device.loginUsername,
-                                                    })}
-                                                />
-                                            }
-                                        >
-                                            <ExternalLink className="size-4" />
-                                            Open POS
-                                        </Button>
-                                    )}
-                                    <DeviceActionsMenu
-                                        organizationId={organizationId}
-                                        organizationUsername={organizationUsername}
-                                        storeId={store.id}
-                                        device={device}
-                                    />
+                            <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/40 pt-2.5">
+                                <span className="min-w-0 truncate text-[11px] font-medium text-muted-foreground/80">
+                                    Last seen {formatDateTime(device.lastSeenAt)}
+                                </span>
+                                <div className="flex shrink-0 items-center gap-0.5">
+                                    {device.status === "active" ? (
+                                        <Tooltip>
+                                            <TooltipTrigger render={<span className="inline-flex" />}>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    aria-label={`Open POS for ${device.name}`}
+                                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                                    render={
+                                                        <a
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            href={getPosLoginUrl({
+                                                                organizationUsername,
+                                                                deviceUsername: device.loginUsername,
+                                                            })}
+                                                        />
+                                                    }
+                                                >
+                                                    <ExternalLink className="size-3.5" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Open POS</TooltipContent>
+                                        </Tooltip>
+                                    ) : null}
+                                    <Tooltip>
+                                        <TooltipTrigger render={<span className="inline-flex" />}>
+                                            <DeviceActionsMenu
+                                                organizationId={organizationId}
+                                                organizationUsername={organizationUsername}
+                                                storeId={store.id}
+                                                device={device}
+                                                trigger={
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={`More actions for ${device.name}`}
+                                                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer touch-manipulation focus-visible:ring-2 focus-visible:ring-primary/40"
+                                                    >
+                                                        <MoreHorizontal className="size-3.5" />
+                                                    </Button>
+                                                }
+                                            />
+                                        </TooltipTrigger>
+                                        <TooltipContent>More actions</TooltipContent>
+                                    </Tooltip>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </>
+                        </Card>
+                    ))}
+                </div>
             )}
-        </section>
+
+            <Sheet open={mobileFiltersOpen} onOpenChange={handleMobileFiltersOpenChange}>
+                <SheetContent
+                    side="bottom"
+                    className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl px-0 pt-4 sm:hidden"
+                >
+                    <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
+                        <div className="flex items-center justify-between gap-3">
+                            <SheetTitle className="text-lg">Filter devices</SheetTitle>
+                            {draftStatusFilters.length > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setDraftStatusFilters([])}
+                                    className="shrink-0 text-sm font-semibold text-primary hover:underline"
+                                >
+                                    Clear all
+                                </button>
+                            ) : (
+                                <span className="invisible shrink-0 text-sm font-semibold">Clear all</span>
+                            )}
+                        </div>
+                    </SheetHeader>
+
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/50 px-6 py-4">
+                        <DeviceStatusFilterOptions
+                            variant="sheet"
+                            selectedValues={draftStatusFilters}
+                            onChange={(value) =>
+                                setDraftStatusFilters((previous) =>
+                                    previous.includes(value)
+                                        ? previous.filter((item) => item !== value)
+                                        : [...previous, value],
+                                )
+                            }
+                            onClear={() => setDraftStatusFilters([])}
+                        />
+                    </div>
+
+                    <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4">
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                void setFilters({ statuses: draftStatusFilters as DeviceStatusFilter[] });
+                                setMobileFiltersOpen(false);
+                            }}
+                            className="w-full rounded-xl"
+                        >
+                            Apply filters
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+        </div>
     );
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { StoreDeviceDTO, StoreWithDevicesDTO, MoneyAccountDTO, MoneyAccountPaymentRouteDTO } from "@repo/types";
 
@@ -74,7 +75,9 @@ const organizationResponse = {
 const renderWithDataRouter = (router: ReturnType<typeof createMemoryRouter>, queryClient: QueryClient) =>
     renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <NuqsTestingAdapter>
+                <RouterProvider router={router} />
+            </NuqsTestingAdapter>
         </QueryClientProvider>,
     );
 

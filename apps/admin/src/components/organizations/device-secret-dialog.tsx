@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import CopyToClipboard from "@repo/ui/components/copy-to-clipboard";
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
 import {
     Dialog,
@@ -9,7 +8,7 @@ import {
     DialogHeader,
 } from "@repo/ui/components/dialog";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ExternalLink, Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, KeyRound, RotateCcw } from "lucide-react";
 
 import { getPosLoginUrl } from "@/lib/pos-origin";
 
@@ -61,97 +60,71 @@ const DeviceSecretDialog = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
-            <DialogContent className="sm:max-w-xl">
-                <DialogHeader
-                    icon={<KeyRound className="size-5 transition-transform duration-300" />}
-                    title="POS setup"
-                    subtitle={<>Use these details to connect <span className="font-semibold text-foreground">{deviceName}</span> to the POS.</>}
-                />
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader icon={<KeyRound className="size-5" />} title="Device secret" subtitle={deviceName} />
 
                 {isLoading ? (
-                    <div className="flex min-h-48 items-center justify-center">
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            <Spinner className="size-5 text-primary" />
-                            Loading device secret...
-                        </div>
+                    <div className="flex min-h-32 items-center justify-center">
+                        <Spinner className="size-6 text-primary" />
                     </div>
                 ) : errorMessage ? (
-                    <Alert variant="warning">
-                        <TriangleAlert />
-                        <AlertTitle>Unable to display this secret</AlertTitle>
-                        <AlertDescription>{errorMessage}</AlertDescription>
-                    </Alert>
+                    <div className="space-y-4">
+                        <p className="text-sm text-destructive">{errorMessage}</p>
+                        {onRetry ? (
+                            <Button type="button" variant="outline" className="rounded-xl" onClick={onRetry}>
+                                <RotateCcw className="size-4" />
+                                Try again
+                            </Button>
+                        ) : null}
+                    </div>
                 ) : (
                     <div className="space-y-4">
-                        <Alert>
-                            <ShieldCheck />
-                            <AlertTitle>Privacy mode is enabled</AlertTitle>
-                            <AlertDescription>
-                                Use the eye button to reveal the value. Keep it hidden when other people can see your
-                                screen.
-                            </AlertDescription>
-                        </Alert>
-
-                        <div className="rounded-3xl border border-border/70 bg-muted/40 p-4 shadow-sm">
-                            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                POS login details
-                            </p>
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-3">
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs text-muted-foreground">Business username</p>
-                                        <code className="break-all font-mono text-sm text-foreground">{organizationUsername}</code>
-                                    </div>
-                                    <CopyToClipboard
-                                        getValue={() => organizationUsername}
-                                        tooltip="Copy business username"
-                                        showTooltip={false}
-                                        variant="outline"
-                                        size="icon-sm"
-                                        className="rounded-full"
-                                    />
-                                </div>
-                                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-3">
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs text-muted-foreground">Device username</p>
-                                        <code className="break-all font-mono text-sm text-foreground">{deviceLoginUsername}</code>
-                                    </div>
-                                    <CopyToClipboard
-                                        getValue={() => deviceLoginUsername}
-                                        tooltip="Copy device username"
-                                        showTooltip={false}
-                                        variant="outline"
-                                        size="icon-sm"
-                                        className="rounded-full"
-                                    />
-                                </div>
+                        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-muted-foreground">Business username</p>
+                                <code className="break-all font-mono text-sm text-foreground">{organizationUsername}</code>
                             </div>
+                            <CopyToClipboard
+                                getValue={() => organizationUsername}
+                                tooltip="Copy business username"
+                                showTooltip={false}
+                                variant="outline"
+                                size="icon-sm"
+                                className="rounded-lg"
+                            />
                         </div>
 
-                        <div className="rounded-3xl border border-border/70 bg-muted/40 p-4 shadow-sm">
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                        Stored device secret
-                                    </p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        Reveal only when you are about to configure the physical device.
-                                    </p>
-                                </div>
+                        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-muted-foreground">Device username</p>
+                                <code className="break-all font-mono text-sm text-foreground">{deviceLoginUsername}</code>
+                            </div>
+                            <CopyToClipboard
+                                getValue={() => deviceLoginUsername}
+                                tooltip="Copy device username"
+                                showTooltip={false}
+                                variant="outline"
+                                size="icon-sm"
+                                className="rounded-lg"
+                            />
+                        </div>
+
+                        <div className="rounded-xl border border-border/60 bg-muted/15 px-3 py-2.5">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                                <p className="text-xs font-medium text-muted-foreground">Device secret</p>
                                 <Button
                                     type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-full"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-lg"
+                                    aria-label={isVisible ? "Hide device secret" : "Show device secret"}
                                     onClick={() => setIsVisible((value) => !value)}
                                 >
-                                    {isVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                    {isVisible ? "Hide" : "Show"}
+                                    {isVisible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                                 </Button>
                             </div>
-
-                            <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/80 p-3">
-                                <code className="flex-1 break-all font-mono text-sm text-foreground">
+                            <div className="flex items-center gap-2">
+                                <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">
                                     {isVisible ? deviceSecret : maskedSecret}
                                 </code>
                                 {deviceSecret ? (
@@ -161,65 +134,54 @@ const DeviceSecretDialog = ({
                                         showTooltip={false}
                                         variant="outline"
                                         size="icon-sm"
-                                        className="rounded-full"
+                                        className="rounded-lg"
                                     />
                                 ) : null}
                             </div>
-
-                            {isVisible && deviceSecret ? (
-                                <CopyToClipboard
-                                    getValue={() => setupDetails}
-                                    text="Copy all setup details"
-                                    tooltip="Copy all setup details"
-                                    showTooltip={false}
-                                    variant="outline"
-                                    size="sm"
-                                    className="mt-3 w-full rounded-full"
-                                />
-                            ) : null}
                         </div>
+
+                        {isVisible && deviceSecret ? (
+                            <CopyToClipboard
+                                getValue={() => setupDetails}
+                                text="Copy all"
+                                tooltip="Copy all"
+                                showTooltip={false}
+                                variant="outline"
+                                size="sm"
+                                className="w-full rounded-xl"
+                            />
+                        ) : null}
                     </div>
                 )}
 
-                <DialogFooter className="sm:justify-between">
-                    {errorMessage && onRetry ? (
-                        <Button type="button" variant="outline" className="rounded-full" onClick={onRetry}>
-                            <RotateCcw className="size-4" />
-                            Try again
-                        </Button>
-                    ) : (
-                        <div />
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                        {canOpenPos ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full"
-                                render={
-                                    <a
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        href={getPosLoginUrl({
-                                            organizationUsername,
-                                            deviceUsername: deviceLoginUsername,
-                                        })}
-                                    />
-                                }
-                            >
-                                <ExternalLink className="size-4" />
-                                Open POS
-                            </Button>
-                        ) : null}
+                <DialogFooter>
+                    {canOpenPos ? (
                         <Button
                             type="button"
-                            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-                            onClick={() => onOpenChange(false)}
+                            variant="outline"
+                            className="rounded-xl"
+                            render={
+                                <a
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    href={getPosLoginUrl({
+                                        organizationUsername,
+                                        deviceUsername: deviceLoginUsername,
+                                    })}
+                                />
+                            }
                         >
-                            Close
+                            <ExternalLink className="size-4" />
+                            Open POS
                         </Button>
-                    </div>
+                    ) : null}
+                    <Button
+                        type="button"
+                        className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Close
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

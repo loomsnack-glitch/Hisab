@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { StoreDeviceDTO, StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
@@ -92,7 +93,9 @@ const renderDevices = () => {
 
     return renderToStaticMarkup(
         <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <NuqsTestingAdapter>
+                <RouterProvider router={router} />
+            </NuqsTestingAdapter>
         </QueryClientProvider>,
     );
 };
@@ -101,11 +104,12 @@ describe("Store workspace Devices page", () => {
     test("shows the selected Store's devices with add-device and Open POS actions", () => {
         const markup = renderDevices();
 
-        expect(markup).toContain("Devices");
-        expect(markup).toContain("POS terminals registered to this store.");
+        expect(markup).toContain("Search devices...");
+        expect(markup).toContain("Status");
         expect(markup).toContain("Add device");
         expect(markup).toContain("Counter 1");
         expect(markup).toContain("Open POS");
+        expect(markup).not.toContain("<table");
         expect(markup).toContain(
             `href="${getPosLoginUrl({ organizationUsername: "panini_house", deviceUsername: "counter_1" }).replaceAll("&", "&amp;")}"`,
         );

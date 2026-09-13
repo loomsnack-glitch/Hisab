@@ -17,6 +17,7 @@ type DeviceActionsMenuProps = {
     organizationUsername: string;
     storeId: string;
     device: StoreDeviceDTO;
+    trigger?: React.ReactElement;
 };
 
 const DeviceActionsMenu = ({
@@ -24,6 +25,7 @@ const DeviceActionsMenu = ({
     organizationUsername,
     storeId,
     device,
+    trigger,
 }: DeviceActionsMenuProps) => {
     const [secretOpen, setSecretOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
@@ -33,16 +35,18 @@ const DeviceActionsMenu = ({
             <DropdownMenu>
                 <DropdownMenuTrigger
                     render={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full"
-                            aria-label={`More actions for ${device.name}`}
-                        >
-                            <MoreHorizontal className="size-4" />
-                            More
-                        </Button>
+                        trigger ?? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                aria-label={`More actions for ${device.name}`}
+                            >
+                                <MoreHorizontal className="size-4" />
+                                More
+                            </Button>
+                        )
                     }
                 />
                 <DropdownMenuContent align="end" className="w-64 rounded-xl p-2">

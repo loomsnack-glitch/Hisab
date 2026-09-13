@@ -21,6 +21,11 @@ describe("isFullWidthDashboardPath", () => {
         ).toBe(true);
         expect(
             isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/devices",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/billing",
             ),
         ).toBe(true);
