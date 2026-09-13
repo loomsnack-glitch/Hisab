@@ -1,16 +1,27 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@repo/ui/components/alert-dialog";
-import { Link2, LoaderCircle, Settings2, Trash2 } from "lucide-react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
+import { Link2, LoaderCircle, Phone, Settings2, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WhatsAppAccountStatusResponseDTO } from "@repo/types";
 import { assignWhatsAppAccount, getWhatsAppAccount, getWhatsAppAccounts, removeWhatsAppAccount } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
+import { Card, CardContent } from "@repo/ui/components/card";
+import CopyToClipboard from "@repo/ui/components/copy-to-clipboard";
+import { CustomOption } from "@repo/ui/components/react-select/components";
+import ReactSelect from "@repo/ui/components/react-select/react-select";
 import { Spinner } from "@repo/ui/components/spinner";
+import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
@@ -33,6 +44,32 @@ type WhatsAppAccountQueryError = {
 type StoreWhatsAppLinkCardProps = {
     organizationId: string;
     storeId: string;
+};
+
+type WhatsAppAccountOption = {
+    value: string;
+    label: string;
+    phoneNumber: string;
+    statusLabel: string;
+    linkedStores: number;
+};
+
+const formatAccountOption = (option: WhatsAppAccountOption, meta: { context: "menu" | "value" }) => {
+    if (meta.context === "value") {
+        return <span className="truncate">{option.phoneNumber}</span>;
+    }
+
+    return (
+        <div className="flex min-w-0 items-center gap-2 py-0.5">
+            <WhatsAppIcon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div className="min-w-0">
+                <p className="font-medium truncate">{option.phoneNumber}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                    {option.statusLabel} · {option.linkedStores} Store{option.linkedStores === 1 ? "" : "s"} linked
+                </p>
+            </div>
+        </div>
+    );
 };
 
 const isWhatsAppNotLinkedError = (error: unknown) =>
@@ -86,7 +123,19 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
     const availableAccounts = accounts.filter(candidate =>
         candidate.provider === "cloud_api" && !candidate.assignedStoreIds.includes(storeId),
     );
-    const selectedAccount = availableAccounts.find(candidate => candidate.id === selectedAccountId);
+    const accountOptions = useMemo<WhatsAppAccountOption[]>(
+        () =>
+            availableAccounts.map(candidate => ({
+                value: candidate.id,
+                label: candidate.phoneNumber,
+                phoneNumber: candidate.phoneNumber,
+                statusLabel: cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud status unavailable",
+                linkedStores: candidate.assignedStoreIds.length,
+            })),
+        [availableAccounts],
+    );
+    const selectedAccountOption =
+        accountOptions.find(candidate => candidate.value === selectedAccountId) ?? null;
     const assignMutation = useMutation({
         mutationFn: () => assignWhatsAppAccount(organizationId, storeId, { whatsappAccountId: selectedAccountId }),
         onSuccess: response => {
@@ -127,89 +176,164 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
         },
     });
     const isBusy = assignMutation.isPending || unassignMutation.isPending;
+    const statusLabel = account
+        ? cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"
+        : null;
 
     return (
-        <>
-            <Card className="border-border/60 bg-card/80 shadow-xl shadow-black/5">
-                <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <CardTitle className="flex items-center gap-2 font-display text-xl">
-                                <WhatsAppIcon className="size-5 text-primary" />
-                                Store WhatsApp
-                            </CardTitle>
-                            <CardDescription className="mt-2">Link an organization WhatsApp account to this Store. Add and manage accounts from the organization page.</CardDescription>
-                        </div>
-                        {account ? <Badge variant="outline" className="rounded-full">{cloudStatusLabel[account.cloudStatus ?? account.status] ?? "Cloud status unavailable"} · Cloud API</Badge> : null}
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                    {accountQuery.isPending || accountsQuery.isPending ? (
-                        <div className="flex min-h-32 items-center justify-center">
-                            <Spinner className="size-5 text-primary" />
-                        </div>
-                    ) : failedToLoadAccount ? (
-                        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                            {(accountError?.message ?? "Unable to load the Store WhatsApp account.")}
-                        </div>
-                    ) : account ? (
-                        <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-sm font-medium">{account.phoneNumber}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">Shared with {account.assignedStoreIds.length} Store{account.assignedStoreIds.length === 1 ? "" : "s"} in this organization.</p>
+        <div className="max-w-xl">
+            <Card className="group overflow-hidden rounded-2xl border-border/60 bg-card/80 shadow-2xs transition-all duration-200 hover:border-primary/20 hover:shadow-md">
+                <CardContent className="p-0">
+                    <div className="relative overflow-hidden border-b border-border/50 px-5 py-5 sm:px-6">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_55%)]" />
+                        <div className="relative flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/15 bg-emerald-500/10 text-emerald-600 shadow-sm dark:text-emerald-400">
+                                    <WhatsAppIcon className="size-5" />
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Messaging</p>
+                                    <h3 className="font-display text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                                        Store WhatsApp
+                                    </h3>
+                                </div>
                             </div>
-                            <Button variant="outline" className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={isBusy} onClick={() => setRemoveOpen(true)}>
-                                {unassignMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                                Unlink from Store
-                            </Button>
+                            {account ? (
+                                <Badge
+                                    variant="outline"
+                                    className="rounded-full shrink-0 border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                >
+                                    {statusLabel} · Cloud API
+                                </Badge>
+                            ) : !accountQuery.isPending && !accountsQuery.isPending ? (
+                                <Badge variant="outline" className="rounded-full shrink-0">
+                                    Not linked
+                                </Badge>
+                            ) : null}
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {availableAccounts.length > 0 ? (
-                                <div className="space-y-3">
-                                    <div>
-                                        <p className="text-sm font-medium">Choose an organization account</p>
-                                        <p className="mt-1 text-xs text-muted-foreground">This Store can use an account already added to the organization pool.</p>
+                    </div>
+
+                    <div className="space-y-4 px-5 py-4 sm:px-6">
+                        {accountQuery.isPending || accountsQuery.isPending ? (
+                            <div className="flex min-h-32 items-center justify-center">
+                                <Spinner className="size-6 text-primary" />
+                            </div>
+                        ) : failedToLoadAccount ? (
+                            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                                {accountError?.message ?? "Unable to load the Store WhatsApp account."}
+                            </div>
+                        ) : account ? (
+                            <div className="rounded-xl border border-border/60 bg-muted/15 p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                        <Phone className="size-4" />
                                     </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row">
-                                        <Select value={selectedAccountId} onValueChange={value => setSelectedAccountId(value ?? "")}>
-                                            <SelectTrigger className="h-10 min-w-0 flex-1 rounded-xl bg-background/70">
-                                                <SelectValue placeholder="Select a WhatsApp account">
-                                                    {selectedAccount ? <span className="truncate">{selectedAccount.phoneNumber}</span> : null}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
-                                                {availableAccounts.map(candidate => (
-                                                    <SelectItem key={candidate.id} value={candidate.id} className="min-w-0">
-                                                        <span className="flex min-w-0 flex-1 items-center gap-2">
-                                                            <WhatsAppIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                                            <span className="min-w-0 flex-1">
-                                                                <span className="block truncate font-medium leading-5">{candidate.phoneNumber}</span>
-                                                                <span className="block truncate text-[11px] leading-4 text-muted-foreground">{cloudStatusLabel[candidate.cloudStatus ?? candidate.status] ?? "Cloud status unavailable"} · {candidate.assignedStoreIds.length} Store{candidate.assignedStoreIds.length === 1 ? "" : "s"} linked</span>
-                                                            </span>
-                                                        </span>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Button className="rounded-full" disabled={isBusy || !selectedAccountId} onClick={() => assignMutation.mutate()}>
-                                            {assignMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}
-                                            Link account
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div>
+                                            <p className="text-xs font-medium text-muted-foreground">Linked number</p>
+                                            <div className="mt-1 flex items-center gap-1">
+                                                <p className="font-medium text-foreground truncate">{account.phoneNumber}</p>
+                                                <CopyToClipboard
+                                                    getValue={() => account.phoneNumber}
+                                                    tooltip="Copy number"
+                                                    showTooltip={false}
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className="shrink-0 rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Store className="size-3.5 shrink-0" />
+                                            <span>
+                                                Shared with {account.assignedStoreIds.length} Store
+                                                {account.assignedStoreIds.length === 1 ? "" : "s"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {availableAccounts.length > 0 ? (
+                                    <div className="rounded-xl border border-border/60 bg-muted/15 p-4 space-y-3">
+                                        <p className="text-xs font-medium text-muted-foreground">Organization account</p>
+                                        <div className="space-y-2">
+                                            <ReactSelect
+                                                options={accountOptions}
+                                                value={selectedAccountOption}
+                                                onChange={option => setSelectedAccountId(option?.value ?? "")}
+                                                placeholder="Select a WhatsApp account"
+                                                isDisabled={isBusy}
+                                                isLoading={accountsQuery.isPending}
+                                                formatOptionLabel={formatAccountOption}
+                                                components={{ Option: CustomOption }}
+                                                classNames={{
+                                                    control: () => "!min-h-11 rounded-xl bg-background/80",
+                                                    menu: () => "rounded-xl",
+                                                }}
+                                            />
+                                            <Button
+                                                className="h-11 w-full rounded-xl"
+                                                disabled={isBusy || !selectedAccountId}
+                                                onClick={() => assignMutation.mutate()}
+                                            >
+                                                {assignMutation.isPending ? (
+                                                    <LoaderCircle className="size-4 animate-spin" />
+                                                ) : (
+                                                    <Link2 className="size-4" />
+                                                )}
+                                                Link account
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : null}
+
+                                <div
+                                    className={cn(
+                                        "rounded-xl border border-dashed p-4",
+                                        availableAccounts.length > 0
+                                            ? "border-border/50 bg-muted/5"
+                                            : "border-border/60 bg-muted/10",
+                                    )}
+                                >
+                                    <p className="text-sm text-muted-foreground">
+                                        {availableAccounts.length > 0
+                                            ? "Need another number? Add it from the organization WhatsApp manager."
+                                            : "No organization WhatsApp account is available yet."}
+                                    </p>
+                                    <div className="mt-3">
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-xl"
+                                            render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}
+                                        >
+                                            <Settings2 className="size-4" />
+                                            Add or manage accounts
                                         </Button>
                                     </div>
                                 </div>
-                            ) : null}
-                            <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
-                                {availableAccounts.length > 0 ? "Need another number? Add it from the organization WhatsApp manager." : "No organization WhatsApp account is available yet. Add one from the organization WhatsApp manager."}
-                                <div className="mt-3">
-                                    <Button variant="outline" className="rounded-full" render={<Link to={`/organizations/${organizationId}/whatsapp/accounts`} />}>
-                                        <Settings2 className="size-3.5" />
-                                        Add or manage accounts
-                                    </Button>
-                                </div>
                             </div>
+                        )}
+                    </div>
+
+                    {account ? (
+                        <div className="flex items-center justify-end border-t border-border/40 px-5 py-3 sm:px-6">
+                            <Button
+                                variant="outline"
+                                className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                disabled={isBusy}
+                                onClick={() => setRemoveOpen(true)}
+                            >
+                                {unassignMutation.isPending ? (
+                                    <LoaderCircle className="size-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="size-4" />
+                                )}
+                                Unlink from Store
+                            </Button>
                         </div>
-                    )}
+                    ) : null}
                 </CardContent>
             </Card>
 
@@ -217,18 +341,28 @@ const StoreWhatsAppLinkCard = ({ organizationId, storeId }: StoreWhatsAppLinkCar
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Unlink WhatsApp from this Store?</AlertDialogTitle>
-                        <AlertDialogDescription>The organization account, session, and saved history will remain. Only this Store assignment will be removed.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={unassignMutation.isPending} onClick={event => { event.preventDefault(); unassignMutation.mutate(); }}>
-                            {unassignMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                        <AlertDialogAction
+                            className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={unassignMutation.isPending}
+                            onClick={event => {
+                                event.preventDefault();
+                                unassignMutation.mutate();
+                            }}
+                        >
+                            {unassignMutation.isPending ? (
+                                <LoaderCircle className="size-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="size-4" />
+                            )}
                             Unlink from Store
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </>
+        </div>
     );
 };
 

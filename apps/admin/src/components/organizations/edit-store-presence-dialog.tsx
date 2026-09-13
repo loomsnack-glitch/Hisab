@@ -15,14 +15,13 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldContent, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Textarea } from "@repo/ui/components/textarea";
-import { Pencil, Store } from "lucide-react";
+import { Pencil, Star } from "lucide-react";
 import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
-type EditStoreDialogProps = {
+type EditStorePresenceDialogProps = {
     organizationId: string;
     store: StoreDTO;
     trigger?: React.ReactElement;
@@ -32,10 +31,13 @@ type EditStoreFormInput = z.input<typeof UpdateStoreSchema>;
 
 const getDefaultValues = (store: StoreDTO): UpdateStoreJSON => ({
     name: store.name,
-    address: store.address ?? "",
+    reviewPlatform: store.reviewPlatform ?? "",
+    reviewLink: store.reviewLink ?? "",
+    socialMediaName: store.socialMediaName ?? "",
+    socialMediaLink: store.socialMediaLink ?? "",
 });
 
-const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProps) => {
+const EditStorePresenceDialog = ({ organizationId, store, trigger }: EditStorePresenceDialogProps) => {
     const [open, setOpen] = useState(false);
     const queryClient = useQueryClient();
 
@@ -63,7 +65,7 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
             toast.error(response.message);
         },
         onError: (error: { message?: string }) => {
-            toast.error(error.message ?? "Failed to update store");
+            toast.error(error.message ?? "Failed to update reviews and social");
         },
     });
 
@@ -74,8 +76,11 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
             await form.handleSubmit(async (values) => {
                 try {
                     const response = await updateMutation.mutateAsync({
-                        name: values.name.trim(),
-                        address: values.address,
+                        name: store.name,
+                        reviewPlatform: values.reviewPlatform,
+                        reviewLink: values.reviewLink,
+                        socialMediaName: values.socialMediaName,
+                        socialMediaLink: values.socialMediaLink,
                     });
                     if (response.status === "success") {
                         result = true;
@@ -104,8 +109,11 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
 
     const onSubmit: SubmitHandler<UpdateStoreJSON> = (values) => {
         updateMutation.mutate({
-            name: values.name.trim(),
-            address: values.address,
+            name: store.name,
+            reviewPlatform: values.reviewPlatform,
+            reviewLink: values.reviewLink,
+            socialMediaName: values.socialMediaName,
+            socialMediaLink: values.socialMediaLink,
         });
     };
 
@@ -121,22 +129,38 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
                 }
             />
             <DialogContent className="sm:max-w-md">
-                <DialogHeader icon={<Store className="size-5" />} title="Edit store" />
+                <DialogHeader icon={<Star className="size-5" />} title="Reviews and social" />
 
                 <form className="space-y-5 pt-2" onSubmit={form.handleSubmit(onSubmit)}>
-                    <Field data-invalid={!!form.formState.errors.name}>
-                        <FieldLabel required>Store name</FieldLabel>
+                    <Field data-invalid={!!form.formState.errors.reviewPlatform}>
+                        <FieldLabel>Review platform</FieldLabel>
                         <FieldContent>
-                            <Input className="h-11 rounded-xl" maxLength={255} {...form.register("name")} />
-                            <FieldError errors={[form.formState.errors.name]} />
+                            <Input className="h-11 rounded-xl" maxLength={100} {...form.register("reviewPlatform")} />
+                            <FieldError errors={[form.formState.errors.reviewPlatform]} />
                         </FieldContent>
                     </Field>
 
-                    <Field data-invalid={!!form.formState.errors.address}>
-                        <FieldLabel>Address</FieldLabel>
+                    <Field data-invalid={!!form.formState.errors.reviewLink}>
+                        <FieldLabel>Review link</FieldLabel>
                         <FieldContent>
-                            <Textarea className="min-h-20 rounded-xl resize-none" maxLength={500} {...form.register("address")} />
-                            <FieldError errors={[form.formState.errors.address]} />
+                            <Input className="h-11 rounded-xl" type="url" maxLength={2048} {...form.register("reviewLink")} />
+                            <FieldError errors={[form.formState.errors.reviewLink]} />
+                        </FieldContent>
+                    </Field>
+
+                    <Field data-invalid={!!form.formState.errors.socialMediaName}>
+                        <FieldLabel>Social name</FieldLabel>
+                        <FieldContent>
+                            <Input className="h-11 rounded-xl" maxLength={100} {...form.register("socialMediaName")} />
+                            <FieldError errors={[form.formState.errors.socialMediaName]} />
+                        </FieldContent>
+                    </Field>
+
+                    <Field data-invalid={!!form.formState.errors.socialMediaLink}>
+                        <FieldLabel>Social link</FieldLabel>
+                        <FieldContent>
+                            <Input className="h-11 rounded-xl" type="url" maxLength={2048} {...form.register("socialMediaLink")} />
+                            <FieldError errors={[form.formState.errors.socialMediaLink]} />
                         </FieldContent>
                     </Field>
 
@@ -164,4 +188,4 @@ const EditStoreDialog = ({ organizationId, store, trigger }: EditStoreDialogProp
     );
 };
 
-export default EditStoreDialog;
+export default EditStorePresenceDialog;

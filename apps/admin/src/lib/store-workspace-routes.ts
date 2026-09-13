@@ -18,8 +18,18 @@ export const getStoreVendorsPath = (organizationId: string, storeId: string) =>
 export const getStoreDevicesPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/devices`;
 
+export const storeSettingsTabs = ["general", "features", "payments", "invoice", "whatsapp"] as const;
+
+export type StoreSettingsTab = (typeof storeSettingsTabs)[number];
+
 export const getStoreSettingsPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/settings`;
+
+export const getStoreSettingsTabPath = (
+    organizationId: string,
+    storeId: string,
+    tab: StoreSettingsTab,
+) => `${getStoreSettingsPath(organizationId, storeId)}/${tab}`;
 
 export const getStoreLicensePath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/license`;

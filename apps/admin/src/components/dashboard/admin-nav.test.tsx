@@ -309,6 +309,11 @@ describe("Admin mobile navigation", () => {
     ).toBe(true);
     expect(
       settings?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/settings/invoice`,
+      ),
+    ).toBe(true);
+    expect(
+      settings?.isActive(
         `/organizations/${organizationId}/stores/${storeId}/settings`,
       ),
     ).toBe(false);

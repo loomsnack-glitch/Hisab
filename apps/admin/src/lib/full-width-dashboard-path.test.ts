@@ -26,6 +26,16 @@ describe("isFullWidthDashboardPath", () => {
         ).toBe(true);
         expect(
             isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/settings",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/settings/invoice",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/billing",
             ),
         ).toBe(true);
@@ -64,7 +74,7 @@ describe("isFullWidthDashboardPath", () => {
     test("keeps the centered container for other organization routes", () => {
         expect(
             isFullWidthDashboardPath(
-                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/settings",
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/license",
             ),
         ).toBe(false);
     });

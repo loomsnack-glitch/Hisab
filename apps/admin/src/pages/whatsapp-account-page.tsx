@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 
 import StoreWhatsAppLinkCard from "@/components/organizations/store-whatsapp-link-card";
-import { getStoreSettingsPath } from "@/lib/store-workspace-routes";
+import { getStoreSettingsTabPath } from "@/lib/store-workspace-routes";
 
 const WhatsAppAccountPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
@@ -13,7 +13,7 @@ const WhatsAppAccountPage = () => {
             <Button
                 variant="ghost"
                 className="rounded-full"
-                render={<Link to={getStoreSettingsPath(organizationId, storeId)} />}
+                render={<Link to={getStoreSettingsTabPath(organizationId, storeId, "whatsapp")} />}
             >
                 <ArrowLeft className="size-4" />
                 Back to store

@@ -255,21 +255,15 @@ describe("Store detail page", () => {
         expect(markup).toContain("KOT system");
         expect(markup).toContain("Table management");
         expect(markup).toContain("Money Account Tracking");
-        expect(markup).toContain("When enabled, Cash, UPI, and Card POS collections immediately increase");
-        expect(markup).toContain("Tracking is off. POS continues as today.");
-        expect(markup).toContain("Retained Money Account history remains");
-        expect(markup).toContain("Store Cash Account: missing");
-        expect(markup).toContain("UPI route: ready · HDFC Current");
-        expect(markup).toContain("Card route: not set");
+        expect(markup).toContain("Track Cash, UPI, and Card POS collections against configured Money Accounts.");
         expect(markup).toContain("Payment routing");
         expect(markup).toContain("UPI payments");
         expect(markup).toContain("Card payments");
         expect(markup).toContain("HDFC Current");
-        expect(markup).toContain("future UPI and Card payments");
         expect(markup).toContain("Not routed");
         expect(markup).toContain("financial year");
         expect(markup).toContain("Token numbers");
-        expect(markup).toContain("KOT Numbers");
+        expect(markup).toContain("KOT numbers");
         expect(markup).toContain("KOT-001");
         expect(markup).toContain("cannot be customized");
         expect(markup).not.toContain("Reset period");
@@ -317,12 +311,8 @@ describe("Store detail page", () => {
             },
         );
 
-        expect(markup).toContain("Tracking is on for this Store. Bank Transfer and Other stay untracked.");
-        expect(markup).toContain("UPI route: needs repair · HDFC Current is inactive");
-        expect(markup).toContain("Card route: needs repair · HDFC Current is inactive");
-        expect(markup).toContain("Historic Movements remain visible");
-        expect(markup).toContain("Future UPI payments are blocked until you choose an");
-        expect(markup).toContain("Future Card payments are blocked until you choose an");
+        expect(markup).toContain("HDFC Current is inactive. Future UPI payments are blocked until you choose an active");
+        expect(markup).toContain("HDFC Current is inactive. Future Card payments are blocked until you choose an active");
         expect(markup).toContain("Historic Movements stay on this account");
     });
 });

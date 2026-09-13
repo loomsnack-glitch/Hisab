@@ -51,7 +51,14 @@ import StoreProductOfferingsPage from "@/pages/store-product-offerings-page";
 import StoreCategoryPresentationsPage from "@/pages/store-category-presentations-page";
 import StoreVendorAvailabilitiesPage from "@/pages/store-vendor-availabilities-page";
 import StoreWorkspaceDevicesPage from "@/pages/store-workspace-devices-page";
-import StoreWorkspaceSettingsPage from "@/pages/store-workspace-settings-page";
+import StoreWorkspaceSettingsPage, {
+    StoreSettingsFeaturesPage,
+    StoreSettingsGeneralPage,
+    StoreSettingsIndexRedirect,
+    StoreSettingsInvoicePage,
+    StoreSettingsPaymentsPage,
+    StoreSettingsWhatsAppPage,
+} from "@/pages/store-workspace-settings-page";
 import StoreWorkspaceLicensePage from "@/pages/store-workspace-license-page";
 import { authKeys, organizationKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -176,7 +183,14 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/categories" element={<StoreCategoryPresentationsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/vendors" element={<StoreVendorAvailabilitiesPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/devices" element={<StoreWorkspaceDevicesPage />} />
-                                <Route path="/organizations/:organizationId/workspaces/:storeId/settings" element={<StoreWorkspaceSettingsPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/settings" element={<StoreWorkspaceSettingsPage />}>
+                                    <Route index element={<StoreSettingsIndexRedirect />} />
+                                    <Route path="general" element={<StoreSettingsGeneralPage />} />
+                                    <Route path="whatsapp" element={<StoreSettingsWhatsAppPage />} />
+                                    <Route path="features" element={<StoreSettingsFeaturesPage />} />
+                                    <Route path="payments" element={<StoreSettingsPaymentsPage />} />
+                                    <Route path="invoice" element={<StoreSettingsInvoicePage />} />
+                                </Route>
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/license" element={<StoreWorkspaceLicensePage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/billing" element={<StoreWorkspaceBillingPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/tables" element={<TablesPage />} />

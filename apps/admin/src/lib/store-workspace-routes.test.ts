@@ -8,6 +8,7 @@ import {
     getStoreLicensePath,
     getStoreProductsPath,
     getStoreSettingsPath,
+    getStoreSettingsTabPath,
     getStoreTablesPath,
     getStoreVendorsPath,
     getStoreWorkspacePath,
@@ -43,6 +44,9 @@ describe("store workspace routes", () => {
         );
         expect(getStoreSettingsPath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/settings`,
+        );
+        expect(getStoreSettingsTabPath(organizationId, storeId, "invoice")).toBe(
+            `/organizations/${organizationId}/workspaces/${storeId}/settings/invoice`,
         );
         expect(getStoreLicensePath(organizationId, storeId)).toBe(
             `/organizations/${organizationId}/workspaces/${storeId}/license`,

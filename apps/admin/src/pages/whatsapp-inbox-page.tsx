@@ -21,7 +21,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
 import { formatWhatsAppDayLabel, formatWhatsAppTimestamp } from "@/lib/format";
 import { filterWhatsAppConversations } from "@/lib/whatsapp-inbox";
-import { getStoreSettingsPath } from "@/lib/store-workspace-routes";
+import { getStoreSettingsTabPath } from "@/lib/store-workspace-routes";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
 type InboxViewProps = {
@@ -147,7 +147,7 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
                 </div>
                 {!embedded ? (
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Button variant="outline" render={<Link to={getStoreSettingsPath(organizationId, storeId)} />}>
+                        <Button variant="outline" render={<Link to={getStoreSettingsTabPath(organizationId, storeId, "whatsapp")} />}>
                             <ArrowLeft className="size-4" />
                             Account settings
                         </Button>

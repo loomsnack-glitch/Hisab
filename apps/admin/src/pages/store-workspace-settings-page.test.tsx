@@ -7,8 +7,15 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
 import { billingKeys, moneyAccountKeys, organizationKeys, whatsappKeys } from "@/lib/query-keys";
-import { getStoreSettingsPath } from "@/lib/store-workspace-routes";
-import StoreWorkspaceSettingsPage from "@/pages/store-workspace-settings-page";
+import { getStoreSettingsPath, getStoreSettingsTabPath, type StoreSettingsTab } from "@/lib/store-workspace-routes";
+import StoreWorkspaceSettingsPage, {
+    StoreSettingsFeaturesPage,
+    StoreSettingsGeneralPage,
+    StoreSettingsIndexRedirect,
+    StoreSettingsInvoicePage,
+    StoreSettingsPaymentsPage,
+    StoreSettingsWhatsAppPage,
+} from "@/pages/store-workspace-settings-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const storeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -94,10 +101,25 @@ const orgWhatsAppAccount = {
     updatedAt: now,
 };
 
-const renderSettings = (options?: { whatsappUnlinked?: boolean; whatsappAccounts?: typeof orgWhatsAppAccount[] }) => {
+const renderSettings = (options?: {
+    tab?: StoreSettingsTab;
+    whatsappUnlinked?: boolean;
+    whatsappLinked?: boolean;
+    whatsappAccounts?: typeof orgWhatsAppAccount[];
+    store?: StoreWithDevicesDTO;
+}) => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
-    queryClient.setQueryData(organizationKeys.store(organizationId, storeId), storeResponse(store));
+    const storeForPage = options?.store ?? store;
+    queryClient.setQueryData(organizationKeys.detail(organizationId), {
+        ...organizationResponse,
+        data: {
+            organization: {
+                ...organizationResponse.data.organization,
+                stores: [storeForPage],
+            },
+        },
+    });
+    queryClient.setQueryData(organizationKeys.store(organizationId, storeId), storeResponse(storeForPage));
     queryClient.setQueryData(billingKeys.saleNumberSettings(organizationId, storeId), {
         status: "success",
         data: {
@@ -164,6 +186,18 @@ const renderSettings = (options?: { whatsappUnlinked?: boolean; whatsappAccounts
             },
             fetchStatus: "idle",
         });
+    } else if (options?.whatsappLinked) {
+        queryClient.setQueryData(whatsappKeys.account(organizationId, storeId), {
+            status: "success",
+            data: {
+                account: {
+                    ...orgWhatsAppAccount,
+                    assignedStoreIds: [storeId],
+                },
+            },
+            message: "WhatsApp account fetched successfully",
+            code: 200,
+        });
     } else {
         queryClient.setQueryData(whatsappKeys.account(organizationId, storeId), {
             status: "success",
@@ -184,9 +218,23 @@ const renderSettings = (options?: { whatsappUnlinked?: boolean; whatsappAccounts
             {
                 path: "/organizations/:organizationId/workspaces/:storeId/settings",
                 element: <StoreWorkspaceSettingsPage />,
+                children: [
+                    { index: true, element: <StoreSettingsIndexRedirect /> },
+                    { path: "general", element: <StoreSettingsGeneralPage /> },
+                    { path: "whatsapp", element: <StoreSettingsWhatsAppPage /> },
+                    { path: "features", element: <StoreSettingsFeaturesPage /> },
+                    { path: "payments", element: <StoreSettingsPaymentsPage /> },
+                    { path: "invoice", element: <StoreSettingsInvoicePage /> },
+                ],
             },
         ],
-        { initialEntries: [getStoreSettingsPath(organizationId, storeId)] },
+        {
+            initialEntries: [
+                options?.tab
+                    ? getStoreSettingsTabPath(organizationId, storeId, options.tab)
+                    : getStoreSettingsPath(organizationId, storeId),
+            ],
+        },
     );
 
     return renderToStaticMarkup(
@@ -197,24 +245,38 @@ const renderSettings = (options?: { whatsappUnlinked?: boolean; whatsappAccounts
 };
 
 describe("Store workspace Settings page", () => {
-    test("shows the selected Store's feature, numbering, and payment settings", () => {
-        const markup = renderSettings();
+    test("shows store details on the General tab", () => {
+        const markup = renderSettings({ tab: "general" });
 
-        expect(markup).toContain("Bill numbering");
-        expect(markup).toContain("Store features");
-        expect(markup).toContain("KOT system");
-        expect(markup).toContain("Table management");
-        expect(markup).toContain("Money Account Tracking");
-        expect(markup).toContain("Payment routing");
-        expect(markup).toContain("HDFC Current");
-        expect(markup).toContain("Edit store");
+        expect(markup).toContain("Store settings navigation tabs");
+        expect(markup).toContain("General");
+        expect(markup).toContain("WhatsApp");
+        expect(markup).toContain("Features");
+        expect(markup).toContain("Payments");
+        expect(markup).toContain("Invoice");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/general"`);
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/whatsapp"`);
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/features"`);
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/payments"`);
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/invoice"`);
+        expect(markup).toContain("Edit store details");
+        expect(markup).toContain("Edit reviews and social");
         expect(markup).toContain("Store details");
+        expect(markup).toContain("Reviews and social");
+        expect(markup).toContain("Customer links");
+        expect(markup).toContain("Address");
         expect(markup).toContain("Adajan");
         expect(markup).toContain("Ring Road");
-        expect(markup).toContain("Store WhatsApp");
-        expect(markup).toContain("Link an organization WhatsApp account to this Store");
-        expect(markup).toContain("Add or manage accounts");
-        expect(markup).toContain(`href="/organizations/${organizationId}/whatsapp/accounts"`);
+        expect(markup).toContain("Google review");
+        expect(markup).toContain("Social profile");
+        expect(markup).toContain("Not configured");
+        expect(markup).toContain("0/2 set");
+        expect(markup).toContain("Complete");
+        expect(markup).not.toContain("Store WhatsApp");
+        expect(markup).not.toContain("Store features");
+        expect(markup).not.toContain("Bill numbering");
+        expect(markup).not.toContain("Payment routing");
+        expect(markup).not.toContain("Invoice appearance");
         expect(markup).not.toContain("Back to stores");
         expect(markup).not.toContain("Add device");
         expect(markup).not.toContain(`href="/organizations/${organizationId}/stores/${storeId}/settings"`);
@@ -222,8 +284,94 @@ describe("Store workspace Settings page", () => {
         expect(markup).not.toContain(`href="/organizations/${organizationId}/stores/${storeId}/license"`);
     });
 
+    test("shows review and social links separately from store details", () => {
+        const markup = renderSettings({
+            tab: "general",
+            store: {
+                ...store,
+                reviewPlatform: "Google",
+                reviewLink: "https://g.page/r/adajan",
+                socialMediaName: "Instagram",
+                socialMediaLink: "https://instagram.com/adajan",
+            },
+        });
+
+        expect(markup).toContain("Store details");
+        expect(markup).toContain("Reviews and social");
+        expect(markup).toContain("Google");
+        expect(markup).toContain("https://g.page/r/adajan");
+        expect(markup).toContain("Instagram");
+        expect(markup).toContain("https://instagram.com/adajan");
+        expect(markup).toContain("Edit store details");
+        expect(markup).toContain("Edit reviews and social");
+        expect(markup).toContain("2/2 set");
+        expect(markup).not.toContain("Not configured");
+        expect(markup).not.toContain("customer-facing profile");
+    });
+
+    test("shows a linked WhatsApp account on the WhatsApp tab", () => {
+        const markup = renderSettings({ tab: "whatsapp", whatsappLinked: true });
+
+        expect(markup).toContain("Store WhatsApp");
+        expect(markup).toContain("Messaging");
+        expect(markup).toContain("Linked number");
+        expect(markup).toContain("+919876543210");
+        expect(markup).toContain("Connected · Cloud API");
+        expect(markup).toContain("Unlink from Store");
+        expect(markup).toContain("Shared with 1 Store");
+        expect(markup).not.toContain("Store details");
+        expect(markup).not.toContain("Reviews and social");
+        expect(markup).not.toContain("Edit store");
+        expect(markup).not.toContain("Store features");
+    });
+
+    test("shows WhatsApp linking options when no account is linked", () => {
+        const markup = renderSettings({ tab: "whatsapp" });
+
+        expect(markup).toContain("Store WhatsApp");
+        expect(markup).toContain("Not linked");
+        expect(markup).toContain("Add or manage accounts");
+        expect(markup).toContain(`href="/organizations/${organizationId}/whatsapp/accounts"`);
+        expect(markup).not.toContain("Linked number");
+    });
+
+    test("shows store features and numbering on the Features tab", () => {
+        const markup = renderSettings({ tab: "features" });
+
+        expect(markup).toContain("Bill numbering");
+        expect(markup).toContain("Store features");
+        expect(markup).toContain("KOT system");
+        expect(markup).toContain("Table management");
+        expect(markup).toContain("Money Account Tracking");
+        expect(markup).not.toContain("Store WhatsApp");
+        expect(markup).not.toContain("Payment routing");
+        expect(markup).not.toContain("Reviews and social");
+        expect(markup).not.toContain("Edit store");
+    });
+
+    test("shows payment routing on the Payments tab", () => {
+        const markup = renderSettings({ tab: "payments" });
+
+        expect(markup).toContain("Payment routing");
+        expect(markup).toContain("HDFC Current");
+        expect(markup).not.toContain("Store features");
+        expect(markup).not.toContain("Store WhatsApp");
+        expect(markup).not.toContain("Bill numbering");
+    });
+
+    test("shows invoice appearance on the Invoice tab", () => {
+        const markup = renderSettings({ tab: "invoice" });
+
+        expect(markup).toContain("Store settings navigation tabs");
+        expect(markup).toContain(`href="/organizations/${organizationId}/workspaces/${storeId}/settings/invoice"`);
+        expect(markup).not.toContain("Store WhatsApp");
+        expect(markup).not.toContain("Payment routing");
+        expect(markup).not.toContain("Store features");
+        expect(markup).not.toContain("Edit store");
+    });
+
     test("lets an unlinked Store add or link an organization WhatsApp account", () => {
-        const markup = renderSettings({ whatsappUnlinked: true });
+        const markup = renderSettings({ tab: "whatsapp", whatsappUnlinked: true });
 
         expect(markup).toContain("Store WhatsApp");
         expect(markup).toContain("Add or manage accounts");
@@ -234,11 +382,12 @@ describe("Store workspace Settings page", () => {
 
     test("lets an unlinked Store link an existing organization WhatsApp account", () => {
         const markup = renderSettings({
+            tab: "whatsapp",
             whatsappUnlinked: true,
             whatsappAccounts: [orgWhatsAppAccount],
         });
 
-        expect(markup).toContain("Choose an organization account");
+        expect(markup).toContain("Organization account");
         expect(markup).toContain("Link account");
         expect(markup).toContain("Select a WhatsApp account");
         expect(markup).toContain("Add or manage accounts");
@@ -247,10 +396,18 @@ describe("Store workspace Settings page", () => {
 
     test("registers a Store workspace settings route without replacing Organization store-detail routes", () => {
         const appSource = readFileSync(join(import.meta.dir, "../App.tsx"), "utf8");
+        const pageSource = readFileSync(join(import.meta.dir, "store-workspace-settings-page.tsx"), "utf8");
 
         expect(appSource).toContain(
             'path="/organizations/:organizationId/workspaces/:storeId/settings"',
         );
+        expect(appSource).toContain('path="general" element={<StoreSettingsGeneralPage />}');
+        expect(appSource).toContain('path="whatsapp" element={<StoreSettingsWhatsAppPage />}');
+        expect(appSource).toContain('path="features" element={<StoreSettingsFeaturesPage />}');
+        expect(appSource).toContain('path="payments" element={<StoreSettingsPaymentsPage />}');
+        expect(appSource).toContain('path="invoice" element={<StoreSettingsInvoicePage />}');
+        expect(appSource).toContain("<StoreSettingsIndexRedirect />");
+        expect(pageSource).toContain('Navigate to="general"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId"');
         expect(appSource).toContain('path="settings" element={<StoreSettingsPage />}');
     });
