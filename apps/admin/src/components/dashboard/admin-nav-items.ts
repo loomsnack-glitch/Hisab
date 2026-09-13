@@ -295,6 +295,16 @@ const storeWorkspaceDestinationIds = new Set([
   "appearance",
 ]);
 
+const organizationWorkspaceNavLabelSuffixIds = new Set([
+  "reports",
+  "money-accounts",
+  "purchases",
+  "expenses",
+  "whatsapp",
+  "google-contacts",
+  "appearance",
+]);
+
 const resolveDestinations = ({
   organizationId = "",
   storeId,
@@ -313,7 +323,10 @@ const resolveDestinations = ({
     )
     .map((destination) => ({
       id: destination.id,
-      label: destination.label,
+      label:
+        !storeId && organizationWorkspaceNavLabelSuffixIds.has(destination.id)
+          ? `${destination.label} *`
+          : destination.label,
       mobileLabel: destination.mobileLabel,
       icon: destination.icon,
       requiresOrganization: destination.requiresOrganization,
