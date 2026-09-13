@@ -42,6 +42,7 @@ import {
 import { toast } from "sonner";
 
 import UnderDevelopment from "@/components/under-development";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 import ServiceTableAreaSections from "@/components/table-service/service-table-area-sections";
 import ServiceTableCard, {
   ServiceTableTile,
@@ -767,9 +768,10 @@ const TablesWorkspace = () => {
 const TablesPage = () => {
   if (!isTableServiceReady) {
     return (
-      <div className="space-y-3" data-testid="tables-page">
+      <div className={adminWorkspacePageHeightClass} data-testid="tables-page">
         <UnderDevelopment
-          title="Tables is under development"
+          className="h-full"
+          title="Tables"
           message={tableServiceUnavailableMessage}
         />
       </div>

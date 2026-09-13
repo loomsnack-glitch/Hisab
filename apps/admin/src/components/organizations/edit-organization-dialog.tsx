@@ -44,6 +44,8 @@ import { toast } from "sonner";
 
 import { organizationKeys } from "@/lib/query-keys";
 
+const BARCODE_SCANNING_AVAILABLE = false;
+
 type EditOrganizationDialogProps = {
   organization: OrganizationDTO;
   trigger?: React.ReactElement;
@@ -241,12 +243,12 @@ const EditOrganizationDialog = ({
           </Field>
 
           <Field>
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 p-3 opacity-70">
               <FieldContent>
                 <FieldLabel>Barcode Scanning</FieldLabel>
                 <p className="text-[11px] text-muted-foreground">
-                  Show Product Code management for administrators. Saved Product
-                  Codes stay intact when disabled.
+                  Under development and not available yet. Product Code
+                  management will be enabled here when ready.
                 </p>
               </FieldContent>
               <Switch
@@ -255,6 +257,7 @@ const EditOrganizationDialog = ({
                   updateCatalogSettingsMutation.mutate(checked)
                 }
                 disabled={
+                  !BARCODE_SCANNING_AVAILABLE ||
                   catalogSettingsQuery.isPending ||
                   updateCatalogSettingsMutation.isPending
                 }

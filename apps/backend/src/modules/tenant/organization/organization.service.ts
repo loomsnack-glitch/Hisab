@@ -245,6 +245,15 @@ export const updateOrganizationCatalogSettings = async (
     };
   }
 
+  if (settingsData.barcodeScanningEnabled) {
+    return {
+      status: "error",
+      message: "Barcode Scanning is under development and cannot be enabled yet",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+
   const settings =
     await organizationRepository.updateOrganizationCatalogSettings(
       organizationId,

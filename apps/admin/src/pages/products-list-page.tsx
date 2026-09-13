@@ -563,7 +563,7 @@ const ProductsListPage = () => {
     );
 
     return (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
             {pendingLinkQueue.length > 0 ? (
                 <div
                     className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
@@ -606,7 +606,7 @@ const ProductsListPage = () => {
             ) : null}
 
             {/* Search, Filters, View Switcher & Actions bar */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Button
                         type="button"
@@ -752,7 +752,7 @@ const ProductsListPage = () => {
 
                 </div>
 
-                <div className="hidden sm:flex flex-wrap items-center gap-2">
+                <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex xl:shrink-0">
                     <Button
                         type="button"
                         className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 sm:px-5 text-xs sm:text-sm font-medium shadow-xs shadow-primary/20 transition-all cursor-pointer"
@@ -780,7 +780,7 @@ const ProductsListPage = () => {
 
             {/* Category filter pills - Horizontally scrollable on mobile */}
             {categories.length > 0 && (
-                <div className="flex items-center gap-2 overflow-x-auto py-0 scrollbar-none -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+                <div className="flex min-w-0 items-center gap-2 overflow-x-auto py-0 scrollbar-none sm:flex-wrap sm:overflow-x-hidden">
                     <Button
                         ref={(el) => { categoryPillRefs.current["all"] = el; }}
                         variant={selectedCategoryFilter === "all" ? "default" : "outline"}
@@ -901,7 +901,7 @@ const ProductsListPage = () => {
             ) : (
                 <div
                     key={selectedCategoryFilter}
-                    className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
+                    className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 transition-all duration-300 ease-out animate-in fade-in-40 slide-in-from-bottom-2"
                 >
                     {filteredProducts.map((product) => {
                         const categoryName = categoryMap.get(product.categoryId)?.name ?? "Unknown";
