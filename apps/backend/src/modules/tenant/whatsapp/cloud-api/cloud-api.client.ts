@@ -237,8 +237,35 @@ export class WhatsAppCloudApiClient {
   }
 
   getPhoneNumbers(wabaId: string) {
+    const fields = [
+      "id",
+      "display_phone_number",
+      "verified_name",
+      "quality_rating",
+      "status",
+      "code_verification_status",
+      "platform_type",
+      "is_on_biz_app",
+    ].join(",");
     return this.requestJson<{ data?: Array<Record<string, unknown>> }>(
-      `${normalizeResourceId(wabaId, "WABA ID")}/phone_numbers`,
+      `${normalizeResourceId(wabaId, "WABA ID")}/phone_numbers?fields=${fields}`,
+    );
+  }
+
+  async registerPhoneNumber(phoneNumberId: string, pin: string) {
+    const normalizedPin = pin.trim();
+    if (!/^\d{6}$/.test(normalizedPin)) {
+      throw new WhatsAppCloudApiError({
+        message: "WhatsApp Cloud registration PIN must be 6 digits",
+        retryable: false,
+      });
+    }
+    return this.requestJson<{ success?: boolean }>(
+      `${normalizeResourceId(phoneNumberId, "Phone Number ID")}/register`,
+      {
+        method: "POST",
+        body: JSON.stringify({ messaging_product: "whatsapp", pin: normalizedPin }),
+      },
     );
   }
 

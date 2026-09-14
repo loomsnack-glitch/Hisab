@@ -246,6 +246,13 @@ const invoiceTemplateKinds = new Set<WhatsAppMessageTemplateKind>([
 const isInvoiceTemplateKind = (kind: WhatsAppMessageTemplateKind): boolean =>
   invoiceTemplateKinds.has(kind);
 
+const isPromotionKind = (kind: WhatsAppMessageTemplateKind): boolean =>
+  kind === "promotion";
+
+const categoryForMessageKind = (
+  kind: WhatsAppMessageTemplateKind,
+): "marketing" | "utility" => (kind === "promotion" ? "marketing" : "utility");
+
 const cloudAuthoringBody = (kind: WhatsAppMessageTemplateKind): string =>
   defaultBody(kind)
     .replace(
@@ -309,9 +316,9 @@ const WhatsAppCloudTemplateManager = ({
   const [sampleValues, setSampleValues] = useState(defaultSampleValues.bill);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<"all" | "bill" | "due_reminder">(
-    "all",
-  );
+  const [kindFilter, setKindFilter] = useState<
+    "all" | WhatsAppMessageTemplateKind
+  >("all");
   const [languageFilter, setLanguageFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const selectedAccountId = accounts.some((item) => item.id === accountId)
@@ -724,7 +731,13 @@ const WhatsAppCloudTemplateManager = ({
         : "",
     );
     setHeaderFormat(
-      header === "image" || header === "document" ? header : "none",
+      isPromotionKind(submission.kind)
+        ? header === "image"
+          ? "image"
+          : "none"
+        : header === "image" || header === "document"
+          ? header
+          : "none",
     );
     setHeaderSample(null);
     setSampleValues(
@@ -752,15 +765,12 @@ const WhatsAppCloudTemplateManager = ({
     values[Number(index) - 1] = value;
     setSampleValues(values.join("|"));
   };
-  const templateCards = cards.filter(
-    (card) => card.kind !== "promotion" && card.category !== "marketing",
-  );
+  const templateCards = cards;
   const previewCard =
     templateCards.find((card) => card.id === previewCardId) ?? null;
   const approvedTemplates = templateCards.filter(
     (card) => card.status === "approved" && card.cloudTemplateId,
   );
-  const defaultKinds = kinds.filter((item) => item.value !== "promotion");
   const availableLanguages = [
     ...new Set(templateCards.map((card) => card.language)),
   ].sort();
@@ -836,7 +846,8 @@ const WhatsAppCloudTemplateManager = ({
           .filter(
             (template) =>
               template.kind === messageKind ||
-              (template.kind === null && template.category === "utility"),
+              (template.kind === null &&
+                template.category === categoryForMessageKind(messageKind)),
           )
           .map((template) => template.language),
         ...bindings
@@ -925,7 +936,9 @@ const WhatsAppCloudTemplateManager = ({
     const canSetDefault =
       card.status === "approved" &&
       Boolean(card.cloudTemplateId) &&
-      (card.kind === "bill" || card.kind === "due_reminder");
+      (card.kind === "bill" ||
+        card.kind === "due_reminder" ||
+        card.kind === "promotion");
 
     return (
       <div className="flex items-center justify-end gap-2">
@@ -1115,8 +1128,8 @@ const WhatsAppCloudTemplateManager = ({
         <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center">
           <p className="text-sm font-medium">No templates yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Create a Bill or Due reminder template and submit it for Meta
-            approval.
+            Create a Bill, Due reminder, or Promotion template and submit it
+            for Meta approval.
           </p>
         </div>
       ) : null}
@@ -1152,7 +1165,7 @@ const WhatsAppCloudTemplateManager = ({
               </p>
             </div>
             <div className="grid gap-2 lg:grid-cols-2">
-              {defaultKinds.flatMap((messageKind) => {
+              {kinds.flatMap((messageKind) => {
                 const languages = languagesForKind(messageKind.value);
                 return (languages.length > 0 ? languages : ["en_US"]).map(
                   (languageCode) => {
@@ -1165,7 +1178,8 @@ const WhatsAppCloudTemplateManager = ({
                       (template) =>
                         (template.kind === messageKind.value ||
                           template.kind === null) &&
-                        template.category === "utility" &&
+                        template.category ===
+                          categoryForMessageKind(messageKind.value) &&
                         template.language === languageCode,
                     );
                     const savingDefault =
@@ -1186,7 +1200,7 @@ const WhatsAppCloudTemplateManager = ({
                             {messageKind.label} · {languageLabel(languageCode)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Utility message ·{" "}
+                            {messageKind.category} message ·{" "}
                             {binding?.isDefault
                               ? "Current default"
                               : "No default selected"}
@@ -1256,8 +1270,8 @@ const WhatsAppCloudTemplateManager = ({
             <div>
               <p className="text-sm font-semibold">Cloud template library</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Review Bill and Due reminder revisions, approval status, and
-                Store usage.
+                Review Bill, Due reminder, and Promotion revisions, approval
+                status, and Store usage.
               </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_10rem]">
@@ -1290,7 +1304,7 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All message types</SelectItem>
-                    {defaultKinds.map((item) => (
+                    {kinds.map((item) => (
                       <SelectItem key={item.value} value={item.value}>
                         {item.label}
                       </SelectItem>
@@ -1691,9 +1705,12 @@ const WhatsAppCloudTemplateManager = ({
       >
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Create Bill or Due reminder template</DialogTitle>
+            <DialogTitle>
+              Create {selectedKind.label} template
+            </DialogTitle>
             <DialogDescription>
-              Ganatri will submit this utility template to Meta for approval.
+              Ganatri will submit this {selectedKind.category.toLowerCase()}{" "}
+              template to Meta for approval.
             </DialogDescription>
           </DialogHeader>
           {submitError ? (
@@ -1725,7 +1742,9 @@ const WhatsAppCloudTemplateManager = ({
                       setKind(next);
                       setBody(cloudAuthoringBody(next));
                       setSampleValues(defaultSampleValues[next]);
-                      setHeaderFormat("none");
+                      setHeaderFormat(
+                        isPromotionKind(next) ? "image" : "none",
+                      );
                       setHeaderSample(null);
                       setUrlButton(
                         isInvoiceTemplateKind(next)
@@ -1741,7 +1760,7 @@ const WhatsAppCloudTemplateManager = ({
                       <SelectValue>{selectedKind.label}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {defaultKinds.map((item) => (
+                      {kinds.map((item) => (
                         <SelectItem key={item.value} value={item.value}>
                           {item.label} · {item.category}
                         </SelectItem>
@@ -1787,8 +1806,9 @@ const WhatsAppCloudTemplateManager = ({
                 <div>
                   <p className="text-xs font-semibold">Header media</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Bill and Due templates use a dynamic invoice link by default.
-                    PDF is available only for legacy document-header templates.
+                    {isPromotionKind(kind)
+                      ? "A promotion template can include an image header. The live image is attached when sending. PDF headers are not supported."
+                      : "Bill and Due templates use a dynamic invoice link by default. PDF is available only for legacy document-header templates."}
                   </p>
                 </div>
                 <Select
@@ -1807,7 +1827,9 @@ const WhatsAppCloudTemplateManager = ({
                   <SelectTrigger className="rounded-xl">
                     <SelectValue>
                       {headerFormat === "none"
-                        ? "No header · View invoice button"
+                        ? isInvoiceTemplateKind(kind)
+                          ? "No header · View invoice button"
+                          : "No header"
                         : headerFormat === "image"
                           ? "Image header"
                           : "PDF document header · Legacy"}
@@ -1815,12 +1837,20 @@ const WhatsAppCloudTemplateManager = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
-                      No header · Dynamic invoice link
+                      {isInvoiceTemplateKind(kind)
+                        ? "No header · Dynamic invoice link"
+                        : "No header"}
                     </SelectItem>
-                    <SelectItem value="image" disabled>
+                    <SelectItem
+                      value="image"
+                      disabled={!isPromotionKind(kind)}
+                    >
                       Image header
                     </SelectItem>
-                    <SelectItem value="document">
+                    <SelectItem
+                      value="document"
+                      disabled={isPromotionKind(kind)}
+                    >
                       PDF header · Legacy
                     </SelectItem>
                   </SelectContent>
@@ -1986,8 +2016,11 @@ const WhatsAppCloudTemplateManager = ({
                     What will {"{{1}}"} mean?
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    These are approval examples. Ganatri replaces them with live
-                    customer, bill, due, and Store values when sending.
+                    These are approval examples. Ganatri replaces them with live{" "}
+                    {isPromotionKind(kind)
+                      ? "customer and Store"
+                      : "customer, bill, due, and Store"}{" "}
+                    values when sending.
                   </p>
                 </div>
                 {placeholderIndexes.length > 0 ? (
@@ -2062,6 +2095,9 @@ const WhatsAppCloudTemplateManager = ({
                 (headerFormat !== "none" && !headerSample) ||
                 (Boolean(urlButton.trim()) &&
                   !/^https:\/\//i.test(urlButton.trim())) ||
+                (isPromotionKind(kind) &&
+                  (headerFormat === "document" ||
+                    /\{\{\d+\}\}/.test(urlButton))) ||
                 (usesInvoiceUrlButton &&
                   (!urlButton.trim() || !/\{\{1\}\}/.test(urlButton))) ||
                 (isInvoiceTemplateKind(kind) && body.includes("{{invoice_url}}"))

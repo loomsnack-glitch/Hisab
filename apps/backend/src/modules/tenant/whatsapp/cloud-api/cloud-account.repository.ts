@@ -22,6 +22,10 @@ export type ProvisionCloudAccountInput = {
   verifiedName: string | null;
   qualityRating: string | null;
   messagingLimit: number | null;
+  providerPhoneStatus: string | null;
+  providerCodeVerificationStatus: string | null;
+  providerPlatformType: string | null;
+  providerIsOnBizApp: boolean | null;
 };
 
 export type CloudCredentialBindingRecord = CloudCredentialBinding & {
@@ -94,6 +98,14 @@ const nullableLimit = (value: number | null): number | null => {
   return value;
 };
 
+const nullableBoolean = (value: boolean | null): boolean | null => {
+  if (value === null) return null;
+  return value;
+};
+
+const providerStatusText = (value: string | null, maxLength: number): string | null =>
+  nullableText(value, maxLength);
+
 /**
  * Map only safe Cloud account metadata. Credential references and key versions
  * are intentionally not selected or returned by this repository boundary.
@@ -112,6 +124,10 @@ export const mapCloudAccountSnapshot = (
     status: mapped.status ?? null,
     qualityRating: mapped.qualityRating ?? null,
     messagingLimit: mapped.messagingLimit ?? null,
+    providerPhoneStatus: mapped.providerPhoneStatus ?? null,
+    providerCodeVerificationStatus: mapped.providerCodeVerificationStatus ?? null,
+    providerPlatformType: mapped.providerPlatformType ?? null,
+    providerIsOnBizApp: typeof mapped.providerIsOnBizApp === "boolean" ? mapped.providerIsOnBizApp : null,
     lastLimitSyncedAt: mapped.lastLimitSyncedAt ?? null,
     lastWebhookAt: mapped.lastWebhookAt ?? null,
     lastGraphApiAt: mapped.lastGraphApiAt ?? null,
@@ -129,6 +145,10 @@ const cloudAccountSnapshotColumns = (accountAlias: string): string => `
     ${accountAlias}.cloud_status AS status,
     ${accountAlias}.cloud_quality_rating AS quality_rating,
     ${accountAlias}.cloud_messaging_limit AS messaging_limit,
+    ${accountAlias}.cloud_provider_phone_status AS provider_phone_status,
+    ${accountAlias}.cloud_provider_code_verification_status AS provider_code_verification_status,
+    ${accountAlias}.cloud_provider_platform_type AS provider_platform_type,
+    ${accountAlias}.cloud_provider_is_on_biz_app AS provider_is_on_biz_app,
     ${accountAlias}.cloud_limit_synced_at AS last_limit_synced_at,
     ${accountAlias}.cloud_last_webhook_at AS last_webhook_at,
     ${accountAlias}.cloud_last_graph_api_at AS last_graph_api_at,
@@ -212,6 +232,10 @@ export const persistProvisionedCloudAccount = async (
   const verifiedName = nullableText(input.verifiedName, 255);
   const qualityRating = nullableText(input.qualityRating, 32);
   const messagingLimit = nullableLimit(input.messagingLimit);
+  const providerPhoneStatus = providerStatusText(input.providerPhoneStatus, 32);
+  const providerCodeVerificationStatus = providerStatusText(input.providerCodeVerificationStatus, 64);
+  const providerPlatformType = providerStatusText(input.providerPlatformType, 64);
+  const providerIsOnBizApp = nullableBoolean(input.providerIsOnBizApp);
 
   return pg.begin(async (tx) => {
     const [business] = await tx`
@@ -264,6 +288,10 @@ export const persistProvisionedCloudAccount = async (
         cloud_verified_name,
         cloud_quality_rating,
         cloud_messaging_limit,
+        cloud_provider_phone_status,
+        cloud_provider_code_verification_status,
+        cloud_provider_platform_type,
+        cloud_provider_is_on_biz_app,
         cloud_limit_synced_at,
         cloud_status,
         created_by,
@@ -281,6 +309,10 @@ export const persistProvisionedCloudAccount = async (
         ${verifiedName},
         ${qualityRating},
         ${messagingLimit},
+        ${providerPhoneStatus},
+        ${providerCodeVerificationStatus},
+        ${providerPlatformType},
+        ${providerIsOnBizApp},
         NOW(),
         'connected',
         ${input.createdBy},
@@ -295,6 +327,10 @@ export const persistProvisionedCloudAccount = async (
         cloud_verified_name = EXCLUDED.cloud_verified_name,
         cloud_quality_rating = EXCLUDED.cloud_quality_rating,
         cloud_messaging_limit = EXCLUDED.cloud_messaging_limit,
+        cloud_provider_phone_status = EXCLUDED.cloud_provider_phone_status,
+        cloud_provider_code_verification_status = EXCLUDED.cloud_provider_code_verification_status,
+        cloud_provider_platform_type = EXCLUDED.cloud_provider_platform_type,
+        cloud_provider_is_on_biz_app = EXCLUDED.cloud_provider_is_on_biz_app,
         cloud_limit_synced_at = EXCLUDED.cloud_limit_synced_at,
         cloud_status = 'connected',
         updated_by = EXCLUDED.updated_by,
@@ -374,6 +410,10 @@ export const refreshCloudAccountMetadata = async (input: {
   verifiedName: string | null;
   qualityRating: string | null;
   messagingLimit: number | null;
+  providerPhoneStatus: string | null;
+  providerCodeVerificationStatus: string | null;
+  providerPlatformType: string | null;
+  providerIsOnBizApp: boolean | null;
   updatedBy: string;
 }): Promise<WhatsAppCloudAccountSnapshot | null> => {
   const wabaId = providerId(input.wabaId, "WABA ID");
@@ -411,6 +451,10 @@ export const refreshCloudAccountMetadata = async (input: {
           cloud_verified_name = ${nullableText(input.verifiedName, 255)},
           cloud_quality_rating = ${nullableText(input.qualityRating, 32)},
           cloud_messaging_limit = ${nullableLimit(input.messagingLimit)},
+          cloud_provider_phone_status = ${providerStatusText(input.providerPhoneStatus, 32)},
+          cloud_provider_code_verification_status = ${providerStatusText(input.providerCodeVerificationStatus, 64)},
+          cloud_provider_platform_type = ${providerStatusText(input.providerPlatformType, 64)},
+          cloud_provider_is_on_biz_app = ${nullableBoolean(input.providerIsOnBizApp)},
           cloud_limit_synced_at = NOW(),
           cloud_status = 'connected',
           status = 'connected',

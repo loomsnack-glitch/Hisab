@@ -28,6 +28,10 @@ describe("Cloud account persistence boundary", () => {
       status: "connected",
       quality_rating: "GREEN",
       messaging_limit: 1_000,
+      provider_phone_status: "CONNECTED",
+      provider_code_verification_status: "VERIFIED",
+      provider_platform_type: "CLOUD_API",
+      provider_is_on_biz_app: false,
       last_limit_synced_at: new Date("2026-08-22T05:00:00.000Z"),
       last_webhook_at: null,
       last_graph_api_at: new Date("2026-08-22T05:00:00.000Z"),
@@ -47,6 +51,10 @@ describe("Cloud account persistence boundary", () => {
       status: "connected",
       qualityRating: "GREEN",
       messagingLimit: 1_000,
+      providerPhoneStatus: "CONNECTED",
+      providerCodeVerificationStatus: "VERIFIED",
+      providerPlatformType: "CLOUD_API",
+      providerIsOnBizApp: false,
       lastLimitSyncedAt: new Date("2026-08-22T05:00:00.000Z"),
       lastWebhookAt: null,
       lastGraphApiAt: new Date("2026-08-22T05:00:00.000Z"),
@@ -72,6 +80,10 @@ describe("Cloud account persistence boundary", () => {
         verifiedName: "Ganatri",
         qualityRating: null,
         messagingLimit: null,
+        providerPhoneStatus: null,
+        providerCodeVerificationStatus: null,
+        providerPlatformType: null,
+        providerIsOnBizApp: null,
       }),
     ).rejects.toThrow("Invalid WhatsApp Cloud WABA ID");
   });
@@ -92,6 +104,10 @@ describe("Cloud account persistence boundary", () => {
         verifiedName: "Ganatri",
         qualityRating: null,
         messagingLimit: null,
+        providerPhoneStatus: null,
+        providerCodeVerificationStatus: null,
+        providerPlatformType: null,
+        providerIsOnBizApp: null,
       }),
     ).rejects.toThrow("Invalid WhatsApp Cloud phone number");
   });

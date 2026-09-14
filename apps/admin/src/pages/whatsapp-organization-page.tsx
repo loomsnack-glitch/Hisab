@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/components/dialog";
-import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, MessageSquareText, RefreshCw, Settings2 } from "lucide-react";
+import { FileText, KeyRound, Link2, LoaderCircle, LogOut, Megaphone, MessageSquareText, Phone, RefreshCw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import {
     assignWhatsAppAccount,
@@ -12,6 +12,7 @@ import {
     startWhatsAppCloudOnboarding,
     completeWhatsAppCloudOnboarding,
     refreshWhatsAppCloudAccount,
+    registerWhatsAppCloudPhone,
     revokeWhatsAppCloudAccount,
     getOrganizationDetails,
 } from "@repo/services";
@@ -23,6 +24,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui/components/select";
 import { cn } from "@repo/ui/lib/utils";
 import { whatsappKeys } from "@/lib/query-keys";
+import { isMetaCloudPhoneOnBizApp, isMetaCloudPhoneRegistered, metaCloudPhoneStatusLabel } from "@/lib/whatsapp-cloud-phone-status";
 import { embeddedSignupLoginOptions, readEmbeddedSignupSession } from "@/lib/whatsapp-embedded-signup";
 import WhatsAppPromotionDashboard from "@/components/organizations/whatsapp-promotion-dashboard";
 import WhatsAppCloudTemplateManager, { type WhatsAppCloudAccountOption } from "@/components/organizations/whatsapp-cloud-template-manager";
@@ -153,6 +155,8 @@ const WhatsAppOrganizationPage = () => {
     const [updateTokenAccountId, setUpdateTokenAccountId] = useState("");
     const [updateAccessToken, setUpdateAccessToken] = useState("");
     const [linkStoreByAccountId, setLinkStoreByAccountId] = useState<Record<string, string>>({});
+    const [registerAccountId, setRegisterAccountId] = useState("");
+    const [registerPin, setRegisterPin] = useState("");
     const accountsKey = whatsappKeys.accounts(organizationId);
     const organizationQuery = useQuery({
         queryKey: ["whatsapp-workspace", organizationId, "organization"],
@@ -223,6 +227,20 @@ const WhatsAppOrganizationPage = () => {
             }
         },
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud account could not be refreshed")),
+    });
+    const cloudRegisterMutation = useMutation({
+        mutationFn: (accountId: string) => registerWhatsAppCloudPhone(organizationId, accountId, registerPin),
+        onSuccess: response => {
+            if (response.status !== "success") {
+                toast.error(response.message);
+                return;
+            }
+            setRegisterAccountId("");
+            setRegisterPin("");
+            toast.success("Phone registered. Send a new bill to confirm. Earlier failed bills need a retry after this.");
+            refresh();
+        },
+        onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud phone could not be registered")),
     });
     const cloudRevokeMutation = useMutation({
         mutationFn: (accountId: string) => revokeWhatsAppCloudAccount(organizationId, accountId),
@@ -304,7 +322,7 @@ const WhatsAppOrganizationPage = () => {
         },
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp account could not be linked")),
     });
-    const isBusy = cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending || assignStoreMutation.isPending;
+    const isBusy = cloudConnectMutation.isPending || cloudRefreshMutation.isPending || cloudRegisterMutation.isPending || cloudRevokeMutation.isPending || updateTokenMutation.isPending || assignStoreMutation.isPending;
     const selectStore = (storeId: string) => {
         setSearchParams({ storeId });
     };
@@ -437,6 +455,8 @@ const WhatsAppOrganizationPage = () => {
                     const unlinkedStores = stores.filter(store => !account.assignedStoreIds.includes(store.id));
                     const selectedLinkStoreId = linkStoreByAccountId[account.id] ?? "";
                     const selectedLinkStore = unlinkedStores.find(store => store.id === selectedLinkStoreId);
+                    const phoneRegistered = isMetaCloudPhoneRegistered(cloudSnapshot?.providerPhoneStatus);
+                    const phoneOnBizApp = isMetaCloudPhoneOnBizApp(cloudSnapshot?.providerIsOnBizApp);
                     return (
                         <Card key={account.id} className="border-border/60 bg-card/80">
                             <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
@@ -445,9 +465,17 @@ const WhatsAppOrganizationPage = () => {
                                     <div className="flex flex-wrap items-center gap-2">
                                         <p className="font-medium">{account.phoneNumber}</p>
                                         <Badge variant="outline" className="rounded-full">{displayedCloudStatus?.replaceAll("_", " ") ?? "Cloud status unavailable"}</Badge>
+                                        <Badge variant={phoneRegistered ? "secondary" : "destructive"} className="rounded-full">
+                                            Phone: {metaCloudPhoneStatusLabel(cloudSnapshot?.providerPhoneStatus)}
+                                        </Badge>
                                         <Badge variant="secondary" className="rounded-full">Cloud API</Badge>
                                     </div>
-                                    <p className="mt-2 text-sm text-muted-foreground">
+                                    {phoneOnBizApp ? (
+                                        <p className="mt-2 text-sm text-muted-foreground">This number is still on the WhatsApp Business app. Do not register it here until coexistence is finished.</p>
+                                    ) : !phoneRegistered ? (
+                                        <p className="mt-2 text-sm text-muted-foreground">Meta cannot send until this number is registered.</p>
+                                    ) : null}
+                                    <p className={phoneOnBizApp || !phoneRegistered ? "text-sm text-muted-foreground" : "mt-2 text-sm text-muted-foreground"}>
                                         {assignedStores.length > 0
                                             ? `Linked to ${assignedStores.map(store => store.name).join(", ")}`
                                             : "Not linked to any Store yet"}
@@ -459,6 +487,12 @@ const WhatsAppOrganizationPage = () => {
                                                 {cloudRefreshMutation.isPending && cloudRefreshMutation.variables === account.id ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                                                 Refresh
                                             </Button>
+                                            {!phoneRegistered && !phoneOnBizApp ? (
+                                                <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setRegisterAccountId(account.id); setRegisterPin(""); }}>
+                                                    <Phone className="size-4" />
+                                                    Register number
+                                                </Button>
+                                            ) : null}
                                             {manualCloudSetupEnabled && cloudSnapshot?.wabaId && cloudSnapshot.phoneNumberId ? (
                                                 <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setUpdateTokenAccountId(account.id); setUpdateAccessToken(""); }}>
                                                     <KeyRound className="size-4" />
@@ -571,6 +605,40 @@ const WhatsAppOrganizationPage = () => {
                     </form>
                 </DialogContent>
             </Dialog> : null}
+
+            <Dialog open={Boolean(registerAccountId)} onOpenChange={open => { if (!cloudRegisterMutation.isPending && !open) { setRegisterAccountId(""); setRegisterPin(""); } }}>
+                <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
+                    <DialogHeader>
+                        <DialogTitle>Register WhatsApp number</DialogTitle>
+                        <DialogDescription>
+                            Meta cannot send until this number is registered. If two-step verification was never set, this PIN becomes the PIN. If it was already set, enter the existing PIN from WhatsApp Manager → Phone numbers → Two-step verification.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (registerAccountId) cloudRegisterMutation.mutate(registerAccountId); }}>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium" htmlFor="register-cloud-pin">6-digit PIN</label>
+                            <Input
+                                id="register-cloud-pin"
+                                type="password"
+                                inputMode="numeric"
+                                autoComplete="off"
+                                maxLength={6}
+                                value={registerPin}
+                                onChange={event => setRegisterPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                                required
+                            />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Ganatri does not store this PIN. If it was forgotten, reset two-step verification in WhatsApp Manager, then register with a new PIN.</p>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" className="rounded-full" disabled={cloudRegisterMutation.isPending} onClick={() => { setRegisterAccountId(""); setRegisterPin(""); }}>Cancel</Button>
+                            <Button type="submit" className="rounded-full" disabled={cloudRegisterMutation.isPending || !/^\d{6}$/.test(registerPin)}>
+                                {cloudRegisterMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Phone className="size-4" />}
+                                Register number
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
         </div>
     );

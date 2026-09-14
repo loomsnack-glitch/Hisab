@@ -296,6 +296,8 @@ const safeSubmissionError = (error: unknown): { code: string; message: string } 
     "Cloud template must contain exactly one body",
     "Cloud template name is invalid",
     "Cloud template language is invalid",
+    "Cloud promotion templates cannot use a document header",
+    "Cloud promotion templates cannot use a dynamic URL button",
   ].some(prefix => error.message.startsWith(prefix))
     ? error.message
     : null;
@@ -376,6 +378,26 @@ const validateSubmissionComponents = (components: unknown[], sampleValues: Recor
     if (typeof sampleValues[placeholder] !== "string" || !String(sampleValues[placeholder]).trim()) throw new Error(`Missing sample value for {{${placeholder}}}`);
   }
   return normalized;
+};
+
+const validateKindSpecificComponents = (
+  kind: WhatsAppCreateCloudTemplateSubmissionJSON["kind"],
+  components: Array<Record<string, unknown>>,
+): void => {
+  if (kind !== "promotion") return;
+  for (const component of components) {
+    const type = String(component.type ?? "").toUpperCase();
+    if (type === "HEADER" && String(component.format ?? "").toUpperCase() === "DOCUMENT") {
+      throw new Error("Cloud promotion templates cannot use a document header");
+    }
+    if (type !== "BUTTONS" || !Array.isArray(component.buttons)) continue;
+    for (const button of component.buttons) {
+      if (!button || typeof button !== "object" || Array.isArray(button)) continue;
+      if (/\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? ""))) {
+        throw new Error("Cloud promotion templates cannot use a dynamic URL button");
+      }
+    }
+  }
 };
 
 const providerPlaceholderIndexes = (text: string): string[] => [...new Set(
@@ -461,7 +483,9 @@ const localBodyFromProviderComponents = (components: unknown[], kind: WhatsAppCr
     const buttons = Array.isArray(value.buttons) ? value.buttons : [];
     return buttons.some(button => button && typeof button === "object" && !Array.isArray(button) && /\{\{\d+\}\}/.test(String((button as Record<string, unknown>).url ?? "")));
   });
-  return hasDynamicUrlButton ? `${mappedBody}\n\nView your invoice online: {{invoice_url}}` : mappedBody;
+  return hasDynamicUrlButton && kind !== "promotion"
+    ? `${mappedBody}\n\nView your invoice online: {{invoice_url}}`
+    : mappedBody;
 };
 
 export const submitCloudTemplateForAccount = async (
@@ -489,6 +513,7 @@ export const submitCloudTemplateForAccount = async (
       }
     }
     const components = validateSubmissionComponents(data.components, data.sampleValues);
+    validateKindSpecificComponents(data.kind, components);
     const credential = await deps.getCredential(organizationId, accountId);
     if (!credential) return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: null, code: STATUS_CODES.CONFLICT };
     const category = categoryForKind(data.kind);

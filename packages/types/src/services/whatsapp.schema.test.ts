@@ -7,6 +7,7 @@ import {
     WhatsAppMessageEventSchema,
     WhatsAppConversationListResponseSchema,
     WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppRegisterCloudPhoneSchema,
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOutboxOperationSchema,
     WhatsAppCreatePromotionSchema,
@@ -49,11 +50,35 @@ describe("WhatsApp schemas", () => {
             status: "connected",
             qualityRating: "GREEN",
             messagingLimit: 1_000,
+            providerPhoneStatus: "CONNECTED",
+            providerCodeVerificationStatus: "VERIFIED",
+            providerPlatformType: "CLOUD_API",
+            providerIsOnBizApp: false,
             lastLimitSyncedAt: new Date(),
             lastWebhookAt: null,
             lastGraphApiAt: new Date(),
             lastErrorCode: null,
         }).success).toBe(true);
+
+        expect(WhatsAppCloudAccountSnapshotSchema.safeParse({
+            id: uuid,
+            organizationId: uuid,
+            whatsappBusinessAccountId: uuid,
+            wabaId: "waba-1",
+            phoneNumberId: "phone-1",
+            verifiedName: "Ganatri",
+            status: "connected",
+            qualityRating: "GREEN",
+            messagingLimit: 1_000,
+            lastLimitSyncedAt: new Date(),
+            lastWebhookAt: null,
+            lastGraphApiAt: new Date(),
+            lastErrorCode: null,
+        }).success).toBe(false);
+
+        expect(WhatsAppRegisterCloudPhoneSchema.safeParse({ pin: "123456" }).success).toBe(true);
+        expect(WhatsAppRegisterCloudPhoneSchema.safeParse({ pin: "12345" }).success).toBe(false);
+        expect(WhatsAppRegisterCloudPhoneSchema.safeParse({ pin: "1234567" }).success).toBe(false);
 
         expect(WhatsAppCloudProvisioningAttemptSchema.safeParse({
             id: uuid,

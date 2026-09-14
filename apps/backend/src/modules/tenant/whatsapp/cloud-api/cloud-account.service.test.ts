@@ -1,8 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
-import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
+import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, registerCloudPhoneForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
 import { CloudOnboardingExchangeError } from "./cloud-onboarding-exchange";
+import { WhatsAppCloudApiError } from "./cloud-api.client";
 import type { CloudProvisioningState } from "./cloud-provisioning";
+import type { WhatsAppCloudAccountSnapshot } from "@repo/types";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
@@ -24,6 +26,27 @@ const {
   refreshCloudAccountForOrganization,
   revokeCloudAccountForOrganization,
 } = await import("./cloud-account.service");
+
+const cloudSnapshot = (overrides: Partial<WhatsAppCloudAccountSnapshot> = {}): WhatsAppCloudAccountSnapshot => ({
+  id: "33333333-3333-4333-8333-333333333333",
+  organizationId,
+  whatsappBusinessAccountId: null,
+  wabaId: "1234567890",
+  phoneNumberId: "9876543210",
+  verifiedName: "Ganatri",
+  status: "connected",
+  qualityRating: null,
+  messagingLimit: null,
+  providerPhoneStatus: null,
+  providerCodeVerificationStatus: null,
+  providerPlatformType: null,
+  providerIsOnBizApp: null,
+  lastLimitSyncedAt: null,
+  lastWebhookAt: null,
+  lastGraphApiAt: null,
+  lastErrorCode: null,
+  ...overrides,
+});
 
 describe("Cloud account provisioning service", () => {
   test("does not complete onboarding after organization access is lost", async () => {
@@ -75,6 +98,10 @@ describe("Cloud account provisioning service", () => {
                   verified_name: "Ganatri",
                   quality_rating: "GREEN",
                   messaging_limit: 1_000,
+                  status: "DISCONNECTED",
+                  code_verification_status: "VERIFIED",
+                  platform_type: "CLOUD_API",
+                  is_on_biz_app: false,
                 },
               ],
             };
@@ -98,21 +125,18 @@ describe("Cloud account provisioning service", () => {
           async revoke() {},
         },
         persist: async (input) => {
-          calls.push(`persist:${input.phoneNumberId}`);
-          return {
-            id: "33333333-3333-4333-8333-333333333333",
-            organizationId,
+          calls.push(`persist:${input.phoneNumberId}:${input.providerPhoneStatus ?? "none"}`);
+          expect(input.providerPhoneStatus).toBe("DISCONNECTED");
+          expect(input.providerIsOnBizApp).toBe(false);
+          return cloudSnapshot({
             wabaId: input.wabaId,
             phoneNumberId: input.phoneNumberId,
             verifiedName: input.verifiedName,
-            status: "connected",
-            qualityRating: null,
-            messagingLimit: null,
-            lastLimitSyncedAt: null,
-            lastWebhookAt: null,
-            lastGraphApiAt: null,
-            lastErrorCode: null,
-          };
+            providerPhoneStatus: input.providerPhoneStatus,
+            providerCodeVerificationStatus: input.providerCodeVerificationStatus,
+            providerPlatformType: input.providerPlatformType,
+            providerIsOnBizApp: input.providerIsOnBizApp,
+          });
         },
         createProvisioningAttempt: async input => ({
           id: "attempt-1",
@@ -151,7 +175,7 @@ describe("Cloud account provisioning service", () => {
         "business:1234567890",
         "phones",
         "subscribe:1234567890",
-        "persist:9876543210",
+        "persist:9876543210:DISCONNECTED",
         "templates",
       ]);
     } finally {
@@ -161,22 +185,12 @@ describe("Cloud account provisioning service", () => {
   });
 
   test("refreshes provider metadata without exposing the access token", async () => {
-    const snapshot = {
-      id: "33333333-3333-4333-8333-333333333333",
-      organizationId,
-      wabaId: "1234567890",
-      phoneNumberId: "9876543210",
+    const snapshot = cloudSnapshot({
       verifiedName: "Old name",
-      status: "needs_action" as const,
-      qualityRating: null,
-      messagingLimit: null,
-      lastLimitSyncedAt: null,
-      lastWebhookAt: null,
-      lastGraphApiAt: null,
-      lastErrorCode: null,
-    };
+      status: "needs_action",
+    });
     let resolved = "";
-    const refreshed = { ...snapshot, verifiedName: "New name", status: "connected" as const };
+    const refreshed = cloudSnapshot({ verifiedName: "New name", status: "connected", providerPhoneStatus: "CONNECTED" });
     const response = await refreshCloudAccountForOrganization(userId, organizationId, snapshot.id, {
       getSnapshot: async () => snapshot,
       organizationAccess: async () => true,
@@ -189,7 +203,7 @@ describe("Cloud account provisioning service", () => {
       },
       createClient: () => ({
         async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
-        async getPhoneNumbers() { return { data: [{ id: snapshot.phoneNumberId!, display_phone_number: "+919876543210", verified_name: "New name", quality_rating: "GREEN", messaging_limit: 1_000 }] }; },
+        async getPhoneNumbers() { return { data: [{ id: snapshot.phoneNumberId!, display_phone_number: "+919876543210", verified_name: "New name", quality_rating: "GREEN", messaging_limit: 1_000, status: "CONNECTED", code_verification_status: "VERIFIED", platform_type: "CLOUD_API", is_on_biz_app: false }] }; },
         async subscribeBusinessAccount() {},
       }),
       refreshMetadata: async input => {
@@ -197,11 +211,16 @@ describe("Cloud account provisioning service", () => {
         expect(input.phoneNumber).toBe("+919876543210");
         expect(input.qualityRating).toBe("GREEN");
         expect(input.messagingLimit).toBe(1_000);
+        expect(input.providerPhoneStatus).toBe("CONNECTED");
+        expect(input.providerCodeVerificationStatus).toBe("VERIFIED");
+        expect(input.providerPlatformType).toBe("CLOUD_API");
+        expect(input.providerIsOnBizApp).toBe(false);
         return refreshed;
       },
     });
     expect(response.status).toBe("success");
     expect(response.data?.verifiedName).toBe("New name");
+    expect(response.data?.providerPhoneStatus).toBe("CONNECTED");
     expect(resolved).toBe("resolved-in-memory");
   });
 
@@ -249,19 +268,12 @@ describe("Cloud account provisioning service", () => {
           async getPhoneNumbers() { return { data: [{ id: "9876543210", display_phone_number: "+919876543210", verified_name: "Ganatri" }] }; },
           async subscribeBusinessAccount() {},
         }),
-        persist: async input => ({
+        persist: async input => cloudSnapshot({
           id: accountId,
-          organizationId,
           wabaId: input.wabaId,
           phoneNumberId: input.phoneNumberId,
           verifiedName: input.verifiedName,
-          status: "connected",
-          qualityRating: null,
-          messagingLimit: null,
-          lastLimitSyncedAt: null,
-          lastWebhookAt: null,
-          lastGraphApiAt: null,
-          lastErrorCode: null,
+          providerPhoneStatus: input.providerPhoneStatus,
         }),
         updateProvisioningAttempt: async input => {
           updates.push(input.state.currentStep);
@@ -280,20 +292,7 @@ describe("Cloud account provisioning service", () => {
   });
 
   test("revokes the vault binding before marking the account revoked", async () => {
-    const snapshot = {
-      id: "33333333-3333-4333-8333-333333333333",
-      organizationId,
-      wabaId: "1234567890",
-      phoneNumberId: "9876543210",
-      verifiedName: "Ganatri",
-      status: "connected" as const,
-      qualityRating: null,
-      messagingLimit: null,
-      lastLimitSyncedAt: null,
-      lastWebhookAt: null,
-      lastGraphApiAt: null,
-      lastErrorCode: null,
-    };
+    const snapshot = cloudSnapshot();
     const calls: string[] = [];
     const response = await revokeCloudAccountForOrganization(userId, organizationId, snapshot.id, {
       getSnapshot: async () => snapshot,
@@ -353,19 +352,11 @@ describe("Cloud account provisioning service", () => {
           async rotate() { return { reference: "unused", keyVersion: "unused" }; },
           async revoke() { calls.push("revoke"); },
         },
-        persist: async input => ({
-          id: "33333333-3333-4333-8333-333333333333",
-          organizationId,
+        persist: async input => cloudSnapshot({
           wabaId: input.wabaId,
           phoneNumberId: input.phoneNumberId,
           verifiedName: input.verifiedName,
-          status: "connected",
-          qualityRating: null,
-          messagingLimit: null,
-          lastLimitSyncedAt: null,
-          lastWebhookAt: null,
-          lastGraphApiAt: null,
-          lastErrorCode: null,
+          providerPhoneStatus: input.providerPhoneStatus,
         }),
         syncTemplates: async () => ({ status: "success" }),
       });
@@ -442,5 +433,207 @@ describe("Cloud account provisioning service", () => {
       if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  test("refreshes an unregistered Meta phone without treating Ganatri connected as registered", async () => {
+    const snapshot = cloudSnapshot({ status: "connected", providerPhoneStatus: null });
+    const response = await refreshCloudAccountForOrganization(userId, organizationId, snapshot.id, {
+      getSnapshot: async () => snapshot,
+      organizationAccess: async () => true,
+      getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      vault: {
+        async store() { return { reference: "unused", keyVersion: "unused" }; },
+        async resolve() { return "resolved-in-memory"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke() {},
+      },
+      createClient: () => ({
+        async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
+        async getPhoneNumbers() {
+          return {
+            data: [{
+              id: snapshot.phoneNumberId!,
+              display_phone_number: "+919876543210",
+              verified_name: "Ganatri",
+              status: "DISCONNECTED",
+              code_verification_status: "VERIFIED",
+              platform_type: "CLOUD_API",
+              is_on_biz_app: false,
+            }],
+          };
+        },
+        async subscribeBusinessAccount() {},
+      }),
+      refreshMetadata: async input => {
+        expect(input.providerPhoneStatus).toBe("DISCONNECTED");
+        return cloudSnapshot({ status: "connected", providerPhoneStatus: input.providerPhoneStatus });
+      },
+    });
+    expect(response.status).toBe("success");
+    expect(response.data?.status).toBe("connected");
+    expect(response.data?.providerPhoneStatus).toBe("DISCONNECTED");
+  });
+
+  test("registers an unregistered Cloud phone and stores Meta CONNECTED without keeping the PIN", async () => {
+    const snapshot = cloudSnapshot({ providerPhoneStatus: "DISCONNECTED" });
+    const calls: string[] = [];
+    const logged: string[] = [];
+    const previousError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(value => String(value)).join(" "));
+    };
+    try {
+      const response = await registerCloudPhoneForOrganization(userId, organizationId, snapshot.id, "123456", {
+        getSnapshot: async () => snapshot,
+        organizationAccess: async () => true,
+        getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+        vault: {
+          async store() { return { reference: "unused", keyVersion: "unused" }; },
+          async resolve() { return "resolved-in-memory"; },
+          async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+          async revoke() {},
+        },
+        createClient: () => ({
+          async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
+          async getPhoneNumbers() {
+            calls.push("phones");
+            return {
+              data: [{
+                id: snapshot.phoneNumberId!,
+                display_phone_number: "+919876543210",
+                verified_name: "Ganatri",
+                status: calls.filter(call => call === "phones").length > 1 ? "CONNECTED" : "DISCONNECTED",
+                is_on_biz_app: false,
+              }],
+            };
+          },
+          async subscribeBusinessAccount() {},
+          async registerPhoneNumber(phoneNumberId: string, pin: string) {
+            expect(phoneNumberId).toBe(snapshot.phoneNumberId);
+            expect(pin).toBe("123456");
+            calls.push("register");
+            return { success: true };
+          },
+        }),
+        refreshMetadata: async input => {
+          expect(input.providerPhoneStatus).toBe("CONNECTED");
+          return cloudSnapshot({ providerPhoneStatus: "CONNECTED" });
+        },
+      });
+      expect(response.status).toBe("success");
+      expect(response.data?.providerPhoneStatus).toBe("CONNECTED");
+      expect(calls).toEqual(["phones", "register", "phones"]);
+      expect(logged.join(" ")).not.toContain("123456");
+    } finally {
+      console.error = previousError;
+    }
+  });
+
+  test("rejects a wrong PIN without calling register again after Meta 133005", async () => {
+    const snapshot = cloudSnapshot({ providerPhoneStatus: "DISCONNECTED" });
+    const logged: string[] = [];
+    const previousError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(value => String(value)).join(" "));
+    };
+    try {
+      const response = await registerCloudPhoneForOrganization(userId, organizationId, snapshot.id, "654321", {
+        getSnapshot: async () => snapshot,
+        organizationAccess: async () => true,
+        getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+        vault: {
+          async store() { return { reference: "unused", keyVersion: "unused" }; },
+          async resolve() { return "resolved-in-memory"; },
+          async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+          async revoke() {},
+        },
+        createClient: () => ({
+          async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
+          async getPhoneNumbers() {
+            return {
+              data: [{
+                id: snapshot.phoneNumberId!,
+                display_phone_number: "+919876543210",
+                status: "DISCONNECTED",
+                is_on_biz_app: false,
+              }],
+            };
+          },
+          async subscribeBusinessAccount() {},
+          async registerPhoneNumber() {
+            throw new WhatsAppCloudApiError({
+              message: "Pin mismatch",
+              status: 400,
+              providerCode: "133005",
+            });
+          },
+        }),
+      });
+      expect(response).toMatchObject({
+        status: "error",
+        message: "That PIN does not match two-step verification.",
+        code: 400,
+      });
+      expect(logged.join(" ")).not.toContain("654321");
+    } finally {
+      console.error = previousError;
+    }
+  });
+
+  test("does not register a WhatsApp Business app coexistence number", async () => {
+    const snapshot = cloudSnapshot({ providerPhoneStatus: "DISCONNECTED" });
+    let registered = false;
+    const response = await registerCloudPhoneForOrganization(userId, organizationId, snapshot.id, "123456", {
+      getSnapshot: async () => snapshot,
+      organizationAccess: async () => true,
+      getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      vault: {
+        async store() { return { reference: "unused", keyVersion: "unused" }; },
+        async resolve() { return "resolved-in-memory"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke() {},
+      },
+      createClient: () => ({
+        async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
+        async getPhoneNumbers() {
+          return {
+            data: [{
+              id: snapshot.phoneNumberId!,
+              display_phone_number: "+919876543210",
+              status: "DISCONNECTED",
+              is_on_biz_app: true,
+            }],
+          };
+        },
+        async subscribeBusinessAccount() {},
+        async registerPhoneNumber() {
+          registered = true;
+          return { success: true };
+        },
+      }),
+      refreshMetadata: async input => cloudSnapshot({
+        providerPhoneStatus: input.providerPhoneStatus,
+        providerIsOnBizApp: input.providerIsOnBizApp,
+      }),
+    });
+    expect(registered).toBe(false);
+    expect(response.status).toBe("error");
+    expect(response.code).toBe(409);
+    expect(response.message).toContain("WhatsApp Business app");
+  });
+
+  test("rejects a registration PIN that is not six digits before Graph", async () => {
+    const response = await registerCloudPhoneForOrganization(
+      userId,
+      organizationId,
+      "33333333-3333-4333-8333-333333333333",
+      "12a456",
+    );
+    expect(response).toEqual({
+      status: "error",
+      message: "PIN must be 6 digits",
+      data: null,
+      code: 400,
+    });
   });
 });
