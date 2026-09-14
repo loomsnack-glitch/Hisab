@@ -67,6 +67,7 @@ import {
     WhatsAppRecordCustomerConsentSchema,
     WhatsAppSetCustomerSuppressionSchema,
     WhatsAppCloudAccountSnapshotSchema,
+    WhatsAppRegisterCloudPhoneSchema,
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOnboardingStateResponseSchema,
     WhatsAppCloudOnboardingResultSchema,
@@ -121,6 +122,7 @@ export type WhatsAppCustomerConsentEventDTO = z.infer<typeof WhatsAppCustomerCon
 export type WhatsAppRecordCustomerConsentJSON = z.infer<typeof WhatsAppRecordCustomerConsentSchema>;
 export type WhatsAppSetCustomerSuppressionJSON = z.infer<typeof WhatsAppSetCustomerSuppressionSchema>;
 export type WhatsAppCloudAccountSnapshot = z.infer<typeof WhatsAppCloudAccountSnapshotSchema>;
+export type WhatsAppRegisterCloudPhoneJSON = z.infer<typeof WhatsAppRegisterCloudPhoneSchema>;
 export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
 export type WhatsAppCloudOnboardingStateResponseDTO = z.infer<typeof WhatsAppCloudOnboardingStateResponseSchema>;
 export type WhatsAppCloudOnboardingResultDTO = z.infer<typeof WhatsAppCloudOnboardingResultSchema>;

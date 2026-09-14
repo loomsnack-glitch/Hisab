@@ -276,4 +276,58 @@ describe("WhatsAppCloudApiClient", () => {
     expect(new Headers(calls[1]?.init?.headers).get("Content-Type")).toBe("application/octet-stream");
     expect(String(calls[1]?.init?.body)).not.toContain("test-secret-token");
   });
+
+  test("requests Meta phone registration fields using the configured Graph version", async () => {
+    const calls: string[] = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async url => {
+        calls.push(String(url));
+        return jsonResponse({ data: [] });
+      },
+    });
+
+    await client.getPhoneNumbers("1234567890");
+    expect(calls).toEqual([
+      "https://graph.example.test/v26.0/1234567890/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,platform_type,is_on_biz_app",
+    ]);
+  });
+
+  test("registers a phone number with the PIN and configured Graph version", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      baseUrl: "https://graph.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return jsonResponse({ success: true });
+      },
+    });
+
+    await expect(client.registerPhoneNumber("9876543210", "123456")).resolves.toEqual({
+      success: true,
+    });
+    expect(calls[0]?.url).toBe("https://graph.example.test/v26.0/9876543210/register");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[0]?.init?.body).toBe(
+      JSON.stringify({ messaging_product: "whatsapp", pin: "123456" }),
+    );
+  });
+
+  test("rejects a registration PIN that is not six digits before calling Graph", async () => {
+    const client = new WhatsAppCloudApiClient({
+      accessToken: "test-secret-token",
+      graphVersion: "v26.0",
+      fetchImpl: async () => {
+        throw new Error("Graph must not be called");
+      },
+    });
+
+    await expect(client.registerPhoneNumber("9876543210", "12345")).rejects.toMatchObject({
+      message: "WhatsApp Cloud registration PIN must be 6 digits",
+    });
+  });
 });

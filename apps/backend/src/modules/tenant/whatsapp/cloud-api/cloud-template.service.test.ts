@@ -27,6 +27,10 @@ const accountSnapshot = {
   lastWebhookAt: null,
   lastGraphApiAt: null,
   lastErrorCode: null,
+  providerPhoneStatus: null,
+  providerCodeVerificationStatus: null,
+  providerPlatformType: null,
+  providerIsOnBizApp: null,
 };
 
 describe("Cloud template synchronization service", () => {

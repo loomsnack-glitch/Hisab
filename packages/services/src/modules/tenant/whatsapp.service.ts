@@ -124,6 +124,19 @@ export const refreshWhatsAppCloudAccount = async (organizationId: string, accoun
     }
 };
 
+export const registerWhatsAppCloudPhone = async (
+    organizationId: string,
+    accountId: string,
+    pin: string,
+): Promise<WhatsAppCloudAccountResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/register-phone`, { pin });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const revokeWhatsAppCloudAccount = async (organizationId: string, accountId: string): Promise<ServiceResponse<null>> => {
     try {
         const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/revoke`);

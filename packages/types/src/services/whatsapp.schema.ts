@@ -274,11 +274,19 @@ export const WhatsAppCloudAccountSnapshotSchema = z.object({
     status: WhatsAppCloudAccountStatusSchema.nullable(),
     qualityRating: z.string().trim().min(1).max(32).nullable(),
     messagingLimit: z.number().int().min(0).nullable(),
+    providerPhoneStatus: z.string().trim().min(1).max(32).nullable(),
+    providerCodeVerificationStatus: z.string().trim().min(1).max(64).nullable(),
+    providerPlatformType: z.string().trim().min(1).max(64).nullable(),
+    providerIsOnBizApp: z.boolean().nullable(),
     lastLimitSyncedAt: dtoDateSchema.nullable(),
     lastWebhookAt: dtoDateSchema.nullable(),
     lastGraphApiAt: dtoDateSchema.nullable(),
     lastErrorCode: z.string().trim().min(1).max(100).nullable(),
 });
+
+export const WhatsAppRegisterCloudPhoneSchema = z.object({
+    pin: z.string().regex(/^\d{6}$/, "PIN must be 6 digits"),
+}).strict();
 
 export const WhatsAppCloudProvisioningAttemptSchema = z.object({
     id: z.uuid("Invalid provisioning attempt id"),

@@ -18,6 +18,7 @@ import {
     WhatsAppCloudQuotaPolicySchema,
     WhatsAppCreateCloudTemplateSubmissionSchema,
     WhatsAppUseCloudTemplateForStoreSchema,
+    WhatsAppRegisterCloudPhoneSchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -32,6 +33,7 @@ import {
     listCloudAccountsForOrganization,
     manuallyProvisionCloudAccount,
     refreshCloudAccountForOrganization,
+    registerCloudPhoneForOrganization,
     revokeCloudAccountForOrganization,
 } from "./cloud-api/cloud-account.service";
 import {
@@ -94,6 +96,30 @@ userRouter.post(
             return handleServiceResponse(
                 c,
                 await manuallyProvisionCloudAccount(c.get("authUser").id, organizationId, c.req.valid("json")),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/accounts/:accountId/register-phone",
+    validateSchema("json", WhatsAppRegisterCloudPhoneSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const accountId = c.req.param("accountId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await registerCloudPhoneForOrganization(
+                    c.get("authUser").id,
+                    organizationId,
+                    accountId,
+                    c.req.valid("json").pin,
+                ),
             );
         } catch (error) {
             return unexpectedError(c, error);

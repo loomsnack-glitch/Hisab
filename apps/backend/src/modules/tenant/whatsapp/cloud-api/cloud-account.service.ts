@@ -48,12 +48,17 @@ type CloudPhoneRecord = {
   verified_name?: string;
   quality_rating?: string;
   messaging_limit?: number;
+  status?: string;
+  codeVerificationStatus?: string;
+  platformType?: string;
+  isOnBizApp?: boolean;
 };
 
 type CloudProvisioningClient = {
   getBusinessAccount: (wabaId: string) => Promise<Record<string, unknown>>;
   getPhoneNumbers: (wabaId: string) => Promise<{ data?: Array<Record<string, unknown>> }>;
   subscribeBusinessAccount: (wabaId: string) => Promise<unknown>;
+  registerPhoneNumber?: (phoneNumberId: string, pin: string) => Promise<{ success?: boolean }>;
 };
 
 type CloudAccountServiceDependencies = {
@@ -100,14 +105,35 @@ const stringField = (value: unknown, label: string): string => {
   return value.trim();
 };
 
-const phoneFromProvider = (value: Record<string, unknown>): CloudPhoneRecord => ({
-  id: stringField(value.id, "Phone Number ID"),
-  display_phone_number: stringField(value.display_phone_number, "Display phone number"),
-  verified_name: typeof value.verified_name === "string" ? value.verified_name.trim() : undefined,
-  quality_rating: typeof value.quality_rating === "string" ? value.quality_rating.trim() : undefined,
-  messaging_limit: typeof value.messaging_limit === "number" && Number.isInteger(value.messaging_limit) && value.messaging_limit >= 0
-    ? value.messaging_limit
-    : undefined,
+const optionalProviderText = (value: unknown, maxLength: number): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || /[\r\n]/.test(trimmed)) return undefined;
+  return trimmed;
+};
+
+const phoneFromProvider = (value: Record<string, unknown>): CloudPhoneRecord => {
+  const status = optionalProviderText(value.status, 32);
+  return {
+    id: stringField(value.id, "Phone Number ID"),
+    display_phone_number: stringField(value.display_phone_number, "Display phone number"),
+    verified_name: optionalProviderText(value.verified_name, 255),
+    quality_rating: optionalProviderText(value.quality_rating, 32),
+    messaging_limit: typeof value.messaging_limit === "number" && Number.isInteger(value.messaging_limit) && value.messaging_limit >= 0
+      ? value.messaging_limit
+      : undefined,
+    status: status ? status.toUpperCase() : undefined,
+    codeVerificationStatus: optionalProviderText(value.code_verification_status, 64),
+    platformType: optionalProviderText(value.platform_type, 64),
+    isOnBizApp: typeof value.is_on_biz_app === "boolean" ? value.is_on_biz_app : undefined,
+  };
+};
+
+const providerPhoneFields = (phone: CloudPhoneRecord) => ({
+  providerPhoneStatus: phone.status ?? null,
+  providerCodeVerificationStatus: phone.codeVerificationStatus ?? null,
+  providerPlatformType: phone.platformType ?? null,
+  providerIsOnBizApp: phone.isOnBizApp ?? null,
 });
 
 const providerError = (error: unknown): string =>
@@ -212,6 +238,7 @@ export const manuallyProvisionCloudAccount = async (
         verifiedName: phone.verified_name ?? null,
         qualityRating: phone.quality_rating ?? null,
         messagingLimit: phone.messaging_limit ?? null,
+        ...providerPhoneFields(phone),
       });
     } catch (error) {
       await deps.vault.revoke(storedCredential).catch(() => undefined);
@@ -344,6 +371,7 @@ export const completeCloudAccountProvisioning = async (
       verifiedName: phone.verified_name ?? null,
       qualityRating: phone.quality_rating ?? null,
       messagingLimit: phone.messaging_limit ?? null,
+      ...providerPhoneFields(phone),
     });
     if (!state.completedSteps.includes("templates_synced")) {
       const sync = await deps.syncTemplates(userId, organizationId, account.id, deps.vault);
@@ -458,6 +486,7 @@ export const refreshCloudAccountForOrganization = async (
       verifiedName: phone.verified_name ?? null,
       qualityRating: phone.quality_rating ?? null,
       messagingLimit: phone.messaging_limit ?? null,
+      ...providerPhoneFields(phone),
       updatedBy: userId,
     });
     return refreshed
@@ -484,6 +513,153 @@ export const refreshCloudAccountForOrganization = async (
       message: code === "vault_unavailable" ? "WhatsApp Cloud credential storage is not configured" : "WhatsApp Cloud account could not be refreshed",
       data: null,
       code: code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST,
+    };
+  }
+};
+
+const registerPhoneFailure = (error: unknown): { message: string; code: number } => {
+  if (error instanceof CloudCredentialError && error.code === "vault_unavailable") {
+    return {
+      message: "WhatsApp Cloud credential storage is not configured",
+      code: STATUS_CODES.SERVICE_UNAVAILABLE,
+    };
+  }
+  if (error instanceof WhatsAppCloudApiError) {
+    if (error.providerCode === "133005") {
+      return { message: "That PIN does not match two-step verification.", code: STATUS_CODES.BAD_REQUEST };
+    }
+    if (error.providerCode === "133016") {
+      return { message: "Too many registration attempts. Wait and try again.", code: STATUS_CODES.BAD_REQUEST };
+    }
+    if (error.providerCode === "133010") {
+      return {
+        message: "This phone number is not registered on WhatsApp Business Platform.",
+        code: STATUS_CODES.BAD_REQUEST,
+      };
+    }
+  }
+  return {
+    message: "WhatsApp Cloud phone could not be registered",
+    code: STATUS_CODES.BAD_REQUEST,
+  };
+};
+
+export const registerCloudPhoneForOrganization = async (
+  userId: string,
+  organizationId: string,
+  accountId: string,
+  pin: string,
+  injected: Partial<CloudAccountServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudAccountSnapshot | null>> => {
+  const deps = { ...defaultDependencies(), ...injected };
+  const normalizedPin = pin.trim();
+  if (!/^\d{6}$/.test(normalizedPin)) {
+    return {
+      status: "error",
+      message: "PIN must be 6 digits",
+      data: null,
+      code: STATUS_CODES.BAD_REQUEST,
+    };
+  }
+  try {
+    if (!await deps.organizationAccess(organizationId, userId)) {
+      return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    const snapshot = await deps.getSnapshot(organizationId, accountId);
+    if (!snapshot) {
+      return { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    if (!snapshot.wabaId || !snapshot.phoneNumberId) {
+      return { status: "error", message: "WhatsApp Cloud account is not fully provisioned", data: snapshot, code: STATUS_CODES.CONFLICT };
+    }
+    const binding = await deps.getCredentialBinding(organizationId, accountId);
+    if (!binding) {
+      return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: snapshot, code: STATUS_CODES.CONFLICT };
+    }
+    const accessToken = await deps.vault.resolve(binding);
+    const client = deps.createClient(accessToken);
+    const [business, phones] = await Promise.all([
+      client.getBusinessAccount(snapshot.wabaId),
+      client.getPhoneNumbers(snapshot.wabaId),
+    ]);
+    if (String(business.id ?? "") !== snapshot.wabaId) throw new Error("Cloud WABA identity did not match the account");
+    const phone = (phones.data ?? []).map(phoneFromProvider).find(candidate => candidate.id === snapshot.phoneNumberId);
+    if (!phone) throw new Error("Cloud phone identity was not found in the WABA");
+    if (phone.isOnBizApp === true) {
+      const coexistence = await deps.refreshMetadata({
+        organizationId,
+        accountId,
+        wabaId: snapshot.wabaId,
+        displayName: typeof business.name === "string" ? business.name : null,
+        phoneNumberId: phone.id,
+        phoneNumber: phone.display_phone_number,
+        verifiedName: phone.verified_name ?? null,
+        qualityRating: phone.quality_rating ?? null,
+        messagingLimit: phone.messaging_limit ?? null,
+        ...providerPhoneFields(phone),
+        updatedBy: userId,
+      });
+      return {
+        status: "error",
+        message: "This number is still on the WhatsApp Business app. Finish coexistence or migrate it in WhatsApp Manager before registering.",
+        data: coexistence,
+        code: STATUS_CODES.CONFLICT,
+      };
+    }
+    if (phone.status === "CONNECTED") {
+      const alreadyRegistered = await deps.refreshMetadata({
+        organizationId,
+        accountId,
+        wabaId: snapshot.wabaId,
+        displayName: typeof business.name === "string" ? business.name : null,
+        phoneNumberId: phone.id,
+        phoneNumber: phone.display_phone_number,
+        verifiedName: phone.verified_name ?? null,
+        qualityRating: phone.quality_rating ?? null,
+        messagingLimit: phone.messaging_limit ?? null,
+        ...providerPhoneFields(phone),
+        updatedBy: userId,
+      });
+      return alreadyRegistered
+        ? { status: "success", message: "WhatsApp Cloud phone is already registered", data: alreadyRegistered, code: STATUS_CODES.SUCCESS }
+        : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    if (!client.registerPhoneNumber) {
+      return { status: "error", message: "WhatsApp Cloud phone could not be registered", data: null, code: STATUS_CODES.BAD_REQUEST };
+    }
+    await client.registerPhoneNumber(snapshot.phoneNumberId, normalizedPin);
+    const refreshedPhones = await client.getPhoneNumbers(snapshot.wabaId);
+    const registered = (refreshedPhones.data ?? [])
+      .map(phoneFromProvider)
+      .find(candidate => candidate.id === snapshot.phoneNumberId) ?? phone;
+    const refreshed = await deps.refreshMetadata({
+      organizationId,
+      accountId,
+      wabaId: snapshot.wabaId,
+      displayName: typeof business.name === "string" ? business.name : null,
+      phoneNumberId: registered.id,
+      phoneNumber: registered.display_phone_number,
+      verifiedName: registered.verified_name ?? null,
+      qualityRating: registered.quality_rating ?? null,
+      messagingLimit: registered.messaging_limit ?? null,
+      ...providerPhoneFields(registered),
+      updatedBy: userId,
+    });
+    return refreshed
+      ? { status: "success", message: "WhatsApp Cloud phone registered", data: refreshed, code: STATUS_CODES.SUCCESS }
+      : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  } catch (error) {
+    const failed = registerPhoneFailure(error);
+    console.error(
+      "[whatsapp] cloud phone register",
+      providerError(error),
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return {
+      status: "error",
+      message: failed.message,
+      data: null,
+      code: failed.code,
     };
   }
 };
