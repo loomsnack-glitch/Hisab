@@ -259,9 +259,9 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
     icon: Contact,
     requiresOrganization: true,
     group: "integrations",
-    getPath: (organizationId) => `/organizations/${organizationId}/settings`,
+    getPath: (organizationId) => `/organizations/${organizationId}/google-contacts`,
     isActive: (pathname) =>
-      /\/organizations\/[^/]+\/settings(\/|$)/.test(pathname),
+      /\/organizations\/[^/]+\/google-contacts(\/|$)/.test(pathname),
   },
   {
     id: "appearance",

@@ -38,7 +38,7 @@ import MoneyAccountsPage from "@/pages/money-accounts-page";
 import MoneyAccountDetailPage from "@/pages/money-account-detail-page";
 import WhatsAppAccountPage from "@/pages/whatsapp-account-page";
 import WhatsAppOrganizationPage from "@/pages/whatsapp-organization-page";
-import OrganizationSettingsPage from "@/pages/organization-settings-page";
+import GoogleContactsPage from "@/pages/google-contacts-page";
 import GoogleContactsOAuthCallbackPage from "@/pages/google-contacts-oauth-callback-page";
 import RetiredPosRoutePage from "@/pages/retired-pos-route-page";
 import StoreWorkspacePage from "@/pages/store-workspace-page";
@@ -206,7 +206,11 @@ const App = () => {
                                 <Route path="/organizations/:organizationId/billing" element={<BillingPage />} />
                                 <Route path="/organizations/:organizationId/reports" element={<ReportsPage />} />
                                 <Route path="/organizations/:organizationId/customers" element={<CustomersPage />} />
-                                <Route path="/organizations/:organizationId/settings" element={<OrganizationSettingsPage />} />
+                                <Route path="/organizations/:organizationId/google-contacts" element={<GoogleContactsPage />} />
+                                <Route
+                                    path="/organizations/:organizationId/settings"
+                                    element={<Navigate to="../google-contacts" replace />}
+                                />
                                 <Route path="/google-contacts/oauth/callback" element={<GoogleContactsOAuthCallbackPage />} />
                                 <Route path="/organizations/:organizationId/units" element={<UnitsPage />} />
                                 <Route path="/organizations/:organizationId/expense-categories" element={<Navigate to="../expenses?tab=categories" replace />} />

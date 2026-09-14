@@ -57,10 +57,9 @@ describe("Google Contacts Sync Status card", () => {
     test("shows a disconnected Organization with a connect action", () => {
         const markup = renderCard(disconnectedStatus);
 
-        expect(markup).toContain("Google Contacts Synchronization");
-        expect(markup).toContain("Disconnected");
+        expect(markup).toContain("Not connected");
         expect(markup).toContain("Connect Google");
-        expect(markup).toContain("No Google account is connected yet.");
+        expect(markup).toContain("Connect a Google account to start syncing customers.");
         expect(markup).not.toContain("refresh");
         expect(markup).not.toContain("access_token");
     });
@@ -88,13 +87,12 @@ describe("Google Contacts Sync Status card", () => {
         expect(connected).toContain("owner@example.com");
         expect(connected).not.toContain("Connect Google");
         expect(connected).toContain("Disconnect");
-        expect(connected).toContain("Replace Google account");
-        expect(connected).toContain("does not delete Google Contacts");
+        expect(connected).toContain("Replace account");
         expect(reconnectRequired).toContain("Reconnect required");
         expect(reconnectRequired).toContain("Reconnect Google");
         expect(reconnectRequired).toContain("owner@example.com");
         expect(reconnectRequired).toContain("Disconnect");
-        expect(reconnectRequired).not.toContain("Replace Google account");
+        expect(reconnectRequired).not.toContain("Replace account");
     });
 
     test("lets a connected Organization run and observe initial catch-up", () => {
@@ -128,17 +126,16 @@ describe("Google Contacts Sync Status card", () => {
         );
 
         expect(ready).toContain("Run initial sync");
-        expect(ready).toContain("Last successful sync: None yet");
-        expect(pending).toContain("Initial sync pending");
-        expect(pending).toContain("Pending 4, retrying 0, errors 0, conflicts 0");
+        expect(ready).toContain("Last synced Never");
+        expect(pending).toContain("Initial sync in progress");
+        expect(pending).toContain("4 pending");
         expect(pending).not.toContain("Run initial sync");
-        expect(completed).toContain("Initial sync completed");
-        expect(completed).toContain("2026-08-26T07:15:00.000Z");
-        expect(completed).toContain("Pending 0, retrying 0, errors 1, conflicts 2");
+        expect(completed).toContain("Last synced");
+        expect(completed).toContain("1 failed");
+        expect(completed).toContain("2 conflicts");
         expect(completed).not.toContain("Run initial sync");
         expect(completed).toContain("Disconnect");
-        expect(completed).toContain("Replace Google account");
-        expect(completed).toContain("does not delete Google Contacts");
+        expect(completed).toContain("Replace account");
     });
 
     test("distinguishes retryable, permanent, reconnect-required, and conflict outcomes", () => {
@@ -179,17 +176,18 @@ describe("Google Contacts Sync Status card", () => {
             conflictCount: 3,
         });
 
-        expect(retrying).toContain("Pending 3, retrying 2, errors 0, conflicts 0");
-        expect(retrying).toContain("Retrying");
+        expect(retrying).toContain("3 pending");
+        expect(retrying).toContain("2 retrying");
         expect(retrying).not.toContain("Reconnect required");
-        expect(freshPending).toContain("Pending 3, retrying 0, errors 0, conflicts 0");
-        expect(freshPending).not.toContain("Retrying");
-        expect(permanent).toContain("Pending 0, retrying 0, errors 2, conflicts 0");
-        expect(permanent).not.toContain("Retrying");
-        expect(conflict).toContain("Pending 0, retrying 0, errors 0, conflicts 4");
+        expect(freshPending).toContain("3 pending");
+        expect(freshPending).not.toContain("retrying");
+        expect(permanent).toContain("2 failed");
+        expect(conflict).toContain("4 conflicts");
         expect(reconnectRequired).toContain("Reconnect required");
         expect(reconnectRequired).toContain("Reconnect Google");
-        expect(reconnectRequired).toContain("Pending 1, retrying 0, errors 2, conflicts 3");
+        expect(reconnectRequired).toContain("1 pending");
+        expect(reconnectRequired).toContain("2 failed");
+        expect(reconnectRequired).toContain("3 conflicts");
         expect(reconnectRequired).not.toContain("refresh_token");
     });
 
@@ -209,8 +207,7 @@ describe("Google Contacts Sync Status card", () => {
         });
 
         expect(markup).toContain("Disconnect");
-        expect(markup).toContain("Replace Google account");
-        expect(markup).toContain("does not delete Google Contacts");
+        expect(markup).toContain("Replace account");
         expect(markup.toLowerCase()).not.toContain("delete contact");
         expect(markup).not.toContain("refresh_token");
     });
@@ -226,14 +223,13 @@ describe("Google Contacts Sync Status card", () => {
         );
         const disconnected = renderCard(disconnectedStatus);
 
-        expect(labeled).toContain("Google contact label");
+        expect(labeled).toContain("Contact label");
         expect(labeled).toContain("Prefix");
         expect(labeled).toContain("Postfix");
         expect(labeled).toContain("Preview: Dev Jariwala @ph");
-        expect(labeled).toContain("Save contact label");
-        expect(labeled).toContain("Customer names in Ganatri stay unchanged");
-        expect(disconnected).not.toContain("Google contact label");
-        expect(disconnected).not.toContain("Save contact label");
+        expect(labeled).toContain("Save label");
+        expect(disconnected).not.toContain("Contact label");
+        expect(disconnected).not.toContain("Save label");
     });
 });
 

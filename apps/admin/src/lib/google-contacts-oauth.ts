@@ -8,7 +8,7 @@ export const GOOGLE_CONTACTS_OAUTH_ORGANIZATION_STORAGE_KEY =
     "ganatri.googleContacts.oauth.organizationId";
 
 export const googleContactsSettingsPath = (organizationId: string) =>
-    `/organizations/${organizationId}/settings`;
+    `/organizations/${organizationId}/google-contacts`;
 
 export const rememberGoogleContactsOAuthOrganization = (organizationId: string) => {
     if (typeof sessionStorage === "undefined") return;

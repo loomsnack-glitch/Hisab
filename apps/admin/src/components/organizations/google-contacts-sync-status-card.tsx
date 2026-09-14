@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Contact } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     disconnectGoogleContacts,
@@ -12,7 +12,7 @@ import {
 import { googleContactDisplayName, type GoogleContactsSyncStatus } from "@repo/types";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardContent } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 
 import { rememberGoogleContactsOAuthOrganization } from "@/lib/google-contacts-oauth";
+import { formatDateTime } from "@/lib/format";
 import { googleContactsKeys } from "@/lib/query-keys";
 
 type GoogleContactsSyncStatusCardViewProps = {
@@ -60,7 +61,18 @@ const statusLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStatu
         case "reconnect_required":
             return "Reconnect required";
         default:
-            return "Disconnected";
+            return "Not connected";
+    }
+};
+
+const statusVariant = (connectionStatus: GoogleContactsSyncStatus["connectionStatus"]) => {
+    switch (connectionStatus) {
+        case "connected":
+            return "default" as const;
+        case "reconnect_required":
+            return "destructive" as const;
+        default:
+            return "outline" as const;
     }
 };
 
@@ -75,17 +87,13 @@ const connectLabel = (connectionStatus: GoogleContactsSyncStatus["connectionStat
     }
 };
 
-const initialSyncLabel = (status: GoogleContactsSyncStatus) => {
-    if (status.initialSyncStatus === "pending") return "Initial sync pending";
-    if (status.initialSyncStatus === "completed") return "Initial sync completed";
-    return "Run initial sync";
-};
-
-const formatSyncTime = (value: GoogleContactsSyncStatus["lastSuccessfulSyncAt"]): string | null => {
-    if (!value) return null;
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString();
+const buildSyncSummary = (status: GoogleContactsSyncStatus): string | null => {
+    const parts: string[] = [];
+    if (status.pendingCount > 0) parts.push(`${status.pendingCount} pending`);
+    if (status.retryingCount > 0) parts.push(`${status.retryingCount} retrying`);
+    if (status.errorCount > 0) parts.push(`${status.errorCount} failed`);
+    if (status.conflictCount > 0) parts.push(`${status.conflictCount} conflicts`);
+    return parts.length > 0 ? parts.join(" · ") : null;
 };
 
 export const GoogleContactsSyncStatusCardView = ({
@@ -111,10 +119,10 @@ export const GoogleContactsSyncStatusCardView = ({
     const canConnect = connectionStatus !== "connected";
     const email = status?.googleAccountEmail;
     const connected = connectionStatus === "connected";
-    const lastSuccessfulSyncAt = status ? formatSyncTime(status.lastSuccessfulSyncAt) : null;
-    const showSummary = Boolean(status) && (connected || connectionStatus === "reconnect_required");
-    const retrying = Boolean(status && status.retryingCount > 0);
+    const showAccountDetails = Boolean(status) && (connected || connectionStatus === "reconnect_required");
+    const syncSummary = status ? buildSyncSummary(status) : null;
     const canStartInitialSync = connected && status?.initialSyncStatus === "not_started" && Boolean(onStartInitialSync);
+    const initialSyncPending = connected && status?.initialSyncStatus === "pending";
     const canDisconnect = (connected || connectionStatus === "reconnect_required") && Boolean(onDisconnect);
     const canReplace = connected && Boolean(onReplace);
     const lifecycleBusy = isSubmitting || isDisconnecting || isReplacing || isSyncing || isSavingNameAffix;
@@ -131,54 +139,51 @@ export const GoogleContactsSyncStatusCardView = ({
 
     return (
         <Card className="border-border/60 bg-card/80">
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <CardTitle className="flex items-center gap-2 font-display text-lg">
-                        <Contact className="size-5 text-primary" />
-                        Google Contacts Synchronization
-                    </CardTitle>
-                    <CardDescription>
-                        Connect one Google account so this Organization can export Customer names and phone numbers.
-                    </CardDescription>
+            <CardContent className="space-y-5 p-5 sm:p-6">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-foreground">Connection</p>
+                    <Badge variant={statusVariant(connectionStatus)} className="rounded-full">
+                        {isPending ? "Loading" : statusLabel(connectionStatus)}
+                    </Badge>
                 </div>
-                <Badge variant={connected ? "default" : "outline"} className="rounded-full">
-                    {isPending ? "Loading" : statusLabel(connectionStatus)}
-                </Badge>
-            </CardHeader>
-            <CardContent className="space-y-4">
+
                 {isPending ? (
                     <div className="flex min-h-16 items-center justify-center">
                         <Spinner className="size-5 text-primary" />
                     </div>
                 ) : (
                     <>
-                        {email ? (
-                            <p className="text-sm text-foreground">
-                                Connected account: <span className="font-medium">{email}</span>
-                            </p>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">No Google account is connected yet.</p>
-                        )}
-                        {showSummary && status ? (
-                            <div className="space-y-1 text-sm text-muted-foreground">
-                                {connected ? <p>{initialSyncLabel(status)}</p> : null}
-                                <p>Last successful sync: {lastSuccessfulSyncAt ?? "None yet"}</p>
-                                <p>
-                                    Pending {status.pendingCount}, retrying {status.retryingCount}, errors {status.errorCount}, conflicts{" "}
-                                    {status.conflictCount}
+                        {showAccountDetails && email ? (
+                            <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+                                <p className="font-medium text-foreground">{email}</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Last synced {formatDateTime(status?.lastSuccessfulSyncAt)}
                                 </p>
-                                {retrying ? <p>Retrying failed Google writes in the background.</p> : null}
+                                {initialSyncPending ? (
+                                    <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                                        <RefreshCw className="size-3.5" />
+                                        Initial sync in progress
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Connect a Google account to start syncing customers.</p>
+                        )}
+
+                        {syncSummary ? (
+                            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+                                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                                <span>{syncSummary}</span>
                             </div>
                         ) : null}
+
                         {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+
                         {canEditNameAffix ? (
-                            <div className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-3">
-                                <div className="space-y-1">
-                                    <p className="text-sm font-medium text-foreground">Google contact label</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Add a prefix or postfix so Google Contacts from Ganatri are easy to recognize. Customer names in
-                                        Ganatri stay unchanged.
-                                    </p>
+                            <div className="space-y-3 border-t border-border/60 pt-5">
+                                <div>
+                                    <p className="text-sm font-medium text-foreground">Contact label</p>
+                                    <p className="text-sm text-muted-foreground">Optional prefix or postfix in Google Contacts.</p>
                                 </div>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div className="space-y-1.5">
@@ -204,43 +209,56 @@ export const GoogleContactsSyncStatusCardView = ({
                                         />
                                     </div>
                                 </div>
-                                <p className="text-sm text-muted-foreground">Preview: {namePreview}</p>
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <p className="text-sm text-muted-foreground">Preview: {namePreview}</p>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-xl"
+                                        onClick={onSaveNameAffix}
+                                        disabled={lifecycleBusy || !nameAffixDirty || !onSaveNameAffix}
+                                    >
+                                        {isSavingNameAffix ? "Saving…" : "Save label"}
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-2 border-t border-border/60 pt-5">
+                            {canConnect && onConnect ? (
+                                <Button type="button" className="rounded-xl" onClick={onConnect} disabled={lifecycleBusy}>
+                                    {isSubmitting ? "Connecting…" : connectLabel(connectionStatus)}
+                                </Button>
+                            ) : null}
+                            {canStartInitialSync ? (
+                                <Button type="button" className="rounded-xl" onClick={onStartInitialSync} disabled={lifecycleBusy}>
+                                    {isSyncing ? "Scheduling…" : "Run initial sync"}
+                                </Button>
+                            ) : null}
+                            {canReplace ? (
                                 <Button
                                     type="button"
                                     variant="outline"
                                     className="rounded-xl"
-                                    onClick={onSaveNameAffix}
-                                    disabled={lifecycleBusy || !nameAffixDirty || !onSaveNameAffix}
+                                    onClick={onReplace}
+                                    disabled={lifecycleBusy}
                                 >
-                                    {isSavingNameAffix ? "Saving…" : "Save contact label"}
+                                    {isReplacing ? "Replacing…" : "Replace account"}
                                 </Button>
-                            </div>
-                        ) : null}
-                        {canConnect && onConnect ? (
-                            <Button type="button" className="rounded-xl" onClick={onConnect} disabled={lifecycleBusy}>
-                                {isSubmitting ? "Connecting…" : connectLabel(connectionStatus)}
-                            </Button>
-                        ) : null}
-                        {canStartInitialSync ? (
-                            <Button type="button" className="rounded-xl" onClick={onStartInitialSync} disabled={lifecycleBusy}>
-                                {isSyncing ? "Scheduling…" : "Run initial sync"}
-                            </Button>
-                        ) : null}
-                        {canReplace ? (
-                            <Button type="button" variant="outline" className="rounded-xl" onClick={onReplace} disabled={lifecycleBusy}>
-                                {isReplacing ? "Replacing…" : "Replace Google account"}
-                            </Button>
-                        ) : null}
-                        {canDisconnect ? (
-                            <Button type="button" variant="outline" className="rounded-xl" onClick={onDisconnect} disabled={lifecycleBusy}>
-                                {isDisconnecting ? "Disconnecting…" : "Disconnect"}
-                            </Button>
-                        ) : null}
-                        {canDisconnect || canReplace ? (
-                            <p className="text-sm text-muted-foreground">
-                                Disconnecting or replacing this account does not delete Google Contacts.
-                            </p>
-                        ) : null}
+                            ) : null}
+                            {canDisconnect ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-xl"
+                                    onClick={onDisconnect}
+                                    disabled={lifecycleBusy}
+                                >
+                                    {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+                                </Button>
+                            ) : null}
+                        </div>
                     </>
                 )}
             </CardContent>
@@ -431,8 +449,8 @@ const GoogleContactsSyncStatusCard = ({ organizationId, redirectTo = defaultRedi
                     <AlertDialogHeader>
                         <AlertDialogTitle>Disconnect Google Contacts?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Future synchronization will stop immediately and Ganatri will no longer hold usable authorization for this
-                            account. Existing Google Contacts are left unchanged.
+                            Syncing will stop and Ganatri will lose access to this Google account. Existing Google Contacts are not
+                            deleted.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -453,8 +471,7 @@ const GoogleContactsSyncStatusCard = ({ organizationId, redirectTo = defaultRedi
                     <AlertDialogHeader>
                         <AlertDialogTitle>Replace the connected Google account?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            The current Google account is left unchanged and its Contacts are not deleted. The replacement account starts as
-                            a fresh destination and needs an initial catch-up sync.
+                            The current account stays unchanged in Google. The new account starts fresh and needs an initial sync.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

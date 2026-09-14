@@ -216,7 +216,7 @@ describe("Admin mobile navigation", () => {
     ).toBe(true);
     expect(
       isAdminMoreDestinationActive(
-        `/organizations/${organizationId}/settings`,
+        `/organizations/${organizationId}/google-contacts`,
         withOrg,
       ),
     ).toBe(true);
