@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { getOrganizationDetails } from "@repo/services";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { getOrganizationDetails, getStoreCommercialStatus } from "@repo/services";
+import type { StoreCommercialStatusDTO } from "@repo/types";
 import { Building2, Check, ChevronsUpDown, Plus, Store } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -12,13 +13,17 @@ import {
 import { cn } from "@repo/ui/lib/utils";
 
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
-import { organizationKeys } from "@/lib/query-keys";
+import { commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { getStoreWorkspacePath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
+import { getCommercialStatus, StoreCommercialSummary } from "@/components/dashboard/store-commercial-summary";
 
 type WorkspaceStoreRef = {
     id: string;
     name: string;
+    commercialStatus?: StoreCommercialStatusDTO | null;
+    commercialStatusLoading?: boolean;
+    commercialStatusUnavailable?: boolean;
 };
 
 type AdminWorkspaceSwitcherPanelProps = {
@@ -100,7 +105,15 @@ export const AdminWorkspaceSwitcherPanel = ({
                                 )}
                             >
                                 <Store className="size-4" />
-                                <span className="min-w-0 flex-1 truncate">{store.name}</span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate">{store.name}</span>
+                                    <StoreCommercialSummary
+                                        commercialStatus={store.commercialStatus}
+                                        isLoading={store.commercialStatusLoading}
+                                        isUnavailable={store.commercialStatusUnavailable}
+                                        className="flex min-w-0 items-center truncate text-xs font-normal text-muted-foreground"
+                                    />
+                                </span>
                                 {active ? <Check className="size-4 shrink-0" /> : null}
                             </Link>
                         );
@@ -312,6 +325,14 @@ export const AdminWorkspaceSwitcherFromRoute = ({
     const organization =
         organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization : null;
 
+    const commercialStatusQueries = useQueries({
+        queries: (organization?.stores ?? []).map((store) => ({
+            queryKey: commercialLicenseKeys.status(organizationId, store.id),
+            queryFn: () => getStoreCommercialStatus(organizationId, store.id),
+            enabled: Boolean(organizationId),
+        })),
+    });
+
     if (!organizationId || !organization) {
         return null;
     }
@@ -320,7 +341,15 @@ export const AdminWorkspaceSwitcherFromRoute = ({
         <AdminWorkspaceSwitcher
             organizationId={organization.id}
             organizationName={organization.name}
-            stores={organization.stores}
+            stores={organization.stores.map((store, index) => {
+                const statusQuery = commercialStatusQueries[index];
+                return {
+                    ...store,
+                    commercialStatus: getCommercialStatus(statusQuery?.data),
+                    commercialStatusLoading: statusQuery?.isPending ?? false,
+                    commercialStatusUnavailable: statusQuery?.isError || statusQuery?.data?.status === "error",
+                };
+            })}
             selectedStoreId={workspace?.storeId ?? null}
             collapsed={collapsed}
             variant={variant}

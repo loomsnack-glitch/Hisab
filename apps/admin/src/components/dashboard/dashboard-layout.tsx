@@ -15,6 +15,7 @@ import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import { getSidebarHomePath, isOrganizationPickerPath } from "@/lib/default-org-path";
 import { isFullWidthDashboardPath } from "@/lib/full-width-dashboard-path";
 import { useAdminNavArgs } from "@/components/dashboard/use-admin-nav-args";
+import { StoreWorkspacePlanNavbarSummary } from "@/components/dashboard/store-commercial-summary";
 import { shouldRedirectUnknownOrganization } from "@/lib/organization-scope";
 import { getPosLoginUrl } from "@/lib/pos-origin";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
@@ -164,6 +165,7 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
+                            {isPickerPage ? null : <StoreWorkspacePlanNavbarSummary />}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">

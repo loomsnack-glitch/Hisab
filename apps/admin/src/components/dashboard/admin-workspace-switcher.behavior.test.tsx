@@ -15,7 +15,35 @@ const adajanId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const vesuId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const stores = [
-    { id: adajanId, name: "Adajan" },
+    {
+        id: adajanId,
+        name: "Adajan",
+        commercialStatus: {
+            storeId: adajanId,
+            organizationId,
+            timezone: "Asia/Kolkata",
+            baseAccess: {
+                id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                sourceKind: "store_license" as const,
+                planKey: "trial",
+                planDisplayName: "Trial",
+                planType: "trial" as const,
+                term: { count: 7, unit: "day" as const },
+                startsAt: new Date("2026-09-14T10:00:00.000Z"),
+                endsAt: new Date("2026-09-21T10:00:00.000Z"),
+                status: "active" as const,
+            },
+            scheduledSuccessor: null,
+            accessGrants: [],
+            activeAddOns: [],
+            availablePaidPlans: [],
+            availableCoTermAddOns: [],
+            pendingCheckout: null,
+            commercialHistory: [],
+            trial: { eligible: false, message: "This Store has already used its standard Trial Plan." },
+            entitlements: { storeId: adajanId, features: [] },
+        },
+    },
     { id: vesuId, name: "Vesu" },
 ];
 
@@ -40,6 +68,8 @@ describe("Admin workspace switcher", () => {
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, adajanId)}"`);
         expect(markup).toContain(`href="${getStoreWorkspacePath(organizationId, vesuId)}"`);
         expect(markup).toContain("Adajan");
+        expect(markup).toContain("Trial");
+        expect(markup).toContain("left");
         expect(markup).toContain("Vesu");
         expect(markup).toContain("Add store");
         expect(markup).not.toContain(`href="${getStoreDetailPath(organizationId, adajanId)}"`);
@@ -136,6 +166,7 @@ describe("Admin workspace switcher", () => {
         expect(sidebarSource).toContain('variant="sidebar"');
         expect(sidebarSource).toContain("AdminWorkspaceSwitcherFromRoute");
         expect(switcherSource).toContain("CreateStoreDialog");
+        expect(layoutSource).toContain("StoreWorkspacePlanNavbarSummary");
         expect(layoutSource).not.toContain("AdminWorkspaceSwitcherFromRoute");
         expect(mobileNavSource).toContain('variant="sheet"');
         expect(mobileNavSource).toContain("AdminWorkspaceSwitcherFromRoute");
