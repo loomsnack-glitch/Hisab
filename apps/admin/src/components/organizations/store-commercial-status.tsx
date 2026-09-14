@@ -32,12 +32,15 @@ import {
     Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatPlanTimeRemaining, getCurrentCommercialAccess } from "@/lib/commercial-access-summary";
 import { formatCurrency } from "@/lib/format";
 import { commercialLicenseKeys } from "@/lib/query-keys";
 import { openRazorpayCheckout as defaultOpenRazorpayCheckout, type OpenRazorpayCheckout } from "@/lib/razorpay-checkout";
 type StoreCommercialStatusProps = {
     organizationId: string;
     storeId: string;
+    variant?: "detail" | "workspace";
+    storeName?: string;
     createPaidPlanCheckout?: typeof createPaidPlanCheckoutRequest;
     createCoTermAddOnCheckout?: typeof createCoTermAddOnCheckoutRequest;
     openRazorpayCheckout?: OpenRazorpayCheckout;
@@ -245,6 +248,132 @@ const AccessGrantSummaries = ({ status }: { status: StoreCommercialStatusDTO }) 
         ))}
     </ul>
 );
+const AccessTimeline = ({ status }: { status: StoreCommercialStatusDTO }) => {
+    const entries = [
+        ...(status.baseAccess ? [{
+            id: status.baseAccess.id,
+            title: status.baseAccess.planDisplayName,
+            detail: "Store License",
+            startsAt: status.baseAccess.startsAt,
+            endsAt: status.baseAccess.endsAt,
+            status: status.baseAccess.status,
+        }] : []),
+        ...status.accessGrants.map((grant) => ({
+            id: grant.id,
+            title: grant.selectionLabel,
+            detail: grant.label,
+            startsAt: grant.startsAt,
+            endsAt: grant.endsAt,
+            status: grant.status,
+        })),
+        ...(status.scheduledSuccessor ? [{
+            id: status.scheduledSuccessor.id,
+            title: status.scheduledSuccessor.planDisplayName,
+            detail: "Scheduled Store License",
+            startsAt: status.scheduledSuccessor.startsAt,
+            endsAt: status.scheduledSuccessor.endsAt,
+            status: status.scheduledSuccessor.status,
+        }] : []),
+    ].sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+
+    if (entries.length === 0) {
+        return <p className="text-sm text-muted-foreground">No Plan or Store Access Grant has started yet.</p>;
+    }
+
+    return (
+        <ol className="space-y-4">
+            {entries.map((entry, index) => (
+                <li key={entry.id} className="relative flex gap-3 pl-1">
+                    {index < entries.length - 1 ? (
+                        <span className="absolute left-[0.6rem] top-6 h-[calc(100%+0.25rem)] w-px bg-border" aria-hidden="true" />
+                    ) : null}
+                    <span className="mt-1.5 flex size-3 shrink-0 rounded-full border-[3px] border-primary bg-background" aria-hidden="true" />
+                    <div className="min-w-0 flex-1 pb-0.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-foreground">{entry.title}</p>
+                            <Badge variant={historyStatusVariant(entry.status)} className="rounded-full text-xs capitalize">
+                                {entry.status}
+                            </Badge>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{entry.detail}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {formatCommercialDate(entry.startsAt)} – {formatCommercialDate(entry.endsAt)} ({status.timezone})
+                        </p>
+                    </div>
+                </li>
+            ))}
+        </ol>
+    );
+};
+const WorkspaceAccessHero = ({
+    status,
+    storeName,
+    onStartTrial,
+    startingTrial,
+    showTrialOffer,
+    hasPlanOptions,
+}: {
+    status: StoreCommercialStatusDTO;
+    storeName?: string;
+    onStartTrial: () => void;
+    startingTrial: boolean;
+    showTrialOffer: boolean;
+    hasPlanOptions: boolean;
+}) => {
+    const access = getCurrentCommercialAccess(status);
+    const accessLabel = access?.kind === "grant" ? "Store access" : "Current plan";
+    const accessState = access ? formatPlanTimeRemaining(access.endsAt) : "No active access";
+
+    return (
+        <section className="overflow-hidden rounded-3xl border border-primary/15 bg-linear-to-br from-primary/12 via-card to-card shadow-sm">
+            <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-end">
+                <div className="min-w-0 space-y-4">
+                    <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Store access</p>
+                        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+                            {storeName ?? "This store"}
+                        </h1>
+                    </div>
+                    <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={access ? "secondary" : "muted"} className="rounded-full px-3 py-1 text-xs">
+                                {accessLabel}
+                            </Badge>
+                            <span className="text-sm font-medium text-primary">{accessState}</span>
+                        </div>
+                        <p className="font-display text-xl font-semibold text-foreground">
+                            {access?.displayName ?? "No active plan"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            {access
+                                ? `Ends ${formatCommercialTimestamp(access.endsAt)} (${status.timezone})`
+                                : "Start a Trial Plan or choose a paid Plan to unlock Store features."}
+                        </p>
+                    </div>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/75 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
+                    {showTrialOffer ? (
+                        <div className="mt-2 space-y-3">
+                            <p className="text-sm text-muted-foreground">{status.trial.message}</p>
+                            <Button className="w-full rounded-full" disabled={startingTrial} onClick={onStartTrial}>
+                                {startingTrial ? "Starting trial..." : "Start Trial"}
+                            </Button>
+                        </div>
+                    ) : hasPlanOptions ? (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Review the available Plan options below to continue or change this Store&apos;s access.
+                        </p>
+                    ) : (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            This Store&apos;s commercial access is up to date.
+                        </p>
+                    )}
+                </div>
+            </div>
+        </section>
+    );
+};
 const QuoteCheckoutPanel = ({
     quote,
     awaitingConfirmation,
@@ -443,6 +572,8 @@ const CommercialActivityTimeline = ({
 const StoreCommercialStatus = ({
     organizationId,
     storeId,
+    variant = "detail",
+    storeName,
     createPaidPlanCheckout = createPaidPlanCheckoutRequest,
     createCoTermAddOnCheckout = createCoTermAddOnCheckoutRequest,
     openRazorpayCheckout = defaultOpenRazorpayCheckout,
@@ -578,6 +709,103 @@ const StoreCommercialStatus = ({
             setAwaitingConfirmation(true);
         }
     };
+    if (variant === "workspace") {
+        return (
+            <div className="space-y-6" data-testid="store-workspace-license-control-center">
+                {statusQuery.isPending ? (
+                    <div className="flex min-h-64 items-center justify-center">
+                        <LoaderCircle className="size-5 animate-spin text-primary" />
+                    </div>
+                ) : statusQuery.isError || statusQuery.data?.status === "error" || !status ? (
+                    <Card className="border-border/60 bg-card/80 shadow-sm">
+                        <CardContent className="py-6 text-sm text-muted-foreground">
+                            {statusQuery.data?.message ?? "Unable to load this Store's commercial status."}
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <>
+                        <WorkspaceAccessHero
+                            status={status}
+                            storeName={storeName}
+                            onStartTrial={() => startTrial.mutate()}
+                            startingTrial={startTrial.isPending}
+                            showTrialOffer={showTrialOffer}
+                            hasPlanOptions={showPaidPlans || Boolean(visibleQuote)}
+                        />
+                        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
+                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
+                                <div className="mb-5 space-y-1">
+                                    <SectionHeading>Access timeline</SectionHeading>
+                                    <p className="text-sm text-muted-foreground">
+                                        Every Store License and Store Access Grant keeps its own dates.
+                                    </p>
+                                </div>
+                                <AccessTimeline status={status} />
+                            </section>
+                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
+                                <div className="mb-5 space-y-1">
+                                    <SectionHeading>What’s enabled</SectionHeading>
+                                    <p className="text-sm text-muted-foreground">
+                                        Features currently available to this Store.
+                                    </p>
+                                </div>
+                                <FeatureEntitlements features={status.entitlements.features} />
+                            </section>
+                        </div>
+                        {status.scheduledSuccessor ? (
+                            <Alert variant="info">
+                                <CalendarClock className="size-4" aria-hidden="true" />
+                                <AlertTitle>Scheduled plan change</AlertTitle>
+                                <AlertDescription>
+                                    {status.scheduledSuccessor.planDisplayName} starts on {formatCommercialTimestamp(status.scheduledSuccessor.startsAt)} and runs until {formatCommercialTimestamp(status.scheduledSuccessor.endsAt)} ({status.timezone}).
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        {status.activeAddOns.length > 0 ? (
+                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
+                                <div className="mb-4 space-y-1">
+                                    <SectionHeading>Active add-ons</SectionHeading>
+                                    <p className="text-sm text-muted-foreground">These Modules end with the active paid Plan.</p>
+                                </div>
+                                <ul className="grid gap-3 sm:grid-cols-2">
+                                    {status.activeAddOns.map((addOn) => (
+                                        <li key={addOn.id} className="rounded-xl border border-border/60 bg-muted/10 px-4 py-3">
+                                            <p className="font-medium text-foreground">{addOn.moduleDisplayName}</p>
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                Ends {formatCommercialDate(addOn.endsAt)} ({status.timezone})
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        ) : null}
+                        {visibleQuote ? (
+                            <section className="space-y-3">
+                                <SectionHeading>Complete your purchase</SectionHeading>
+                                <QuoteCheckoutPanel quote={visibleQuote} awaitingConfirmation={awaitingConfirmation} onPay={() => void payQuote(visibleQuote)} />
+                            </section>
+                        ) : null}
+                        {showPaidPlans ? (
+                            <section className="space-y-3">
+                                <div className="space-y-1">
+                                    <SectionHeading>{hasActivePaidAccess ? "Renew or upgrade this plan" : "Choose a paid plan"}</SectionHeading>
+                                    <p className="text-sm text-muted-foreground">All prices are GST-inclusive and a Plan change takes effect only after payment is verified.</p>
+                                </div>
+                                <PaidPlanCards plans={status.availablePaidPlans} isCreating={createCheckout.isPending} onSelectPlan={(planKey) => createCheckout.mutate(planKey)} />
+                            </section>
+                        ) : null}
+                        {showCoTermAddOns ? (
+                            <section className="space-y-3">
+                                <SectionHeading>Add eligible modules</SectionHeading>
+                                <CoTermAddOnCards addOns={status.availableCoTermAddOns} isCreating={createAddOnCheckout.isPending} onSelectAddOn={(moduleKey) => createAddOnCheckout.mutate(moduleKey)} />
+                            </section>
+                        ) : null}
+                        <CommercialActivityTimeline entries={commercialHistory} />
+                    </>
+                )}
+            </div>
+        );
+    }
     return (
         <Card className="border-border/60 bg-card/80 shadow-sm sm:shadow-md">
             <CardHeader>

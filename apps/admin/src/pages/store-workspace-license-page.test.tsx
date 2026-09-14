@@ -84,13 +84,50 @@ const eligibleStatus: StoreCommercialStatusResponse = {
     },
 };
 
-const renderLicense = () => {
+const activeTrialStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...eligibleStatus.commercialStatus,
+        baseAccess: {
+            id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            sourceKind: "store_license",
+            planKey: "trial",
+            planDisplayName: "Trial",
+            planType: "trial",
+            term: { count: 7, unit: "day" },
+            startsAt: new Date("2026-09-07T03:19:00.000Z"),
+            endsAt: new Date("2026-09-14T03:19:00.000Z"),
+            status: "active",
+        },
+        trial: {
+            eligible: false,
+            message: "This Store has already used its standard Trial Plan.",
+        },
+        entitlements: {
+            storeId,
+            features: [{
+                key: "billing",
+                displayName: "Billing",
+                sources: [{
+                    sourceKind: "store_license",
+                    sourceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                    moduleKey: "core_operations",
+                    moduleDisplayName: "Core Operations",
+                    featureDisplayName: "Billing",
+                    startsAt: new Date("2026-09-07T03:19:00.000Z"),
+                    endsAt: new Date("2026-09-14T03:19:00.000Z"),
+                }],
+            }],
+        },
+    },
+};
+
+const renderLicense = (status = eligibleStatus) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
     queryClient.setQueryData(organizationKeys.store(organizationId, storeId), storeResponse(store));
     queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
         status: "success",
-        data: eligibleStatus,
+        data: status,
         message: "Store commercial status fetched successfully",
         code: 200,
     });
@@ -113,11 +150,14 @@ const renderLicense = () => {
 };
 
 describe("Store workspace License page", () => {
-    test("shows the selected Store's license, trial, and included features", () => {
+    test("presents the selected Store's access as a workspace control center", () => {
         const markup = renderLicense();
 
-        expect(markup).toContain("Store License");
-        expect(markup).toContain("Manage this store");
+        expect(markup).toContain('data-testid="store-workspace-license-control-center"');
+        expect(markup).toContain("Store access");
+        expect(markup).toContain("Access timeline");
+        expect(markup).toContain("What’s enabled");
+        expect(markup).toContain("Next step");
         expect(markup).toContain("This Store can start the standard Trial Plan once.");
         expect(markup).toContain("Start Trial");
         expect(markup).not.toContain("Back to stores");
@@ -127,6 +167,16 @@ describe("Store workspace License page", () => {
         expect(markup).not.toContain(`href="/organizations/${organizationId}/stores/${storeId}/license"`);
         expect(markup).not.toContain(`href="/organizations/${organizationId}/stores/${storeId}/devices"`);
         expect(markup).not.toContain(`href="/organizations/${organizationId}/stores/${storeId}/settings"`);
+    });
+
+    test("connects the current Plan, timeline, and enabled features for an active Store", () => {
+        const markup = renderLicense(activeTrialStatus);
+
+        expect(markup).toContain("Adajan");
+        expect(markup).toContain("Current plan");
+        expect(markup).toContain("Trial");
+        expect(markup).toContain("Store License");
+        expect(markup).toContain("Billing");
     });
 
     test("registers a Store workspace license route without replacing Organization store-detail routes", () => {

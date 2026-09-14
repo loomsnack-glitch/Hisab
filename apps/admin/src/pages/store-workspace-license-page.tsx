@@ -4,7 +4,12 @@ import StoreCommercialStatus from "@/components/organizations/store-commercial-s
 const StoreWorkspaceLicensePage = () => (
     <StoreWorkspacePageGate testId="store-license-page">
         {({ organizationId, store }) => (
-            <StoreCommercialStatus organizationId={organizationId} storeId={store.id} />
+            <StoreCommercialStatus
+                organizationId={organizationId}
+                storeId={store.id}
+                storeName={store.name}
+                variant="workspace"
+            />
         )}
     </StoreWorkspacePageGate>
 );

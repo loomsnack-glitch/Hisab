@@ -16,7 +16,8 @@ import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { getStoreWorkspacePath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
-import { getCommercialStatus, StoreCommercialSummary } from "@/components/dashboard/store-commercial-summary";
+import { StoreCommercialSummary } from "@/components/dashboard/store-commercial-summary";
+import { getCommercialStatus } from "@/lib/commercial-access-summary";
 
 type WorkspaceStoreRef = {
     id: string;
