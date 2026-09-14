@@ -174,6 +174,7 @@ describe("Bundle Product catalog service", () => {
                 unitId: pieceUnitId,
                 defaultSellingQuantity: 1,
                 allowCustomSellingQuantity: false,
+                status: "active",
             }),
             expect.anything(),
         );

@@ -70,7 +70,7 @@ const defaultValues: FormInput = {
     name: "",
     price: 0,
     discount: 0,
-    status: "inactive",
+    status: "active",
     choiceGroups: [{ name: "", minSelections: 1, maxSelections: 1, options: [] }],
 };
 
@@ -191,7 +191,7 @@ const UpsertComboProductDialog = ({
                     priceAdjustment: Number(option.priceAdjustment),
                 })),
             })),
-            status: (isEdit ? values.status : "inactive") as ProductStatus,
+            status: (isEdit ? values.status : "active") as ProductStatus,
         });
     };
 

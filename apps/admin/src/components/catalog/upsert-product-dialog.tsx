@@ -154,7 +154,7 @@ const defaultValues: UpsertProductFormInput = {
   price: "",
   discount: "",
   imagePath: "",
-  status: "inactive",
+  status: "active",
   productCode: "",
   unitId: "",
   defaultSellingQuantity: "1",

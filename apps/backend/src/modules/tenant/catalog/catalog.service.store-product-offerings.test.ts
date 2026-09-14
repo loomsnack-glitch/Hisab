@@ -80,13 +80,12 @@ describe("Store Product Offerings", () => {
     getStoreById.mockResolvedValue(store);
   });
 
-  test("creating a Catalog Product writes an active Offering for every current Store", async () => {
+  test("creating a Catalog Product is Organization-active and writes an active Offering for every current Store", async () => {
     const response = await catalogService.createProduct(userId, organizationId, {
       categoryId,
       name: "Cake",
       price: 250,
       discount: 10,
-      status: "active",
     });
 
     expect(response.status).toBe("success");
@@ -95,7 +94,7 @@ describe("Store Product Offerings", () => {
         name: "Cake",
         price: 250,
         discount: 10,
-        status: "inactive",
+        status: "active",
       }),
       expect.anything(),
     );

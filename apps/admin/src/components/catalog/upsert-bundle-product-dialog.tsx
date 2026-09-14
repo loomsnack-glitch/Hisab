@@ -370,7 +370,7 @@ const UpsertBundleProductDialog = ({
                     ...shared,
                     price: values.price,
                     discount: values.discount ?? 0,
-                    status: "inactive" as const,
+                    status: "active" as const,
                 },
         );
     };

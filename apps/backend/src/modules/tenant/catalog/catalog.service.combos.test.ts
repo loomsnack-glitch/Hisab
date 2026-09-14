@@ -89,6 +89,7 @@ describe("Combo Product catalog service", () => {
             unitId: pieceUnitId,
             defaultSellingQuantity: 1,
             allowCustomSellingQuantity: false,
+            status: "active",
         }), expect.anything());
         expect(createComboChoiceGroupRepo).toHaveBeenCalledWith(expect.objectContaining({ minSelections: 1, maxSelections: 2 }), expect.anything());
         expect(createComboChoiceOptionRepo).toHaveBeenCalledTimes(2);
