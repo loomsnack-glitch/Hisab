@@ -218,10 +218,14 @@ export const getActiveTrialPlanSnapshot = async (): Promise<ActiveTrialPlanSnaps
             r.id AS plan_revision_id,
             p.key,
             r.display_name,
+            r.description,
             r.plan_type,
             r.price_inr,
             r.term_count,
-            r.term_unit
+            r.term_unit,
+            r.is_best_value,
+            r.is_recommended,
+            r.display_sequence
         FROM commercial_plan_revisions r
         INNER JOIN commercial_plans p ON p.id = r.plan_id
         WHERE r.status = 'active'
@@ -236,10 +240,14 @@ export const getActiveTrialPlanSnapshot = async (): Promise<ActiveTrialPlanSnaps
         plan_revision_id: string;
         key: string;
         display_name: string;
+        description: string;
         plan_type: "trial";
         price_inr: string | number;
         term_count: number;
         term_unit: "day" | "month" | "year";
+        is_best_value: boolean;
+        is_recommended: boolean;
+        display_sequence: number;
     }>;
     if (!plan) {
         return null;
@@ -305,12 +313,16 @@ export const getActiveTrialPlanSnapshot = async (): Promise<ActiveTrialPlanSnaps
         planRevisionId: plan.plan_revision_id,
         key: plan.key,
         displayName: plan.display_name,
+        description: plan.description,
         planType: "trial",
         priceInr: Number(plan.price_inr),
         term: {
             count: Number(plan.term_count),
             unit: plan.term_unit,
         },
+        isBestValue: plan.is_best_value,
+        isRecommended: plan.is_recommended,
+        displaySequence: Number(plan.display_sequence),
         modules: moduleRows.map((row) => ({
             moduleId: row.module_id,
             moduleRevisionId: row.module_revision_id,
@@ -701,10 +713,14 @@ const loadPlanSnapshot = async (plan: {
     plan_revision_id: string;
     key: string;
     display_name: string;
+    description: string;
     plan_type: "trial" | "paid";
     price_inr: string | number;
     term_count: number;
     term_unit: "day" | "month" | "year";
+    is_best_value: boolean;
+    is_recommended: boolean;
+    display_sequence: number;
 }): Promise<ActivePlanSnapshot> => {
     const moduleRows = await pg`
         SELECT
@@ -730,12 +746,16 @@ const loadPlanSnapshot = async (plan: {
         planRevisionId: plan.plan_revision_id,
         key: plan.key,
         displayName: plan.display_name,
+        description: plan.description,
         planType: plan.plan_type,
         priceInr: Number(plan.price_inr),
         term: {
             count: Number(plan.term_count),
             unit: plan.term_unit,
         },
+        isBestValue: plan.is_best_value,
+        isRecommended: plan.is_recommended,
+        displaySequence: Number(plan.display_sequence),
         modules: await loadFeaturesForModuleRevisions(moduleRows),
     };
 };
@@ -747,23 +767,31 @@ export const listActivePlanSnapshots = async (): Promise<ActivePlanSnapshot[]> =
             r.id AS plan_revision_id,
             p.key,
             r.display_name,
+            r.description,
             r.plan_type,
             r.price_inr,
             r.term_count,
-            r.term_unit
+            r.term_unit,
+            r.is_best_value,
+            r.is_recommended,
+            r.display_sequence
         FROM commercial_plan_revisions r
         INNER JOIN commercial_plans p ON p.id = r.plan_id
         WHERE r.status = 'active'
-        ORDER BY r.display_name ASC, p.key ASC
+        ORDER BY r.display_sequence ASC, r.display_name ASC, p.key ASC
     ` as Array<{
         plan_id: string;
         plan_revision_id: string;
         key: string;
         display_name: string;
+        description: string;
         plan_type: "trial" | "paid";
         price_inr: string | number;
         term_count: number;
         term_unit: "day" | "month" | "year";
+        is_best_value: boolean;
+        is_recommended: boolean;
+        display_sequence: number;
     }>;
     const snapshots: ActivePlanSnapshot[] = [];
     for (const plan of plans) {
@@ -779,10 +807,14 @@ export const getActivePlanSnapshotByKey = async (planKey: string): Promise<Activ
             r.id AS plan_revision_id,
             p.key,
             r.display_name,
+            r.description,
             r.plan_type,
             r.price_inr,
             r.term_count,
-            r.term_unit
+            r.term_unit,
+            r.is_best_value,
+            r.is_recommended,
+            r.display_sequence
         FROM commercial_plan_revisions r
         INNER JOIN commercial_plans p ON p.id = r.plan_id
         WHERE r.status = 'active'
@@ -794,10 +826,14 @@ export const getActivePlanSnapshotByKey = async (planKey: string): Promise<Activ
         plan_revision_id: string;
         key: string;
         display_name: string;
+        description: string;
         plan_type: "trial" | "paid";
         price_inr: string | number;
         term_count: number;
         term_unit: "day" | "month" | "year";
+        is_best_value: boolean;
+        is_recommended: boolean;
+        display_sequence: number;
     }>;
     return plan ? loadPlanSnapshot(plan) : null;
 };

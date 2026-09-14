@@ -26,6 +26,7 @@ import {
     type CreateCommercialPlanJSON,
 } from "@repo/types";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
+import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
@@ -259,6 +260,9 @@ const CommercialCatalogPlansPage = ({
                 planType: input.planType,
                 priceInr: input.priceInr,
                 term: input.term,
+                isBestValue: input.isBestValue,
+                isRecommended: input.isRecommended,
+                displaySequence: input.displaySequence,
                 moduleRevisionIds: input.moduleRevisionIds,
             }),
         onMutate: () => setFormError(null),
@@ -340,6 +344,9 @@ const CommercialCatalogPlansPage = ({
                                 planType: currentRevision.planType,
                                 priceInr: currentRevision.priceInr,
                                 term: currentRevision.term,
+                                isBestValue: currentRevision.isBestValue,
+                                isRecommended: currentRevision.isRecommended,
+                                displaySequence: currentRevision.displaySequence,
                                 moduleRevisionIds: currentRevision.modules.map((moduleItem) => moduleItem.moduleRevisionId),
                             }
                             : initialCreateValues}
@@ -379,6 +386,7 @@ const CommercialCatalogPlansPage = ({
                                         <TableHead>Status</TableHead>
                                         <TableHead>Revision</TableHead>
                                         <TableHead>Type</TableHead>
+                                        <TableHead>Sequence</TableHead>
                                         <TableHead>Price / term</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -391,14 +399,27 @@ const CommercialCatalogPlansPage = ({
                                             onClick={() => openPlan(planItem.id)}
                                         >
                                             <TableCell>
-                                                <button type="button" className="text-left font-medium" onClick={() => openPlan(planItem.id)}>
-                                                    {planItem.displayName}
-                                                </button>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <button type="button" className="text-left font-medium" onClick={() => openPlan(planItem.id)}>
+                                                        {planItem.displayName}
+                                                    </button>
+                                                    {planItem.isBestValue ? (
+                                                        <Badge className="rounded-full bg-[#0C73FE] text-[10px] font-semibold uppercase tracking-wide text-white">
+                                                            Best value
+                                                        </Badge>
+                                                    ) : null}
+                                                    {planItem.isRecommended ? (
+                                                        <Badge className="rounded-full bg-emerald-600 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                                            Recommended
+                                                        </Badge>
+                                                    ) : null}
+                                                </div>
                                             </TableCell>
                                             <TableCell><code>{planItem.key}</code></TableCell>
                                             <TableCell>{commercialCatalogStatusBadge(planItem.status)}</TableCell>
                                             <TableCell>{planItem.revisionNumber}</TableCell>
                                             <TableCell>{commercialCatalogPlanTypeLabels[planItem.planType]}</TableCell>
+                                            <TableCell>{planItem.displaySequence}</TableCell>
                                             <TableCell>
                                                 {`${formatCommercialCatalogInr(planItem.priceInr)} / ${formatCommercialCatalogTerm(planItem.term)}`}
                                             </TableCell>
@@ -467,6 +488,11 @@ const PlanEditor = ({
     const [priceInr, setPriceInr] = useState(initialValues?.priceInr != null ? String(initialValues.priceInr) : "");
     const [termCount, setTermCount] = useState(initialValues?.term?.count != null ? String(initialValues.term.count) : "1");
     const [termUnit, setTermUnit] = useState<CommercialCatalogTermUnit>(initialValues?.term?.unit ?? "year");
+    const [isBestValue, setIsBestValue] = useState(initialValues?.isBestValue ?? false);
+    const [isRecommended, setIsRecommended] = useState(initialValues?.isRecommended ?? false);
+    const [displaySequence, setDisplaySequence] = useState(
+        initialValues?.displaySequence != null ? String(initialValues.displaySequence) : "1",
+    );
     const [localError, setLocalError] = useState<string | null>(null);
 
     const modulesQuery = useQuery({
@@ -507,6 +533,9 @@ const PlanEditor = ({
             planType,
             priceInr: Number(priceInr),
             term: { count: Number(termCount), unit: termUnit },
+            isBestValue,
+            isRecommended,
+            displaySequence: Number(displaySequence),
             moduleRevisionIds: [...selectedRevisionIds],
         };
         const parsed = (lockedKey ? UpdateCommercialPlanDraftSchema : CreateCommercialPlanSchema).safeParse(
@@ -517,6 +546,9 @@ const PlanEditor = ({
                     planType: payload.planType,
                     priceInr: payload.priceInr,
                     term: payload.term,
+                    isBestValue: payload.isBestValue,
+                    isRecommended: payload.isRecommended,
+                    displaySequence: payload.displaySequence,
                     moduleRevisionIds: payload.moduleRevisionIds,
                 }
                 : payload,
@@ -596,6 +628,35 @@ const PlanEditor = ({
                     </select>
                 </label>
             </div>
+            <label className="block space-y-2 text-sm font-medium">
+                Sequence
+                <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={displaySequence}
+                    onChange={(event) => setDisplaySequence(event.target.value)}
+                    aria-label="Plan sequence"
+                />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                    type="checkbox"
+                    checked={isBestValue}
+                    onChange={(event) => setIsBestValue(event.target.checked)}
+                    aria-label="Mark as best value"
+                />
+                Best value
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                    type="checkbox"
+                    checked={isRecommended}
+                    onChange={(event) => setIsRecommended(event.target.checked)}
+                    aria-label="Mark as recommended"
+                />
+                Recommended
+            </label>
             <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Modules</legend>
                 {modulesQuery.isPending ? (
@@ -695,6 +756,9 @@ const PlanDetail = ({
                 planType: input.planType,
                 priceInr: input.priceInr,
                 term: input.term,
+                isBestValue: input.isBestValue,
+                isRecommended: input.isRecommended,
+                displaySequence: input.displaySequence,
                 moduleRevisionIds: input.moduleRevisionIds,
             }),
         onMutate: () => setFormError(null),
@@ -845,6 +909,9 @@ const PlanDetail = ({
                             planType: current.planType,
                             priceInr: current.priceInr,
                             term: current.term,
+                            isBestValue: current.isBestValue,
+                            isRecommended: current.isRecommended,
+                            displaySequence: current.displaySequence,
                             moduleRevisionIds: current.modules.map((moduleItem) => moduleItem.moduleRevisionId),
                         }}
                         submitLabel="Save draft"
@@ -863,6 +930,9 @@ const PlanDetail = ({
                     {commercialCatalogPlanTypeLabels[current.planType]}
                     {" · "}
                     {`${formatCommercialCatalogInr(current.priceInr)} / ${formatCommercialCatalogTerm(current.term)}`}
+                    {current.isBestValue ? " · Best value" : ""}
+                    {current.isRecommended ? " · Recommended" : ""}
+                    {` · Sequence ${current.displaySequence}`}
                 </p>
             </div>
 

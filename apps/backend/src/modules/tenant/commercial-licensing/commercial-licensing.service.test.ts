@@ -91,6 +91,12 @@ describe("Commercial Licensing standard Trial", () => {
         const repeat = await memory.service.startStandardTrial(userId, organizationId, storeId);
 
         expect(status.data?.commercialStatus.baseAccess).toBeNull();
+        expect(status.data?.commercialStatus.storeLicenses).toEqual([
+            expect.objectContaining({
+                planKey: "trial",
+                status: "expired",
+            }),
+        ]);
         expect(status.data?.commercialStatus.trial.eligible).toBe(false);
         expect(status.data?.commercialStatus.entitlements.features).toEqual([]);
         expect(entitlement.entitled).toBe(false);
@@ -417,8 +423,27 @@ describe("Paid Plan checkout and verified fulfilment", () => {
         });
         expect(status.data?.commercialStatus.baseAccess).toBeNull();
         expect(status.data?.commercialStatus.pendingCheckout?.id).toBe(checkout.data?.quote.id);
-        expect(status.data?.commercialStatus.availablePaidPlans.map((plan) => plan.key).sort())
+        expect(status.data?.commercialStatus.availablePaidPlans.map((plan) => plan.key))
             .toEqual(["core", "pro"]);
+        expect(status.data?.commercialStatus.availablePaidPlans.find((plan) => plan.key === "core")).toEqual(
+            expect.objectContaining({
+                isRecommended: true,
+                displaySequence: 2,
+                modules: [expect.objectContaining({ key: "core_operations", displayName: "Core Operations" })],
+            }),
+        );
+        expect(status.data?.commercialStatus.availablePaidPlans.find((plan) => plan.key === "pro")?.isBestValue)
+            .toBe(true);
+        expect(status.data?.commercialStatus.availableTrialPlan).toEqual(expect.objectContaining({
+            key: "trial",
+            displayName: "Trial",
+            isRecommended: false,
+            displaySequence: 1,
+            modules: expect.arrayContaining([
+                expect.objectContaining({ key: "core_operations" }),
+            ]),
+        }));
+        expect(status.data?.commercialStatus.storeLicenses).toEqual([]);
         expect(billing.entitled).toBe(false);
     });
 

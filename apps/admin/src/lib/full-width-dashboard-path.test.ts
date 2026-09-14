@@ -91,11 +91,11 @@ describe("isFullWidthDashboardPath", () => {
         ).toBe(true);
     });
 
-    test("keeps the centered container for other organization routes", () => {
+    test("uses the full dashboard width for the store license route", () => {
         expect(
             isFullWidthDashboardPath(
                 "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/license",
             ),
-        ).toBe(false);
+        ).toBe(true);
     });
 });

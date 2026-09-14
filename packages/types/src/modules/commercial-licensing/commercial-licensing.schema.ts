@@ -217,6 +217,11 @@ export const PurchasablePaidPlanDTOSchema = z.object({
     licenseTiming: CommercialQuoteLicenseTimingSchema,
     intendedStartsAt: dtoDateSchema,
     intendedEndsAt: dtoDateSchema,
+    description: z.string().optional(),
+    isBestValue: z.boolean().optional(),
+    isRecommended: z.boolean().optional(),
+    displaySequence: z.number().int().min(1).optional(),
+    modules: z.array(StoreAccessGrantModuleDTOSchema).optional(),
 });
 
 export const StoreCoTermAddOnDTOSchema = z.object({
@@ -228,6 +233,17 @@ export const StoreCoTermAddOnDTOSchema = z.object({
     startsAt: dtoDateSchema,
     endsAt: dtoDateSchema,
     status: StoreLicenseStatusSchema,
+});
+
+export const AvailableTrialPlanDTOSchema = z.object({
+    key: CommercialCatalogKeySchema,
+    displayName: CommercialCatalogDisplayNameSchema,
+    description: z.string(),
+    term: CommercialCatalogTermSchema,
+    isBestValue: z.boolean(),
+    isRecommended: z.boolean(),
+    displaySequence: z.number().int().min(1),
+    modules: z.array(StoreAccessGrantModuleDTOSchema),
 });
 
 export const PurchasableCoTermAddOnDTOSchema = z.object({
@@ -271,9 +287,11 @@ export const StoreCommercialStatusDTOSchema = z.object({
     timezone: z.literal("Asia/Kolkata"),
     baseAccess: StoreLicenseBaseAccessDTOSchema.nullable(),
     scheduledSuccessor: StoreLicenseBaseAccessDTOSchema.nullable(),
+    storeLicenses: z.array(StoreLicenseBaseAccessDTOSchema).optional(),
     accessGrants: z.array(StoreAccessGrantDTOSchema),
     activeAddOns: z.array(StoreCoTermAddOnDTOSchema),
     availablePaidPlans: z.array(PurchasablePaidPlanDTOSchema),
+    availableTrialPlan: AvailableTrialPlanDTOSchema.nullable().optional(),
     availableCoTermAddOns: z.array(PurchasableCoTermAddOnDTOSchema),
     pendingCheckout: CommercialQuoteDTOSchema.nullable(),
     commercialHistory: z.array(CommercialHistoryEntryDTOSchema),

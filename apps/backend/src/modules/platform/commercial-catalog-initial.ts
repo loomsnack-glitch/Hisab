@@ -61,6 +61,9 @@ export type InitialCommercialCatalogSeedRepository = {
         planType: "trial" | "paid";
         priceInr: number;
         term: { count: number; unit: "day" | "month" | "year" };
+        isBestValue: boolean;
+        isRecommended: boolean;
+        displaySequence: number;
         moduleRevisionIds: string[];
         actorId: string;
         now: Date;
@@ -176,10 +179,13 @@ export const seedInitialCommercialCatalog = async (
             revisionId: input.createId(),
             key: planItem.key,
             displayName: planItem.displayName,
-            description: "",
+            description: planItem.description,
             planType: planItem.planType,
             priceInr: planItem.priceInr,
             term: planItem.term,
+            isBestValue: planItem.isBestValue,
+            isRecommended: planItem.isRecommended,
+            displaySequence: planItem.displaySequence,
             moduleRevisionIds: moduleRevisionIdsForPlan as string[],
             actorId: input.actorId,
             now: input.now,

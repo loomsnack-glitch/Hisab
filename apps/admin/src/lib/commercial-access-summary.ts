@@ -2,36 +2,39 @@ import type { ServiceResponse, StoreCommercialStatusDTO, StoreCommercialStatusRe
 
 const HOUR_MS = 60 * 60 * 1000;
 
-export type CurrentCommercialAccess = {
+export type EffectiveCommercialAccess = {
     displayName: string;
     endsAt: string | Date;
-    kind: "plan" | "grant";
+    sourceKind: "store_license" | "store_access_grant";
+    sourceLabel: string;
 };
 
 export const getCommercialStatus = (
     response: ServiceResponse<StoreCommercialStatusResponse | null> | undefined,
 ) => response?.status === "success" ? response.data?.commercialStatus ?? null : null;
 
-export const getCurrentCommercialAccess = (
+export const getEffectiveCommercialAccess = (
     commercialStatus: StoreCommercialStatusDTO | null | undefined,
-): CurrentCommercialAccess | null => {
+): EffectiveCommercialAccess | null => {
     if (!commercialStatus) return null;
 
     const activePlanAccess = [
         ...(commercialStatus.baseAccess?.status === "active" ? [{
             displayName: commercialStatus.baseAccess.planDisplayName,
             endsAt: commercialStatus.baseAccess.endsAt,
-            kind: "plan" as const,
+            sourceKind: "store_license" as const,
+            sourceLabel: "Store License",
         }] : []),
         ...commercialStatus.accessGrants
             .filter((grant) => grant.status === "active" && grant.selectionKind === "plan" && grant.planDisplayName)
             .map((grant) => ({
                 displayName: grant.planDisplayName!,
                 endsAt: grant.endsAt,
-                kind: "plan" as const,
+                sourceKind: "store_access_grant" as const,
+                sourceLabel: grant.label,
             })),
     ];
-    const latestPlanAccess = activePlanAccess.reduce<CurrentCommercialAccess | null>(
+    const latestPlanAccess = activePlanAccess.reduce<EffectiveCommercialAccess | null>(
         (latest, access) => !latest || new Date(access.endsAt).getTime() > new Date(latest.endsAt).getTime()
             ? access
             : latest,
@@ -49,7 +52,12 @@ export const getCurrentCommercialAccess = (
         );
 
     return activeGrant
-        ? { displayName: activeGrant.selectionLabel, endsAt: activeGrant.endsAt, kind: "grant" }
+        ? {
+            displayName: activeGrant.selectionLabel,
+            endsAt: activeGrant.endsAt,
+            sourceKind: "store_access_grant",
+            sourceLabel: activeGrant.label,
+        }
         : null;
 };
 

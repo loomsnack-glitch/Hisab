@@ -15,9 +15,13 @@ export type SeededCommercialModuleDefinition = {
 export type SeededCommercialPlanDefinition = {
     key: string;
     displayName: string;
+    description: string;
     planType: "trial" | "paid";
     priceInr: number;
     term: { count: number; unit: "day" | "month" | "year" };
+    isBestValue: boolean;
+    isRecommended: boolean;
+    displaySequence: number;
     moduleKeys: readonly string[];
 };
 
@@ -91,9 +95,13 @@ export const SEEDED_COMMERCIAL_PLANS = [
     {
         key: "trial",
         displayName: "Trial",
+        description: "Try every included Module before you buy.",
         planType: "trial",
         priceInr: 0,
         term: { count: 7, unit: "day" },
+        isBestValue: false,
+        isRecommended: false,
+        displaySequence: 1,
         moduleKeys: [
             "core_operations",
             "basic_catalog",
@@ -106,17 +114,25 @@ export const SEEDED_COMMERCIAL_PLANS = [
     {
         key: "core",
         displayName: "Core",
+        description: "Everything you need to get started.",
         planType: "paid",
         priceInr: 2999,
         term: { count: 1, unit: "year" },
+        isBestValue: false,
+        isRecommended: true,
+        displaySequence: 2,
         moduleKeys: ["core_operations", "basic_catalog"],
     },
     {
         key: "pro",
         displayName: "Pro",
+        description: "Everything in Core, plus advanced business tools.",
         planType: "paid",
         priceInr: 4999,
         term: { count: 1, unit: "year" },
+        isBestValue: true,
+        isRecommended: false,
+        displaySequence: 3,
         moduleKeys: ["core_operations", "basic_catalog", "finance", "restaurant_operations"],
     },
 ] as const satisfies readonly SeededCommercialPlanDefinition[];

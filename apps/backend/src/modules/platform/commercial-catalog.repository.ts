@@ -1511,6 +1511,9 @@ type PlanRevisionRow = {
     price_inr: string | number;
     term_count: number;
     term_unit: CommercialCatalogTermUnit;
+    is_best_value: boolean;
+    is_recommended: boolean;
+    display_sequence: number;
     created_at: string | Date;
     published_at: string | Date | null;
     retired_at: string | Date | null;
@@ -1582,6 +1585,9 @@ const toPlanRevision = (
     planType: row.plan_type,
     priceInr: Number(row.price_inr),
     term: toTerm(row.term_count, row.term_unit) as CommercialCatalogTerm,
+    isBestValue: row.is_best_value,
+    isRecommended: row.is_recommended,
+    displaySequence: Number(row.display_sequence),
     modules,
     resolvedFeatures: resolveFeatures(modules),
     createdBy: actorFrom(row.created_by_id, row.created_first_name, row.created_last_name) as CommercialCatalogAuditActorDTO,
@@ -1607,6 +1613,9 @@ const planRevisionSelect = sql`
         r.price_inr,
         r.term_count,
         r.term_unit,
+        r.is_best_value,
+        r.is_recommended,
+        r.display_sequence,
         r.created_at,
         r.published_at,
         r.retired_at,
@@ -1783,6 +1792,9 @@ export const listPlans = async (
                 r.price_inr,
                 r.term_count,
                 r.term_unit,
+                r.is_best_value,
+                r.is_recommended,
+                r.display_sequence,
                 ROW_NUMBER() OVER (
                     PARTITION BY r.plan_id
                     ORDER BY
@@ -1809,12 +1821,15 @@ export const listPlans = async (
             current_revisions.plan_type,
             current_revisions.price_inr,
             current_revisions.term_count,
-            current_revisions.term_unit
+            current_revisions.term_unit,
+            current_revisions.is_best_value,
+            current_revisions.is_recommended,
+            current_revisions.display_sequence
         FROM current_revisions
         WHERE current_revisions.revision_rank = 1
             ${statusClause}
             ${searchClause}
-        ORDER BY current_revisions.display_name ASC, current_revisions.key ASC, current_revisions.plan_id ASC
+        ORDER BY current_revisions.display_sequence ASC, current_revisions.display_name ASC, current_revisions.key ASC, current_revisions.plan_id ASC
     ` as Array<{
         id: string;
         key: string;
@@ -1827,6 +1842,9 @@ export const listPlans = async (
         price_inr: string | number;
         term_count: number;
         term_unit: CommercialCatalogTermUnit;
+        is_best_value: boolean;
+        is_recommended: boolean;
+        display_sequence: number;
     }>;
 
     return rows.map((row) => ({
@@ -1840,6 +1858,9 @@ export const listPlans = async (
         planType: row.plan_type,
         priceInr: Number(row.price_inr),
         term: toTerm(row.term_count, row.term_unit) as CommercialCatalogTerm,
+        isBestValue: row.is_best_value,
+        isRecommended: row.is_recommended,
+        displaySequence: Number(row.display_sequence),
     }));
 };
 
@@ -1855,6 +1876,9 @@ export type CreateDraftPlanInput = {
     planType: CommercialPlanType;
     priceInr: number;
     term: CommercialCatalogTerm;
+    isBestValue: boolean;
+    isRecommended: boolean;
+    displaySequence: number;
     moduleRevisionIds: string[];
     actorId: string;
     now: Date;
@@ -1901,6 +1925,9 @@ export const createDraftPlan = async (input: CreateDraftPlanInput): Promise<Crea
                     price_inr,
                     term_count,
                     term_unit,
+                    is_best_value,
+                    is_recommended,
+                    display_sequence,
                     created_by_owner_user_id,
                     created_at
                 )
@@ -1915,6 +1942,9 @@ export const createDraftPlan = async (input: CreateDraftPlanInput): Promise<Crea
                     ${input.priceInr},
                     ${input.term.count},
                     ${input.term.unit},
+                    ${input.isBestValue},
+                    ${input.isRecommended},
+                    ${input.displaySequence},
                     ${input.actorId},
                     ${input.now}
                 )
@@ -1943,6 +1973,9 @@ export type UpdateDraftPlanInput = {
     planType: CommercialPlanType;
     priceInr: number;
     term: CommercialCatalogTerm;
+    isBestValue: boolean;
+    isRecommended: boolean;
+    displaySequence: number;
     moduleRevisionIds: string[];
 };
 
@@ -1983,7 +2016,10 @@ export const updateDraftPlanRevision = async (input: UpdateDraftPlanInput): Prom
                 plan_type = ${input.planType},
                 price_inr = ${input.priceInr},
                 term_count = ${input.term.count},
-                term_unit = ${input.term.unit}
+                term_unit = ${input.term.unit},
+                is_best_value = ${input.isBestValue},
+                is_recommended = ${input.isRecommended},
+                display_sequence = ${input.displaySequence}
             WHERE id = ${input.revisionId}
         `;
         await replacePlanMemberships(tx, input.revisionId, memberships.refs);
@@ -2021,11 +2057,11 @@ const planMembershipsOfRevision = async (tx: SqlClient, revisionId: string): Pro
 export const publishPlanRevision = async (input: PublishPlanInput): Promise<PublishPlanResult> =>
     pg.begin(async (tx) => {
         const [revision] = await tx`
-            SELECT id, status
+            SELECT id, status, is_best_value, is_recommended
             FROM commercial_plan_revisions
             WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
             FOR UPDATE
-        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus }>;
+        ` as Array<{ id: string; status: CommercialCatalogRevisionStatus; is_best_value: boolean; is_recommended: boolean }>;
         if (!revision) {
             return { status: "not-found" as const };
         }
@@ -2047,6 +2083,24 @@ export const publishPlanRevision = async (input: PublishPlanInput): Promise<Publ
             WHERE plan_id = ${input.planId}
                 AND status = 'active'
         `;
+        if (revision.is_best_value) {
+            await tx`
+                UPDATE commercial_plan_revisions
+                SET is_best_value = FALSE
+                WHERE status = 'active'
+                  AND is_best_value
+                  AND id <> ${input.revisionId}
+            `;
+        }
+        if (revision.is_recommended) {
+            await tx`
+                UPDATE commercial_plan_revisions
+                SET is_recommended = FALSE
+                WHERE status = 'active'
+                  AND is_recommended
+                  AND id <> ${input.revisionId}
+            `;
+        }
         await tx`
             UPDATE commercial_plan_revisions
             SET
@@ -2159,6 +2213,9 @@ export const createSuccessorPlanRevision = async (
                 price_inr,
                 term_count,
                 term_unit,
+                is_best_value,
+                is_recommended,
+                display_sequence,
                 revision_number
             FROM commercial_plan_revisions
             WHERE id = ${input.revisionId} AND plan_id = ${input.planId}
@@ -2172,6 +2229,9 @@ export const createSuccessorPlanRevision = async (
             price_inr: string | number;
             term_count: number;
             term_unit: CommercialCatalogTermUnit;
+            is_best_value: boolean;
+            is_recommended: boolean;
+            display_sequence: number;
             revision_number: number;
         }>;
         if (!source) {
@@ -2209,6 +2269,9 @@ export const createSuccessorPlanRevision = async (
                 price_inr,
                 term_count,
                 term_unit,
+                is_best_value,
+                is_recommended,
+                display_sequence,
                 created_by_owner_user_id,
                 created_at
             )
@@ -2223,6 +2286,9 @@ export const createSuccessorPlanRevision = async (
                 ${source.price_inr},
                 ${source.term_count},
                 ${source.term_unit},
+                ${source.is_best_value},
+                ${source.is_recommended},
+                ${source.display_sequence},
                 ${input.actorId},
                 ${input.now}
             )

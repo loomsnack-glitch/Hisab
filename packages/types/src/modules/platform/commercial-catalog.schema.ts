@@ -115,6 +115,11 @@ export const CommercialCatalogPriceInrSchema = z
         message: "Price must have at most two decimal places",
     });
 
+export const CommercialCatalogDisplaySequenceSchema = z
+    .number({ error: "Sequence is required" })
+    .int("Sequence must be a whole number")
+    .min(1, "Sequence must be at least 1");
+
 export const CommercialCatalogTermUnitSchema = z.enum(["day", "month", "year"]);
 
 export const CommercialCatalogTermSchema = z
@@ -327,6 +332,9 @@ export const CommercialPlanRevisionDTOSchema = z.object({
     planType: CommercialPlanTypeSchema,
     priceInr: CommercialCatalogPriceInrSchema,
     term: CommercialCatalogTermSchema,
+    isBestValue: z.boolean(),
+    isRecommended: z.boolean(),
+    displaySequence: CommercialCatalogDisplaySequenceSchema,
     modules: z.array(CommercialPlanModuleMembershipDTOSchema).min(1),
     resolvedFeatures: z.array(CommercialModuleFeatureMembershipDTOSchema).min(1),
     createdBy: CommercialCatalogAuditActorDTOSchema,
@@ -350,6 +358,9 @@ export const CommercialPlanListItemDTOSchema = z.object({
     planType: CommercialPlanTypeSchema,
     priceInr: CommercialCatalogPriceInrSchema,
     term: CommercialCatalogTermSchema,
+    isBestValue: z.boolean(),
+    isRecommended: z.boolean(),
+    displaySequence: CommercialCatalogDisplaySequenceSchema,
 });
 
 export const CommercialPlanListDTOSchema = z.object({
@@ -385,6 +396,9 @@ const commercialPlanWritableFields = {
     planType: CommercialPlanTypeSchema,
     priceInr: CommercialCatalogPriceInrSchema,
     term: CommercialCatalogTermSchema,
+    isBestValue: z.boolean().default(false),
+    isRecommended: z.boolean().default(false),
+    displaySequence: CommercialCatalogDisplaySequenceSchema.default(1),
     moduleRevisionIds: commercialPlanModuleRevisionIdsSchema,
 };
 

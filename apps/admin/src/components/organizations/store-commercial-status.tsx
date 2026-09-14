@@ -12,6 +12,7 @@ import {
     type CommercialQuoteDTO,
     type CoTermAddOnCheckoutResponse,
     type PaidPlanCheckoutResponse,
+    type ServiceResponse,
     type StoreCommercialStatusDTO,
     type StoreLicenseBaseAccessDTO,
 } from "@repo/types";
@@ -20,7 +21,15 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@repo/ui/components/collapsible";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from "@repo/ui/components/empty";
 import { Separator } from "@repo/ui/components/separator";
+import { cn } from "@repo/ui/lib/utils";
 import {
     BadgeCheck,
     CalendarClock,
@@ -29,18 +38,33 @@ import {
     CreditCard,
     History,
     LoaderCircle,
+    Check,
     Sparkles,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { formatPlanTimeRemaining, getCurrentCommercialAccess } from "@/lib/commercial-access-summary";
+import { formatPlanTimeRemaining, getEffectiveCommercialAccess } from "@/lib/commercial-access-summary";
 import { formatCurrency } from "@/lib/format";
 import { commercialLicenseKeys } from "@/lib/query-keys";
 import { openRazorpayCheckout as defaultOpenRazorpayCheckout, type OpenRazorpayCheckout } from "@/lib/razorpay-checkout";
+import {
+    buildAccessTimelineEntries,
+    currentPlanAction,
+    currentTermRange,
+    isLicensePlanCatalogOpen,
+    LICENSE_WORKSPACE_TABS,
+    parseLicenseWorkspaceTab,
+    remainingTermPercent,
+    resolvePreviousPaidPlan,
+    visiblePaidPlans,
+    orderedLicenseCatalogCards,
+    shouldIncludeTrialInCatalog,
+    type LicenseWorkspaceTab,
+} from "@/lib/store-license-workspace";
 type StoreCommercialStatusProps = {
     organizationId: string;
     storeId: string;
     variant?: "detail" | "workspace";
-    storeName?: string;
     createPaidPlanCheckout?: typeof createPaidPlanCheckoutRequest;
     createCoTermAddOnCheckout?: typeof createCoTermAddOnCheckoutRequest;
     openRazorpayCheckout?: OpenRazorpayCheckout;
@@ -83,6 +107,16 @@ const daysRemainingLabel = (endsAt: string | Date) => {
     if (days === 0) return "Expires today";
     if (days === 1) return "1 day remaining";
     return `${days} days remaining`;
+};
+const useCurrentTime = () => {
+    const [currentTime, setCurrentTime] = useState(() => new Date());
+
+    useEffect(() => {
+        const interval = window.setInterval(() => setCurrentTime(new Date()), 60_000);
+        return () => window.clearInterval(interval);
+    }, []);
+
+    return currentTime;
 };
 const planActionLabel = (plan: StoreCommercialStatusDTO["availablePaidPlans"][number]) => {
     if (plan.checkoutAction === "upgrade") {
@@ -249,32 +283,7 @@ const AccessGrantSummaries = ({ status }: { status: StoreCommercialStatusDTO }) 
     </ul>
 );
 const AccessTimeline = ({ status }: { status: StoreCommercialStatusDTO }) => {
-    const entries = [
-        ...(status.baseAccess ? [{
-            id: status.baseAccess.id,
-            title: status.baseAccess.planDisplayName,
-            detail: "Store License",
-            startsAt: status.baseAccess.startsAt,
-            endsAt: status.baseAccess.endsAt,
-            status: status.baseAccess.status,
-        }] : []),
-        ...status.accessGrants.map((grant) => ({
-            id: grant.id,
-            title: grant.selectionLabel,
-            detail: grant.label,
-            startsAt: grant.startsAt,
-            endsAt: grant.endsAt,
-            status: grant.status,
-        })),
-        ...(status.scheduledSuccessor ? [{
-            id: status.scheduledSuccessor.id,
-            title: status.scheduledSuccessor.planDisplayName,
-            detail: "Scheduled Store License",
-            startsAt: status.scheduledSuccessor.startsAt,
-            endsAt: status.scheduledSuccessor.endsAt,
-            status: status.scheduledSuccessor.status,
-        }] : []),
-    ].sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+    const entries = buildAccessTimelineEntries(status);
 
     if (entries.length === 0) {
         return <p className="text-sm text-muted-foreground">No Plan or Store Access Grant has started yet.</p>;
@@ -305,73 +314,445 @@ const AccessTimeline = ({ status }: { status: StoreCommercialStatusDTO }) => {
         </ol>
     );
 };
-const WorkspaceAccessHero = ({
+const LicenseWorkspaceTabs = ({
+    tab,
+    historyCount,
+    paymentCount,
+    onTabChange,
+}: {
+    tab: LicenseWorkspaceTab;
+    historyCount: number;
+    paymentCount: number;
+    onTabChange: (next: LicenseWorkspaceTab) => void;
+}) => (
+    <nav aria-label="Store license tabs" className="border-b border-border/60 pb-px">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+            {LICENSE_WORKSPACE_TABS.map((item) => {
+                const active = tab === item.id;
+                const count = item.id === "history" ? historyCount : item.id === "payments" ? paymentCount : null;
+                return (
+                    <button
+                        key={item.id}
+                        type="button"
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => onTabChange(item.id)}
+                        className={cn(
+                            "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-medium transition-all duration-150 sm:px-4 sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            active
+                                ? "bg-primary/10 font-semibold text-primary shadow-2xs"
+                                : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                        )}
+                    >
+                        {item.id === "plans" ? <Sparkles className={cn("size-3.5 sm:size-4", active ? "text-primary" : "text-muted-foreground/70")} /> : null}
+                        {item.id === "history" ? <History className={cn("size-3.5 sm:size-4", active ? "text-primary" : "text-muted-foreground/70")} /> : null}
+                        {item.id === "payments" ? <CreditCard className={cn("size-3.5 sm:size-4", active ? "text-primary" : "text-muted-foreground/70")} /> : null}
+                        <span>{item.label}</span>
+                        {count ? (
+                            <Badge variant={active ? "secondary" : "muted"} className="rounded-full px-1.5 py-0 text-[10px]">
+                                {count}
+                            </Badge>
+                        ) : null}
+                        {active ? <span className="absolute -bottom-px left-2 right-2 h-0.5 rounded-full bg-primary" /> : null}
+                    </button>
+                );
+            })}
+        </div>
+    </nav>
+);
+
+const CurrentPlanCard = ({
     status,
-    storeName,
+    currentTime,
+    onOpenCatalog,
     onStartTrial,
     startingTrial,
-    showTrialOffer,
-    hasPlanOptions,
 }: {
     status: StoreCommercialStatusDTO;
-    storeName?: string;
+    currentTime: Date;
+    onOpenCatalog: () => void;
     onStartTrial: () => void;
     startingTrial: boolean;
-    showTrialOffer: boolean;
-    hasPlanOptions: boolean;
 }) => {
-    const access = getCurrentCommercialAccess(status);
-    const accessLabel = access?.kind === "grant" ? "Store access" : "Current plan";
-    const accessState = access ? formatPlanTimeRemaining(access.endsAt) : "No active access";
+    const access = getEffectiveCommercialAccess(status);
+    if (!access) return null;
+    const accessLabel = access.sourceKind === "store_access_grant" ? "Effective access" : "Current plan";
+    const accessState = formatPlanTimeRemaining(access.endsAt, currentTime);
+    const range = currentTermRange(status);
+    const remainingPercent = range ? remainingTermPercent(range, currentTime) : null;
+    const action = currentPlanAction(status);
+    const accessSourceDetail = access.sourceKind === "store_access_grant"
+        ? status.baseAccess?.status === "active"
+            ? `Base Store License ends ${formatCommercialTimestamp(status.baseAccess.endsAt)}. Extended by ${access.sourceLabel}.`
+            : `Provided by ${access.sourceLabel}.`
+        : `Provided by ${access.sourceLabel}.`;
 
     return (
-        <section className="overflow-hidden rounded-3xl border border-primary/15 bg-linear-to-br from-primary/12 via-card to-card shadow-sm">
-            <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-end">
-                <div className="min-w-0 space-y-4">
-                    <div className="space-y-1">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Store access</p>
-                        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
-                            {storeName ?? "This store"}
-                        </h1>
+        <section className="overflow-hidden rounded-3xl border border-primary/15 bg-linear-to-br from-primary/12 via-card to-card p-5 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">{accessLabel}</Badge>
+                        <span className="text-sm font-medium text-primary">{accessState}</span>
                     </div>
-                    <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={access ? "secondary" : "muted"} className="rounded-full px-3 py-1 text-xs">
-                                {accessLabel}
-                            </Badge>
-                            <span className="text-sm font-medium text-primary">{accessState}</span>
-                        </div>
-                        <p className="font-display text-xl font-semibold text-foreground">
-                            {access?.displayName ?? "No active plan"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            {access
-                                ? `Ends ${formatCommercialTimestamp(access.endsAt)} (${status.timezone})`
-                                : "Start a Trial Plan or choose a paid Plan to unlock Store features."}
-                        </p>
-                    </div>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-background/75 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
-                    {showTrialOffer ? (
-                        <div className="mt-2 space-y-3">
-                            <p className="text-sm text-muted-foreground">{status.trial.message}</p>
-                            <Button className="w-full rounded-full" disabled={startingTrial} onClick={onStartTrial}>
-                                {startingTrial ? "Starting trial..." : "Start Trial"}
-                            </Button>
-                        </div>
-                    ) : hasPlanOptions ? (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            Review the available Plan options below to continue or change this Store&apos;s access.
-                        </p>
-                    ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            This Store&apos;s commercial access is up to date.
-                        </p>
-                    )}
+                    <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+                        {access.displayName}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        Ends {formatCommercialTimestamp(access.endsAt)} ({status.timezone})
+                    </p>
+                    <p className="text-xs text-muted-foreground">{accessSourceDetail}</p>
                 </div>
             </div>
+            {remainingPercent !== null ? (
+                <div className="mt-4 space-y-2">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-background/70">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${remainingPercent}%` }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{remainingPercent}% of this term remaining</p>
+                </div>
+            ) : null}
+            {status.scheduledSuccessor ? (
+                <Alert variant="info" className="mt-4">
+                    <CalendarClock className="size-4" aria-hidden="true" />
+                    <AlertTitle>Scheduled plan change</AlertTitle>
+                    <AlertDescription>
+                        {status.scheduledSuccessor.planDisplayName} starts on {formatCommercialTimestamp(status.scheduledSuccessor.startsAt)} and runs until {formatCommercialTimestamp(status.scheduledSuccessor.endsAt)} ({status.timezone}).
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <div className="mt-5 space-y-2">
+                <SectionHeading>What’s enabled</SectionHeading>
+                <FeatureEntitlements features={status.entitlements.features} />
+            </div>
+            {status.activeAddOns.length > 0 ? (
+                <div className="mt-5 space-y-2">
+                    <SectionHeading>Active add-ons</SectionHeading>
+                    <ul className="grid gap-3 sm:grid-cols-2">
+                        {status.activeAddOns.map((addOn) => (
+                            <li key={addOn.id} className="rounded-xl border border-border/60 bg-background/70 px-4 py-3">
+                                <p className="font-medium text-foreground">{addOn.moduleDisplayName}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Ends {formatCommercialDate(addOn.endsAt)} ({status.timezone})
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
+            <div className="mt-5 flex flex-wrap gap-2">
+                {action?.kind === "renew" || action?.kind === "choose" ? (
+                    <Button className="rounded-full" onClick={onOpenCatalog}>{action.label}</Button>
+                ) : null}
+                {status.trial.eligible ? (
+                    <Button variant="outline" className="rounded-full" disabled={startingTrial} onClick={onStartTrial}>
+                        {startingTrial ? "Starting trial..." : "Start Trial"}
+                    </Button>
+                ) : null}
+            </div>
         </section>
+    );
+};
+
+const ExpiredPlanCard = ({
+    status,
+    previousPlan,
+    isCreating,
+    catalogOpen,
+    onRenewSamePlan,
+    onOpenCatalog,
+    onCloseCatalog,
+}: {
+    status: StoreCommercialStatusDTO;
+    previousPlan: NonNullable<ReturnType<typeof resolvePreviousPaidPlan>>;
+    isCreating: boolean;
+    catalogOpen: boolean;
+    onRenewSamePlan: () => void;
+    onOpenCatalog: () => void;
+    onCloseCatalog: () => void;
+}) => (
+    <section className="space-y-4 rounded-3xl border border-border/70 bg-card/80 p-5 shadow-sm sm:p-6">
+        <div className="space-y-1">
+            <Badge variant="destructive" className="rounded-full px-3 py-1 text-xs">
+                {previousPlan.status === "expired" ? "Expired" : "Revoked"}
+            </Badge>
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+                {previousPlan.planDisplayName}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+                This Store License ended {formatCommercialTimestamp(previousPlan.endsAt)} ({status.timezone}).
+            </p>
+        </div>
+        {previousPlan.availablePlan ? (
+            <div className="flex flex-wrap gap-2">
+                <Button className="rounded-full" disabled={isCreating} onClick={onRenewSamePlan}>
+                    {isCreating ? "Preparing checkout..." : `Renew with ${previousPlan.planDisplayName}`}
+                </Button>
+                {catalogOpen ? (
+                    <Button variant="outline" className="rounded-full" onClick={onCloseCatalog}>Hide other plans</Button>
+                ) : (
+                    <Button variant="outline" className="rounded-full" onClick={onOpenCatalog}>See other plans</Button>
+                )}
+            </div>
+        ) : (
+            <p className="text-sm text-muted-foreground">
+                {previousPlan.planDisplayName} is no longer available. Choose a current Plan below.
+            </p>
+        )}
+    </section>
+);
+
+const TrialOfferCard = ({
+    message,
+    startingTrial,
+    onStartTrial,
+}: {
+    message: string;
+    startingTrial: boolean;
+    onStartTrial: () => void;
+}) => (
+    <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/60 bg-muted/10 p-5">
+        <div className="space-y-1">
+            <SectionHeading>Try before you buy</SectionHeading>
+            <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+        <Button className="rounded-full" disabled={startingTrial} onClick={onStartTrial}>
+            {startingTrial ? "Starting trial..." : "Start Trial"}
+        </Button>
+    </section>
+);
+
+const PlanCatalog = ({
+    status,
+    isCreatingPlan,
+    isCreatingAddOn,
+    startingTrial,
+    highlightedPlanKey,
+    onSelectPlan,
+    onSelectAddOn,
+    onStartTrial,
+}: {
+    status: StoreCommercialStatusDTO;
+    isCreatingPlan: boolean;
+    isCreatingAddOn: boolean;
+    startingTrial: boolean;
+    highlightedPlanKey?: string;
+    onSelectPlan: (planKey: string) => void;
+    onSelectAddOn: (moduleKey: string) => void;
+    onStartTrial: () => void;
+}) => {
+    const plans = visiblePaidPlans(status);
+    const includeTrial = shouldIncludeTrialInCatalog(status);
+    const trialPlan = includeTrial ? status.availableTrialPlan : null;
+    if (plans.length === 0 && !trialPlan && status.availableCoTermAddOns.length === 0) {
+        if (status.trial.eligible) return null;
+        return (
+            <Empty className="border border-dashed border-border/70 bg-muted/10">
+                <EmptyHeader>
+                    <EmptyMedia variant="icon"><Sparkles /></EmptyMedia>
+                    <EmptyTitle>No Plans are available right now</EmptyTitle>
+                    <EmptyDescription>Check back once Ganatri publishes a sellable Plan for this Store.</EmptyDescription>
+                </EmptyHeader>
+            </Empty>
+        );
+    }
+    return (
+        <div id="plan-options" className="space-y-6">
+            {trialPlan || plans.length > 0 ? (
+                <section className="space-y-4">
+                    <PaidPlanCards
+                        plans={plans}
+                        trialPlan={trialPlan}
+                        trialEligible={status.trial.eligible}
+                        trialMessage={status.trial.message}
+                        isCreating={isCreatingPlan}
+                        startingTrial={startingTrial}
+                        highlightedPlanKey={highlightedPlanKey}
+                        onSelectPlan={onSelectPlan}
+                        onStartTrial={onStartTrial}
+                    />
+                </section>
+            ) : null}
+            {status.availableCoTermAddOns.length > 0 ? (
+                <section className="space-y-3">
+                    <SectionHeading>Add eligible modules</SectionHeading>
+                    <CoTermAddOnCards
+                        addOns={status.availableCoTermAddOns}
+                        isCreating={isCreatingAddOn}
+                        onSelectAddOn={onSelectAddOn}
+                    />
+                </section>
+            ) : null}
+        </div>
+    );
+};
+
+type WorkspaceLicenseControlCenterProps = {
+    status: StoreCommercialStatusDTO;
+    currentTime: Date;
+    awaitingConfirmation: boolean;
+    startingTrial: boolean;
+    creatingCheckout: boolean;
+    creatingAddOnCheckout: boolean;
+    visibleQuote: CommercialQuoteDTO | null;
+    commercialHistory: CommercialHistoryEntryDTO[];
+    onStartTrial: () => void;
+    onSelectPlan: (planKey: string) => void;
+    onSelectAddOn: (moduleKey: string) => void;
+    onPayQuote: (quote: CommercialQuoteDTO) => void;
+};
+
+const WorkspaceLicenseControlCenter = ({
+    status,
+    currentTime,
+    awaitingConfirmation,
+    startingTrial,
+    creatingCheckout,
+    creatingAddOnCheckout,
+    visibleQuote,
+    commercialHistory,
+    onStartTrial,
+    onSelectPlan,
+    onSelectAddOn,
+    onPayQuote,
+}: WorkspaceLicenseControlCenterProps) => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tab = parseLicenseWorkspaceTab(searchParams.get("tab"));
+    const catalogOpen = isLicensePlanCatalogOpen(searchParams.get("browse"), status);
+    const access = getEffectiveCommercialAccess(status);
+    const previousPlan = resolvePreviousPaidPlan(status);
+    const timelineEntries = buildAccessTimelineEntries(status);
+    const showTrialOffer = status.trial.eligible && !access && !shouldIncludeTrialInCatalog(status);
+
+    const updateParams = (mutate: (params: URLSearchParams) => void) => {
+        const nextParams = new URLSearchParams(searchParams);
+        mutate(nextParams);
+        setSearchParams(nextParams, { replace: true });
+    };
+
+    const setTab = (next: LicenseWorkspaceTab) => {
+        updateParams((params) => {
+            if (next === "plans") params.delete("tab");
+            else params.set("tab", next);
+        });
+    };
+
+    const setCatalogOpen = (open: boolean) => {
+        updateParams((params) => {
+            params.delete("tab");
+            if (open) params.set("browse", "1");
+            else params.delete("browse");
+        });
+    };
+
+    return (
+        <div className="space-y-5">
+            <LicenseWorkspaceTabs
+                tab={tab}
+                historyCount={timelineEntries.length}
+                paymentCount={commercialHistory.length}
+                onTabChange={setTab}
+            />
+            {tab === "plans" ? (
+                <div className="space-y-6">
+                    {visibleQuote ? (
+                        <section id="checkout" className="space-y-3">
+                            <SectionHeading>Complete your purchase</SectionHeading>
+                            <QuoteCheckoutPanel quote={visibleQuote} awaitingConfirmation={awaitingConfirmation} onPay={() => onPayQuote(visibleQuote)} />
+                        </section>
+                    ) : null}
+                    {access ? (
+                        <CurrentPlanCard
+                            status={status}
+                            currentTime={currentTime}
+                            onOpenCatalog={() => setCatalogOpen(true)}
+                            onStartTrial={onStartTrial}
+                            startingTrial={startingTrial}
+                        />
+                    ) : previousPlan ? (
+                        <ExpiredPlanCard
+                            status={status}
+                            previousPlan={previousPlan}
+                            isCreating={creatingCheckout}
+                            catalogOpen={catalogOpen}
+                            onRenewSamePlan={() => previousPlan.availablePlan && onSelectPlan(previousPlan.availablePlan.key)}
+                            onOpenCatalog={() => setCatalogOpen(true)}
+                            onCloseCatalog={() => setCatalogOpen(false)}
+                        />
+                    ) : showTrialOffer ? (
+                        <TrialOfferCard
+                            message={status.trial.message}
+                            startingTrial={startingTrial}
+                            onStartTrial={onStartTrial}
+                        />
+                    ) : null}
+                    {catalogOpen && !visibleQuote ? (
+                        <div className="space-y-3">
+                            {access ? (
+                                <div className="flex justify-end">
+                                    <Button variant="ghost" className="rounded-full" onClick={() => setCatalogOpen(false)}>
+                                        Back to current plan
+                                    </Button>
+                                </div>
+                            ) : null}
+                            <PlanCatalog
+                                status={status}
+                                isCreatingPlan={creatingCheckout}
+                                isCreatingAddOn={creatingAddOnCheckout}
+                                startingTrial={startingTrial}
+                                highlightedPlanKey={previousPlan?.availablePlan?.key}
+                                onSelectPlan={onSelectPlan}
+                                onSelectAddOn={onSelectAddOn}
+                                onStartTrial={onStartTrial}
+                            />
+                        </div>
+                    ) : null}
+                    {!catalogOpen && !visibleQuote && access && status.availableCoTermAddOns.length > 0 ? (
+                        <section className="space-y-3">
+                            <SectionHeading>Add eligible modules</SectionHeading>
+                            <CoTermAddOnCards
+                                addOns={status.availableCoTermAddOns}
+                                isCreating={creatingAddOnCheckout}
+                                onSelectAddOn={onSelectAddOn}
+                            />
+                        </section>
+                    ) : null}
+                </div>
+            ) : null}
+            {tab === "history" ? (
+                <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
+                    <div className="mb-5 space-y-1">
+                        <SectionHeading>Access timeline</SectionHeading>
+                        <p className="text-sm text-muted-foreground">
+                            Every Store License and Store Access Grant keeps its own dates.
+                        </p>
+                    </div>
+                    {timelineEntries.length === 0 ? (
+                        <Empty className="border-0 py-8">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon"><History /></EmptyMedia>
+                                <EmptyTitle>No access history yet</EmptyTitle>
+                                <EmptyDescription>Start a Trial Plan or purchase a Plan to begin this Store's timeline.</EmptyDescription>
+                            </EmptyHeader>
+                        </Empty>
+                    ) : (
+                        <AccessTimeline status={status} />
+                    )}
+                </section>
+            ) : null}
+            {tab === "payments" ? (
+                commercialHistory.length === 0 ? (
+                    <Empty className="border border-dashed border-border/70 bg-muted/10">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon"><CreditCard /></EmptyMedia>
+                            <EmptyTitle>No payment history yet</EmptyTitle>
+                            <EmptyDescription>Quotes, verified payments, and refunds for this Store will appear here.</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <CommercialActivityTimeline entries={commercialHistory} collapsible={false} />
+                )
+            ) : null}
+        </div>
     );
 };
 const QuoteCheckoutPanel = ({
@@ -472,52 +853,275 @@ const CoTermAddOnCards = ({
         ))}
     </div>
 );
-const PaidPlanCards = ({
-    plans,
-    isCreating,
-    onSelectPlan,
+const formatCatalogPrice = (amount: number) =>
+    new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    }).format(amount);
+
+const formatCatalogTermPeriod = (term: { count: number; unit: string }) => {
+    const unitLabel = term.count === 1 ? term.unit : `${term.unit}s`;
+    return term.count === 1 ? `/ ${unitLabel}` : `/ ${term.count} ${unitLabel}`;
+};
+
+type CatalogModuleList = NonNullable<StoreCommercialStatusDTO["availablePaidPlans"][number]["modules"]>;
+
+const PlanModuleList = ({
+    modules,
 }: {
-    plans: StoreCommercialStatusDTO["availablePaidPlans"];
-    isCreating: boolean;
-    onSelectPlan: (planKey: string) => void;
-}) => (
-    <div className="grid gap-3 sm:grid-cols-2">
-        {plans.map((plan) => (
-            <div
-                key={plan.key}
-                className="flex h-full flex-col justify-between gap-4 rounded-2xl border border-border/70 bg-card p-5 shadow-sm"
-            >
+    modules: CatalogModuleList;
+}) => {
+    if (modules.length === 0) return null;
+    return (
+        <ul className="space-y-3 text-xs sm:text-sm">
+            {modules.map((moduleItem) => (
+                <li key={moduleItem.key} className="space-y-1.5">
+                    <p className="font-semibold text-foreground">{moduleItem.displayName}</p>
+                    {moduleItem.features.length > 0 ? (
+                        <ul className="space-y-1.5">
+                            {moduleItem.features.map((feature) => (
+                                <li key={feature.key} className="flex items-start gap-2.5">
+                                    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[#0C73FE]/10 text-[#0C73FE] dark:bg-[#38BDF8]/15 dark:text-[#38BDF8]">
+                                        <Check className="size-3 stroke-[2.5]" />
+                                    </span>
+                                    <span className="text-muted-foreground">{feature.displayName}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </li>
+            ))}
+        </ul>
+    );
+};
+
+const CatalogPlanCard = ({
+    name,
+    description,
+    priceLabel,
+    periodLabel,
+    footnote,
+    modules,
+    isBestValue,
+    isRecommended,
+    highlighted,
+    highlightLabel,
+    ctaLabel,
+    ctaDisabled,
+    featuredCta,
+    onSelect,
+}: {
+    name: string;
+    description?: string | null;
+    priceLabel: string;
+    periodLabel: string;
+    footnote?: string;
+    modules: CatalogModuleList;
+    isBestValue: boolean;
+    isRecommended: boolean;
+    highlighted?: boolean;
+    highlightLabel?: string;
+    ctaLabel: string;
+    ctaDisabled: boolean;
+    featuredCta: boolean;
+    onSelect: () => void;
+}) => {
+    const ribbonLabel = isBestValue ? "Best value" : isRecommended ? "Recommended" : null;
+    return (
+    <div className={cn("group relative flex h-full flex-col", ribbonLabel ? "mt-5 lg:mt-4" : "")}>
+        {ribbonLabel ? (
+            <div className="pointer-events-none absolute -top-4 left-1/2 z-10 -translate-x-1/2">
+                <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-lg",
+                    isBestValue
+                        ? "bg-gradient-to-r from-[#0C73FE] to-[#1D4ED8] dark:from-[#38BDF8] dark:to-[#0C73FE] dark:text-zinc-950"
+                        : "bg-gradient-to-r from-emerald-600 to-emerald-700 dark:from-emerald-400 dark:to-emerald-600 dark:text-zinc-950",
+                )}>
+                    <span className="size-1.5 rounded-full bg-white opacity-90 dark:bg-zinc-950" />
+                    {ribbonLabel}
+                </span>
+            </div>
+        ) : null}
+        <div
+            className={cn(
+                "relative flex h-full flex-col justify-between rounded-3xl p-5 sm:p-7",
+                isBestValue
+                    ? "border-2 border-[#0C73FE] bg-card/95 shadow-[0_4px_32px_-4px_rgba(12,115,254,0.22)] dark:border-[#38BDF8] dark:shadow-[0_4px_32px_-4px_rgba(56,189,248,0.18)]"
+                    : isRecommended
+                        ? "border-2 border-emerald-600 bg-card/95 shadow-[0_4px_32px_-4px_rgba(5,150,105,0.18)] dark:border-emerald-400"
+                    : "border border-border/80 bg-card/85 shadow-sm",
+                highlighted && !isBestValue && !isRecommended ? "ring-1 ring-primary/20" : "",
+            )}
+        >
+            <div className="space-y-5">
                 <div className="space-y-2">
-                    <p className="font-display text-lg font-semibold text-foreground">{plan.displayName}</p>
-                    <p className="font-display text-2xl font-semibold text-foreground">
-                        {formatCurrency(plan.amountInr)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        GST-inclusive · {plan.term.count} {plan.term.unit}
-                        {plan.term.count === 1 ? "" : "s"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {planTimingLabel(plan)}
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{name}</h3>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {isBestValue && isRecommended ? (
+                                <Badge className="rounded-full bg-emerald-600 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                    Recommended
+                                </Badge>
+                            ) : null}
+                            {highlighted && highlightLabel ? (
+                                <Badge variant="secondary" className="rounded-full text-xs">{highlightLabel}</Badge>
+                            ) : null}
+                        </div>
+                    </div>
+                    {description ? (
+                        <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{description}</p>
+                    ) : null}
+                    <div className="flex items-baseline gap-1.5 pt-2">
+                        <span className="font-display text-4xl font-black tracking-tight text-foreground sm:text-5xl">
+                            {priceLabel}
+                        </span>
+                        <span className="text-sm font-medium text-muted-foreground sm:text-base">{periodLabel}</span>
+                    </div>
+                    {footnote ? (
+                        <p className="text-xs text-muted-foreground">{footnote}</p>
+                    ) : null}
                 </div>
+                <div className={cn(
+                    "h-px w-full",
+                    isBestValue
+                        ? "bg-[#0C73FE]/20 dark:bg-[#38BDF8]/20"
+                        : isRecommended
+                            ? "bg-emerald-600/20 dark:bg-emerald-400/20"
+                            : "bg-border/60",
+                )} />
+                <PlanModuleList modules={modules} />
+            </div>
+            <div className="mt-6">
                 <Button
-                    className="rounded-full"
-                    disabled={isCreating}
-                    onClick={() => onSelectPlan(plan.key)}
+                    variant={featuredCta ? "default" : "outline"}
+                    className={cn(
+                        "h-11 w-full rounded-xl text-sm font-semibold",
+                        featuredCta
+                            ? isBestValue
+                                ? "bg-[#0C73FE] text-white hover:bg-[#0C73FE]/90 dark:bg-[#38BDF8] dark:text-zinc-950 dark:hover:bg-[#38BDF8]/90"
+                                : "bg-emerald-600 text-white hover:bg-emerald-600/90 dark:bg-emerald-400 dark:text-zinc-950 dark:hover:bg-emerald-400/90"
+                            : "",
+                    )}
+                    disabled={ctaDisabled}
+                    onClick={onSelect}
                 >
-                    {isCreating ? "Preparing checkout..." : planActionLabel(plan)}
+                    {ctaLabel}
                 </Button>
             </div>
+        </div>
+    </div>
+    );
+};
+
+const PaidPlanCards = ({
+    plans,
+    trialPlan,
+    trialEligible = false,
+    trialMessage,
+    isCreating,
+    startingTrial = false,
+    onSelectPlan,
+    onStartTrial,
+    highlightedPlanKey,
+}: {
+    plans: StoreCommercialStatusDTO["availablePaidPlans"];
+    trialPlan?: StoreCommercialStatusDTO["availableTrialPlan"];
+    trialEligible?: boolean;
+    trialMessage?: string;
+    isCreating: boolean;
+    startingTrial?: boolean;
+    onSelectPlan: (planKey: string) => void;
+    onStartTrial?: () => void;
+    highlightedPlanKey?: string;
+}) => (
+    <div className="grid items-stretch gap-5 lg:grid-cols-3">
+        {orderedLicenseCatalogCards({ trialPlan, plans }).map((card) => (
+            card.kind === "trial" ? (
+                <CatalogPlanCard
+                    key={card.key}
+                    name={card.trial.displayName}
+                    description={card.trial.description}
+                    priceLabel="Free"
+                    periodLabel={formatCatalogTermPeriod(card.trial.term)}
+                    footnote={trialMessage}
+                    modules={card.trial.modules}
+                    isBestValue={card.trial.isBestValue}
+                    isRecommended={card.trial.isRecommended}
+                    ctaLabel={startingTrial ? "Starting trial..." : trialEligible ? "Start Trial" : "Trial already used"}
+                    ctaDisabled={startingTrial || !trialEligible || !onStartTrial}
+                    featuredCta={card.trial.isRecommended}
+                    onSelect={() => onStartTrial?.()}
+                />
+            ) : (
+                <CatalogPlanCard
+                    key={card.key}
+                    name={card.plan.displayName}
+                    description={card.plan.description}
+                    priceLabel={formatCatalogPrice(card.plan.amountInr)}
+                    periodLabel={formatCatalogTermPeriod(card.plan.term)}
+                    footnote={`GST-inclusive · ${planTimingLabel(card.plan)}`}
+                    modules={card.plan.modules ?? []}
+                    isBestValue={Boolean(card.plan.isBestValue)}
+                    isRecommended={Boolean(card.plan.isRecommended)}
+                    highlighted={highlightedPlanKey === card.plan.key}
+                    highlightLabel="Previous plan"
+                    ctaLabel={isCreating ? "Preparing checkout..." : planActionLabel(card.plan)}
+                    ctaDisabled={isCreating}
+                    featuredCta={Boolean(card.plan.isBestValue || card.plan.isRecommended)}
+                    onSelect={() => onSelectPlan(card.plan.key)}
+                />
+            )
         ))}
     </div>
 );
+const CommercialHistoryList = ({ entries }: { entries: CommercialHistoryEntryDTO[] }) => (
+    <ul className="space-y-0 px-4 py-3">
+        {entries.map((entry, index) => (
+            <li key={`${entry.kind}-${entry.id}`} className="relative pl-6 pb-4 last:pb-1">
+                {index < entries.length - 1 ? (
+                    <span
+                        className="absolute top-2 left-[7px] h-[calc(100%-0.25rem)] w-px bg-border"
+                        aria-hidden="true"
+                    />
+                ) : null}
+                <span
+                    className="absolute top-1.5 left-0 size-3.5 rounded-full border-2 border-background bg-muted-foreground/40"
+                    aria-hidden="true"
+                />
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                        <p className="text-xs text-muted-foreground">{entry.detail}</p>
+                        <p className="text-xs text-muted-foreground">
+                            {formatCommercialTimestamp(entry.occurredAt)}
+                        </p>
+                    </div>
+                    <Badge variant={historyStatusVariant(entry.status)} className="rounded-full text-xs capitalize">
+                        {entry.status}
+                    </Badge>
+                </div>
+            </li>
+        ))}
+    </ul>
+);
+
 const CommercialActivityTimeline = ({
     entries,
+    collapsible = true,
 }: {
     entries: CommercialHistoryEntryDTO[];
+    collapsible?: boolean;
 }) => {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(!collapsible);
     if (entries.length === 0) return null;
+    if (!collapsible) {
+        return (
+            <div className="rounded-2xl border border-border/60 bg-card/80">
+                <CommercialHistoryList entries={entries} />
+            </div>
+        );
+    }
     return (
         <Collapsible open={open} onOpenChange={setOpen}>
             <div className="rounded-2xl border border-border/60 bg-muted/10">
@@ -536,34 +1140,7 @@ const CommercialActivityTimeline = ({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                     <Separator />
-                    <ul className="space-y-0 px-4 py-3">
-                        {entries.map((entry, index) => (
-                            <li key={`${entry.kind}-${entry.id}`} className="relative pl-6 pb-4 last:pb-1">
-                                {index < entries.length - 1 ? (
-                                    <span
-                                        className="absolute top-2 left-[7px] h-[calc(100%-0.25rem)] w-px bg-border"
-                                        aria-hidden="true"
-                                    />
-                                ) : null}
-                                <span
-                                    className="absolute top-1.5 left-0 size-3.5 rounded-full border-2 border-background bg-muted-foreground/40"
-                                    aria-hidden="true"
-                                />
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div className="min-w-0 space-y-1">
-                                        <p className="text-sm font-medium text-foreground">{entry.title}</p>
-                                        <p className="text-xs text-muted-foreground">{entry.detail}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {formatCommercialTimestamp(entry.occurredAt)}
-                                        </p>
-                                    </div>
-                                    <Badge variant={historyStatusVariant(entry.status)} className="rounded-full text-xs capitalize">
-                                        {entry.status}
-                                    </Badge>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
+                    <CommercialHistoryList entries={entries} />
                 </CollapsibleContent>
             </div>
         </Collapsible>
@@ -573,12 +1150,12 @@ const StoreCommercialStatus = ({
     organizationId,
     storeId,
     variant = "detail",
-    storeName,
     createPaidPlanCheckout = createPaidPlanCheckoutRequest,
     createCoTermAddOnCheckout = createCoTermAddOnCheckoutRequest,
     openRazorpayCheckout = defaultOpenRazorpayCheckout,
 }: StoreCommercialStatusProps) => {
     const queryClient = useQueryClient();
+    const currentTime = useCurrentTime();
     const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
     const [checkoutQuote, setCheckoutQuote] = useState<PaidPlanCheckoutResponse | CoTermAddOnCheckoutResponse | null>(null);
     const statusQuery = useQuery({
@@ -601,36 +1178,57 @@ const StoreCommercialStatus = ({
             toast.error(error.message ?? "Unable to start the Trial Plan");
         },
     });
+    const rememberCheckout = (data: PaidPlanCheckoutResponse | CoTermAddOnCheckoutResponse) => {
+        setCheckoutQuote(data);
+        queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
+            status: "success",
+            data: { commercialStatus: data.commercialStatus },
+            message: "Store commercial status fetched successfully",
+            code: 200,
+        });
+    };
+    const startRazorpayForCheckout = async (data: PaidPlanCheckoutResponse | CoTermAddOnCheckoutResponse) => {
+        try {
+            const result = await openRazorpayCheckout({
+                keyId: data.checkout.keyId,
+                orderId: data.checkout.orderId,
+                amountPaise: data.checkout.amountPaise,
+                currency: data.checkout.currency,
+                description: data.quote.kind === "co_term_add_on"
+                    ? `${quoteDisplayName(data.quote)} Add-On`
+                    : `${quoteDisplayName(data.quote)} Plan`,
+            });
+            if (result.outcome === "browser-success") {
+                setAwaitingConfirmation(true);
+            }
+            if (result.outcome === "failed") {
+                toast.error(result.message);
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to open Razorpay Checkout");
+        }
+    };
+    const beginCheckout = async (
+        response: ServiceResponse<PaidPlanCheckoutResponse | CoTermAddOnCheckoutResponse | null>,
+        fallbackMessage: string,
+    ) => {
+        if (response.status === "error" || !response.data) {
+            toast.error(response.message ?? fallbackMessage);
+            return;
+        }
+        rememberCheckout(response.data);
+        await startRazorpayForCheckout(response.data);
+    };
     const createCheckout = useMutation({
         mutationFn: (planKey: string) => createPaidPlanCheckout(organizationId, storeId, { planKey }),
-        onSuccess: (response) => {
-            if (response.status === "error" || !response.data) {
-                toast.error(response.message ?? "Unable to create a Commercial Quote");
-                return;
-            }
-            setCheckoutQuote(response.data);
-            queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
-                ...response,
-                data: { commercialStatus: response.data.commercialStatus },
-            });
-        },
+        onSuccess: (response) => beginCheckout(response, "Unable to create a Commercial Quote"),
         onError: (error: { message?: string }) => {
             toast.error(error.message ?? "Unable to create a Commercial Quote");
         },
     });
     const createAddOnCheckout = useMutation({
         mutationFn: (moduleKey: string) => createCoTermAddOnCheckout(organizationId, storeId, { moduleKey }),
-        onSuccess: (response) => {
-            if (response.status === "error" || !response.data) {
-                toast.error(response.message ?? "Unable to create a Commercial Quote");
-                return;
-            }
-            setCheckoutQuote(response.data);
-            queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
-                ...response,
-                data: { commercialStatus: response.data.commercialStatus },
-            });
-        },
+        onSuccess: (response) => beginCheckout(response, "Unable to create a Commercial Quote"),
         onError: (error: { message?: string }) => {
             toast.error(error.message ?? "Unable to create a Commercial Quote");
         },
@@ -672,42 +1270,14 @@ const StoreCommercialStatus = ({
         }
     }, [canPurchase, hasActivePaidAccess]);
     const payQuote = async (quote: CommercialQuoteDTO) => {
-        const checkout = checkoutQuote?.quote.id === quote.id ? checkoutQuote.checkout : null;
-        if (!checkout) {
-            const created = quote.kind === "co_term_add_on"
-                ? await createCoTermAddOnCheckout(organizationId, storeId, { moduleKey: quoteSelectionKey(quote) })
-                : await createPaidPlanCheckout(organizationId, storeId, { planKey: quoteSelectionKey(quote) });
-            if (created.status === "error" || !created.data) {
-                toast.error(created.message ?? "Unable to create a Commercial Quote");
-                return;
-            }
-            setCheckoutQuote(created.data);
-            const result = await openRazorpayCheckout({
-                keyId: created.data.checkout.keyId,
-                orderId: created.data.checkout.orderId,
-                amountPaise: created.data.checkout.amountPaise,
-                currency: created.data.checkout.currency,
-                description: quote.kind === "co_term_add_on"
-                    ? `${quoteDisplayName(quote)} Add-On`
-                    : `${quoteDisplayName(quote)} Plan`,
-            });
-            if (result.outcome === "browser-success") {
-                setAwaitingConfirmation(true);
-            }
+        if (checkoutQuote?.quote.id === quote.id) {
+            await startRazorpayForCheckout(checkoutQuote);
             return;
         }
-        const result = await openRazorpayCheckout({
-            keyId: checkout.keyId,
-            orderId: checkout.orderId,
-            amountPaise: checkout.amountPaise,
-            currency: checkout.currency,
-            description: quote.kind === "co_term_add_on"
-                ? `${quoteDisplayName(quote)} Add-On`
-                : `${quoteDisplayName(quote)} Plan`,
-        });
-        if (result.outcome === "browser-success") {
-            setAwaitingConfirmation(true);
-        }
+        const created = quote.kind === "co_term_add_on"
+            ? await createCoTermAddOnCheckout(organizationId, storeId, { moduleKey: quoteSelectionKey(quote) })
+            : await createPaidPlanCheckout(organizationId, storeId, { planKey: quoteSelectionKey(quote) });
+        await beginCheckout(created, "Unable to create a Commercial Quote");
     };
     if (variant === "workspace") {
         return (
@@ -723,85 +1293,20 @@ const StoreCommercialStatus = ({
                         </CardContent>
                     </Card>
                 ) : (
-                    <>
-                        <WorkspaceAccessHero
-                            status={status}
-                            storeName={storeName}
-                            onStartTrial={() => startTrial.mutate()}
-                            startingTrial={startTrial.isPending}
-                            showTrialOffer={showTrialOffer}
-                            hasPlanOptions={showPaidPlans || Boolean(visibleQuote)}
-                        />
-                        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
-                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
-                                <div className="mb-5 space-y-1">
-                                    <SectionHeading>Access timeline</SectionHeading>
-                                    <p className="text-sm text-muted-foreground">
-                                        Every Store License and Store Access Grant keeps its own dates.
-                                    </p>
-                                </div>
-                                <AccessTimeline status={status} />
-                            </section>
-                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
-                                <div className="mb-5 space-y-1">
-                                    <SectionHeading>What’s enabled</SectionHeading>
-                                    <p className="text-sm text-muted-foreground">
-                                        Features currently available to this Store.
-                                    </p>
-                                </div>
-                                <FeatureEntitlements features={status.entitlements.features} />
-                            </section>
-                        </div>
-                        {status.scheduledSuccessor ? (
-                            <Alert variant="info">
-                                <CalendarClock className="size-4" aria-hidden="true" />
-                                <AlertTitle>Scheduled plan change</AlertTitle>
-                                <AlertDescription>
-                                    {status.scheduledSuccessor.planDisplayName} starts on {formatCommercialTimestamp(status.scheduledSuccessor.startsAt)} and runs until {formatCommercialTimestamp(status.scheduledSuccessor.endsAt)} ({status.timezone}).
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        {status.activeAddOns.length > 0 ? (
-                            <section className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm">
-                                <div className="mb-4 space-y-1">
-                                    <SectionHeading>Active add-ons</SectionHeading>
-                                    <p className="text-sm text-muted-foreground">These Modules end with the active paid Plan.</p>
-                                </div>
-                                <ul className="grid gap-3 sm:grid-cols-2">
-                                    {status.activeAddOns.map((addOn) => (
-                                        <li key={addOn.id} className="rounded-xl border border-border/60 bg-muted/10 px-4 py-3">
-                                            <p className="font-medium text-foreground">{addOn.moduleDisplayName}</p>
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                Ends {formatCommercialDate(addOn.endsAt)} ({status.timezone})
-                                            </p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </section>
-                        ) : null}
-                        {visibleQuote ? (
-                            <section className="space-y-3">
-                                <SectionHeading>Complete your purchase</SectionHeading>
-                                <QuoteCheckoutPanel quote={visibleQuote} awaitingConfirmation={awaitingConfirmation} onPay={() => void payQuote(visibleQuote)} />
-                            </section>
-                        ) : null}
-                        {showPaidPlans ? (
-                            <section className="space-y-3">
-                                <div className="space-y-1">
-                                    <SectionHeading>{hasActivePaidAccess ? "Renew or upgrade this plan" : "Choose a paid plan"}</SectionHeading>
-                                    <p className="text-sm text-muted-foreground">All prices are GST-inclusive and a Plan change takes effect only after payment is verified.</p>
-                                </div>
-                                <PaidPlanCards plans={status.availablePaidPlans} isCreating={createCheckout.isPending} onSelectPlan={(planKey) => createCheckout.mutate(planKey)} />
-                            </section>
-                        ) : null}
-                        {showCoTermAddOns ? (
-                            <section className="space-y-3">
-                                <SectionHeading>Add eligible modules</SectionHeading>
-                                <CoTermAddOnCards addOns={status.availableCoTermAddOns} isCreating={createAddOnCheckout.isPending} onSelectAddOn={(moduleKey) => createAddOnCheckout.mutate(moduleKey)} />
-                            </section>
-                        ) : null}
-                        <CommercialActivityTimeline entries={commercialHistory} />
-                    </>
+                    <WorkspaceLicenseControlCenter
+                        status={status}
+                        currentTime={currentTime}
+                        awaitingConfirmation={awaitingConfirmation}
+                        startingTrial={startTrial.isPending}
+                        creatingCheckout={createCheckout.isPending}
+                        creatingAddOnCheckout={createAddOnCheckout.isPending}
+                        visibleQuote={visibleQuote}
+                        commercialHistory={commercialHistory}
+                        onStartTrial={() => startTrial.mutate()}
+                        onSelectPlan={(planKey) => createCheckout.mutate(planKey)}
+                        onSelectAddOn={(moduleKey) => createAddOnCheckout.mutate(moduleKey)}
+                        onPayQuote={(quote) => void payQuote(quote)}
+                    />
                 )}
             </div>
         );

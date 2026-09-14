@@ -27,6 +27,7 @@ import type {
     PaidPlanCheckoutActionSchema,
     PurchasableCoTermAddOnDTOSchema,
     PurchasablePaidPlanDTOSchema,
+    AvailableTrialPlanDTOSchema,
     StoreCoTermAddOnDTOSchema,
     RefundableCommercialPaymentDTOSchema,
     RazorpayCheckoutBootstrapDTOSchema,
@@ -64,6 +65,7 @@ export type CommercialQuoteLicenseTiming = z.infer<typeof CommercialQuoteLicense
 export type CommercialQuoteLineItemDTO = z.infer<typeof CommercialQuoteLineItemDTOSchema>;
 export type CommercialQuoteDTO = z.infer<typeof CommercialQuoteDTOSchema>;
 export type PurchasablePaidPlanDTO = z.infer<typeof PurchasablePaidPlanDTOSchema>;
+export type AvailableTrialPlanDTO = z.infer<typeof AvailableTrialPlanDTOSchema>;
 export type StoreCoTermAddOnDTO = z.infer<typeof StoreCoTermAddOnDTOSchema>;
 export type PurchasableCoTermAddOnDTO = z.infer<typeof PurchasableCoTermAddOnDTOSchema>;
 export type CommercialHistoryEntryDTO = z.infer<typeof CommercialHistoryEntryDTOSchema>;
@@ -128,9 +130,13 @@ export type ActivePlanSnapshot = {
     planRevisionId: string;
     key: string;
     displayName: string;
+    description: string;
     planType: CommercialPlanType;
     priceInr: number;
     term: CommercialCatalogTerm;
+    isBestValue: boolean;
+    isRecommended: boolean;
+    displaySequence: number;
     modules: CommercialAccessSourceModuleSnapshot[];
 };
 

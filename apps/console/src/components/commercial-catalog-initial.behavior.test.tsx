@@ -57,9 +57,9 @@ const moduleList: CommercialModuleListItemDTO[] = [
 ];
 
 const planList: CommercialPlanListItemDTO[] = [
-    { id: "p-trial", key: "trial", currentRevisionId: "pr-trial", revisionNumber: 1, status: "active", displayName: "Trial", description: "", planType: "trial", priceInr: 0, term: { count: 7, unit: "day" } },
-    { id: "p-core", key: "core", currentRevisionId: "pr-core", revisionNumber: 1, status: "active", displayName: "Core", description: "", planType: "paid", priceInr: 2999, term: { count: 1, unit: "year" } },
-    { id: "p-pro", key: "pro", currentRevisionId: "pr-pro", revisionNumber: 1, status: "active", displayName: "Pro", description: "", planType: "paid", priceInr: 4999, term: { count: 1, unit: "year" } },
+    { id: "p-trial", key: "trial", currentRevisionId: "pr-trial", revisionNumber: 1, status: "active", displayName: "Trial", description: "", planType: "trial", priceInr: 0, term: { count: 7, unit: "day" }, isBestValue: false, isRecommended: false, displaySequence: 1 },
+    { id: "p-core", key: "core", currentRevisionId: "pr-core", revisionNumber: 1, status: "active", displayName: "Core", description: "", planType: "paid", priceInr: 2999, term: { count: 1, unit: "year" }, isBestValue: false, isRecommended: true, displaySequence: 2 },
+    { id: "p-pro", key: "pro", currentRevisionId: "pr-pro", revisionNumber: 1, status: "active", displayName: "Pro", description: "", planType: "paid", priceInr: 4999, term: { count: 1, unit: "year" }, isBestValue: true, isRecommended: false, displaySequence: 3 },
 ];
 
 const membership = (item: CommercialFeatureListItemDTO) => ({
@@ -166,6 +166,9 @@ const proPlan: CommercialPlanDetailDTO = {
         planType: "paid",
         priceInr: 4999,
         term: { count: 1, unit: "year" },
+        isBestValue: true,
+        isRecommended: false,
+        displaySequence: 3,
         modules: [
             moduleMembership(moduleList[0]!, ["billing", "reports"]),
             moduleMembership(moduleList[1]!, ["catalog_products", "units"]),

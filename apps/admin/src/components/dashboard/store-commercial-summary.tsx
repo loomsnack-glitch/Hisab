@@ -7,7 +7,7 @@ import { useLocation, useParams } from "react-router-dom";
 import {
     formatPlanTimeRemaining,
     getCommercialStatus,
-    getCurrentCommercialAccess,
+    getEffectiveCommercialAccess,
 } from "@/lib/commercial-access-summary";
 import { commercialLicenseKeys } from "@/lib/query-keys";
 import { parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
@@ -53,7 +53,7 @@ export const StoreCommercialSummary = ({
         return <span className={className}>Plan unavailable</span>;
     }
 
-    const access = getCurrentCommercialAccess(commercialStatus);
+    const access = getEffectiveCommercialAccess(commercialStatus);
     if (!access) {
         return <span className={className}>No active plan</span>;
     }
@@ -83,7 +83,7 @@ export const StoreWorkspacePlanNavbarSummary = ({ now }: StoreWorkspacePlanNavba
         enabled: Boolean(organizationId && storeId),
     });
     const commercialStatus = getCommercialStatus(statusQuery.data);
-    const currentAccess = getCurrentCommercialAccess(commercialStatus);
+    const currentAccess = getEffectiveCommercialAccess(commercialStatus);
 
     if (!workspace) {
         return null;
@@ -92,7 +92,7 @@ export const StoreWorkspacePlanNavbarSummary = ({ now }: StoreWorkspacePlanNavba
     return (
         <div className="min-w-0" data-store-workspace-plan-summary>
             <p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:block">
-                {currentAccess?.kind === "grant" ? "Store access" : "Current plan"}
+                {currentAccess?.sourceKind === "store_access_grant" ? "Store access" : "Current plan"}
             </p>
             <StoreCommercialSummary
                 commercialStatus={commercialStatus}

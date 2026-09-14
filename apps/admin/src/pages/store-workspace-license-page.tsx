@@ -7,7 +7,6 @@ const StoreWorkspaceLicensePage = () => (
             <StoreCommercialStatus
                 organizationId={organizationId}
                 storeId={store.id}
-                storeName={store.name}
                 variant="workspace"
             />
         )}

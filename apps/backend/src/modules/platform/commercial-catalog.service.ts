@@ -666,6 +666,9 @@ export const createCommercialCatalogService = (dependencies: CommercialCatalogDe
             planType: input.planType,
             priceInr: input.priceInr,
             term: input.term,
+            isBestValue: input.isBestValue,
+            isRecommended: input.isRecommended,
+            displaySequence: input.displaySequence,
             moduleRevisionIds: input.moduleRevisionIds,
             actorId: actor.id,
             now: dependencies.now(),
@@ -697,6 +700,9 @@ export const createCommercialCatalogService = (dependencies: CommercialCatalogDe
             planType: input.planType,
             priceInr: input.priceInr,
             term: input.term,
+            isBestValue: input.isBestValue,
+            isRecommended: input.isRecommended,
+            displaySequence: input.displaySequence,
             moduleRevisionIds: input.moduleRevisionIds,
         });
         if (result.status === "not-found") {

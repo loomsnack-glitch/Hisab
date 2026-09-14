@@ -37,6 +37,7 @@ import {
     type RefundableCommercialPaymentDTO,
     type PurchasableCoTermAddOnDTO,
     type PurchasablePaidPlanDTO,
+    type AvailableTrialPlanDTO,
     type ServiceResponse,
     type StoreAccessGrantDTO,
     type StoreAccessGrantRecord,
@@ -509,6 +510,16 @@ const buildAvailableCoTermAddOns = (
         .filter((moduleItem): moduleItem is PurchasableCoTermAddOnDTO => moduleItem !== null);
 };
 
+const toCatalogModules = (modules: CommercialAccessSourceModuleSnapshot[]) =>
+    modules.map((moduleItem) => ({
+        key: moduleItem.key,
+        displayName: moduleItem.displayName,
+        features: moduleItem.features.map((feature) => ({
+            key: feature.key,
+            displayName: feature.displayName,
+        })),
+    }));
+
 const toPurchasablePlan = (
     plan: ActivePlanSnapshot,
     checkoutAction: PaidPlanCheckoutAction,
@@ -526,6 +537,22 @@ const toPurchasablePlan = (
     amountInr,
     term: { ...plan.term },
     ...timing,
+    description: plan.description,
+    isBestValue: plan.isBestValue,
+    isRecommended: plan.isRecommended,
+    displaySequence: plan.displaySequence,
+    modules: toCatalogModules(plan.modules),
+});
+
+const toAvailableTrialPlan = (plan: ActiveTrialPlanSnapshot): AvailableTrialPlanDTO => ({
+    key: plan.key,
+    displayName: plan.displayName,
+    description: plan.description,
+    term: { ...plan.term },
+    isBestValue: plan.isBestValue,
+    isRecommended: plan.isRecommended,
+    displaySequence: plan.displaySequence,
+    modules: toCatalogModules(plan.modules),
 });
 
 const buildAvailablePaidPlans = (
@@ -887,11 +914,15 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
             timezone: COMMERCIAL_TERM_TIMEZONE,
             baseAccess: currentBase ? toBaseAccess(currentBase, at) : null,
             scheduledSuccessor: scheduledSuccessor ? toBaseAccess(scheduledSuccessor, at) : null,
+            storeLicenses: licenses
+                .map((license) => toBaseAccess(license, at))
+                .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime()),
             accessGrants: grants.map((grant) => toGrantDto(grant, at)),
             activeAddOns,
             availablePaidPlans: checkoutEligible
                 ? buildAvailablePaidPlans(licenses, paidPlans, at)
                 : [],
+            availableTrialPlan: trialPlan ? toAvailableTrialPlan(trialPlan) : null,
             availableCoTermAddOns: addOnCheckoutEligible
                 ? buildAvailableCoTermAddOns(activePaid, purchasableModules, accessSources, at)
                 : [],

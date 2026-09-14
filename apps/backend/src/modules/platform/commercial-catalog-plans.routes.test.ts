@@ -61,6 +61,9 @@ type StoredRevision = {
     priceInr?: number | null;
     term?: CommercialCatalogTerm | null;
     planType?: CommercialPlanType;
+    isBestValue?: boolean;
+    isRecommended?: boolean;
+    displaySequence?: number;
     createdByOwnerUserId: string;
     createdAt: string;
     publishedByOwnerUserId: string | null;
@@ -193,6 +196,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             displayName: revision.displayName,
             description: revision.description,
             planType: revision.planType ?? "paid",
+            isBestValue: revision.isBestValue ?? false,
+            isRecommended: revision.isRecommended ?? false,
+            displaySequence: revision.displaySequence ?? 1,
             priceInr: revision.priceInr ?? 0,
             term: revision.term ?? { count: 1, unit: "year" },
             modules: planModules,
@@ -389,6 +395,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
         priceInr: fields.priceInr,
         term: fields.term,
         planType: fields.planType,
+        isBestValue: fields.isBestValue,
+        isRecommended: fields.isRecommended,
+        displaySequence: fields.displaySequence,
         createdByOwnerUserId: actorId,
         createdAt: now.toISOString(),
         publishedByOwnerUserId: fields.publishedByOwnerUserId ?? null,
@@ -580,7 +589,8 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
                 .filter((detail) => query.status === "all" ? detail.currentRevision.status !== "discarded" : detail.currentRevision.status === query.status)
                 .filter((detail) => !search || detail.key.includes(search) || detail.currentRevision.displayName.toLowerCase().includes(search))
                 .sort((left, right) =>
-                    left.currentRevision.displayName.localeCompare(right.currentRevision.displayName)
+                    left.currentRevision.displaySequence - right.currentRevision.displaySequence
+                    || left.currentRevision.displayName.localeCompare(right.currentRevision.displayName)
                     || left.key.localeCompare(right.key)
                     || left.id.localeCompare(right.id)
                 )
@@ -595,6 +605,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
                     planType: detail.currentRevision.planType,
                     priceInr: detail.currentRevision.priceInr,
                     term: detail.currentRevision.term,
+                    isBestValue: detail.currentRevision.isBestValue,
+                    isRecommended: detail.currentRevision.isRecommended,
+                    displaySequence: detail.currentRevision.displaySequence,
                 }));
         },
         getPlanDetail: async (planId: string) => planDetailOf(planId),
@@ -607,6 +620,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             planType: CommercialPlanType;
             priceInr: number;
             term: CommercialCatalogTerm;
+            isBestValue: boolean;
+            isRecommended: boolean;
+            displaySequence: number;
             moduleRevisionIds: string[];
             actorId: string;
             now: Date;
@@ -624,6 +640,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
                     planType: input.planType,
                     priceInr: input.priceInr,
                     term: input.term,
+                    isBestValue: input.isBestValue,
+                    isRecommended: input.isRecommended,
+                    displaySequence: input.displaySequence,
                 }),
                 planId: input.planId,
             });
@@ -638,6 +657,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             planType: CommercialPlanType;
             priceInr: number;
             term: CommercialCatalogTerm;
+            isBestValue: boolean;
+            isRecommended: boolean;
+            displaySequence: number;
             moduleRevisionIds: string[];
         }) => {
             const revision = findPlanRevision(input.planId, input.revisionId);
@@ -650,6 +672,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
             revision.planType = input.planType;
             revision.priceInr = input.priceInr;
             revision.term = input.term;
+            revision.isBestValue = input.isBestValue;
+            revision.isRecommended = input.isRecommended;
+            revision.displaySequence = input.displaySequence;
             replacePlanMemberships(input.revisionId, membership.refs);
             return { status: "updated" as const, plan: planDetailOf(input.planId)! };
         },
@@ -667,6 +692,20 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
                 previousActive.status = "retired";
                 previousActive.retiredByOwnerUserId = input.actorId;
                 previousActive.retiredAt = input.now.toISOString();
+            }
+            if (revision.isBestValue) {
+                for (const item of planRevisions) {
+                    if (item.status === "active" && item.isBestValue && item.id !== revision.id) {
+                        item.isBestValue = false;
+                    }
+                }
+            }
+            if (revision.isRecommended) {
+                for (const item of planRevisions) {
+                    if (item.status === "active" && item.isRecommended && item.id !== revision.id) {
+                        item.isRecommended = false;
+                    }
+                }
             }
             revision.status = "active";
             revision.publishedByOwnerUserId = input.actorId;
@@ -716,6 +755,9 @@ const createMemoryCatalog = (owners: OwnerUserRecord[]) => {
                     planType: source.planType,
                     priceInr: source.priceInr,
                     term: source.term,
+                    isBestValue: source.isBestValue,
+                    isRecommended: source.isRecommended,
+                    displaySequence: source.displaySequence,
                     revisionNumber: latest + 1,
                 }),
                 planId: input.planId,
@@ -1232,6 +1274,124 @@ describe("Plan Catalog management API", () => {
         ]);
     });
 
+    test("publishing a Best value Plan clears the previous active Best value flag", async () => {
+        const { app } = await createHarness();
+        const cookie = await authCookie(app);
+        const billing = await createdFeature(app, cookie, "billing", "Billing");
+        const coreModule = await createdModule(app, cookie, "core_operations", "Core Operations", [billing.currentRevision.id]);
+        const core = await createPlan(app, cookie, {
+            key: "core",
+            displayName: "Core",
+            planType: "paid",
+            priceInr: 2999,
+            term: { count: 1, unit: "year" },
+            isBestValue: true,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        const coreBody = await core.json() as ServiceResponse<CommercialPlanDetailResponse>;
+        await publishPlan(app, cookie, coreBody.data!.plan.id, coreBody.data!.plan.currentRevision.id);
+
+        const pro = await createPlan(app, cookie, {
+            key: "pro",
+            displayName: "Pro",
+            planType: "paid",
+            priceInr: 4999,
+            term: { count: 1, unit: "year" },
+            isBestValue: true,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        const proBody = await pro.json() as ServiceResponse<CommercialPlanDetailResponse>;
+        await publishPlan(app, cookie, proBody.data!.plan.id, proBody.data!.plan.currentRevision.id);
+
+        const listed = await listPlans(app, cookie);
+        const listedBody = await listed.json() as ServiceResponse<CommercialPlanListResponse>;
+        expect(listedBody.data?.plans.map((planItem) => ({
+            key: planItem.key,
+            isBestValue: planItem.isBestValue,
+        })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "core", isBestValue: false },
+            { key: "pro", isBestValue: true },
+        ]);
+    });
+
+    test("publishing a recommended Plan clears the previous active recommended flag", async () => {
+        const { app } = await createHarness();
+        const cookie = await authCookie(app);
+        const billing = await createdFeature(app, cookie, "billing", "Billing");
+        const coreModule = await createdModule(app, cookie, "core_operations", "Core Operations", [billing.currentRevision.id]);
+        const core = await createPlan(app, cookie, {
+            key: "core",
+            displayName: "Core",
+            planType: "paid",
+            priceInr: 2999,
+            term: { count: 1, unit: "year" },
+            isRecommended: true,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        const coreBody = await core.json() as ServiceResponse<CommercialPlanDetailResponse>;
+        await publishPlan(app, cookie, coreBody.data!.plan.id, coreBody.data!.plan.currentRevision.id);
+
+        const pro = await createPlan(app, cookie, {
+            key: "pro",
+            displayName: "Pro",
+            planType: "paid",
+            priceInr: 4999,
+            term: { count: 1, unit: "year" },
+            isRecommended: true,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        const proBody = await pro.json() as ServiceResponse<CommercialPlanDetailResponse>;
+        await publishPlan(app, cookie, proBody.data!.plan.id, proBody.data!.plan.currentRevision.id);
+
+        const listed = await listPlans(app, cookie);
+        const listedBody = await listed.json() as ServiceResponse<CommercialPlanListResponse>;
+        expect(listedBody.data?.plans.map((planItem) => ({
+            key: planItem.key,
+            isRecommended: planItem.isRecommended,
+        })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
+            { key: "core", isRecommended: false },
+            { key: "pro", isRecommended: true },
+        ]);
+    });
+
+    test("lists Plans by display sequence then name", async () => {
+        const { app } = await createHarness();
+        const cookie = await authCookie(app);
+        const billing = await createdFeature(app, cookie, "billing", "Billing");
+        const coreModule = await createdModule(app, cookie, "core_operations", "Core Operations", [billing.currentRevision.id]);
+        await createPlan(app, cookie, {
+            key: "zeta",
+            displayName: "Zeta",
+            planType: "paid",
+            priceInr: 1999,
+            term: { count: 1, unit: "year" },
+            displaySequence: 2,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        await createPlan(app, cookie, {
+            key: "alpha",
+            displayName: "Alpha",
+            planType: "paid",
+            priceInr: 2999,
+            term: { count: 1, unit: "year" },
+            displaySequence: 3,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+        await createPlan(app, cookie, {
+            key: "beta",
+            displayName: "Beta",
+            planType: "paid",
+            priceInr: 3999,
+            term: { count: 1, unit: "year" },
+            displaySequence: 1,
+            moduleRevisionIds: [coreModule.currentRevision.id],
+        });
+
+        const listed = await listPlans(app, cookie);
+        const listedBody = await listed.json() as ServiceResponse<CommercialPlanListResponse>;
+        expect(listedBody.data?.plans.map((planItem) => planItem.key)).toEqual(["beta", "zeta", "alpha"]);
+    });
+
     test("retires, discards, and rejects invalid Plan lifecycle transitions", async () => {
         const { app } = await createHarness();
         const cookie = await authCookie(app);
@@ -1334,10 +1494,13 @@ describe("Plan Catalog management API", () => {
             planType: item.planType,
             priceInr: item.priceInr,
             term: item.term,
+            isBestValue: item.isBestValue,
+            isRecommended: item.isRecommended,
+            displaySequence: item.displaySequence,
         })).sort((left, right) => left.key.localeCompare(right.key))).toEqual([
-            { key: "core", displayName: "Core", planType: "paid", priceInr: 2999, term: { count: 1, unit: "year" } },
-            { key: "pro", displayName: "Pro", planType: "paid", priceInr: 4999, term: { count: 1, unit: "year" } },
-            { key: "trial", displayName: "Trial", planType: "trial", priceInr: 0, term: { count: 7, unit: "day" } },
+            { key: "core", displayName: "Core", planType: "paid", priceInr: 2999, term: { count: 1, unit: "year" }, isBestValue: false, isRecommended: true, displaySequence: 2 },
+            { key: "pro", displayName: "Pro", planType: "paid", priceInr: 4999, term: { count: 1, unit: "year" }, isBestValue: true, isRecommended: false, displaySequence: 3 },
+            { key: "trial", displayName: "Trial", planType: "trial", priceInr: 0, term: { count: 7, unit: "day" }, isBestValue: false, isRecommended: false, displaySequence: 1 },
         ]);
 
         const byKey = <T extends { key: string }>(items: T[]) => Object.fromEntries(items.map((item) => [item.key, item]));
@@ -1364,6 +1527,15 @@ describe("Plan Catalog management API", () => {
             "restaurant_operations",
         ]);
         expect(pro.currentRevision.modules.map((item) => item.key)).not.toContain("integrations");
+        expect(pro.currentRevision.isBestValue).toBe(true);
+        expect(core.currentRevision.isBestValue).toBe(false);
+        expect(trial.currentRevision.isBestValue).toBe(false);
+        expect(pro.currentRevision.isRecommended).toBe(false);
+        expect(core.currentRevision.isRecommended).toBe(true);
+        expect(trial.currentRevision.isRecommended).toBe(false);
+        expect(trial.currentRevision.displaySequence).toBe(1);
+        expect(core.currentRevision.displaySequence).toBe(2);
+        expect(pro.currentRevision.displaySequence).toBe(3);
         expect(core.currentRevision.resolvedFeatures.map((item) => item.key).sort()).toEqual([
             "billing",
             "catalog_products",

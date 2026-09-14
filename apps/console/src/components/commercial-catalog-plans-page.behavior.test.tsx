@@ -84,6 +84,9 @@ const trialRevision = (overrides: Partial<CommercialPlanRevisionDTO> = {}): Comm
     planType: "trial",
     priceInr: 0,
     term: { count: 7, unit: "day" },
+    isBestValue: false,
+    isRecommended: false,
+    displaySequence: 1,
     modules: [{
         moduleId: coreModuleListItem.id,
         moduleRevisionId: coreModuleListItem.currentRevisionId,
@@ -123,6 +126,9 @@ const trialListItem = (overrides: Partial<CommercialPlanListItemDTO> = {}): Comm
     planType: "trial",
     priceInr: 0,
     term: { count: 7, unit: "day" },
+    isBestValue: false,
+    isRecommended: false,
+    displaySequence: 1,
     ...overrides,
 });
 
@@ -137,6 +143,9 @@ const coreListItem: CommercialPlanListItemDTO = {
     planType: "paid",
     priceInr: 2999,
     term: { count: 1, unit: "year" },
+    isBestValue: false,
+    isRecommended: false,
+    displaySequence: 2,
 };
 
 const successPlanList = (plans: CommercialPlanListItemDTO[]): ServiceResponse<CommercialPlanListResponse> => ({
@@ -314,12 +323,48 @@ describe("Commercial Catalog Plans console destination", () => {
             planType: "trial",
             priceInr: 0,
             term: { count: 7, unit: "day" },
+            isBestValue: false,
+            isRecommended: false,
+            displaySequence: 1,
             moduleRevisionIds: [coreModuleListItem.currentRevisionId, financeModuleListItem.currentRevisionId],
         }));
         expect(await view.findByRole("heading", { name: "Trial" })).toBeTruthy();
         expect(view.getByText("Included Modules")).toBeTruthy();
         expect(view.getByText("Resolved Features")).toBeTruthy();
         expect(view.getAllByText(/Billing/).length).toBeGreaterThan(0);
+    });
+
+    test("marks a Plan as recommended and sets its sequence", async () => {
+        let created: CreateCommercialPlanJSON | null = null;
+        const view = renderPage({
+            createCommercialPlan: async (data) => {
+                created = data;
+                return successPlanDetail(trialPlan(trialRevision({
+                    isRecommended: true,
+                    displaySequence: 4,
+                })), 201);
+            },
+            initialCreateValues: {
+                key: "core",
+                displayName: "Core",
+                description: "",
+                planType: "paid",
+                priceInr: 2999,
+                term: { count: 1, unit: "year" },
+                displaySequence: 4,
+                moduleRevisionIds: [coreModuleListItem.currentRevisionId],
+            },
+        });
+
+        fireEvent.click(await view.findByRole("button", { name: "Add Plan" }));
+        expect((view.getByLabelText("Plan sequence") as HTMLInputElement).value).toBe("4");
+        fireEvent.click(view.getByLabelText("Mark as recommended"));
+        fireEvent.click(view.getByRole("button", { name: "Create Draft Plan" }));
+
+        await waitFor(() => expect(created).toMatchObject({
+            isRecommended: true,
+            displaySequence: 4,
+        }));
     });
 
     test("requires at least one Module revision before creating a Plan", async () => {
