@@ -524,4 +524,184 @@ describe("Cloud template synchronization service", () => {
     expect(response).toMatchObject({ status: "error", message: "Cloud template name is invalid" });
     expect(persisted).toBe(false);
   });
+
+  test("rejects a promotion template with a document header before calling Meta", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "promotion",
+      friendlyName: "Weekend offer",
+      metaTemplateName: "weekend_offer",
+      languageCode: "en_US",
+      components: [
+        { type: "HEADER", format: "DOCUMENT" },
+        { type: "BODY", text: "Hello {{1}}, an offer from {{2}}." },
+      ],
+      sampleValues: { "1": "Customer", "2": "My Store" },
+      headerSampleBase64: "cGRm",
+      headerSampleFileName: "offer.pdf",
+      headerSampleMimeType: "application/pdf",
+      idempotencyKey: "idem-promotion-document",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createSubmission: async () => { throw new Error("should not persist invalid promotion content"); },
+      createClient: () => ({
+        async getTemplates() { providerCalled = true; return { data: [] }; },
+      }),
+    });
+
+    expect(response).toMatchObject({
+      status: "error",
+      message: "Cloud promotion templates cannot use a document header",
+    });
+    expect(providerCalled).toBe(false);
+  });
+
+  test("rejects a promotion template with a dynamic URL button before calling Meta", async () => {
+    let providerCalled = false;
+    const response = await submitCloudTemplateForAccount(userId, organizationId, accountId, {
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "promotion",
+      friendlyName: "Weekend offer",
+      metaTemplateName: "weekend_offer_link",
+      languageCode: "en_US",
+      components: [
+        { type: "BODY", text: "Hello {{1}}, an offer from {{2}}." },
+        { type: "BUTTONS", buttons: [{ type: "URL", text: "View details", url: "https://example.com/{{1}}" }] },
+      ],
+      sampleValues: { "1": "Customer", "2": "My Store" },
+      idempotencyKey: "idem-promotion-dynamic-url",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      createSubmission: async () => { throw new Error("should not persist invalid promotion content"); },
+      createClient: () => ({
+        async getTemplates() { providerCalled = true; return { data: [] }; },
+      }),
+    });
+
+    expect(response).toMatchObject({
+      status: "error",
+      message: "Cloud promotion templates cannot use a dynamic URL button",
+    });
+    expect(providerCalled).toBe(false);
+  });
+
+  test("does not append an invoice link when assigning a promotion template with a URL button", async () => {
+    let input: Record<string, unknown> | undefined;
+    const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888889", {
+      organizationAccess: async () => true,
+      getSubmission: async () => ({
+        id: "88888888-8888-4888-8888-888888888889",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        originatingStoreId: "99999999-9999-4999-8999-999999999999",
+        localTemplateId: null,
+        kind: "promotion" as const,
+        friendlyName: "Weekend offer",
+        metaTemplateName: "weekend_offer",
+        languageCode: "en_US",
+        category: "marketing" as const,
+        requestedComponents: [
+          { type: "BODY", text: "Hello {{1}} from {{2}}." },
+          { type: "BUTTONS", buttons: [{ type: "URL", text: "View details", url: "https://example.com/{{1}}" }] },
+        ],
+        sampleValues: { "1": "Customer", "2": "My Store" },
+        idempotencyKey: "idem-promotion-assign",
+        metaTemplateId: "meta-promo-1",
+        status: "approved" as const,
+        rejectionReason: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        submittedAt: "2026-08-23T10:00:00.000Z",
+        providerUpdatedAt: "2026-08-23T10:00:00.000Z",
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: "2026-08-23T10:00:00.000Z",
+        updatedAt: "2026-08-23T10:00:00.000Z",
+      }),
+      list: async () => [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        metaTemplateId: "meta-promo-1",
+        name: "weekend_offer",
+        languageCode: "en_US",
+        category: "marketing" as const,
+        status: "approved" as const,
+        components: [
+          { type: "BODY", text: "Hello {{1}} from {{2}}." },
+          { type: "BUTTONS", buttons: [{ type: "URL", text: "View details", url: "https://example.com/{{1}}" }] },
+        ],
+        rejectionReason: null,
+        providerUpdatedAt: null,
+        lastSyncedAt: "2026-08-23T10:00:00.000Z",
+        version: 1,
+      }],
+      createDefaultBinding: async value => { input = value; return {} as never; },
+      recordAudit: async () => {},
+    });
+    expect(response.status).toBe("success");
+    expect(input?.kind).toBe("promotion");
+    expect(input?.localTemplateBody).toBe("Hello {{customer_name}} from {{store_name}}.");
+  });
+
+  test("still appends an invoice link when assigning a bill template with a dynamic URL button", async () => {
+    let input: Record<string, unknown> | undefined;
+    const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888887", {
+      organizationAccess: async () => true,
+      getSubmission: async () => ({
+        id: "88888888-8888-4888-8888-888888888887",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        originatingStoreId: "99999999-9999-4999-8999-999999999999",
+        localTemplateId: null,
+        kind: "bill" as const,
+        friendlyName: "Bill ready",
+        metaTemplateName: "bill_ready_link",
+        languageCode: "en_US",
+        category: "utility" as const,
+        requestedComponents: [
+          { type: "BODY", text: "Hello {{1}}." },
+          { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://example.com/invoices/{{1}}" }] },
+        ],
+        sampleValues: { "1": "Customer" },
+        idempotencyKey: "idem-bill-assign-url",
+        metaTemplateId: "meta-bill-link",
+        status: "approved" as const,
+        rejectionReason: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        submittedAt: "2026-08-23T10:00:00.000Z",
+        providerUpdatedAt: "2026-08-23T10:00:00.000Z",
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: "2026-08-23T10:00:00.000Z",
+        updatedAt: "2026-08-23T10:00:00.000Z",
+      }),
+      list: async () => [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        metaTemplateId: "meta-bill-link",
+        name: "bill_ready_link",
+        languageCode: "en_US",
+        category: "utility" as const,
+        status: "approved" as const,
+        components: [
+          { type: "BODY", text: "Hello {{1}}." },
+          { type: "BUTTONS", buttons: [{ type: "URL", text: "View invoice", url: "https://example.com/invoices/{{1}}" }] },
+        ],
+        rejectionReason: null,
+        providerUpdatedAt: null,
+        lastSyncedAt: "2026-08-23T10:00:00.000Z",
+        version: 1,
+      }],
+      createDefaultBinding: async value => { input = value; return {} as never; },
+      recordAudit: async () => {},
+    });
+    expect(response.status).toBe("success");
+    expect(input?.localTemplateBody).toBe("Hello {{customer_name}}.\n\nView your invoice online: {{invoice_url}}");
+  });
 });
