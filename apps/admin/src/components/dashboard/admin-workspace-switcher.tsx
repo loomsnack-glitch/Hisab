@@ -15,9 +15,12 @@ import { cn } from "@repo/ui/lib/utils";
 import { getOrganizationWorkspacePath } from "@/lib/default-org-path";
 import { commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { getStoreWorkspacePath, parseStoreWorkspacePath } from "@/lib/store-workspace-routes";
+import { createConcurrentTaskQueue } from "@/lib/concurrent-task-queue";
 import CreateStoreDialog from "@/components/organizations/create-store-dialog";
 import { StoreCommercialSummary } from "@/components/dashboard/store-commercial-summary";
 import { getCommercialStatus } from "@/lib/commercial-access-summary";
+
+const commercialStatusRequestQueue = createConcurrentTaskQueue(2);
 
 type WorkspaceStoreRef = {
     id: string;
@@ -326,10 +329,14 @@ export const AdminWorkspaceSwitcherFromRoute = ({
     const organization =
         organizationQuery.data?.status === "success" ? organizationQuery.data.data?.organization : null;
 
+    const stores = organization?.stores ?? [];
+
     const commercialStatusQueries = useQueries({
-        queries: (organization?.stores ?? []).map((store) => ({
+        queries: stores.map((store) => ({
             queryKey: commercialLicenseKeys.status(organizationId, store.id),
-            queryFn: () => getStoreCommercialStatus(organizationId, store.id),
+            queryFn: () => commercialStatusRequestQueue.run(
+                () => getStoreCommercialStatus(organizationId, store.id),
+            ),
             enabled: Boolean(organizationId),
         })),
     });
@@ -342,7 +349,7 @@ export const AdminWorkspaceSwitcherFromRoute = ({
         <AdminWorkspaceSwitcher
             organizationId={organization.id}
             organizationName={organization.name}
-            stores={organization.stores.map((store, index) => {
+            stores={stores.map((store, index) => {
                 const statusQuery = commercialStatusQueries[index];
                 return {
                     ...store,

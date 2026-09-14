@@ -24,6 +24,15 @@ import {
 } from "./commercial-licensing.test-harness";
 
 describe("Commercial Licensing standard Trial", () => {
+    test("builds commercial status from the records it already loaded", async () => {
+        const memory = createMemoryCommercialLicensing();
+
+        const status = await memory.service.getStoreCommercialStatus(userId, organizationId, storeId);
+
+        expect(status.status).toBe("success");
+        expect(memory.calls.listAccessSourcesForStore).toBe(0);
+    });
+
     test("starts the standard Trial Plan once with Asia/Kolkata term timing and snapshotted Features", async () => {
         const memory = createMemoryCommercialLicensing();
 

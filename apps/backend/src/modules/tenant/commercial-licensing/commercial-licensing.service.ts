@@ -283,6 +283,36 @@ const toLicenseAccessSource = (license: StoreLicenseRecord): CommercialAccessSou
     modules: license.modules,
 });
 
+const toCoTermAddOnAccessSource = (addOn: StoreCoTermAddOnRecord): CommercialAccessSourceRecord => ({
+    id: addOn.id,
+    kind: "co_term_add_on",
+    storeId: addOn.storeId,
+    organizationId: addOn.organizationId,
+    startsAt: addOn.startsAt,
+    endsAt: addOn.endsAt,
+    revokedAt: addOn.revokedAt,
+    planKey: null,
+    planDisplayName: null,
+    planType: null,
+    term: addOn.term,
+    modules: addOn.modules,
+});
+
+const toGrantAccessSource = (grant: StoreAccessGrantRecord): CommercialAccessSourceRecord => ({
+    id: grant.id,
+    kind: "store_access_grant",
+    storeId: grant.storeId,
+    organizationId: grant.organizationId,
+    startsAt: grant.startsAt,
+    endsAt: grant.endsAt,
+    revokedAt: grant.revokedAt,
+    planKey: grant.planKey,
+    planDisplayName: grant.planDisplayName,
+    planType: grant.planType,
+    term: grant.term,
+    modules: grant.modules,
+});
+
 const trialAvailability = (licenses: StoreLicenseRecord[], hasActiveTrialPlan: boolean) => {
     if (licenses.some((license) => license.sourceKind === "trial")) {
         return {
@@ -878,22 +908,30 @@ export const createCommercialLicensingService = (dependencies: CommercialLicensi
         storeId: string,
         at: Date,
     ): Promise<StoreCommercialStatusDTO> => {
-        const [licenses, grants, addOns, trialPlan, paidPlans, purchasableModules, accessSources, quotes, paymentEvents, refunds, revocations] =
-            await Promise.all([
+        const [licenses, grants, addOns] = await Promise.all([
             dependencies.repository.listStoreLicenses(storeId),
             dependencies.repository.listAccessGrantsForStore(storeId),
             dependencies.repository.listCoTermAddOnsForStore(storeId),
+        ]);
+        const [trialPlan, paidPlans, purchasableModules] = await Promise.all([
             dependencies.repository.getActiveTrialPlanSnapshot(),
             dependencies.repository.listActivePlanSnapshots(),
             dependencies.repository.listActivePurchasableModuleSnapshots(),
-            dependencies.repository.listAccessSourcesForStore(storeId),
+        ]);
+        const [quotes, paymentEvents, refunds, revocations] = await Promise.all([
             dependencies.repository.listCommercialQuotesForStore(storeId),
             dependencies.repository.listPaymentEventsForStore(storeId),
             dependencies.repository.listCommercialRefundsForStore(storeId),
             dependencies.repository.listLicenseRevocationsForStore(storeId),
         ]);
-        const entitlements = await dependencies.featureEntitlement.resolveStoreFeatureEntitlement(
+        const accessSources = [
+            ...licenses.map(toLicenseAccessSource),
+            ...addOns.map(toCoTermAddOnAccessSource),
+            ...grants.map(toGrantAccessSource),
+        ];
+        const entitlements = dependencies.featureEntitlement.resolveStoreFeatureEntitlementFromSources(
             storeId,
+            accessSources,
             at,
         );
         const currentBase = licenses.find((license) =>

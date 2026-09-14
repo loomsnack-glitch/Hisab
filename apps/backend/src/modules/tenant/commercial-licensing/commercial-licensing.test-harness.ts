@@ -294,6 +294,10 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
         }),
     };
 
+    const calls = {
+        listAccessSourcesForStore: 0,
+    };
+
     const repository = {
         getActiveTrialPlanSnapshot: async () => {
             const plan = state.activePlans.find((item) => item.planType === "trial") ?? state.trialPlan;
@@ -349,17 +353,20 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
             state.coTermAddOns
                 .filter((addOn) => addOn.storeId === targetStoreId)
                 .map(cloneCoTermAddOn),
-        listAccessSourcesForStore: async (targetStoreId: string) => [
-            ...(await repository.listStoreLicenses(targetStoreId)).map(toLicenseAccessSource),
-            ...(await repository.listCoTermAddOnsForStore(targetStoreId)).map(toCoTermAddOnAccessSource),
-            ...(await repository.listAccessGrantsForStore(targetStoreId)).map(toGrantAccessSource),
-            ...state.extraAccessSources
-                .filter((source) => source.storeId === targetStoreId)
-                .map((source) => ({
-                    ...source,
-                    modules: cloneModules(source.modules),
-                })),
-        ],
+        listAccessSourcesForStore: async (targetStoreId: string) => {
+            calls.listAccessSourcesForStore += 1;
+            return [
+                ...(await repository.listStoreLicenses(targetStoreId)).map(toLicenseAccessSource),
+                ...(await repository.listCoTermAddOnsForStore(targetStoreId)).map(toCoTermAddOnAccessSource),
+                ...(await repository.listAccessGrantsForStore(targetStoreId)).map(toGrantAccessSource),
+                ...state.extraAccessSources
+                    .filter((source) => source.storeId === targetStoreId)
+                    .map((source) => ({
+                        ...source,
+                        modules: cloneModules(source.modules),
+                    })),
+            ];
+        },
         listStoresExistingAt: async (at: Date) =>
             state.stores
                 .filter((store) => store.createdAt.getTime() <= at.getTime())
@@ -720,6 +727,7 @@ export const createMemoryCommercialLicensing = (now = trialStart) => {
 
     return {
         state,
+        calls,
         repository,
         featureEntitlement,
         razorpay,

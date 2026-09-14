@@ -29,11 +29,11 @@ const evidenceFrom = (
 });
 
 export const createFeatureEntitlementService = (dependencies: FeatureEntitlementDependencies) => {
-    const resolveStoreFeatureEntitlement = async (
+    const resolveStoreFeatureEntitlementFromSources = (
         storeId: string,
+        sources: CommercialAccessSourceRecord[],
         at: Date,
-    ): Promise<StoreFeatureEntitlementDTO> => {
-        const sources = await dependencies.listAccessSources(storeId);
+    ): StoreFeatureEntitlementDTO => {
         const features = new Map<string, EntitledFeatureDTO>();
 
         for (const source of sources) {
@@ -70,6 +70,16 @@ export const createFeatureEntitlementService = (dependencies: FeatureEntitlement
         };
     };
 
+    const resolveStoreFeatureEntitlement = async (
+        storeId: string,
+        at: Date,
+    ): Promise<StoreFeatureEntitlementDTO> =>
+        resolveStoreFeatureEntitlementFromSources(
+            storeId,
+            await dependencies.listAccessSources(storeId),
+            at,
+        );
+
     const resolveFeatureEntitlement = async (
         storeId: string,
         featureKey: string,
@@ -85,6 +95,7 @@ export const createFeatureEntitlementService = (dependencies: FeatureEntitlement
     };
 
     return {
+        resolveStoreFeatureEntitlementFromSources,
         resolveStoreFeatureEntitlement,
         resolveFeatureEntitlement,
     };
