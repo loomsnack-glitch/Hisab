@@ -234,6 +234,7 @@ import {
   isDirectGenerateKotVisible,
   isKotBackedDirectDraft,
   isOrderTypeSelectorVisible,
+  kotsToPrintAfterDirectGeneration,
   saleComposerItemsWithoutStandaloneKot,
   selectedStandaloneKotItemsToComposerItems,
   splitKotBackedDraftComposer,
@@ -246,6 +247,7 @@ import {
     composerItemsFromTableKot,
   isTableKotFulfillmentSelectorVisible,
   isTableKotWorkflowEnabled,
+    kotToPrintAfterTableGeneration,
     remainingTableKotItemCount,
   resolveTableCheckoutMode,
   resolveStableTableKotRequest,
@@ -369,6 +371,49 @@ type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
 type BillPaymentMethod = Exclude<SalesPaymentMethodFilter, "all">;
 type BillingPanelTab = "products" | "bills";
 type InvoiceAction = "print" | "whatsapp";
+
+const WEBUSB_UNAVAILABLE_MESSAGE =
+  "WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS";
+
+type PosPrinterJob = {
+  run: () => Promise<void>;
+  successMessage: string;
+};
+
+const sendJobsToPosPrinter = ({
+  printer,
+  jobs,
+  failureMessage,
+}: {
+  printer: { supported: boolean; connected: boolean } | null | undefined;
+  jobs: PosPrinterJob[];
+  failureMessage: string;
+}) => {
+  if (jobs.length === 0) {
+    return;
+  }
+  if (!printer?.supported) {
+    toast.error(WEBUSB_UNAVAILABLE_MESSAGE);
+    return;
+  }
+  if (!printer.connected) {
+    toast.error("Connect the receipt printer before printing");
+    return;
+  }
+  void (async () => {
+    for (const job of jobs) {
+      try {
+        await job.run();
+        toast.success(job.successMessage);
+      } catch (error) {
+        toast.error(
+          (error as { message?: string })?.message || failureMessage,
+        );
+        return;
+      }
+    }
+  })();
+};
 
 const SERVICE_MODE_OPTIONS: Array<{
     value: SaleServiceMode;
@@ -550,6 +595,7 @@ const BillingPage = ({
     const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [activeTableOrder, setActiveTableOrder] =
     useState<TableOrderDTO | null>(null);
+  const [activeTableLabel, setActiveTableLabel] = useState<string | null>(null);
     const [selectedKotId, setSelectedKotId] = useState<string | null>(null);
     const [editingKotId, setEditingKotId] = useState<string | null>(null);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -1803,6 +1849,7 @@ const BillingPage = ({
         setActiveDraftId(null);
         setActiveTableId(null);
         setActiveTableOrder(null);
+        setActiveTableLabel(null);
         setSelectedKotId(null);
         setEditingKotId(null);
     setBaselineComposerItems([]);
@@ -2462,6 +2509,24 @@ const BillingPage = ({
       return customer.id;
     };
 
+    const queueGeneratedKotPrints = (
+      kots: KotDTO[],
+      tableLabel: string | null = null,
+    ) => {
+      if (!isDeviceMode || !posPrinter?.connected || kots.length === 0) {
+        return;
+      }
+      sendJobsToPosPrinter({
+        printer: posPrinter,
+        jobs: kots.map((kot) => ({
+          run: () =>
+            posPrinter.printKot(kot, { ...receiptContext, tableLabel }),
+          successMessage: "KOT sent to printer",
+        })),
+        failureMessage: "KOT printing failed",
+      });
+    };
+
     const createCustomerMutation = useMutation({
         mutationFn: (payload: CreateCustomerJSON) =>
       isDeviceMode
@@ -2525,10 +2590,15 @@ const BillingPage = ({
             return response.data.sale;
         },
         onSuccess: (sale) => {
+      const generatedKots = kotsToPrintAfterDirectGeneration({
+        standaloneKots: sale.standaloneKots,
+        previouslyKnownKotIds: activeStandaloneKots.map((kot) => kot.id),
+      });
       draftKotRequestRef.current = null;
             invalidateBillingQueries();
             resetComposer();
             toast.success(sale.status === "draft" ? "Draft saved" : "Bill updated");
+            queueGeneratedKotPrints(generatedKots);
             if (isDeviceMode && shouldReturnToPosTablesAfterSale(sale)) {
                 onPanelTabChange?.("tables");
             }
@@ -2702,6 +2772,10 @@ const BillingPage = ({
         },
         onSuccess: (sale, variables) => {
             const wasReplacing = Boolean(replacingSaleId);
+            const generatedKots = kotsToPrintAfterDirectGeneration({
+              standaloneKots: sale.standaloneKots,
+              previouslyKnownKotIds: activeStandaloneKots.map((kot) => kot.id),
+            });
             completionRequestRef.current = null;
             invalidateBillingQueries();
             invalidateTableQueries();
@@ -2710,23 +2784,27 @@ const BillingPage = ({
             resetComposer();
             if (variables.shouldPrint) {
                 if (isDeviceMode) {
-                    if (!posPrinter?.supported) {
-            toast.error(
-              "WebUSB is unavailable; use Chrome or Edge on localhost or HTTPS",
-            );
-                    } else if (!posPrinter.connected) {
-                        toast.error("Connect the receipt printer before printing");
-                    } else {
-            void posPrinter
-              .printSale(sale, receiptContext)
-                            .then(() => toast.success("Receipt sent to printer"))
-                            .catch((error: { message?: string }) => {
-                                toast.error(error?.message || "Receipt printing failed");
-                            });
-                    }
+                    sendJobsToPosPrinter({
+                      printer: posPrinter,
+                      jobs: [
+                        {
+                          run: () => posPrinter!.printSale(sale, receiptContext),
+                          successMessage: "Receipt sent to printer",
+                        },
+                        ...generatedKots.map((kot) => ({
+                          run: () =>
+                            posPrinter!.printKot(kot, receiptContext),
+                          successMessage: "KOT sent to printer",
+                        })),
+                      ],
+                      failureMessage: "Receipt printing failed",
+                    });
                 } else {
                     setReceiptToPrint(sale);
+                    queueGeneratedKotPrints(generatedKots);
                 }
+            } else {
+                queueGeneratedKotPrints(generatedKots);
             }
             if (variables.shouldSendWhatsApp && !wasReplacing) {
                 const queueRequest = isDeviceMode
@@ -2837,9 +2915,16 @@ const BillingPage = ({
                 return;
             }
 
-            const latestKot = tableOrder.kots[tableOrder.kots.length - 1];
+            const latestKot = kotToPrintAfterTableGeneration({
+              tableOrder,
+              isEditing: false,
+            });
+            const tableLabel = activeTableLabel;
             resetComposer();
             toast.success(`Table ${latestKot?.kotNumber ?? "KOT"} generated`);
+            if (latestKot) {
+              queueGeneratedKotPrints([latestKot], tableLabel);
+            }
             onPanelTabChange?.("tables");
         },
         onError: (error: { message?: string }) => {
@@ -2973,6 +3058,7 @@ const BillingPage = ({
         setActiveDraftId(editSaleId ? null : sale.id);
         setActiveTableId(null);
         setActiveTableOrder(null);
+        setActiveTableLabel(null);
         setSelectedKotId(null);
         setEditingKotId(null);
       setSelectedStandaloneKotId(null);
@@ -3075,6 +3161,7 @@ const BillingPage = ({
         setActiveDraftId(null);
         setActiveTableId(table.id);
         setActiveTableOrder(tableOrder);
+        setActiveTableLabel(table.tableLabel);
         setSelectedKotId(null);
         setEditingKotId(null);
       setActiveStandaloneKots([]);

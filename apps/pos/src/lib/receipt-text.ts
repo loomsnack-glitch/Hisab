@@ -1,6 +1,7 @@
-import type { SaleDetailDTO } from "@repo/types";
+import type { KotDTO, SaleDetailDTO } from "@repo/types";
 
 import { formatDateTime } from "@/lib/format";
+import { getKitchenKotContext } from "@/lib/pos-kitchen-kot";
 
 export type ReceiptContext = {
   organizationName?: string | null;
@@ -9,6 +10,11 @@ export type ReceiptContext = {
   storeAddress?: string | null;
   storePhone?: string | null;
 };
+
+export type KotPrintContext = ReceiptContext & {
+  tableLabel?: string | null;
+};
+
 export const RECEIPT_WIDTH = 42;
 const defaultReceiptWidth = 48;
 const quantityColumnWidth = 5;
@@ -125,6 +131,29 @@ export const formatKotNumbersForReceipt = (kotNumbers: string[]) =>
   kotNumbers.map(formatKotNumberForReceipt).join(", ");
 
 export const TOKEN_NO_RECEIPT_PREFIX = "TOKEN NO:";
+export const KOT_NO_RECEIPT_PREFIX = "KOT NO:";
+export const KITCHEN_KOT_TITLE = "KITCHEN KOT";
+
+const appendKotItemRow = (
+  lines: string[],
+  name: string,
+  quantity: string,
+  itemColumnWidth: number,
+  indent = "",
+) => {
+  const nameLines = wrapText(name, itemColumnWidth - indent.length).map(
+    (line, index) =>
+      `${index === 0 ? indent : " ".repeat(indent.length)}${line}`,
+  );
+  const quantityLines = wrapText(quantity, quantityColumnWidth);
+  const rowCount = Math.max(nameLines.length, quantityLines.length);
+
+  for (let index = 0; index < rowCount; index += 1) {
+    lines.push(
+      `${(nameLines[index] ?? "").padEnd(itemColumnWidth)}${(quantityLines[index] ?? "").padStart(quantityColumnWidth)}`,
+    );
+  }
+};
 
 const appendWrappedText = (lines: string[], value: string, width: number) => {
   wrapText(value, width).forEach((line) => lines.push(line));
@@ -201,7 +230,7 @@ export const buildReceiptText = (
   if (sale.kotNumbers && sale.kotNumbers.length > 0) {
     appendWrappedText(
       lines,
-      `KOT NO: ${formatKotNumbersForReceipt(sale.kotNumbers)}`,
+      `${KOT_NO_RECEIPT_PREFIX} ${formatKotNumbersForReceipt(sale.kotNumbers)}`,
       width,
     );
   }
@@ -327,5 +356,90 @@ export const buildReceiptText = (
   appendCenteredText(lines, "Thank you! Visit again", width);
   lines.push(doubleSeparator);
 
+  return lines.join("\n") + "\n";
+};
+
+export const buildKotText = (
+  kot: Pick<KotDTO, "kotNumber" | "fulfillmentType" | "createdAt" | "items">,
+  context: KotPrintContext = {},
+  options: ReceiptTextOptions = {},
+): string => {
+  const width = options.width ?? defaultReceiptWidth;
+  if (!Number.isInteger(width) || width < minimumReceiptWidth) {
+    throw new Error(
+      `Receipt width must be an integer of at least ${minimumReceiptWidth}`,
+    );
+  }
+  const itemColumnWidth = width - quantityColumnWidth;
+  const emphasisWidth = Math.floor(width / 2);
+  const separator = "-".repeat(width);
+  const doubleSeparator = "=".repeat(width);
+  const fulfillment = getKitchenKotContext({
+    fulfillmentType: kot.fulfillmentType,
+    tableLabel: context.tableLabel ?? null,
+  });
+  const storeName = context.storeName?.trim();
+
+  const lines: string[] = [];
+  lines.push(doubleSeparator);
+  if (storeName) {
+    appendCenteredText(lines, storeName, width);
+  }
+  appendCenteredText(
+    lines,
+    KITCHEN_KOT_TITLE,
+    options.doubleWidthEmphasis ? emphasisWidth : width,
+  );
+  lines.push(separator);
+  appendWrappedText(
+    lines,
+    `${KOT_NO_RECEIPT_PREFIX} ${formatKotNumberForReceipt(kot.kotNumber)}`,
+    width,
+  );
+  appendWrappedText(lines, `${fulfillment.label}: ${fulfillment.value}`, width);
+  appendWrappedText(lines, `Date: ${formatDateTime(kot.createdAt)}`, width);
+  lines.push(separator);
+  lines.push(
+    `${"ITEM".padEnd(itemColumnWidth)}${"QTY".padStart(quantityColumnWidth)}`,
+  );
+  lines.push(separator);
+
+  kot.items.forEach((item) => {
+    appendKotItemRow(
+      lines,
+      item.productNameSnapshot,
+      String(Number(item.quantity)),
+      itemColumnWidth,
+    );
+    (item.addOns ?? []).forEach((addOn) => {
+      appendKotItemRow(
+        lines,
+        `+ ${addOn.addOnNameSnapshot}`,
+        String(Number(addOn.totalQuantity)),
+        itemColumnWidth,
+        "  ",
+      );
+    });
+    (item.bundleComponents ?? []).forEach((component) => {
+      appendKotItemRow(
+        lines,
+        `* ${component.productNameSnapshot}`,
+        String(Number(component.totalQuantity)),
+        itemColumnWidth,
+        "  ",
+      );
+      (component.addOns ?? []).forEach((addOn) => {
+        appendKotItemRow(
+          lines,
+          `+ ${addOn.addOnNameSnapshot}`,
+          String(Number(addOn.totalQuantity)),
+          itemColumnWidth,
+          "    ",
+        );
+      });
+    });
+  });
+
+  lines.push(doubleSeparator);
   return lines.join("\n") + "\n";
 };

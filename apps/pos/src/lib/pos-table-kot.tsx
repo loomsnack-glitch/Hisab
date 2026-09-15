@@ -110,6 +110,19 @@ export const remainingTableKotItemCount = (tableOrder: TableOrderDTO | null) =>
     0,
   );
 
+export const kotToPrintAfterTableGeneration = ({
+  tableOrder,
+  isEditing,
+}: {
+  tableOrder: TableOrderDTO;
+  isEditing: boolean;
+}) => {
+  if (isEditing) {
+    return null;
+  }
+  return tableOrder.kots[tableOrder.kots.length - 1] ?? null;
+};
+
 export type TableKotComposerItem = KotComposerItem;
 
 export const composerItemsFromTableKot = (

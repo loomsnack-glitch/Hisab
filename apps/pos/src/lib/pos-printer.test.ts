@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
-import type { SaleDetailDTO } from "@repo/types";
+import type { KotDTO, SaleDetailDTO } from "@repo/types";
 
 import {
   build80mmEscPosPayload,
   buildEscPosPayload,
+  buildKotEscPosPayload,
   chunkBluetoothPrinterPayload,
   connectBluetoothPrinterWithRetry,
   describeBluetoothRestoreReason,
@@ -24,7 +25,7 @@ import {
   writeSerialPrinter,
 } from "./pos-printer";
 import { getReceiptPaperWidth } from "./receipt-paper-size";
-import { buildReceiptText, RECEIPT_WIDTH } from "./receipt-text";
+import { buildKotText, buildReceiptText, RECEIPT_WIDTH } from "./receipt-text";
 
 const sale = {
   saleNumber: "INV-1042",
@@ -382,6 +383,70 @@ describe("80mm ESC/POS receipt payload", () => {
     expect(width).toBe(32);
     expect(output).toContain("A".repeat(32));
     expect(receipt.split("\n").every((line) => line.length <= 32)).toBe(true);
+  });
+});
+
+describe("kitchen KOT ESC/POS payload", () => {
+  const kot = {
+    kotNumber: "KOT-001",
+    fulfillmentType: "dine_in",
+    createdAt: "2026-08-04T12:00:00.000Z",
+    items: [
+      {
+        productNameSnapshot: "Masala Dosa",
+        quantity: 2,
+        unitPriceSnapshot: 90,
+        lineTotal: 180,
+        addOns: [
+          {
+            addOnNameSnapshot: "Extra Cheese",
+            totalQuantity: 1,
+            unitPriceSnapshot: 20,
+            lineTotal: 20,
+          },
+        ],
+        bundleComponents: [
+          {
+            productNameSnapshot: "Side Salad",
+            totalQuantity: 1,
+            addOns: [],
+          },
+        ],
+      },
+    ],
+  } as unknown as KotDTO;
+
+  test("prints a kitchen ticket without bill prices and cuts the paper", () => {
+    const payload = buildKotEscPosPayload(kot, { tableLabel: "A1" });
+    const output = new TextDecoder().decode(payload);
+    const ticket = buildKotText(kot, { tableLabel: "A1" }, { width: RECEIPT_WIDTH });
+
+    expect(Array.from(payload.slice(0, 2))).toEqual([0x1b, 0x40]);
+    expect(output).toContain("KITCHEN KOT");
+    expect(output).toContain("KOT NO: 001");
+    expect(output).toContain("Table: A1");
+    expect(output).toContain("Masala Dosa");
+    expect(output).toContain("+ Extra Cheese");
+    expect(output).toContain("* Side Salad");
+    expect(output).not.toContain("INVOICE / RECEIPT");
+    expect(output).not.toContain("FINAL AMOUNT");
+    expect(ticket).not.toContain("90");
+    expect(ticket).not.toContain("180");
+    expect(Array.from(payload.slice(-6))).toEqual([
+      0x1b, 0x64, 0x04, 0x1d, 0x56, 0x00,
+    ]);
+  });
+
+  test("prints a pick-up table KOT as Parcel instead of the table label", () => {
+    const output = new TextDecoder().decode(
+      buildKotEscPosPayload(
+        { ...kot, fulfillmentType: "pick_up" },
+        { tableLabel: "A1" },
+      ),
+    );
+
+    expect(output).toContain("Order type: Parcel");
+    expect(output).not.toContain("Table: A1");
   });
 });
 

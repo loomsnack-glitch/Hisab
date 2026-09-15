@@ -10,6 +10,7 @@ import {
   isTableKotFulfillmentSelectorVisible,
   isTableKotWorkflowEnabled,
   kotPrintsAsParcel,
+  kotToPrintAfterTableGeneration,
   remainingTableKotItemCount,
   resolveTableCheckoutMode,
   resolveStableTableKotRequest,
@@ -173,6 +174,21 @@ describe("Table KOT POS workflow", () => {
     expect(isTableKotFulfillmentSelectorVisible("save_kot")).toBe(false);
     expect(isTableKotFulfillmentSelectorVisible("place_order")).toBe(false);
     expect(isTableKotFulfillmentSelectorVisible(null)).toBe(false);
+  });
+
+  test("prints the latest table KOT after generate and skips edits", () => {
+    expect(
+      kotToPrintAfterTableGeneration({
+        tableOrder,
+        isEditing: false,
+      })?.kotNumber,
+    ).toBe("KOT-002");
+    expect(
+      kotToPrintAfterTableGeneration({
+        tableOrder,
+        isEditing: true,
+      }),
+    ).toBeNull();
   });
 
   test("prints only pick-up table KOTs as Parcel", () => {

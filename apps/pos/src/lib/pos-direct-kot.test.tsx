@@ -7,6 +7,7 @@ import {
   isDirectGenerateKotVisible,
   isKotBackedDirectDraft,
   isOrderTypeSelectorVisible,
+  kotsToPrintAfterDirectGeneration,
   saleItemsToComposerItems,
   selectedStandaloneKotItemsToComposerItems,
   splitKotBackedDraftComposer,
@@ -91,6 +92,24 @@ describe("Direct POS KOT workflow", () => {
     expect(markup).toContain("Generate KOT");
     expect(markup).toContain("generate-kot-toggle");
     expect(markup).toContain('aria-checked="true"');
+  });
+
+  test("prints only newly generated standalone KOTs after save or place", () => {
+    const existing = kot("KOT-101", "11111111-1111-4111-8111-111111111111");
+    const generated = kot("KOT-102", "22222222-2222-4222-8222-222222222222");
+
+    expect(
+      kotsToPrintAfterDirectGeneration({
+        standaloneKots: [existing, generated],
+        previouslyKnownKotIds: [existing.id],
+      }),
+    ).toEqual([generated]);
+    expect(
+      kotsToPrintAfterDirectGeneration({
+        standaloneKots: [existing],
+        previouslyKnownKotIds: [existing.id],
+      }),
+    ).toEqual([]);
   });
 
   test("treats a default-on toggle with no pending items as no KOT for save and place", () => {

@@ -8,10 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { SaleDetailDTO } from "@repo/types";
+import type { KotDTO, SaleDetailDTO } from "@repo/types";
 
 import {
   buildEscPosPayload,
+  buildKotEscPosPayload,
   connectBluetoothPrinterWithRetry,
   describeBluetoothRestoreReason,
   describeUsbPrinterError,
@@ -47,7 +48,7 @@ import {
   readReceiptPaperSize,
   type ReceiptPaperSize,
 } from "@/lib/receipt-paper-size";
-import type { ReceiptContext } from "@/lib/receipt-text";
+import type { KotPrintContext, ReceiptContext } from "@/lib/receipt-text";
 
 type PosPrinterStatus =
   | "unsupported"
@@ -77,6 +78,7 @@ type PosPrinterContextValue = {
   connectBluetooth: () => Promise<boolean>;
   disconnect: () => Promise<void>;
   printSale: (sale: SaleDetailDTO, context?: ReceiptContext) => Promise<void>;
+  printKot: (kot: KotDTO, context?: KotPrintContext) => Promise<void>;
   needsBluetoothReconnectTap: boolean;
 };
 
@@ -459,14 +461,11 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
     setStatus(idleStatus);
   }, [disconnectDevice, idleStatus]);
 
-  const printSale = useCallback(async (sale: SaleDetailDTO, context?: ReceiptContext) => {
+  const printBytes = useCallback(async (payload: Uint8Array) => {
     const device = usbDeviceRef.current;
     const endpoint = usbEndpointRef.current;
     const port = serialPortRef.current;
     const bluetoothCharacteristic = bluetoothCharacteristicRef.current;
-    const payload = buildEscPosPayload(sale, context, {
-      width: getReceiptPaperWidth(paperSize),
-    });
 
     if (bluetoothCharacteristic) {
       setStatus("printing");
@@ -529,7 +528,23 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
       }
       throw new Error(message);
     }
-  }, [disconnectDevice, markBluetoothWaiting, paperSize]);
+  }, [disconnectDevice, markBluetoothWaiting]);
+
+  const printSale = useCallback(async (sale: SaleDetailDTO, context?: ReceiptContext) => {
+    await printBytes(
+      buildEscPosPayload(sale, context, {
+        width: getReceiptPaperWidth(paperSize),
+      }),
+    );
+  }, [paperSize, printBytes]);
+
+  const printKot = useCallback(async (kot: KotDTO, context?: KotPrintContext) => {
+    await printBytes(
+      buildKotEscPosPayload(kot, context, {
+        width: getReceiptPaperWidth(paperSize),
+      }),
+    );
+  }, [paperSize, printBytes]);
 
   useEffect(() => {
     if (!usb && !serial && !bluetooth) {
@@ -679,6 +694,7 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
       connectBluetooth,
       disconnect,
       printSale,
+      printKot,
       needsBluetoothReconnectTap:
         Boolean(printerName) &&
         transport === "bluetooth" &&
@@ -696,6 +712,7 @@ export const PosPrinterProvider = ({ children }: { children: ReactNode }) => {
       error,
       paperSize,
       printerName,
+      printKot,
       printSale,
       serial,
       setPaperSize,

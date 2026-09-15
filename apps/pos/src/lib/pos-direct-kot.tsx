@@ -17,6 +17,17 @@ export const isDirectGenerateKotVisible = ({
 }) =>
   isDeviceMode && kotSystemEnabled && !hasActiveTableOrder && !isReplacingSale;
 
+export const kotsToPrintAfterDirectGeneration = ({
+  standaloneKots,
+  previouslyKnownKotIds,
+}: {
+  standaloneKots: KotDTO[] | undefined;
+  previouslyKnownKotIds: string[];
+}) => {
+  const previousIds = new Set(previouslyKnownKotIds);
+  return (standaloneKots ?? []).filter((kot) => !previousIds.has(kot.id));
+};
+
 export const isKotBackedDirectDraft = (sale: SaleDetailDTO) =>
   (sale.standaloneKots?.length ?? 0) > 0 || (sale.kotNumbers?.length ?? 0) > 0;
 

@@ -1,10 +1,14 @@
-import type { SaleDetailDTO } from "@repo/types";
+import type { KotDTO, SaleDetailDTO } from "@repo/types";
 
 import {
+  buildKotText,
   buildReceiptText,
   countWrappedReceiptLines,
+  KITCHEN_KOT_TITLE,
+  KOT_NO_RECEIPT_PREFIX,
   RECEIPT_WIDTH,
   TOKEN_NO_RECEIPT_PREFIX,
+  type KotPrintContext,
   type ReceiptContext,
 } from "@/lib/receipt-text";
 
@@ -306,6 +310,41 @@ export const build80mmEscPosPayload = (
   sale: SaleDetailDTO,
   context?: ReceiptContext,
 ) => buildEscPosPayload(sale, context, { width: RECEIPT_WIDTH });
+
+export const buildKotEscPosPayload = (
+  kot: KotDTO,
+  context?: KotPrintContext,
+  options?: { width?: number },
+) => {
+  const paperWidth = options?.width ?? RECEIPT_WIDTH;
+  const ticketLines = buildKotText(kot, context, {
+    doubleWidthEmphasis: true,
+    width: paperWidth,
+  })
+    .split("\n")
+    .flatMap((line) => wrapLine(line, paperWidth));
+  const body = ticketLines
+    .map((line) => {
+      const isTitleLine = line.includes(KITCHEN_KOT_TITLE);
+      const isKotNoLine = line.includes(KOT_NO_RECEIPT_PREFIX);
+      if (isTitleLine || isKotNoLine) {
+        return concatBytes(
+          bytes(esc.alignCenter, esc.boldOn, esc.doubleSizeOn),
+          encoder.encode(toPrinterText(`${line.trim()}\n`)),
+          bytes(esc.doubleSizeOff, esc.boldOff, esc.alignCenter),
+        );
+      }
+
+      return encoder.encode(toPrinterText(`${line.padEnd(paperWidth)}\n`));
+    })
+    .reduce((output, line) => concatBytes(output, line), new Uint8Array());
+
+  return concatBytes(
+    bytes(esc.init, esc.fontA, esc.alignCenter),
+    body,
+    bytes(esc.feed(), esc.cut),
+  );
+};
 
 const findBulkOutEndpoint = async (device: UsbDevice) => {
   if (!device.configuration) {
