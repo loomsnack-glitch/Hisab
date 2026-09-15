@@ -113,13 +113,13 @@ export const SalesPaymentMethodsQuerySchema = z.preprocess((value) => {
 }, z.array(PaymentMethodSchema).optional());
 
 export type SerializedSalesListQueryParams<
-  T extends { paymentMethods?: readonly string[] },
+  T extends { paymentMethods?: readonly string[] | string },
 > = Omit<T, "paymentMethods"> & {
   paymentMethods?: string;
 };
 
 export const serializeSalesListQueryParams = <
-  T extends { paymentMethods?: readonly string[] },
+  T extends { paymentMethods?: readonly string[] | string },
 >(
   query?: T,
 ): SerializedSalesListQueryParams<T> | undefined => {
@@ -128,10 +128,14 @@ export const serializeSalesListQueryParams = <
   }
 
   const { paymentMethods, ...queryWithoutPaymentMethods } = query;
+  const serializedPaymentMethods =
+    typeof paymentMethods === "string"
+      ? paymentMethods
+      : paymentMethods?.join(",");
 
   return {
     ...queryWithoutPaymentMethods,
-    ...(paymentMethods ? { paymentMethods: paymentMethods.join(",") } : {}),
+    ...(serializedPaymentMethods ? { paymentMethods: serializedPaymentMethods } : {}),
   };
 };
 export const CustomerLedgerEntryTypeSchema = z.enum([

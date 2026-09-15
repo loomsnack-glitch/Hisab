@@ -529,6 +529,16 @@ describe("Configured sale billing contracts", () => {
         expect(parsed.paymentMethods).toBeUndefined();
     });
 
+    test("serialized payment method filters keep an already joined CSV string", () => {
+        const params = serializeSalesListQueryParams({
+            paymentMethods: "cash,upi",
+        });
+
+        expect(params).toEqual({
+            paymentMethods: "cash,upi",
+        });
+    });
+
     test("serialized payment method filters survive HTTP query encoding", () => {
         const params = serializeSalesListQueryParams({
             paymentMethods: ["cash", "upi"],
