@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getPosProductSalesSummary,
@@ -10,9 +10,13 @@ import type {
   ProductSalesSummaryQuery,
 } from "@repo/types";
 import {
+  aggregateProductSalesByCategory,
+  mergeProductSalesByProductId,
+  UNCATEGORIZED_CATEGORY_NAME,
+} from "@repo/types";
+import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
@@ -31,15 +35,17 @@ import {
   SelectValue,
 } from "@repo/ui/components/select";
 import { Spinner } from "@repo/ui/components/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import {
-  BarChart3,
   Calendar,
   ChevronLeft,
   ChevronRight,
   Package2,
+  Tags,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
+import SalesDistributionChart from "@/components/reports/sales-distribution-chart";
 import { billingKeys } from "@/lib/query-keys";
 
 type ReportDateMode = "date" | "range";
@@ -59,11 +65,14 @@ type ReportDateSelection = {
   customToDate: Date | null;
 };
 
+type ReportViewMode = "products" | "categories";
+
 type ProductSalesSummaryProps =
   | {
       mode: "admin";
       organizationId: string;
       stores: Array<{ id: string; name: string }>;
+      fixedStoreId?: string;
     }
   | {
       mode: "pos";
@@ -277,7 +286,7 @@ const ReportDateFilter = ({
       : value.preset === "all"
         ? "All dates"
         : value.customFromDate && value.customToDate
-          ? `${formatReportDate(value.customFromDate)} — ${formatReportDate(value.customToDate)}`
+          ? `${formatReportDate(value.customFromDate)} - ${formatReportDate(value.customToDate)}`
           : "Select date range";
 
   return (
@@ -426,6 +435,121 @@ const ReportDateFilter = ({
   );
 };
 
+type RankedSalesRow = {
+  id: string;
+  name: string;
+  detail: string;
+  quantitySold: number;
+};
+
+const productCountLabel = (count: number) =>
+  `${count} ${count === 1 ? "product" : "products"}`;
+
+const toRankedProductRows = (
+  products: ProductSalesSummaryDTO[],
+): RankedSalesRow[] =>
+  products.map((product) => ({
+    id: product.productId,
+    name: product.productName,
+    detail: product.categoryName ?? UNCATEGORIZED_CATEGORY_NAME,
+    quantitySold: product.quantitySold,
+  }));
+
+const toRankedCategoryRows = (
+  categories: ReturnType<typeof aggregateProductSalesByCategory>,
+): RankedSalesRow[] =>
+  categories.map((category) => ({
+    id: `category:${category.categoryName}`,
+    name: category.categoryName,
+    detail: productCountLabel(category.productCount),
+    quantitySold: category.quantitySold,
+  }));
+
+const SalesRankTable = ({
+  viewMode,
+  rows,
+  isPending,
+  isError,
+  errorMessage,
+}: {
+  viewMode: ReportViewMode;
+  rows: RankedSalesRow[];
+  isPending: boolean;
+  isError: boolean;
+  errorMessage: string;
+}) => {
+  const isCategoryView = viewMode === "categories";
+
+  if (isPending) {
+    return (
+      <div className="flex min-h-48 items-center justify-center">
+        <Spinner className="size-6 text-primary" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-5 text-sm text-destructive">{errorMessage}</div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
+        {isCategoryView ? (
+          <Tags className="size-8 text-muted-foreground/50" />
+        ) : (
+          <Package2 className="size-8 text-muted-foreground/50" />
+        )}
+        <p className="font-medium text-foreground">
+          {isCategoryView ? "No category sales" : "No product sales"}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Try another date or date range.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[28rem] text-sm" data-testid={`report-${viewMode}-table`}>
+        <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="w-16 px-4 py-3 font-medium sm:px-5">#</th>
+            <th className="px-4 py-3 font-medium sm:px-5">
+              {isCategoryView ? "Category" : "Product"}
+            </th>
+            <th className="px-4 py-3 font-medium sm:px-5">
+              {isCategoryView ? "Products" : "Category"}
+            </th>
+            <th className="px-4 py-3 text-right font-medium sm:px-5">Sold</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/50">
+          {rows.map((row, index) => (
+            <tr key={row.id} className="hover:bg-muted/20">
+              <td className="px-4 py-3 tabular-nums text-muted-foreground sm:px-5">
+                {index + 1}
+              </td>
+              <td className="px-4 py-3 font-medium text-foreground sm:px-5">
+                {row.name}
+              </td>
+              <td className="px-4 py-3 text-muted-foreground sm:px-5">
+                {row.detail}
+              </td>
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground sm:px-5">
+                {row.quantitySold}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
   const initialDate = useState(() => startOfLocalDay(new Date()))[0];
   const [dateSelection, setDateSelection] = useState<ReportDateSelection>(
@@ -437,7 +561,11 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
       customToDate: null,
     }),
   );
-  const [selectedStoreId, setSelectedStoreId] = useState("all");
+  const [viewMode, setViewMode] = useState<ReportViewMode>("products");
+  const lockedStoreId = props.mode === "admin" ? props.fixedStoreId : undefined;
+  const [selectedStoreId, setSelectedStoreId] = useState(
+    lockedStoreId ?? "all",
+  );
 
   const dateBounds = useMemo(
     () => getDateBounds(dateSelection),
@@ -449,14 +577,15 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
     }
 
     if (props.mode === "admin") {
+      const storeId = lockedStoreId ?? selectedStoreId;
       return {
         ...dateBounds,
-        ...(selectedStoreId !== "all" ? { storeId: selectedStoreId } : {}),
+        ...(storeId !== "all" ? { storeId } : {}),
       } satisfies ProductSalesSummaryAdminQuery;
     }
 
     return dateBounds;
-  }, [dateBounds, props.mode, selectedStoreId]);
+  }, [dateBounds, lockedStoreId, props.mode, selectedStoreId]);
 
   const productSalesQuery = useQuery({
     queryKey:
@@ -486,44 +615,48 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
       (props.mode === "pos" || Boolean(props.organizationId)),
   });
 
-  const products = productSalesQuery.data ?? [];
-  const totalQuantitySold = products.reduce(
-    (total, product) => total + product.quantitySold,
-    0,
+  const products = useMemo(
+    () => mergeProductSalesByProductId(productSalesQuery.data ?? []),
+    [productSalesQuery.data],
+  );
+  const categories = useMemo(
+    () => aggregateProductSalesByCategory(products),
+    [products],
+  );
+  const productRows = useMemo(() => toRankedProductRows(products), [products]);
+  const categoryRows = useMemo(
+    () => toRankedCategoryRows(categories),
+    [categories],
   );
   const selectedStoreName =
     props.mode === "admin"
-      ? selectedStoreId === "all"
-        ? "All stores"
-        : props.stores.find((store) => store.id === selectedStoreId)?.name ??
-          "Choose store"
+      ? lockedStoreId
+        ? props.stores.find((store) => store.id === lockedStoreId)?.name ??
+          "This store"
+        : selectedStoreId === "all"
+          ? "All stores"
+          : props.stores.find((store) => store.id === selectedStoreId)?.name ??
+            "Choose store"
       : props.storeName;
+  const showStoreFilter = props.mode === "admin" && !lockedStoreId;
+  const errorMessage =
+    (productSalesQuery.error as Error | undefined)?.message ||
+    "Sales could not be loaded.";
 
   return (
     <div className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-primary">
-            <BarChart3 className="size-5" />
-            <p className="text-xs font-bold uppercase tracking-[0.18em]">
-              Reports
-            </p>
-          </div>
-          <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Product sales
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            Reports
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            See how many units of each product were sold for the selected date.
+            Ranked by units sold for the selected dates.
           </p>
-          {props.mode === "pos" ? (
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Store: {selectedStoreName}
-            </p>
-          ) : null}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <ReportDateFilter value={dateSelection} onChange={setDateSelection} />
-          {props.mode === "admin" ? (
+          {showStoreFilter ? (
             <label className="flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
               <span className="sr-only">Store filter</span>
               <Select
@@ -549,141 +682,75 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:gap-5">
-        <Card className="min-w-0 rounded-2xl border-border/60 bg-card shadow-sm">
-          <CardContent className="flex min-h-[76px] min-w-0 items-center gap-2 p-3.5 sm:gap-3 sm:p-4">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:size-10">
-              <Package2 className="size-5" />
+      <Card className="overflow-hidden border-border/60 bg-card shadow-sm">
+        <Tabs
+          value={viewMode}
+          onValueChange={(value) => {
+            if (value === "products" || value === "categories") {
+              setViewMode(value);
+            }
+          }}
+          className="gap-0"
+        >
+          <CardHeader className="gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <TabsList
+                className="grid h-9 w-full grid-cols-2 sm:w-auto"
+                data-testid="report-view-mode"
+              >
+                <TabsTrigger
+                  value="products"
+                  data-testid="report-view-products"
+                >
+                  Products
+                </TabsTrigger>
+                <TabsTrigger
+                  value="categories"
+                  data-testid="report-view-categories"
+                >
+                  Categories
+                </TabsTrigger>
+              </TabsList>
+              {productSalesQuery.isFetching ? (
+                <Spinner className="size-4 text-primary" />
+              ) : null}
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-                Products sold
-              </p>
-              <p className="text-lg font-semibold text-foreground sm:text-xl">
-                {products.length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0 rounded-2xl border-border/60 bg-card shadow-sm">
-          <CardContent className="flex min-h-[76px] min-w-0 items-center gap-2 p-3.5 sm:gap-3 sm:p-4">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 sm:size-10">
-              <BarChart3 className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">
-                Total units sold
-              </p>
-              <p className="text-lg font-semibold text-foreground sm:text-xl">
-                {totalQuantitySold}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
-        <CardHeader className="border-b border-border/60 px-4 py-3 sm:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Products sold</CardTitle>
-              <CardDescription className="mt-0.5">
-                Sorted by quantity sold, highest first.
-              </CardDescription>
-            </div>
-            {productSalesQuery.isFetching ? (
-              <Spinner className="size-4 text-primary" />
+            <CardTitle className="text-base">
+              {viewMode === "categories" ? "Category sales" : "Product sales"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!productSalesQuery.isPending &&
+            !productSalesQuery.isError &&
+            (viewMode === "categories" ? categoryRows : productRows)
+              .length > 0 ? (
+              <SalesDistributionChart
+                viewMode={viewMode}
+                rows={
+                  viewMode === "categories" ? categoryRows : productRows
+                }
+              />
             ) : null}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {productSalesQuery.isPending ? (
-            <div className="flex min-h-40 items-center justify-center">
-              <Spinner className="size-6 text-primary" />
-            </div>
-          ) : productSalesQuery.isError ? (
-            <div className="p-5 text-sm text-destructive">
-              {(productSalesQuery.error as Error).message ||
-                "Product sales could not be loaded."}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 p-5 text-center">
-              <Package2 className="size-8 text-muted-foreground/50" />
-              <p className="font-medium text-foreground">
-                No product sales found
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Try another date or date range.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="w-16 px-5 py-3 font-medium">#</th>
-                      <th className="px-5 py-3 font-medium">Product</th>
-                      <th className="px-5 py-3 font-medium">Category</th>
-                      <th className="px-5 py-3 text-right font-medium">
-                        Quantity sold
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {products.map((product, index) => (
-                      <tr key={product.productId} className="hover:bg-muted/20">
-                        <td className="px-5 py-3 text-muted-foreground">
-                          {index + 1}
-                        </td>
-                        <td className="px-5 py-3 font-medium text-foreground">
-                          {product.productName}
-                        </td>
-                        <td className="px-5 py-3 text-muted-foreground">
-                          {product.categoryName ?? "Uncategorized"}
-                        </td>
-                        <td className="px-5 py-3 text-right font-semibold text-foreground">
-                          {product.quantitySold}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="grid gap-2 p-3 sm:hidden">
-                {products.map((product, index) => (
-                  <div
-                    key={product.productId}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 p-3"
-                  >
-                    <div className="min-w-0 flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {product.productName}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {product.categoryName ?? "Uncategorized"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-base font-semibold text-foreground">
-                        {product.quantitySold}
-                      </p>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        sold
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </CardContent>
+            <TabsContent value="products" className="mt-0">
+              <SalesRankTable
+                viewMode="products"
+                rows={productRows}
+                isPending={productSalesQuery.isPending}
+                isError={productSalesQuery.isError}
+                errorMessage={errorMessage}
+              />
+            </TabsContent>
+            <TabsContent value="categories" className="mt-0">
+              <SalesRankTable
+                viewMode="categories"
+                rows={categoryRows}
+                isPending={productSalesQuery.isPending}
+                isError={productSalesQuery.isError}
+                errorMessage={errorMessage}
+              />
+            </TabsContent>
+          </CardContent>
+        </Tabs>
       </Card>
     </div>
   );

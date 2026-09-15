@@ -23,6 +23,8 @@ describe("Store workspace page", () => {
         const appSource = readFileSync(join(import.meta.dir, "../App.tsx"), "utf8");
 
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId"');
+        expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/billing"');
+        expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/reports"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/products"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/categories"');
         expect(appSource).toContain('path="/organizations/:organizationId/workspaces/:storeId/vendors"');

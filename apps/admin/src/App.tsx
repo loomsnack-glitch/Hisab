@@ -56,6 +56,7 @@ import StoreWorkspaceSettingsPage, {
     StoreSettingsWhatsAppPage,
 } from "@/pages/store-workspace-settings-page";
 import StoreWorkspaceLicensePage from "@/pages/store-workspace-license-page";
+import StoreWorkspaceReportsPage from "@/pages/store-workspace-reports-page";
 import { authKeys, organizationKeys } from "@/lib/query-keys";
 import { useAuthActions, useAuthUser } from "@/store/auth.store";
 import WebAppHead from "@/components/web-app-head";
@@ -189,6 +190,7 @@ const App = () => {
                                 </Route>
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/license" element={<StoreWorkspaceLicensePage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/billing" element={<StoreWorkspaceBillingPage />} />
+                                <Route path="/organizations/:organizationId/workspaces/:storeId/reports" element={<StoreWorkspaceReportsPage />} />
                                 <Route path="/organizations/:organizationId/workspaces/:storeId/tables" element={<TablesPage />} />
                                 <Route path="/organizations/:organizationId/stores/:storeId" element={<StoreDetailShell />}>
                                     <Route index element={<StoreDetailIndexRedirect />} />

@@ -24,6 +24,7 @@ import {
   getStoreDevicesPath,
   getStoreLicensePath,
   getStoreProductsPath,
+  getStoreReportsPath,
   getStoreSettingsPath,
   getStoreTablesPath,
   getStoreVendorsPath,
@@ -192,8 +193,15 @@ const adminDestinationDefs: AdminNavDestinationDef[] = [
     icon: BarChart3,
     requiresOrganization: true,
     group: "reports",
-    getPath: (organizationId) => `/organizations/${organizationId}/reports`,
-    isActive: (pathname) => /\/organizations\/[^/]+\/reports/.test(pathname),
+    getPath: (organizationId, storeId) =>
+      storeId
+        ? getStoreReportsPath(organizationId, storeId)
+        : `/organizations/${organizationId}/reports`,
+    isActive: (pathname, storeId) =>
+      storeId
+        ? pathname.includes(`/workspaces/${storeId}/reports`)
+        : /\/organizations\/[^/]+\/reports/.test(pathname) &&
+          !pathname.includes("/workspaces/"),
   },
   {
     id: "money-accounts",
@@ -291,6 +299,7 @@ const storeWorkspaceDestinationIds = new Set([
   "license",
   "billing",
   "tables",
+  "reports",
   "products",
   "vendors",
   "appearance",

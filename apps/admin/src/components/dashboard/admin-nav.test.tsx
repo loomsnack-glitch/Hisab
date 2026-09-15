@@ -363,6 +363,21 @@ describe("Admin mobile navigation", () => {
     expect(tables?.isActive(`/organizations/${organizationId}/tables`)).toBe(
       false,
     );
+    const reports = getVisibleAdminWorkspaceDestinations(withStore).find(
+      (destination) => destination.id === "reports",
+    );
+    expect(reports?.path).toBe(
+      `/organizations/${organizationId}/workspaces/${storeId}/reports`,
+    );
+    expect(reports?.group).toBe("reports");
+    expect(
+      reports?.isActive(
+        `/organizations/${organizationId}/workspaces/${storeId}/reports`,
+      ),
+    ).toBe(true);
+    expect(reports?.isActive(`/organizations/${organizationId}/reports`)).toBe(
+      false,
+    );
     expect(storeDestinationIds).toEqual([
       "devices",
       "settings",
@@ -370,6 +385,7 @@ describe("Admin mobile navigation", () => {
       "products",
       "billing",
       "tables",
+      "reports",
       "vendors",
       "appearance",
     ]);
@@ -378,6 +394,7 @@ describe("Admin mobile navigation", () => {
     expect(sections.map((section) => section.label)).toEqual([
       "Catalog",
       "Store",
+      "Reports",
       "Finance",
       "Organization",
     ]);
@@ -389,6 +406,7 @@ describe("Admin mobile navigation", () => {
       "billing",
       "tables",
     ]);
+    expect(sections[2]?.items.map((item) => item.id)).toEqual(["reports"]);
   });
 
   test("hides Tables from the Store workspace sidebar when Table Management is off", () => {

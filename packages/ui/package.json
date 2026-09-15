@@ -35,6 +35,7 @@
     "react-resize-detector": "^12.3.0",
     "react-select": "^5.10.2",
     "react-textarea-autosize": "^8.5.9",
+    "recharts": "^3.10.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tlds": "^1.261.0",

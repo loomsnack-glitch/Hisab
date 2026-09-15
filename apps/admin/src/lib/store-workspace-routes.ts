@@ -37,6 +37,9 @@ export const getStoreLicensePath = (organizationId: string, storeId: string) =>
 export const getStoreBillingPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/billing`;
 
+export const getStoreReportsPath = (organizationId: string, storeId: string) =>
+    `${getStoreWorkspacePath(organizationId, storeId)}/reports`;
+
 export const getStoreTablesPath = (organizationId: string, storeId: string) =>
     `${getStoreWorkspacePath(organizationId, storeId)}/tables`;
 
