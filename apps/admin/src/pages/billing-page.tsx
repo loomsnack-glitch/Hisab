@@ -28,6 +28,7 @@ import {
     getProducts,
     getSale,
     getSales,
+    getStoreCategoryPresentations,
     getStoreProductOfferings,
     updatePosSettings,
     updatePosDraftSale,
@@ -480,6 +481,11 @@ const BillingPage = ({
         queryFn: () => getStoreProductOfferings(organizationId, selectedStoreId),
         enabled: !isDeviceMode && Boolean(organizationId && selectedStoreId),
     });
+    const storeCategoryPresentationsQuery = useQuery({
+        queryKey: catalogKeys.storeCategoryPresentations(organizationId, selectedStoreId),
+        queryFn: () => getStoreCategoryPresentations(organizationId, selectedStoreId),
+        enabled: !isDeviceMode && Boolean(organizationId && selectedStoreId),
+    });
 
     const posSettingsQuery = useQuery({
         queryKey: ["pos", "settings", session?.device.id],
@@ -603,6 +609,26 @@ const BillingPage = ({
         () => (categoriesQuery.data?.status === "success" ? (categoriesQuery.data.data?.categories ?? []) : []),
         [categoriesQuery.data],
     );
+    const storeCategoryPresentations = useMemo(
+        () =>
+            storeCategoryPresentationsQuery.data?.status === "success"
+                ? (storeCategoryPresentationsQuery.data.data?.presentations ?? [])
+                : [],
+        [storeCategoryPresentationsQuery.data],
+    );
+    const browseCategories = useMemo(() => {
+        if (isDeviceMode) {
+            return categories;
+        }
+        const hiddenCategoryIds = new Set(
+            storeCategoryPresentations
+                .filter((presentation) => !presentation.visible)
+                .map((presentation) => presentation.categoryId),
+        );
+        return categories.filter(
+            (category) => category.status !== "inactive" && !hiddenCategoryIds.has(category.id),
+        );
+    }, [categories, isDeviceMode, storeCategoryPresentations]);
     const catalogProducts = useMemo(
         () => (productsQuery.data?.status === "success" ? (productsQuery.data.data?.products ?? []) : []),
         [productsQuery.data],
@@ -796,9 +822,9 @@ const BillingPage = ({
         checkoutResolution.status === "blocked" || checkoutResolution.status === "looking_up";
     const customerSearchLooksLikePhone = /^[+\d\s()-]+$/.test(customerSearch);
 
-    const categoryOptions = [{ id: "all", name: "All" }, ...categories];
+    const categoryOptions = [{ id: "all", name: "All" }, ...browseCategories];
     const activeCategoryFilter =
-        categoryFilter !== "all" && !categories.some((category) => category.id === categoryFilter)
+        categoryFilter !== "all" && !browseCategories.some((category) => category.id === categoryFilter)
             ? "all"
             : categoryFilter;
     const filteredCustomers = customers.slice(0, customerPickerOpen ? 40 : 8);
@@ -923,9 +949,17 @@ const BillingPage = ({
 
     const activeProducts = products.filter((product) => product.status === "active");
     const filteredProducts = activeProducts.filter((product) => {
+        const category = categories.find((candidate) => candidate.id === product.categoryId);
+        const matchesOrganizationCategory = category?.status !== "inactive";
+        const matchesStoreCategory = isDeviceMode
+            ? categories.length === 0
+              || categories.some((candidate) => candidate.id === product.categoryId)
+            : !storeCategoryPresentations.some(
+                (presentation) => presentation.categoryId === product.categoryId && !presentation.visible,
+            );
         const matchesCategory = activeCategoryFilter === "all" || product.categoryId === activeCategoryFilter;
         const matchesSearch = !deferredProductSearch || product.name.toLowerCase().includes(deferredProductSearch);
-        return matchesCategory && matchesSearch;
+        return matchesOrganizationCategory && matchesStoreCategory && matchesCategory && matchesSearch;
     });
     const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
 

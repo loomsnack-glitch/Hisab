@@ -4,7 +4,7 @@ import { Input } from "@repo/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/components/popover";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@repo/ui/components/sheet";
 import { cn } from "@repo/ui/lib/utils";
-import { Building2, Check, CircleCheck, Filter, Search, X } from "lucide-react";
+import { Building2, Check, CircleCheck, Filter, Search, Tags, X } from "lucide-react";
 
 import { CATALOG_STATUSES, type CatalogStatusFilter } from "@/lib/catalog-query-states";
 
@@ -21,6 +21,16 @@ type CatalogStatusFilterOptionsProps = {
     variant?: "popover" | "sheet";
 };
 
+const statusFilterIcon = (title: string) => {
+    if (title === "Org status" || title === "Org category") {
+        return Building2;
+    }
+    if (title.toLowerCase().includes("category")) {
+        return Tags;
+    }
+    return CircleCheck;
+};
+
 const CatalogStatusFilterOptions = ({
     title,
     selectedValues,
@@ -29,6 +39,7 @@ const CatalogStatusFilterOptions = ({
     variant = "popover",
 }: CatalogStatusFilterOptionsProps) => {
     const isSheet = variant === "sheet";
+    const Icon = statusFilterIcon(title);
 
     return (
         <div className={cn("space-y-1", isSheet && "space-y-2")}>
@@ -36,16 +47,10 @@ const CatalogStatusFilterOptions = ({
                 <div className="flex min-w-0 items-center gap-2">
                     {isSheet ? (
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            {title === "Org status" ? (
-                                <Building2 className="size-4" />
-                            ) : (
-                                <CircleCheck className="size-4" />
-                            )}
+                            <Icon className="size-4" />
                         </span>
-                    ) : title === "Org status" ? (
-                        <Building2 className="size-3.5 shrink-0 text-muted-foreground/70" />
                     ) : (
-                        <CircleCheck className="size-3.5 shrink-0 text-muted-foreground/70" />
+                        <Icon className="size-3.5 shrink-0 text-muted-foreground/70" />
                     )}
                     <p
                         className={cn(
@@ -110,7 +115,9 @@ type StatusFilterButtonProps = {
     onClear: () => void;
 };
 
-const StatusFilterButton = ({ label, selectedValues, onChange, onClear }: StatusFilterButtonProps) => (
+const StatusFilterButton = ({ label, selectedValues, onChange, onClear }: StatusFilterButtonProps) => {
+    const Icon = statusFilterIcon(label);
+    return (
     <Popover>
         <PopoverTrigger
             render={
@@ -123,21 +130,12 @@ const StatusFilterButton = ({ label, selectedValues, onChange, onClear }: Status
                             : "text-muted-foreground",
                     )}
                 >
-                    {label === "Org status" ? (
-                        <Building2
-                            className={cn(
-                                "size-3.5 transition-colors",
-                                selectedValues.length > 0 ? "text-primary stroke-[2.5]" : "text-muted-foreground/70",
-                            )}
-                        />
-                    ) : (
-                        <CircleCheck
-                            className={cn(
-                                "size-3.5 transition-colors",
-                                selectedValues.length > 0 ? "text-primary stroke-[2.5]" : "text-muted-foreground/70",
-                            )}
-                        />
-                    )}
+                    <Icon
+                        className={cn(
+                            "size-3.5 transition-colors",
+                            selectedValues.length > 0 ? "text-primary stroke-[2.5]" : "text-muted-foreground/70",
+                        )}
+                    />
                     <span>{label}</span>
                     {selectedValues.length > 0 ? (
                         <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground animate-in zoom-in duration-200">
@@ -156,7 +154,15 @@ const StatusFilterButton = ({ label, selectedValues, onChange, onClear }: Status
             />
         </PopoverContent>
     </Popover>
-);
+    );
+};
+
+type CatalogStatusFilterGroup = {
+    label: string;
+    selectedValues: readonly string[];
+    onToggle: (value: string) => void;
+    onSet: (statuses: CatalogStatusFilter[]) => void;
+};
 
 type CatalogStatusFilterBarProps = {
     searchPlaceholder: string;
@@ -169,6 +175,7 @@ type CatalogStatusFilterBarProps = {
     orgStatusFilters?: readonly string[];
     onToggleOrgStatus?: (value: string) => void;
     onSetOrgStatuses?: (statuses: CatalogStatusFilter[]) => void;
+    extraFilterGroups?: CatalogStatusFilterGroup[];
     filterAriaLabel: string;
     mobileSheetTitle: string;
     children?: React.ReactNode;
@@ -185,6 +192,7 @@ const CatalogStatusFilterBar = ({
     orgStatusFilters,
     onToggleOrgStatus,
     onSetOrgStatuses,
+    extraFilterGroups = [],
     filterAriaLabel,
     mobileSheetTitle,
     children,
@@ -192,8 +200,12 @@ const CatalogStatusFilterBar = ({
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
     const [draftOrgStatusFilters, setDraftOrgStatusFilters] = useState<string[]>([]);
+    const [draftExtraFilters, setDraftExtraFilters] = useState<string[][]>([]);
     const showOrgStatus = orgStatusFilters != null && onToggleOrgStatus != null && onSetOrgStatuses != null;
-    const selectedFilterCount = statusFilters.length + (showOrgStatus ? orgStatusFilters.length : 0);
+    const selectedFilterCount =
+        statusFilters.length +
+        (showOrgStatus ? orgStatusFilters.length : 0) +
+        extraFilterGroups.reduce((total, group) => total + group.selectedValues.length, 0);
     const hasSelectedFilters = selectedFilterCount > 0;
 
     const handleMobileFiltersOpenChange = (open: boolean) => {
@@ -202,6 +214,7 @@ const CatalogStatusFilterBar = ({
             if (showOrgStatus) {
                 setDraftOrgStatusFilters([...orgStatusFilters]);
             }
+            setDraftExtraFilters(extraFilterGroups.map((group) => [...group.selectedValues]));
         }
         setMobileFiltersOpen(open);
     };
@@ -218,9 +231,23 @@ const CatalogStatusFilterBar = ({
         );
     };
 
+    const toggleDraftExtraFilter = (index: number, value: string) => {
+        setDraftExtraFilters((previous) =>
+            previous.map((selected, selectedIndex) => {
+                if (selectedIndex !== index) {
+                    return selected;
+                }
+                return selected.includes(value)
+                    ? selected.filter((item) => item !== value)
+                    : [...selected, value];
+            }),
+        );
+    };
+
     const clearAllFilters = () => {
         onSetStatuses([]);
         onSetOrgStatuses?.([]);
+        extraFilterGroups.forEach((group) => group.onSet([]));
     };
 
     return (
@@ -284,6 +311,16 @@ const CatalogStatusFilterBar = ({
                         />
                     ) : null}
 
+                    {extraFilterGroups.map((group) => (
+                        <StatusFilterButton
+                            key={group.label}
+                            label={group.label}
+                            selectedValues={group.selectedValues}
+                            onChange={group.onToggle}
+                            onClear={() => group.onSet([])}
+                        />
+                    ))}
+
                     {hasSelectedFilters ? (
                         <Button
                             variant="ghost"
@@ -307,12 +344,15 @@ const CatalogStatusFilterBar = ({
                     <SheetHeader className="shrink-0 space-y-0 px-6 pb-4 pt-0 pr-14 text-left">
                         <div className="flex items-center justify-between gap-3">
                             <SheetTitle className="text-lg">{mobileSheetTitle}</SheetTitle>
-                            {draftStatusFilters.length > 0 || (showOrgStatus && draftOrgStatusFilters.length > 0) ? (
+                            {draftStatusFilters.length > 0
+                            || (showOrgStatus && draftOrgStatusFilters.length > 0)
+                            || draftExtraFilters.some((selected) => selected.length > 0) ? (
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setDraftStatusFilters([]);
                                         setDraftOrgStatusFilters([]);
+                                        setDraftExtraFilters(extraFilterGroups.map(() => []));
                                     }}
                                     className="shrink-0 text-sm font-semibold text-primary hover:underline"
                                 >
@@ -341,6 +381,22 @@ const CatalogStatusFilterBar = ({
                                 onClear={() => setDraftOrgStatusFilters([])}
                             />
                         ) : null}
+                        {extraFilterGroups.map((group, index) => (
+                            <CatalogStatusFilterOptions
+                                key={group.label}
+                                title={group.label}
+                                variant="sheet"
+                                selectedValues={draftExtraFilters[index] ?? []}
+                                onChange={(value) => toggleDraftExtraFilter(index, value)}
+                                onClear={() =>
+                                    setDraftExtraFilters((previous) =>
+                                        previous.map((selected, selectedIndex) =>
+                                            selectedIndex === index ? [] : selected,
+                                        ),
+                                    )
+                                }
+                            />
+                        ))}
                     </div>
 
                     <SheetFooter className="shrink-0 border-t border-border/50 px-6 py-4">
@@ -351,6 +407,9 @@ const CatalogStatusFilterBar = ({
                                 if (showOrgStatus) {
                                     onSetOrgStatuses(draftOrgStatusFilters as CatalogStatusFilter[]);
                                 }
+                                extraFilterGroups.forEach((group, index) => {
+                                    group.onSet((draftExtraFilters[index] ?? []) as CatalogStatusFilter[]);
+                                });
                                 setMobileFiltersOpen(false);
                             }}
                             className="w-full rounded-xl"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryStates } from "nuqs";
@@ -6,6 +6,7 @@ import {
     getCategories,
     getOrganizationDetails,
     getStore,
+    getStoreCategoryPresentations,
     getStoreCommercialStatus,
     getStoreProductOfferings,
 } from "@repo/services";
@@ -29,10 +30,13 @@ import ProductTypeBadge from "@/components/catalog/product-type-badge";
 import UpsertStoreProductOfferingDialog from "@/components/catalog/upsert-store-product-offering-dialog";
 import StoreCatalogTabs from "@/components/catalog/store-catalog-tabs";
 import CatalogStatusFilterBar from "@/components/catalog/catalog-status-filter-bar";
+import CatalogCategoryFilterPills from "@/components/catalog/catalog-category-filter-pills";
 import {
     catalogFilterUrlOptions,
-    storeCatalogListFilterParsers,
+    catalogStatusFilterAllows,
+    storeProductListFilterParsers,
     toggleCatalogStatusFilter,
+    type CatalogStatusFilter,
 } from "@/lib/catalog-query-states";
 import { catalogKeys, commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
 import { useDebouncedUrlSearch } from "@/lib/use-debounced-url-search";
@@ -47,8 +51,14 @@ const EMPTY_CATALOG_ITEMS: never[] = [];
 
 const StoreProductOfferingsPage = () => {
     const { organizationId = "", storeId = "" } = useParams();
-    const [{ search: searchQuery, statuses: statusFilters, orgStatuses: orgStatusFilters }, setFilters] = useQueryStates(
-        storeCatalogListFilterParsers,
+    const [{
+        search: searchQuery,
+        statuses: statusFilters,
+        orgStatuses: orgStatusFilters,
+        categoryStatuses,
+        orgCategoryStatuses,
+    }, setFilters] = useQueryStates(
+        storeProductListFilterParsers,
         catalogFilterUrlOptions,
     );
     const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
@@ -70,6 +80,11 @@ const StoreProductOfferingsPage = () => {
         queryFn: () => getCategories(organizationId),
         enabled: Boolean(organizationId),
     });
+    const presentationsQuery = useQuery({
+        queryKey: catalogKeys.storeCategoryPresentations(organizationId, storeId),
+        queryFn: () => getStoreCategoryPresentations(organizationId, storeId),
+        enabled: Boolean(organizationId && storeId),
+    });
     const offeringsQuery = useQuery({
         queryKey: catalogKeys.storeProductOfferings(organizationId, storeId),
         queryFn: () => getStoreProductOfferings(organizationId, storeId),
@@ -90,6 +105,10 @@ const StoreProductOfferingsPage = () => {
         categoriesQuery.data?.status === "success"
             ? categoriesQuery.data.data?.categories ?? EMPTY_CATALOG_ITEMS
             : EMPTY_CATALOG_ITEMS;
+    const presentations =
+        presentationsQuery.data?.status === "success"
+            ? presentationsQuery.data.data?.presentations ?? []
+            : [];
     const offerings =
         offeringsQuery.data?.status === "success" ? offeringsQuery.data.data?.offerings ?? [] : [];
     const commercialStatus = commercialStatusQuery.data?.status === "success"
@@ -103,18 +122,56 @@ const StoreProductOfferingsPage = () => {
         () => new Map(categories.map((category) => [category.id, category])),
         [categories],
     );
-    const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const presentationByCategoryId = useMemo(
+        () => new Map(presentations.map((presentation) => [presentation.categoryId, presentation])),
+        [presentations],
+    );
+    const storeCategoryStatus = (categoryId: string): CatalogStatusFilter =>
+        presentationByCategoryId.get(categoryId)?.visible === false ? "inactive" : "active";
+
+    const categoryPills = useMemo(
+        () =>
+            categories.flatMap((category) => {
+                const localStatus = storeCategoryStatus(category.id);
+                if (!catalogStatusFilterAllows(localStatus, categoryStatuses)) {
+                    return [];
+                }
+                if (!catalogStatusFilterAllows(category.status, orgCategoryStatuses)) {
+                    return [];
+                }
+                return [{
+                    id: category.id,
+                    name: category.name,
+                    inactive: localStatus === "inactive" || category.status === "inactive",
+                    sortOrder: presentationByCategoryId.get(category.id)?.sortOrder ?? category.sortOrder,
+                }];
+            }).sort((left, right) => left.sortOrder - right.sortOrder),
+        [categories, categoryStatuses, orgCategoryStatuses, presentationByCategoryId],
+    );
 
     useEffect(() => {
-        const el = categoryPillRefs.current[selectedCategoryFilter];
-        if (el) {
-            el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        if (selectedCategoryFilter === "all") {
+            return;
         }
-    }, [selectedCategoryFilter]);
+        if (!categoryPills.some((category) => category.id === selectedCategoryFilter)) {
+            setSelectedCategoryFilter("all");
+        }
+    }, [categoryPills, selectedCategoryFilter]);
 
     const filteredOfferings = useMemo(() => {
         return offerings.filter((offering) => {
             if (selectedCategoryFilter !== "all" && offering.product.categoryId !== selectedCategoryFilter) {
+                return false;
+            }
+            const category = categoryMap.get(offering.product.categoryId);
+            const localCategoryStatus =
+                presentationByCategoryId.get(offering.product.categoryId)?.visible === false
+                    ? "inactive"
+                    : "active";
+            if (!catalogStatusFilterAllows(localCategoryStatus, categoryStatuses)) {
+                return false;
+            }
+            if (!catalogStatusFilterAllows(category?.status ?? "active", orgCategoryStatuses)) {
                 return false;
             }
             if (statusFilters.length > 0 && !statusFilters.includes(offering.status)) {
@@ -126,12 +183,22 @@ const StoreProductOfferingsPage = () => {
             if (searchQuery.trim()) {
                 const query = searchQuery.toLowerCase().trim();
                 const productName = offering.product.name.toLowerCase();
-                const categoryName = categoryMap.get(offering.product.categoryId)?.name.toLowerCase() ?? "";
+                const categoryName = category?.name.toLowerCase() ?? "";
                 return productName.includes(query) || categoryName.includes(query);
             }
             return true;
         });
-    }, [offerings, selectedCategoryFilter, statusFilters, orgStatusFilters, searchQuery, categoryMap]);
+    }, [
+        offerings,
+        selectedCategoryFilter,
+        statusFilters,
+        orgStatusFilters,
+        categoryStatuses,
+        orgCategoryStatuses,
+        searchQuery,
+        categoryMap,
+        presentationByCategoryId,
+    ]);
 
     const toggleStatusFilter = (value: string) => {
         void setFilters((current) => ({
@@ -145,13 +212,36 @@ const StoreProductOfferingsPage = () => {
         }));
     };
 
+    const toggleCategoryStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            categoryStatuses: toggleCatalogStatusFilter(current.categoryStatuses, value),
+        }));
+    };
+
+    const toggleOrgCategoryStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            orgCategoryStatuses: toggleCatalogStatusFilter(current.orgCategoryStatuses, value),
+        }));
+    };
+
     const resetFilters = () => {
         clearSearch();
         setSelectedCategoryFilter("all");
-        void setFilters({ statuses: [], orgStatuses: [] });
+        void setFilters({
+            statuses: [],
+            orgStatuses: [],
+            categoryStatuses: [],
+            orgCategoryStatuses: [],
+        });
     };
 
-    if (organizationQuery.isPending || storeQuery.isPending || categoriesQuery.isPending || offeringsQuery.isPending) {
+    if (
+        organizationQuery.isPending
+        || storeQuery.isPending
+        || categoriesQuery.isPending
+        || presentationsQuery.isPending
+        || offeringsQuery.isPending
+    ) {
         return (
             <div className="flex min-h-[40vh] items-center justify-center">
                 <Spinner className="size-6 text-primary" />
@@ -242,6 +332,7 @@ const StoreProductOfferingsPage = () => {
                         <EmptyContent>
                             <Button variant="outline" className="rounded-full" onClick={() => {
                                 categoriesQuery.refetch();
+                                presentationsQuery.refetch();
                                 offeringsQuery.refetch();
                             }}>
                                 Try again
@@ -269,43 +360,31 @@ const StoreProductOfferingsPage = () => {
                 orgStatusFilters={orgStatusFilters}
                 onToggleOrgStatus={toggleOrgStatusFilter}
                 onSetOrgStatuses={(orgStatuses) => void setFilters({ orgStatuses })}
+                extraFilterGroups={[
+                    {
+                        label: "Category",
+                        selectedValues: categoryStatuses,
+                        onToggle: toggleCategoryStatusFilter,
+                        onSet: (statuses) => void setFilters({ categoryStatuses: statuses }),
+                    },
+                    {
+                        label: "Org category",
+                        selectedValues: orgCategoryStatuses,
+                        onToggle: toggleOrgCategoryStatusFilter,
+                        onSet: (statuses) => void setFilters({ orgCategoryStatuses: statuses }),
+                    },
+                ]}
                 filterAriaLabel="Filter products"
                 mobileSheetTitle="Filter products"
             />
 
-            {categories.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto py-0 scrollbar-none">
-                    <Button
-                        ref={(el) => { categoryPillRefs.current["all"] = el; }}
-                        variant={selectedCategoryFilter === "all" ? "default" : "outline"}
-                        className={cn(
-                            "rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0",
-                            selectedCategoryFilter === "all"
-                                ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
-                                : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80",
-                        )}
-                        onClick={() => setSelectedCategoryFilter("all")}
-                    >
-                        All
-                    </Button>
-                    {categories.map((category) => (
-                        <Button
-                            key={category.id}
-                            ref={(el) => { categoryPillRefs.current[category.id] = el; }}
-                            variant={selectedCategoryFilter === category.id ? "default" : "outline"}
-                            className={cn(
-                                "rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0",
-                                selectedCategoryFilter === category.id
-                                    ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
-                                    : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80",
-                            )}
-                            onClick={() => setSelectedCategoryFilter(category.id)}
-                        >
-                            {category.name}
-                        </Button>
-                    ))}
-                </div>
-            )}
+            {categories.length > 0 ? (
+                <CatalogCategoryFilterPills
+                    categories={categoryPills}
+                    selectedCategoryId={selectedCategoryFilter}
+                    onSelect={setSelectedCategoryFilter}
+                />
+            ) : null}
 
             {offerings.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">

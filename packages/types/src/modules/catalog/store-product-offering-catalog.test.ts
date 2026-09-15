@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  catalogProductsInActiveOrganizationCategories,
+  catalogProductsInBrowseCategories,
   getStoreProductOfferingAvailability,
   inactiveProductCodesWithoutActiveOffering,
   isStoreProductOfferingPriceInherited,
@@ -105,5 +107,32 @@ describe("Store Product Offering catalog overlay", () => {
         },
       ]),
     ).toEqual([{ productCode: "CAKE-1", productName: "Cake" }]);
+  });
+
+  test("POS catalog omits products whose Organization Category is inactive", () => {
+    expect(
+      catalogProductsInActiveOrganizationCategories(
+        [
+          { id: burger.id, categoryId: "category-active" },
+          { id: cake.id, categoryId: "category-inactive" },
+        ],
+        [
+          { id: "category-active", status: "active" },
+          { id: "category-inactive", status: "inactive" },
+        ],
+      ),
+    ).toEqual([{ id: burger.id, categoryId: "category-active" }]);
+  });
+
+  test("POS All tab omits products whose Store Category is hidden", () => {
+    expect(
+      catalogProductsInBrowseCategories(
+        [
+          { id: burger.id, categoryId: "category-visible" },
+          { id: cake.id, categoryId: "category-hidden" },
+        ],
+        [{ id: "category-visible" }],
+      ),
+    ).toEqual([{ id: burger.id, categoryId: "category-visible" }]);
   });
 });

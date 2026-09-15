@@ -5,6 +5,7 @@ import {
 } from "@repo/types";
 import {
   catalogService,
+  category,
   categoryId,
   getActiveStoreCatalogProducts,
   getOrganizationByIdForUser,
@@ -14,6 +15,7 @@ import {
   getStoreProductOfferingOverrideSummary,
   getStoreProductOfferingsByStoreId,
   getStoresByOrganizationId,
+  getVisibleCategoriesForStore,
   organization,
   organizationId,
   product,
@@ -54,6 +56,8 @@ describe("Shared catalog inheritance end-to-end flow", () => {
       isDiscountInherited: data.discountOverride === null,
     }));
     getActiveStoreCatalogProducts.mockClear();
+    getVisibleCategoriesForStore.mockClear();
+    getVisibleCategoriesForStore.mockResolvedValue([category]);
     getStoreProductOfferingOverrideSummary.mockClear();
     getStoreAddOnOfferingOverrideSummary.mockClear();
     getStoreCategoryPresentationsByStoreId.mockClear();
@@ -134,7 +138,7 @@ describe("Shared catalog inheritance end-to-end flow", () => {
     expect(getActiveStoreCatalogProducts).toHaveBeenCalledWith(organizationId, vesuStore.id);
   });
 
-  test("Store Category presentation is scoped per Store and does not change Product sellability", async () => {
+  test("hiding a Store Category does not rewrite Product Offerings and omits those products from POS", async () => {
     getStoreCategoryPresentationsByStoreId.mockResolvedValue([
       {
         id: "11111111-1111-4111-8111-111111111111",
@@ -148,6 +152,7 @@ describe("Shared catalog inheritance end-to-end flow", () => {
         updatedAt: new Date("2026-07-12T12:00:00.000Z"),
       },
     ]);
+    getVisibleCategoriesForStore.mockResolvedValue([]);
     getActiveStoreCatalogProducts.mockResolvedValue([
       { ...product, price: product.price, discount: product.discount, status: "active" as const },
     ]);
@@ -164,7 +169,7 @@ describe("Shared catalog inheritance end-to-end flow", () => {
     } as never);
 
     expect(presentations.data?.presentations[0]?.visible).toBe(false);
-    expect(posProducts.data?.products[0]?.status).toBe("active");
+    expect(posProducts.data?.products).toEqual([]);
     expect(updateStoreProductOfferingRepo).not.toHaveBeenCalled();
   });
 

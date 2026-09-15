@@ -22,6 +22,17 @@ export const storeCatalogListFilterParsers = {
     orgStatuses: statusListParser.withDefault(["active"]),
 };
 
+export const organizationProductListFilterParsers = {
+    ...catalogListFilterParsers,
+    categoryStatuses: statusListParser.withDefault(["active"]),
+};
+
+export const storeProductListFilterParsers = {
+    ...storeCatalogListFilterParsers,
+    categoryStatuses: statusListParser.withDefault(["active"]),
+    orgCategoryStatuses: statusListParser.withDefault(["active"]),
+};
+
 export const toggleCatalogStatusFilter = (
     current: readonly CatalogStatusFilter[],
     value: string,
@@ -29,3 +40,8 @@ export const toggleCatalogStatusFilter = (
     const next = value as CatalogStatusFilter;
     return current.includes(next) ? current.filter((item) => item !== next) : [...current, next];
 };
+
+export const catalogStatusFilterAllows = (
+    status: CatalogStatusFilter,
+    filters: readonly CatalogStatusFilter[],
+) => filters.length === 0 || filters.includes(status);

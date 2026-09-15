@@ -420,6 +420,7 @@ export const getActiveProductsByOrganizationId = async (organizationId: string):
            AND c.organization_id = p.organization_id
         WHERE p.organization_id = ${organizationId}
           AND p.status = 'active'
+          AND c.status = 'active'
         ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 
@@ -2067,10 +2068,16 @@ export const getActiveStoreCatalogProducts = async (
         INNER JOIN categories c
             ON c.id = p.category_id
            AND c.organization_id = p.organization_id
+        INNER JOIN store_category_presentations scp
+            ON scp.category_id = c.id
+           AND scp.organization_id = c.organization_id
+           AND scp.store_id = o.store_id
         WHERE o.organization_id = ${organizationId}
           AND o.store_id = ${storeId}
           AND o.status = 'active'
           AND p.status = 'active'
+          AND c.status = 'active'
+          AND scp.visible = TRUE
         ORDER BY c.sort_order ASC, p.sort_order ASC, p.created_at ASC, p.id ASC
     `;
 

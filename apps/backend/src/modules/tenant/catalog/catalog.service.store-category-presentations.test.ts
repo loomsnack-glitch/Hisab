@@ -222,13 +222,15 @@ describe("Store Category Presentations", () => {
     expect(getCategoriesByOrganizationId).not.toHaveBeenCalled();
   });
 
-  test("hiding a Store Category does not remove active Product Offerings or barcode resolution", async () => {
+  test("hiding a Store Category omits its products from POS All and barcode resolution", async () => {
     getVisibleCategoriesForStore.mockResolvedValue([]);
-    getProductByCode.mockResolvedValue({
-      ...product,
-      productCode: "SCAN-1",
-      productCodeKind: "manufacturer" as const,
-    });
+    getProductsByOrganizationId.mockResolvedValue([
+      {
+        ...product,
+        productCode: "SCAN-1",
+        productCodeKind: "manufacturer" as const,
+      },
+    ]);
 
     const categoriesResponse = await catalogService.getCategoriesForDevice({
       organization: { id: organizationId },
@@ -242,10 +244,42 @@ describe("Store Category Presentations", () => {
     } as never);
 
     expect(categoriesResponse.data?.categories).toEqual([]);
-    expect(productsResponse.data?.products).toEqual([
-      expect.objectContaining({ id: productId, price: 80, discount: 5 }),
+    expect(productsResponse.data?.products).toEqual([]);
+    expect(productsResponse.data?.inactiveProductCodes).toEqual([
+      { productCode: "SCAN-1", productName: product.name },
     ]);
-    expect(getActiveStoreCatalogProducts).toHaveBeenCalledWith(organizationId, store.id);
+    expect(getVisibleCategoriesForStore).toHaveBeenCalledWith(organizationId, store.id);
+  });
+
+  test("POS discovery omits products whose Organization Category is inactive", async () => {
+    getVisibleCategoriesForStore.mockResolvedValue([]);
+    getCategoriesByOrganizationId.mockResolvedValue([
+      { ...category, status: "inactive" as const },
+    ]);
+    getProductsByOrganizationId.mockResolvedValue([
+      {
+        ...product,
+        productCode: "SCAN-1",
+        productCodeKind: "manufacturer" as const,
+      },
+    ]);
+
+    const categoriesResponse = await catalogService.getCategoriesForDevice({
+      organization: { id: organizationId },
+      store: { id: store.id },
+      device: { id: "device-1" },
+    } as never);
+    const productsResponse = await catalogService.getProductsForDevice({
+      organization: { id: organizationId },
+      store: { id: store.id },
+      device: { id: "device-1" },
+    } as never);
+
+    expect(categoriesResponse.data?.categories).toEqual([]);
+    expect(productsResponse.data?.products).toEqual([]);
+    expect(productsResponse.data?.inactiveProductCodes).toEqual([
+      { productCode: "SCAN-1", productName: product.name },
+    ]);
   });
 
   test("rejects Store Category Presentation updates for another Store", async () => {

@@ -60,6 +60,8 @@ export const catalogKeys = {
     [...catalogKeys.all, "label-templates", organizationId] as const,
   storeProductOfferings: (organizationId: string, storeId: string) =>
     [...catalogKeys.all, "store-product-offerings", organizationId, storeId] as const,
+  storeCategoryPresentations: (organizationId: string, storeId: string) =>
+    [...catalogKeys.all, "store-category-presentations", organizationId, storeId] as const,
 };
 
 export const billingKeys = {

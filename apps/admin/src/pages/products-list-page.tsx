@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useQueryStates } from "nuqs";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -33,18 +33,21 @@ import {
     Puzzle,
     RefreshCw,
     Search,
+    Tags,
     X,
 } from "lucide-react";
 
 import ProductStatusBadge from "@/components/catalog/product-status-badge";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
+import CatalogCategoryFilterPills from "@/components/catalog/catalog-category-filter-pills";
 import UpsertComboProductDialog from "@/components/catalog/upsert-combo-product-dialog";
 import UpsertProductDialog from "@/components/catalog/upsert-product-dialog";
 import ManageProductAddOnsDialog from "@/components/catalog/manage-product-add-ons-dialog";
 import InternalProductLabelDialog from "@/components/catalog/internal-product-label-dialog";
 import {
     catalogFilterUrlOptions,
-    catalogListFilterParsers,
+    catalogStatusFilterAllows,
+    organizationProductListFilterParsers,
     type CatalogStatusFilter,
 } from "@/lib/catalog-query-states";
 import { catalogKeys } from "@/lib/query-keys";
@@ -162,8 +165,8 @@ const ProductsListPage = () => {
     const { organizationId = "" } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
-    const [{ search: searchQuery, statuses: statusFilters }, setFilters] = useQueryStates(
-        catalogListFilterParsers,
+    const [{ search: searchQuery, statuses: statusFilters, categoryStatuses }, setFilters] = useQueryStates(
+        organizationProductListFilterParsers,
         catalogFilterUrlOptions,
     );
     const commitSearch = useCallback((search: string) => setFilters({ search }), [setFilters]);
@@ -177,6 +180,7 @@ const ProductsListPage = () => {
     const [linkingProductCode, setLinkingProductCode] = useState<string | null>(null);
     const [pendingLinkQueue, setPendingLinkQueue] = useState(() => listUnknownProductCodeQueue(organizationId));
     const [draftStatusFilters, setDraftStatusFilters] = useState<string[]>([]);
+    const [draftCategoryStatuses, setDraftCategoryStatuses] = useState<string[]>([]);
     const [draftAddOnsFilters, setDraftAddOnsFilters] = useState<string[]>([]);
     const categoriesQuery = useQuery({
         queryKey: catalogKeys.categories(organizationId),
@@ -219,14 +223,22 @@ const ProductsListPage = () => {
         setSearchParams(nextParams, { replace: true });
     }, [organizationId, searchParams, setSearchParams]);
 
-    const activeFilterCount = statusFilters.length + addOnsFilters.length;
-    const draftFilterCount = draftStatusFilters.length + draftAddOnsFilters.length;
+    const activeFilterCount = statusFilters.length + categoryStatuses.length + addOnsFilters.length;
+    const draftFilterCount = draftStatusFilters.length + draftCategoryStatuses.length + draftAddOnsFilters.length;
 
     const toggleStatusFilter = (value: string) => {
         void setFilters((current) => ({
             statuses: current.statuses.includes(value as CatalogStatusFilter)
                 ? current.statuses.filter((item) => item !== value)
                 : [...current.statuses, value as CatalogStatusFilter],
+        }));
+    };
+
+    const toggleCategoryStatusFilter = (value: string) => {
+        void setFilters((current) => ({
+            categoryStatuses: current.categoryStatuses.includes(value as CatalogStatusFilter)
+                ? current.categoryStatuses.filter((item) => item !== value)
+                : [...current.categoryStatuses, value as CatalogStatusFilter],
         }));
     };
 
@@ -242,6 +254,12 @@ const ProductsListPage = () => {
         );
     };
 
+    const toggleDraftCategoryStatusFilter = (value: string) => {
+        setDraftCategoryStatuses((prev) =>
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+        );
+    };
+
     const toggleDraftAddOnsFilter = (value: string) => {
         setDraftAddOnsFilters((prev) =>
             prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
@@ -249,25 +267,30 @@ const ProductsListPage = () => {
     };
 
     const clearAllFilters = () => {
-        void setFilters({ statuses: [] });
+        void setFilters({ statuses: [], categoryStatuses: [] });
         setAddOnsFilters([]);
     };
 
     const clearDraftFilters = () => {
         setDraftStatusFilters([]);
+        setDraftCategoryStatuses([]);
         setDraftAddOnsFilters([]);
     };
 
     const handleMobileFiltersOpenChange = (open: boolean) => {
         if (open) {
             setDraftStatusFilters(statusFilters);
+            setDraftCategoryStatuses(categoryStatuses);
             setDraftAddOnsFilters(addOnsFilters);
         }
         setMobileFiltersOpen(open);
     };
 
     const applyMobileFilters = () => {
-        void setFilters({ statuses: draftStatusFilters as CatalogStatusFilter[] });
+        void setFilters({
+            statuses: draftStatusFilters as CatalogStatusFilter[],
+            categoryStatuses: draftCategoryStatuses as CatalogStatusFilter[],
+        });
         setAddOnsFilters(draftAddOnsFilters);
         setMobileFiltersOpen(false);
     };
@@ -282,19 +305,37 @@ const ProductsListPage = () => {
         setAddComboDialogOpen(true);
     };
 
-    const categoryPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const categoryPills = useMemo(
+        () =>
+            categories.flatMap((category) => {
+                if (!catalogStatusFilterAllows(category.status, categoryStatuses)) {
+                    return [];
+                }
+                return [{
+                    id: category.id,
+                    name: category.name,
+                    inactive: category.status === "inactive",
+                }];
+            }),
+        [categories, categoryStatuses],
+    );
 
-    // Auto-scroll the active category pill into center view whenever selectedCategoryFilter changes
     useEffect(() => {
-        const el = categoryPillRefs.current[selectedCategoryFilter];
-        if (el) {
-            el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        if (selectedCategoryFilter === "all") {
+            return;
         }
-    }, [selectedCategoryFilter]);
+        if (!categoryPills.some((category) => category.id === selectedCategoryFilter)) {
+            setSelectedCategoryFilter("all");
+        }
+    }, [categoryPills, selectedCategoryFilter]);
 
     const filteredProducts = useMemo(() => {
         return products.filter((product) => {
             if (selectedCategoryFilter !== "all" && product.categoryId !== selectedCategoryFilter) {
+                return false;
+            }
+            const category = categoryMap.get(product.categoryId);
+            if (!catalogStatusFilterAllows(category?.status ?? "active", categoryStatuses)) {
                 return false;
             }
             if (statusFilters.length > 0 && !statusFilters.includes(product.status)) {
@@ -311,12 +352,12 @@ const ProductsListPage = () => {
             if (searchQuery.trim()) {
                 const query = searchQuery.toLowerCase().trim();
                 const productName = product.name.toLowerCase();
-                const categoryName = categoryMap.get(product.categoryId)?.name.toLowerCase() ?? "";
+                const categoryName = category?.name.toLowerCase() ?? "";
                 return productName.includes(query) || categoryName.includes(query);
             }
             return true;
         });
-    }, [products, selectedCategoryFilter, statusFilters, addOnsFilters, searchQuery, categoryMap]);
+    }, [products, selectedCategoryFilter, statusFilters, categoryStatuses, addOnsFilters, searchQuery, categoryMap]);
 
     const reorderCategoryId = selectedCategoryFilter !== "all" ? selectedCategoryFilter : null;
 
@@ -698,6 +739,45 @@ const ProductsListPage = () => {
                         </PopoverContent>
                     </Popover>
 
+                    <Popover>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "hidden sm:flex h-9 rounded-full bg-card border-border/50 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 shadow-2xs items-center gap-1.5 px-3.5 text-xs font-semibold shrink-0 cursor-pointer transition-all duration-200",
+                                        categoryStatuses.length > 0
+                                            ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                            : "text-muted-foreground"
+                                    )}
+                                >
+                                    <Tags className={cn(
+                                        "size-3.5 transition-colors",
+                                        categoryStatuses.length > 0
+                                            ? "text-primary stroke-[2.5]"
+                                            : "text-muted-foreground/70"
+                                    )} />
+                                    <span>Category status</span>
+                                    {categoryStatuses.length > 0 && (
+                                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground animate-in zoom-in duration-200">
+                                            {categoryStatuses.length}
+                                        </span>
+                                    )}
+                                </Button>
+                            }
+                        />
+                        <PopoverContent align="start" className="w-[180px] p-2 bg-card border-border/50 rounded-xl shadow-md z-50">
+                            <ProductFilterOptions
+                                label="Category status"
+                                icon={Tags}
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={categoryStatuses}
+                                onChange={toggleCategoryStatusFilter}
+                                onClear={() => void setFilters({ categoryStatuses: [] })}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
                     {/* Add-ons Filter Popover (PremiumTable pattern) */}
                     <Popover>
                         <PopoverTrigger
@@ -739,7 +819,7 @@ const ProductsListPage = () => {
                     </Popover>
 
                     {/* Clear All Filters Button (PremiumTable pattern) */}
-                    {(statusFilters.length > 0 || addOnsFilters.length > 0) && (
+                    {(statusFilters.length > 0 || categoryStatuses.length > 0 || addOnsFilters.length > 0) && (
                         <Button
                             variant="ghost"
                             onClick={clearAllFilters}
@@ -779,40 +859,14 @@ const ProductsListPage = () => {
             </div>
 
             {/* Category filter pills - Horizontally scrollable on mobile */}
-            {categories.length > 0 && (
-                <div className="flex min-w-0 items-center gap-2 overflow-x-auto py-0 scrollbar-none sm:flex-wrap sm:overflow-x-hidden">
-                    <Button
-                        ref={(el) => { categoryPillRefs.current["all"] = el; }}
-                        variant={selectedCategoryFilter === "all" ? "default" : "outline"}
-                        className={`rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0 ${
-                            selectedCategoryFilter === "all"
-                                ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
-                                : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80"
-                        }`}
-                        onClick={() => setSelectedCategoryFilter("all")}
-                    >
-                        All
-                    </Button>
-                    {categories.map((category) => {
-                        const isSelected = selectedCategoryFilter === category.id;
-                        return (
-                            <Button
-                                key={category.id}
-                                ref={(el) => { categoryPillRefs.current[category.id] = el; }}
-                                variant={isSelected ? "default" : "outline"}
-                                className={`rounded-full px-4 h-8.5 font-medium text-xs transition-all cursor-pointer shrink-0 ${
-                                    isSelected
-                                        ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20 border-primary"
-                                        : "border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:bg-card hover:border-border/80"
-                                }`}
-                                onClick={() => setSelectedCategoryFilter(category.id)}
-                            >
-                                {category.name}
-                            </Button>
-                        );
-                    })}
-                </div>
-            )}
+            {categories.length > 0 ? (
+                <CatalogCategoryFilterPills
+                    categories={categoryPills}
+                    selectedCategoryId={selectedCategoryFilter}
+                    onSelect={setSelectedCategoryFilter}
+                    wrap
+                />
+            ) : null}
 
             {filteredProducts.length > 0 && (
                 <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
@@ -862,6 +916,8 @@ const ProductsListPage = () => {
                                         || addOnsFilters.length > 0
                                         || statusFilters.length !== 1
                                         || statusFilters[0] !== "active"
+                                        || categoryStatuses.length !== 1
+                                        || categoryStatuses[0] !== "active"
                                         ? "Try adjusting your search query, category, status, or add-on filters."
                                         : "Add your first product to start building the catalog."}
                                 </EmptyDescription>
@@ -871,7 +927,9 @@ const ProductsListPage = () => {
                                 || selectedCategoryFilter !== "all"
                                 || addOnsFilters.length > 0
                                 || statusFilters.length !== 1
-                                || statusFilters[0] !== "active" ? (
+                                || statusFilters[0] !== "active"
+                                || categoryStatuses.length !== 1
+                                || categoryStatuses[0] !== "active" ? (
                                 <EmptyContent>
                                     <Button
                                         variant="outline"
@@ -879,7 +937,7 @@ const ProductsListPage = () => {
                                         onClick={() => {
                                             clearSearch();
                                             setSelectedCategoryFilter("all");
-                                            void setFilters({ statuses: [] });
+                                            void setFilters({ statuses: [], categoryStatuses: [] });
                                             setAddOnsFilters([]);
                                         }}
                                     >
@@ -1099,6 +1157,15 @@ const ProductsListPage = () => {
                                 selectedValues={draftStatusFilters}
                                 onChange={toggleDraftStatusFilter}
                                 onClear={() => setDraftStatusFilters([])}
+                            />
+                            <ProductFilterOptions
+                                variant="sheet"
+                                label="Category status"
+                                icon={Tags}
+                                options={STATUS_FILTER_OPTIONS}
+                                selectedValues={draftCategoryStatuses}
+                                onChange={toggleDraftCategoryStatusFilter}
+                                onClear={() => setDraftCategoryStatuses([])}
                             />
                             <ProductFilterOptions
                                 variant="sheet"

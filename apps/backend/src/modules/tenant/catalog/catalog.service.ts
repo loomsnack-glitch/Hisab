@@ -60,6 +60,7 @@ import {
   type UpdateStoreAddOnOfferingSVC,
   type UpdateStoreCategoryPresentationSVC,
   canAssignUnitToCatalogProduct,
+  catalogProductsInBrowseCategories,
   FIXED_BUNDLE_COMBO_DEFAULT_SELLING_QUANTITY,
   PIECE_PREDEFINED_UNIT_KEY,
   type UnitDTO,
@@ -1110,14 +1111,22 @@ export const getCategoriesForDevice = async (
 export const getProductsForDevice = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ProductsListResponse | null>> => {
-  const [products, productsForInactiveCodeLookup] = await Promise.all([
+  const [products, productsForInactiveCodeLookup, visibleCategories] = await Promise.all([
     catalogRepository.getActiveStoreCatalogProducts(
       session.organization.id,
       session.store.id,
     ),
     catalogRepository.getProductsByOrganizationId(session.organization.id),
+    catalogRepository.getVisibleCategoriesForStore(
+      session.organization.id,
+      session.store.id,
+    ),
   ]);
-  const activeProductIds = new Set(products.map((product) => product.id));
+  const sellableProducts = catalogProductsInBrowseCategories(
+    products,
+    visibleCategories,
+  );
+  const activeProductIds = new Set(sellableProducts.map((product) => product.id));
   const inactiveProductCodes = productsForInactiveCodeLookup.flatMap(
     (product) =>
       product.productCode && !activeProductIds.has(product.id)
@@ -1127,7 +1136,7 @@ export const getProductsForDevice = async (
   return {
     status: "success",
     data: {
-      products: await resolveProducts(products),
+      products: await resolveProducts(sellableProducts),
       inactiveProductCodes,
     },
     message: "Products fetched successfully",
@@ -2876,10 +2885,21 @@ export const getComboProductDetailsForDevice = async (
     session.organization.id,
     productId,
   );
+  const category = product
+    ? await getCategoryForOrganization(session.organization.id, product.categoryId)
+    : null;
+  const visibleCategories = product
+    ? await catalogRepository.getVisibleCategoriesForStore(
+        session.organization.id,
+        session.store.id,
+      )
+    : [];
   if (
     !product ||
     product.productType !== "combo" ||
-    product.status !== "active"
+    product.status !== "active" ||
+    category?.status !== "active" ||
+    !visibleCategories.some((visibleCategory) => visibleCategory.id === product.categoryId)
   ) {
     return {
       status: "error",
@@ -2905,11 +2925,17 @@ export const getComboProductDetailsForDevice = async (
 export const getComboProductDetailsForDeviceBulk = async (
   session: DeviceSessionDTO,
 ): Promise<ServiceResponse<ComboProductsListResponse | null>> => {
-  const comboProducts = (
-    await catalogRepository.getActiveProductsByOrganizationId(
+  const [activeProducts, visibleCategories] = await Promise.all([
+    catalogRepository.getActiveProductsByOrganizationId(session.organization.id),
+    catalogRepository.getVisibleCategoriesForStore(
       session.organization.id,
-    )
-  ).filter((product) => product.productType === "combo");
+      session.store.id,
+    ),
+  ]);
+  const comboProducts = catalogProductsInBrowseCategories(
+    activeProducts.filter((product) => product.productType === "combo"),
+    visibleCategories,
+  );
   const choiceGroupsByProductId = await loadComboChoiceGroupsForProducts(
     session.organization.id,
     comboProducts,

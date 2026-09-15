@@ -10,6 +10,25 @@ type OfferingForStoreBilling = Pick<
   "productId" | "effectivePrice" | "effectiveDiscount" | "status"
 >;
 
+export const catalogProductsInBrowseCategories = <T extends { categoryId: string }>(
+  products: T[],
+  categories: Array<{ id: string }>,
+): T[] => {
+  const allowedCategoryIds = new Set(categories.map((category) => category.id));
+  return products.filter((product) => allowedCategoryIds.has(product.categoryId));
+};
+
+export const catalogProductsInActiveOrganizationCategories = <
+  T extends { categoryId: string },
+>(
+  products: T[],
+  categories: Array<{ id: string; status: "active" | "inactive" }>,
+): T[] =>
+  catalogProductsInBrowseCategories(
+    products,
+    categories.filter((category) => category.status === "active"),
+  );
+
 export const overlayActiveStoreProductOfferings = <T extends CatalogProductForStoreBilling>(
   products: T[],
   offerings: OfferingForStoreBilling[],

@@ -245,11 +245,28 @@ const catalogMissingFromPlanStatus: StoreCommercialStatusResponse = {
 
 const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
 
+const mainsPresentation = {
+    id: "12121212-1212-4121-8121-121212121212",
+    organizationId,
+    storeId: adajanId,
+    categoryId: category.id,
+    visible: true,
+    sortOrder: 0,
+    createdBy: adajan.createdBy,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+    category,
+};
+
 const renderProducts = (
     path = getStoreProductsPath(organizationId, adajanId),
     options?: {
         commercialStatus?: StoreCommercialStatusResponse;
         offeringsResponse?: { status: "error"; data: null; message: string; code: number };
+        categories?: Array<typeof category>;
+        presentations?: Array<typeof mainsPresentation>;
+        offerings?: StoreProductOfferingResponseDTO[];
     },
 ) => {
     const queryClient = new QueryClient();
@@ -257,7 +274,7 @@ const renderProducts = (
     queryClient.setQueryData(organizationKeys.store(organizationId, adajanId), storeResponse(adajan));
     queryClient.setQueryData(catalogKeys.storeProductOfferings(organizationId, adajanId), options?.offeringsResponse ?? {
         status: "success",
-        data: { offerings: [offering, inactiveOffering, orgInactiveOffering] },
+        data: { offerings: options?.offerings ?? [offering, inactiveOffering, orgInactiveOffering] },
         message: "Store Product Offerings fetched successfully",
         code: 200,
     });
@@ -269,8 +286,14 @@ const renderProducts = (
     });
     queryClient.setQueryData(catalogKeys.categories(organizationId), {
         status: "success",
-        data: { categories: [category] },
+        data: { categories: options?.categories ?? [category] },
         message: "Categories fetched successfully",
+        code: 200,
+    });
+    queryClient.setQueryData(catalogKeys.storeCategoryPresentations(organizationId, adajanId), {
+        status: "success",
+        data: { presentations: options?.presentations ?? [mainsPresentation] },
+        message: "Store Category Presentations fetched successfully",
         code: 200,
     });
 
@@ -301,6 +324,8 @@ describe("Store Products page", () => {
         expect(markup).toContain("Search products...");
         expect(markup).toContain("Status");
         expect(markup).toContain("Org status");
+        expect(markup).toContain("Category");
+        expect(markup).toContain("Org category");
         expect(markup).toContain("Mains");
         expect(markup).toContain("Edit Burger");
         expect(markup).toContain("Store price");
@@ -394,6 +419,104 @@ describe("Store Products page", () => {
         expect(markup).toContain("Inactive in org");
         expect(markup).not.toContain(">Burger<");
         expect(markup).not.toContain("Seasonal Wrap");
+    });
+
+    test("hides inactive org categories by default and shows them struck through when inactive org category is selected", () => {
+        const inactiveOrgCategory = {
+            ...category,
+            id: "22222222-2222-4222-8222-222222222222",
+            name: "Desserts",
+            status: "inactive" as const,
+            sortOrder: 1,
+        };
+        const dessertProduct: ProductResponseDTO = {
+            ...product,
+            id: "33333333-3333-4333-8333-333333333333",
+            categoryId: inactiveOrgCategory.id,
+            name: "Gulab Jamun",
+        };
+        const dessertOffering: StoreProductOfferingResponseDTO = {
+            ...offering,
+            id: "44444444-4444-4444-8444-444444444444",
+            productId: dessertProduct.id,
+            product: dessertProduct,
+        };
+        const dessertPresentation = {
+            ...mainsPresentation,
+            id: "55555555-5555-4555-8555-555555555555",
+            categoryId: inactiveOrgCategory.id,
+            sortOrder: 1,
+            category: inactiveOrgCategory,
+        };
+        const catalog = {
+            categories: [category, inactiveOrgCategory],
+            presentations: [mainsPresentation, dessertPresentation],
+            offerings: [offering, inactiveOffering, orgInactiveOffering, dessertOffering],
+        };
+
+        const defaultMarkup = renderProducts(getStoreProductsPath(organizationId, adajanId), catalog);
+        expect(defaultMarkup).toContain("Mains");
+        expect(defaultMarkup).not.toContain("Desserts");
+        expect(defaultMarkup).not.toContain("Gulab Jamun");
+
+        const inactiveMarkup = renderProducts(
+            `${getStoreProductsPath(organizationId, adajanId)}?orgCategoryStatuses=inactive`,
+            catalog,
+        );
+        expect(inactiveMarkup).toContain("Desserts");
+        expect(inactiveMarkup).toContain("line-through");
+        expect(inactiveMarkup).toContain("Gulab Jamun");
+        expect(inactiveMarkup).not.toContain(">Burger<");
+        expect(inactiveMarkup).not.toContain("Mains");
+    });
+
+    test("hides store-hidden categories by default and shows them struck through when inactive category is selected", () => {
+        const hiddenCategory = {
+            ...category,
+            id: "66666666-6666-4666-8666-666666666666",
+            name: "Sides",
+            sortOrder: 2,
+        };
+        const sidesProduct: ProductResponseDTO = {
+            ...product,
+            id: "77777777-7777-4777-8777-777777777777",
+            categoryId: hiddenCategory.id,
+            name: "Fries",
+        };
+        const sidesOffering: StoreProductOfferingResponseDTO = {
+            ...offering,
+            id: "88888888-8888-4888-8888-888888888888",
+            productId: sidesProduct.id,
+            product: sidesProduct,
+        };
+        const hiddenPresentation = {
+            ...mainsPresentation,
+            id: "99999999-9999-4999-8999-999999999999",
+            categoryId: hiddenCategory.id,
+            visible: false,
+            sortOrder: 2,
+            category: hiddenCategory,
+        };
+        const catalog = {
+            categories: [category, hiddenCategory],
+            presentations: [mainsPresentation, hiddenPresentation],
+            offerings: [offering, inactiveOffering, orgInactiveOffering, sidesOffering],
+        };
+
+        const defaultMarkup = renderProducts(getStoreProductsPath(organizationId, adajanId), catalog);
+        expect(defaultMarkup).toContain("Mains");
+        expect(defaultMarkup).not.toContain("Sides");
+        expect(defaultMarkup).not.toContain("Fries");
+
+        const inactiveMarkup = renderProducts(
+            `${getStoreProductsPath(organizationId, adajanId)}?categoryStatuses=inactive`,
+            catalog,
+        );
+        expect(inactiveMarkup).toContain("Sides");
+        expect(inactiveMarkup).toContain("line-through");
+        expect(inactiveMarkup).toContain("Fries");
+        expect(inactiveMarkup).not.toContain(">Burger<");
+        expect(inactiveMarkup).not.toContain("Mains");
     });
 
     test("registers a Store workspace products route without replacing Organization catalog routes", () => {

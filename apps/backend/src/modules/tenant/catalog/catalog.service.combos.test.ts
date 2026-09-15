@@ -18,6 +18,8 @@ import {
     getComboChoiceGroupsByProductIds,
     getComboChoiceOptionsByGroupIds,
     getActiveProductsByOrganizationId,
+    getCategoriesByOrganizationId,
+    getVisibleCategoriesForStore,
     getProductsByIds,
     getOrganizationByIdForUser,
     getProductById,
@@ -42,6 +44,8 @@ describe("Combo Product catalog service", () => {
         getComboChoiceGroupsByProductIds.mockClear();
         getComboChoiceOptionsByGroupIds.mockClear();
         getActiveProductsByOrganizationId.mockClear();
+        getCategoriesByOrganizationId.mockClear();
+        getVisibleCategoriesForStore.mockClear();
         getProductsByIds.mockClear();
         getProductById.mockClear();
         begin.mockClear();
@@ -55,6 +59,8 @@ describe("Combo Product catalog service", () => {
         getComboChoiceGroupsByProductIds.mockResolvedValue([]);
         getComboChoiceOptionsByGroupIds.mockResolvedValue([]);
         getActiveProductsByOrganizationId.mockResolvedValue([burger]);
+        getCategoriesByOrganizationId.mockResolvedValue([category]);
+        getVisibleCategoriesForStore.mockResolvedValue([category]);
         getProductsByIds.mockResolvedValue([burger]);
         getProductById.mockImplementation((async (_organizationId: string, productId: string) => {
             if (productId === burgerId) return burger;
@@ -129,11 +135,27 @@ describe("Combo Product catalog service", () => {
             maxQuantity: 1, priceAdjustment: 0, sortOrder: 0, createdBy: userId, updatedBy: null, createdAt: new Date(), updatedAt: new Date(),
         }]);
 
-        const response = await catalogService.getComboProductDetailsForDeviceBulk({ organization: { id: organizationId } } as never);
+        const response = await catalogService.getComboProductDetailsForDeviceBulk({
+            organization: { id: organizationId },
+            store: { id: store.id },
+        } as never);
 
         expect(response.data?.combos).toHaveLength(1);
         expect(getComboChoiceGroupsByProductIds).toHaveBeenCalledTimes(1);
         expect(getComboChoiceGroupsByProductId).not.toHaveBeenCalled();
         expect(getProductsByIds).toHaveBeenCalledWith(organizationId, [burgerId]);
+    });
+
+    test("POS Combo preload omits Combos that are not in visible Store Categories", async () => {
+        const combo = { ...burger, id: bundleId, productType: "combo" as const };
+        getActiveProductsByOrganizationId.mockResolvedValue([combo]);
+        getVisibleCategoriesForStore.mockResolvedValue([]);
+
+        const response = await catalogService.getComboProductDetailsForDeviceBulk({
+            organization: { id: organizationId },
+            store: { id: store.id },
+        } as never);
+
+        expect(response.data?.combos).toEqual([]);
     });
 });

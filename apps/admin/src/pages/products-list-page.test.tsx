@@ -25,6 +25,16 @@ const category = {
     updatedAt: now,
 };
 
+const inactiveCategoryId = "22222222-2222-4222-8222-222222222222";
+
+const inactiveCategory = {
+    ...category,
+    id: inactiveCategoryId,
+    name: "Archive",
+    sortOrder: 1,
+    status: "inactive" as const,
+};
+
 const burger: ProductResponseDTO = {
     id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     organizationId,
@@ -57,19 +67,26 @@ const retiredCake: ProductResponseDTO = {
     status: "inactive",
 };
 
+const archivedSoup: ProductResponseDTO = {
+    ...burger,
+    id: "cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa",
+    categoryId: inactiveCategoryId,
+    name: "Old Soup",
+};
+
 const searchFromPath = (path: string) => (path.includes("?") ? path.slice(path.indexOf("?")) : "");
 
 const renderProducts = (path = `/organizations/${organizationId}/products/list`) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(catalogKeys.categories(organizationId), {
         status: "success",
-        data: { categories: [category] },
+        data: { categories: [category, inactiveCategory] },
         message: "Categories fetched successfully",
         code: 200,
     });
     queryClient.setQueryData(catalogKeys.products(organizationId), {
         status: "success",
-        data: { products: [burger, retiredCake] },
+        data: { products: [burger, retiredCake, archivedSoup] },
         message: "Products fetched successfully",
         code: 200,
     });
@@ -102,6 +119,10 @@ describe("Organization products page", () => {
         expect(markup).toContain('aria-label="Edit Burger"');
         expect(markup).toContain("Search products...");
         expect(markup).toContain("Status");
+        expect(markup).toContain("Category status");
+        expect(markup).toContain("Mains");
+        expect(markup).not.toContain("Archive");
+        expect(markup).not.toContain("Old Soup");
         expect(markup).not.toContain("Org default");
         expect(markup).not.toContain("Save ");
         expect(markup).not.toContain("Effective price");
@@ -119,5 +140,18 @@ describe("Organization products page", () => {
         expect(markup).toContain('aria-label="Edit Retired Cake"');
         expect(markup).not.toContain("Mark inactive Burger");
         expect(markup).not.toContain("Mark active Retired Cake");
+    });
+
+    test("hides inactive categories by default and shows them struck through when inactive category status is selected", () => {
+        const markup = renderProducts(
+            `/organizations/${organizationId}/products/list?categoryStatuses=inactive`,
+        );
+
+        expect(markup).toContain("Archive");
+        expect(markup).toContain("line-through");
+        expect(markup).toContain("Old Soup");
+        expect(markup).not.toContain("Mains");
+        expect(markup).not.toContain(">Burger<");
+        expect(markup).not.toContain("Retired Cake");
     });
 });
