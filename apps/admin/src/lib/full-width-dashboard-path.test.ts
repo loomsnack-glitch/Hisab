@@ -96,6 +96,19 @@ describe("isFullWidthDashboardPath", () => {
         ).toBe(true);
     });
 
+    test("uses the full dashboard width for appearance routes", () => {
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/appearance",
+            ),
+        ).toBe(true);
+        expect(
+            isFullWidthDashboardPath(
+                "/organizations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc/appearance",
+            ),
+        ).toBe(true);
+    });
+
     test("uses the full dashboard width for the store license route", () => {
         expect(
             isFullWidthDashboardPath(

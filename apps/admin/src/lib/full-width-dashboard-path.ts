@@ -4,8 +4,14 @@ const ORGANIZATION_CATALOG_PATH =
 const STORE_CATALOG_PATH =
     /^\/organizations\/[^/]+\/workspaces\/[^/]+\/(?:products|add-ons|categories|tables|devices|settings|vendors|license|reports)(?:\/|$)/;
 
+const APPEARANCE_PATH = /\/appearance(?:\/|$)/;
+
 export const isFullWidthDashboardPath = (pathname: string): boolean => {
     if (pathname.includes("/billing")) {
+        return true;
+    }
+
+    if (APPEARANCE_PATH.test(pathname)) {
         return true;
     }
 

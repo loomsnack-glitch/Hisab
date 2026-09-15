@@ -17,6 +17,7 @@ describe("POS printer settings page", () => {
         expect(layoutSource).toContain('navigate("/printer")');
         expect(layoutSource).toContain("Reconnect receipt printer");
         expect(layoutSource).toContain("needsBluetoothReconnectTap");
+        expect(layoutSource).toContain("isPosSettingsPath");
         expect(layoutSource).not.toContain("Receipt paper size");
         expect(layoutSource).not.toContain("Connect receipt printer");
         expect(layoutSource).not.toContain("58mm");
@@ -30,7 +31,8 @@ describe("POS printer settings page", () => {
             </PosPrinterProvider>,
         );
 
-        expect(markup).toContain("Printer");
+        expect(markup).not.toContain("Connect a receipt printer and choose paper width");
+        expect(markup).toContain("Connection");
         expect(markup).toContain("USB");
         expect(markup).toContain("Bluetooth");
         expect(markup).toContain("COM port");

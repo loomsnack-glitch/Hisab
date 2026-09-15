@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deviceLogout, getPosWhatsAppAccount } from "@repo/services";
 import { type DeviceSessionDTO, type WhatsAppAccountStatusResponseDTO } from "@repo/types";
@@ -24,6 +24,7 @@ import { deviceAuthKeys } from "@/lib/query-keys";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import WorkspaceBrand from "@/components/workspace/workspace-brand";
 import PosMobileBottomNav from "@/components/pos/pos-mobile-bottom-nav";
+import { isPosSettingsPath } from "@/components/pos/pos-nav-items";
 import PosSidebar, { persistPosSidebarCollapsed, readPosSidebarCollapsed } from "@/components/pos/pos-sidebar";
 import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
@@ -116,6 +117,8 @@ const PosLayout = ({
   onSearchChange,
   showSearch = true,
 }: PosLayoutProps) => {
+    const location = useLocation();
+    const isSettingsRoute = isPosSettingsPath(location.pathname);
     const navigate = useNavigate();
     const { billsCount } = usePosMobileNav();
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readPosSidebarCollapsed);
@@ -430,7 +433,14 @@ const PosLayout = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <main className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden px-0 max-lg:pb-[var(--pos-mobile-nav-height)]">{children}</main>
+            <main
+                className={cn(
+                    "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden px-0",
+                    !isSettingsRoute && "max-lg:pb-[var(--pos-mobile-nav-height)]",
+                )}
+            >
+                {children}
+            </main>
 
             <PosMobileBottomNav
                 billsCount={billsCount}
