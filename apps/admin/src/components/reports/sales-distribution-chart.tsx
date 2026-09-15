@@ -5,15 +5,16 @@ import {
 } from "@repo/types";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
+// Hues spaced around the wheel so adjacent slices stay easy to tell apart.
 const SLICE_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "oklch(0.62 0.16 30)",
-  "oklch(0.58 0.14 340)",
-  "oklch(0.70 0.12 95)",
+  "oklch(0.58 0.19 250)", // blue
+  "oklch(0.68 0.17 55)", // orange
+  "oklch(0.62 0.17 145)", // green
+  "oklch(0.64 0.20 350)", // pink
+  "oklch(0.62 0.14 195)", // teal
+  "oklch(0.72 0.15 75)", // amber
+  "oklch(0.50 0.18 275)", // indigo
+  "oklch(0.58 0.20 25)", // red
 ];
 
 type SalesDistributionChartProps = {

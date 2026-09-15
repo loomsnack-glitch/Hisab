@@ -386,6 +386,14 @@ const StoreProductOfferingsPage = () => {
                 />
             ) : null}
 
+            {filteredOfferings.length > 0 ? (
+                <div className="flex items-center justify-between px-1 pt-0 pb-0.5">
+                    <span className="text-xs text-muted-foreground/70">
+                        Showing {filteredOfferings.length} product{filteredOfferings.length === 1 ? "" : "s"}
+                    </span>
+                </div>
+            ) : null}
+
             {offerings.length === 0 ? (
                 <Card className="border-border/60 bg-card/80 shadow-md">
                     <CardContent className="pt-6">
