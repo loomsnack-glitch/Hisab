@@ -61,6 +61,22 @@ export const adminNavGroupOrder: AdminNavGroup[] = [
   "organization",
 ];
 
+const storeNavGroupOrder: AdminNavGroup[] = [
+  "catalog",
+  "reports",
+  "finance",
+  "store",
+  "organization",
+];
+
+const storeGroupItemOrder = [
+  "billing",
+  "devices",
+  "license",
+  "settings",
+  "tables",
+] as const;
+
 export type AdminNavDestination = {
   id: string;
   label: string;
@@ -306,15 +322,14 @@ const storeWorkspaceDestinationIds = new Set([
 ]);
 
 const organizationWorkspaceNavLabelSuffixIds = new Set([
-  "reports",
   "vendors",
   "money-accounts",
   "purchases",
   "expenses",
   "whatsapp",
-  "google-contacts",
-  "appearance",
 ]);
+
+const storeWorkspaceNavLabelSuffixIds = new Set(["vendors"]);
 
 const resolveDestinations = ({
   organizationId = "",
@@ -340,9 +355,11 @@ const resolveDestinations = ({
     .map((destination) => ({
       id: destination.id,
       label:
-        !storeId && organizationWorkspaceNavLabelSuffixIds.has(destination.id)
+        storeId && storeWorkspaceNavLabelSuffixIds.has(destination.id)
           ? `${destination.label} *`
-          : destination.label,
+          : !storeId && organizationWorkspaceNavLabelSuffixIds.has(destination.id)
+            ? `${destination.label} *`
+            : destination.label,
       mobileLabel: destination.mobileLabel,
       icon: destination.icon,
       requiresOrganization: destination.requiresOrganization,
@@ -382,13 +399,32 @@ export const getGroupedAdminMainDestinations = (
     }
   }
 
-  return adminNavGroupOrder
+  const groupOrder = args.storeId ? storeNavGroupOrder : adminNavGroupOrder;
+
+  return groupOrder
     .filter((group) => byGroup.has(group))
-    .map((group) => ({
-      group,
-      label: adminNavGroupLabels[group],
-      items: byGroup.get(group)!,
-    }));
+    .map((group) => {
+      let items = byGroup.get(group)!;
+      if (args.storeId && group === "store") {
+        items = [...items].sort((left, right) => {
+          const leftIndex = storeGroupItemOrder.indexOf(
+            left.id as (typeof storeGroupItemOrder)[number],
+          );
+          const rightIndex = storeGroupItemOrder.indexOf(
+            right.id as (typeof storeGroupItemOrder)[number],
+          );
+          const safeLeft = leftIndex === -1 ? storeGroupItemOrder.length : leftIndex;
+          const safeRight = rightIndex === -1 ? storeGroupItemOrder.length : rightIndex;
+          return safeLeft - safeRight;
+        });
+      }
+
+      return {
+        group,
+        label: adminNavGroupLabels[group],
+        items,
+      };
+    });
 };
 
 export const getVisibleAdminPrimaryMobileDestinations = (

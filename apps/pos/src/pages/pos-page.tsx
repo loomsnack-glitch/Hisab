@@ -76,11 +76,15 @@ const PosPage = () => {
         return <Navigate to={getPosLoginPath(returnTo)} replace />;
     }
 
+    if (location.pathname === "/" && legacyPanel === "bills") {
+        return <Navigate to={getPosPanelPath("bills")} replace />;
+    }
+
     if (
         location.pathname === "/" &&
-        (legacyPanel === "bills" || legacyPanel === "customers" || legacyPanel === "reports")
+        (legacyPanel === "customers" || legacyPanel === "reports")
     ) {
-        return <Navigate to={getPosPanelPath(legacyPanel as PosPanelTab)} replace />;
+        return <Navigate to="/" replace />;
     }
 
     const context: PosRouteContext = {
@@ -100,7 +104,7 @@ const PosPage = () => {
                     searchValue={headerSearch}
                     searchPlaceholder={isSettingsRoute ? "" : posPanelConfig[activePanelTab].searchPlaceholder}
                     onSearchChange={setHeaderSearch}
-                    showSearch={!isSettingsRoute && activePanelTab !== "customers" && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
+                    showSearch={!isSettingsRoute && Boolean(posPanelConfig[activePanelTab].searchPlaceholder)}
                 >
                     <Outlet context={context} />
                 </PosLayout>

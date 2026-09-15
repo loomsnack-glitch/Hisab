@@ -393,20 +393,21 @@ describe("Admin mobile navigation", () => {
     const sections = getGroupedAdminMainDestinations(withStore);
     expect(sections.map((section) => section.label)).toEqual([
       "Catalog",
-      "Store",
       "Reports",
       "Finance",
+      "Store",
       "Organization",
     ]);
     expect(sections[0]?.items.map((item) => item.id)).toEqual(["products"]);
-    expect(sections[1]?.items.map((item) => item.id)).toEqual([
-      "devices",
-      "settings",
-      "license",
+    expect(sections[1]?.items.map((item) => item.id)).toEqual(["reports"]);
+    expect(sections[2]?.items.map((item) => item.id)).toEqual(["vendors"]);
+    expect(sections[3]?.items.map((item) => item.id)).toEqual([
       "billing",
+      "devices",
+      "license",
+      "settings",
       "tables",
     ]);
-    expect(sections[2]?.items.map((item) => item.id)).toEqual(["reports"]);
   });
 
   test("hides Tables from the Store workspace sidebar when Table Management is off", () => {
@@ -418,11 +419,11 @@ describe("Admin mobile navigation", () => {
     const sections = getGroupedAdminMainDestinations(withStore);
 
     expect(destinationIds).not.toContain("tables");
-    expect(sections[1]?.items.map((item) => item.id)).toEqual([
-      "devices",
-      "settings",
-      "license",
+    expect(sections[3]?.items.map((item) => item.id)).toEqual([
       "billing",
+      "devices",
+      "license",
+      "settings",
     ]);
   });
 

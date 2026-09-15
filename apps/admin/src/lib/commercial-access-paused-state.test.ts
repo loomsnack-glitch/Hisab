@@ -43,6 +43,15 @@ describe("featureAccessPausedState", () => {
         ).toBeNull();
     });
 
+    test("returns no-plan state when the store has no Reports access", () => {
+        expect(featureAccessPausedState(baseStatus, "reports")).toEqual({
+            badge: "No plan purchased",
+            title: "Reports access paused",
+            description: "Reports unlock as soon as this Store has reporting access.",
+            actionLabel: "Choose a plan",
+        });
+    });
+
     test("returns no-plan state when the store has no commercial access", () => {
         expect(featureAccessPausedState(baseStatus, "money_account_tracking")).toEqual({
             badge: "No plan purchased",

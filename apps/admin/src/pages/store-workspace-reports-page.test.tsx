@@ -4,10 +4,10 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import type { StoreDTO, StoreWithDevicesDTO } from "@repo/types";
+import type { StoreCommercialStatusResponse, StoreDTO, StoreWithDevicesDTO } from "@repo/types";
 
-import { organizationKeys } from "@/lib/query-keys";
-import { getStoreReportsPath } from "@/lib/store-workspace-routes";
+import { commercialLicenseKeys, organizationKeys } from "@/lib/query-keys";
+import { getStoreLicensePath, getStoreReportsPath } from "@/lib/store-workspace-routes";
 import StoreWorkspaceReportsPage from "@/pages/store-workspace-reports-page";
 
 const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -60,10 +60,88 @@ const storeResponse = (entry: StoreDTO) => ({
     code: 200,
 });
 
-const renderReports = () => {
+const reportsAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        storeId,
+        organizationId,
+        timezone: "Asia/Kolkata",
+        baseAccess: null,
+        scheduledSuccessor: null,
+        accessGrants: [],
+        activeAddOns: [],
+        availablePaidPlans: [],
+        availableCoTermAddOns: [],
+        pendingCheckout: null,
+        commercialHistory: [],
+        trial: { eligible: true, message: "This Store can start the standard Trial Plan once." },
+        entitlements: {
+            storeId,
+            features: [{
+                key: "reports",
+                displayName: "Reports",
+                sources: [{
+                    sourceKind: "store_access_grant",
+                    sourceId: "00000000-0000-4000-8000-000000000001",
+                    moduleKey: "core_operations",
+                    moduleDisplayName: "Core Operations",
+                    featureDisplayName: "Reports",
+                    startsAt: now,
+                    endsAt: new Date("2026-10-06T00:00:00.000Z"),
+                }],
+            }],
+        },
+    },
+};
+
+const noReportsAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...reportsAccessStatus.commercialStatus,
+        entitlements: { storeId, features: [] },
+    },
+};
+
+const expiredReportsAccessStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...noReportsAccessStatus.commercialStatus,
+        commercialHistory: [{
+            kind: "license",
+            id: "00000000-0000-4000-8000-000000000002",
+            occurredAt: new Date("2024-09-06T00:00:00.000Z"),
+            title: "Store License · Basic",
+            detail: "₹999.00 · basic",
+            amountInr: 999,
+            status: "expired",
+        }],
+    },
+};
+
+const reportsMissingFromPlanStatus: StoreCommercialStatusResponse = {
+    commercialStatus: {
+        ...noReportsAccessStatus.commercialStatus,
+        baseAccess: {
+            id: "00000000-0000-4000-8000-000000000003",
+            sourceKind: "store_license",
+            planKey: "core",
+            planDisplayName: "Core",
+            planType: "paid",
+            term: { count: 1, unit: "year" },
+            startsAt: now,
+            endsAt: new Date("2027-09-06T00:00:00.000Z"),
+            status: "active",
+        },
+    },
+};
+
+const renderReports = (commercialStatus: StoreCommercialStatusResponse = reportsAccessStatus) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(organizationKeys.detail(organizationId), organizationResponse);
     queryClient.setQueryData(organizationKeys.store(organizationId, storeId), storeResponse(store));
+    queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
+        status: "success",
+        data: commercialStatus,
+        message: "Store commercial status fetched successfully",
+        code: 200,
+    });
 
     const router = createMemoryRouter(
         [
@@ -94,6 +172,37 @@ describe("Store workspace Reports page", () => {
         expect(markup).toContain("Product sales");
         expect(markup).not.toContain("All stores");
         expect(markup).not.toContain("Under development");
+        expect(markup).not.toContain("Reports is not available for this Store");
+    });
+
+    test("directs a Store without Reports access to choose a license", () => {
+        const markup = renderReports(noReportsAccessStatus);
+
+        expect(markup).toContain("Reports access paused");
+        expect(markup).toContain("No plan purchased");
+        expect(markup).toContain("Choose a plan");
+        expect(markup).toContain("Retry access check");
+        expect(markup).toContain(`href="${getStoreLicensePath(organizationId, storeId)}"`);
+        expect(markup).not.toContain("Reports is not available for this Store");
+        expect(markup).not.toContain("Product sales");
+    });
+
+    test("directs a Store with an expired license to renew it", () => {
+        const markup = renderReports(expiredReportsAccessStatus);
+
+        expect(markup).toContain("License expired");
+        expect(markup).toContain("Renew license");
+        expect(markup).toContain(`href="${getStoreLicensePath(organizationId, storeId)}"`);
+        expect(markup).not.toContain("Reports is not available for this Store");
+    });
+
+    test("directs a Store whose plan excludes Reports to change access", () => {
+        const markup = renderReports(reportsMissingFromPlanStatus);
+
+        expect(markup).toContain("Reports not included");
+        expect(markup).toContain("Add Reports access");
+        expect(markup).toContain(`href="${getStoreLicensePath(organizationId, storeId)}"`);
+        expect(markup).not.toContain("Unable to load");
     });
 
     test("registers a Store workspace reports route", () => {

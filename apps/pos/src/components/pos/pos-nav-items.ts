@@ -1,12 +1,10 @@
 import {
     Armchair,
-    BarChart3,
     ChefHat,
     Printer,
     ReceiptText,
     Settings2,
     Store,
-    Users,
     type LucideIcon,
 } from "lucide-react";
 
@@ -26,8 +24,6 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "tables", label: "Tables", icon: Armchair, path: getPosPanelPath("tables"), tab: "tables" },
     { id: "bills", label: "Bills", icon: ReceiptText, path: getPosPanelPath("bills"), tab: "bills" },
     { id: "kots", label: "KOT", icon: ChefHat, path: getPosPanelPath("kots"), tab: "kots" },
-    { id: "customers", label: "Customers", icon: Users, path: getPosPanelPath("customers"), tab: "customers" },
-    { id: "reports", label: "Reports", icon: BarChart3, path: getPosPanelPath("reports"), tab: "reports" },
     { id: "printer", label: "Printer", icon: Printer, path: "/printer" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
 ];
@@ -72,5 +68,5 @@ export const isPosMoreDestinationActive = (pathname: string) => {
     }
 
     const tab = posWorkspaceDestinations.find((destination) => destination.path === pathname)?.tab;
-    return tab === "reports" || tab === "customers" || tab === "kots";
+    return tab === "kots";
 };

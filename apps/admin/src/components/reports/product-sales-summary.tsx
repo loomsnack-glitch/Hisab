@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getPosProductSalesSummary,
   getProductSalesSummary,
+  getStoreCommercialStatus,
 } from "@repo/services";
 import type {
   ProductSalesSummaryAdminQuery,
@@ -37,6 +38,7 @@ import {
 import { Spinner } from "@repo/ui/components/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import {
+  BarChart3,
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -45,8 +47,13 @@ import {
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 
+import CatalogAccessPaused from "@/components/commercial/catalog-access-paused";
 import SalesDistributionChart from "@/components/reports/sales-distribution-chart";
-import { billingKeys } from "@/lib/query-keys";
+import { isQueryCommercialAccessDenied } from "@/lib/commercial-access";
+import { featureAccessPausedState } from "@/lib/commercial-access-paused-state";
+import { billingKeys, commercialLicenseKeys } from "@/lib/query-keys";
+import { getStoreLicensePath } from "@/lib/store-workspace-routes";
+import { adminWorkspacePageHeightClass } from "@/lib/workspace-page-layout";
 
 type ReportDateMode = "date" | "range";
 type ReportDatePreset =
@@ -587,6 +594,35 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
     return dateBounds;
   }, [dateBounds, lockedStoreId, props.mode, selectedStoreId]);
 
+  const scopedStoreId =
+    props.mode === "admin"
+      ? (lockedStoreId ?? (selectedStoreId !== "all" ? selectedStoreId : undefined))
+      : undefined;
+  const licenseStoreId =
+    scopedStoreId ?? (props.mode === "admin" ? props.stores[0]?.id : undefined);
+
+  const commercialStatusQuery = useQuery({
+    queryKey: commercialLicenseKeys.status(
+      props.mode === "admin" ? props.organizationId : "",
+      licenseStoreId ?? "",
+    ),
+    queryFn: () =>
+      getStoreCommercialStatus(
+        props.mode === "admin" ? props.organizationId : "",
+        licenseStoreId ?? "",
+      ),
+    enabled:
+      props.mode === "admin" &&
+      Boolean(props.organizationId && licenseStoreId),
+  });
+  const commercialStatus =
+    commercialStatusQuery.data?.status === "success"
+      ? commercialStatusQuery.data.data?.commercialStatus ?? null
+      : null;
+  const accessState = commercialStatus
+    ? featureAccessPausedState(commercialStatus, "reports")
+    : null;
+
   const productSalesQuery = useQuery({
     queryKey:
       props.mode === "admin"
@@ -603,8 +639,9 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
           : await getPosProductSalesSummary(queryParams);
 
       if (response.status !== "success") {
-        throw new Error(
-          response.message || "Product sales could not be loaded",
+        throw Object.assign(
+          new Error(response.message || "Product sales could not be loaded"),
+          { code: response.code },
         );
       }
 
@@ -612,7 +649,8 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
     },
     enabled:
       Boolean(queryParams) &&
-      (props.mode === "pos" || Boolean(props.organizationId)),
+      (props.mode === "pos" || Boolean(props.organizationId)) &&
+      !(scopedStoreId && accessState),
   });
 
   const products = useMemo(
@@ -642,6 +680,62 @@ const ProductSalesSummary = (props: ProductSalesSummaryProps) => {
   const errorMessage =
     (productSalesQuery.error as Error | undefined)?.message ||
     "Sales could not be loaded.";
+  const salesAccessDenied = isQueryCommercialAccessDenied(productSalesQuery);
+  const pausedState =
+    accessState ??
+    (salesAccessDenied
+      ? {
+          badge: "Reports not included",
+          title: "Reports access paused",
+          description: scopedStoreId
+            ? "This Store's current access does not include Reports."
+            : "No Store in this Organization currently has Reports access.",
+          actionLabel: "Add Reports access",
+        }
+      : null);
+  const showReportsPaused =
+    props.mode === "admin" &&
+    Boolean(licenseStoreId) &&
+    Boolean(pausedState) &&
+    (Boolean(scopedStoreId) || salesAccessDenied);
+
+  if (
+    props.mode === "admin" &&
+    scopedStoreId &&
+    commercialStatusQuery.isPending
+  ) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Spinner className="size-6 text-primary" />
+      </div>
+    );
+  }
+
+  if (showReportsPaused && pausedState && licenseStoreId) {
+    return (
+      <div className={adminWorkspacePageHeightClass}>
+        <CatalogAccessPaused
+          className="h-full min-h-0"
+          badge={pausedState.badge}
+          title={pausedState.title}
+          message={pausedState.description}
+          actionLabel={pausedState.actionLabel}
+          actionHref={getStoreLicensePath(
+            props.organizationId,
+            licenseStoreId,
+          )}
+          featureIcon={BarChart3}
+          retrying={
+            productSalesQuery.isFetching || commercialStatusQuery.isFetching
+          }
+          onRetry={() => {
+            void productSalesQuery.refetch();
+            void commercialStatusQuery.refetch();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-5">

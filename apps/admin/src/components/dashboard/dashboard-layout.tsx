@@ -165,10 +165,10 @@ const DashboardLayout = () => {
                             >
                                 <WorkspaceBrand workspace="admin" />
                             </Link>
-                            {isPickerPage ? null : <StoreWorkspacePlanNavbarSummary />}
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                            {isPickerPage ? null : <StoreWorkspacePlanNavbarSummary />}
                             {isPickerPage ? null : (
                                 <Button
                                     variant="outline"

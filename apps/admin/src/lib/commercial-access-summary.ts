@@ -61,15 +61,26 @@ export const getEffectiveCommercialAccess = (
         : null;
 };
 
+export const isPlanExpiringWithinDays = (
+    endsAt: string | Date,
+    days: number,
+    now = new Date(),
+) => {
+    const remainingMs = new Date(endsAt).getTime() - now.getTime();
+    if (remainingMs <= 0) return true;
+    return remainingMs < days * 24 * HOUR_MS;
+};
+
 export const formatPlanTimeRemaining = (endsAt: string | Date, now = new Date()) => {
-    const remainingHours = Math.ceil((new Date(endsAt).getTime() - now.getTime()) / HOUR_MS);
+    const remainingMs = new Date(endsAt).getTime() - now.getTime();
+    if (remainingMs <= 0) return "Expired";
 
-    if (remainingHours <= 0) return "Expired";
+    const totalHours = remainingMs / HOUR_MS;
+    if (totalHours >= 24) {
+        const days = Math.floor(totalHours / 24);
+        return `${days}d left`;
+    }
 
-    const days = Math.floor(remainingHours / 24);
-    const hours = remainingHours % 24;
-
-    if (days > 0 && hours > 0) return `${days}d ${hours}h left`;
-    if (days > 0) return `${days}d left`;
+    const hours = Math.ceil(totalHours);
     return `${hours}h left`;
 };

@@ -75,6 +75,38 @@ describe("POS navigation visibility", () => {
         expect(mobileNav).not.toContain("google-contacts");
     });
 
+    test("does not expose Customers or Reports in POS navigation", () => {
+        const sidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+        const mobileNav = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosMobileBottomNav tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+
+        expect(sidebar).not.toContain('href="/customers"');
+        expect(sidebar).not.toContain('href="/reports"');
+        expect(sidebar).not.toContain("Customers");
+        expect(sidebar).not.toContain("Reports");
+        expect(mobileNav).not.toContain('href="/customers"');
+        expect(mobileNav).not.toContain('href="/reports"');
+        expect(
+            getVisiblePosWorkspaceDestinations({
+                tableManagementEnabled: true,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
+        ).not.toContain("customers");
+        expect(
+            getVisiblePosWorkspaceDestinations({
+                tableManagementEnabled: true,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
+        ).not.toContain("reports");
+    });
+
     test("includes Printer in the sidebar footer and workspace destinations", () => {
         const sidebar = renderToStaticMarkup(
             <MemoryRouter>

@@ -18,48 +18,40 @@ describe("POS route context", () => {
     test("maps core POS panels to root-based routes", () => {
         expect(getPosPanelPath("products")).toBe("/");
         expect(getPosPanelPath("tables")).toBe("/tables");
-        expect(getPosPanelPath("customers")).toBe("/customers");
         expect(getPosPanelPath("bills")).toBe("/bills");
-        expect(getPosPanelPath("reports")).toBe("/reports");
         expect(getPosPanelPath("whatsapp")).toBe("/whatsapp");
         expect(posPanelConfig.products.path).toBe("/");
         expect(posPanelConfig.tables.path).toBe("/tables");
-        expect(posPanelConfig.customers.path).toBe("/customers");
         expect(posPanelConfig.bills.path).toBe("/bills");
-        expect(posPanelConfig.reports.path).toBe("/reports");
         expect(posPanelConfig.whatsapp.path).toBe("/whatsapp");
     });
 
     test("falls back to products for the POS root and unknown paths", () => {
         expect(getPosPanelTabFromPath("/")).toBe("products");
         expect(getPosPanelTabFromPath("/tables")).toBe("tables");
-        expect(getPosPanelTabFromPath("/customers")).toBe("customers");
         expect(getPosPanelTabFromPath("/bills")).toBe("bills");
-        expect(getPosPanelTabFromPath("/reports")).toBe("reports");
         expect(getPosPanelTabFromPath("/whatsapp")).toBe("whatsapp");
+        expect(getPosPanelTabFromPath("/customers")).toBe("products");
+        expect(getPosPanelTabFromPath("/reports")).toBe("products");
         expect(getPosPanelTabFromPath("/unknown")).toBe("products");
     });
 
     test("sends unauthenticated workspace requests to POS login", () => {
         expect(getPosLoginPath("/")).toBe("/login?returnTo=%2F");
         expect(getPosLoginPath("/tables")).toBe("/login?returnTo=%2Ftables");
-        expect(getPosLoginPath("/customers")).toBe("/login?returnTo=%2Fcustomers");
         expect(getPosLoginPath("/bills")).toBe("/login?returnTo=%2Fbills");
-        expect(getPosLoginPath("/reports")).toBe("/login?returnTo=%2Freports");
         expect(getPosLoginPath("/whatsapp")).toBe("/login?returnTo=%2Fwhatsapp");
-    expect(getPosLoginPath("/appearance")).toBe(
-      "/login?returnTo=%2Fappearance",
-    );
-    expect(getPosLoginPath("/printer")).toBe(
-      "/login?returnTo=%2Fprinter",
-    );
+        expect(getPosLoginPath("/appearance")).toBe(
+            "/login?returnTo=%2Fappearance",
+        );
+        expect(getPosLoginPath("/printer")).toBe(
+            "/login?returnTo=%2Fprinter",
+        );
     });
 
     test("preserves only internal POS return paths after login", () => {
         expect(getPosReturnPath("/tables")).toBe("/tables");
-        expect(getPosReturnPath("/customers")).toBe("/customers");
         expect(getPosReturnPath("/bills")).toBe("/bills");
-        expect(getPosReturnPath("/reports")).toBe("/reports");
         expect(getPosReturnPath("/whatsapp")).toBe("/whatsapp");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
         expect(getPosReturnPath("/printer")).toBe("/printer");
@@ -69,70 +61,55 @@ describe("POS route context", () => {
         expect(getPosReturnPath(null)).toBe("/");
     });
 
-    test("exposes Tables and Customers in POS navigation and marks them active in the mobile More menu", () => {
-    expect(
-      posWorkspaceDestinations.map((destination) => destination.id),
-    ).toEqual([
+    test("exposes Tables in POS navigation and marks KOT active in the mobile More menu", () => {
+        expect(
+            posWorkspaceDestinations.map((destination) => destination.id),
+        ).toEqual([
             "products",
             "tables",
             "bills",
-      "kots",
-      "customers",
-            "reports",
+            "kots",
             "printer",
             "appearance",
         ]);
-    const tablesDestination = posWorkspaceDestinations.find(
-      (destination) => destination.id === "tables",
-    );
-    expect(tablesDestination).toMatchObject({
-      label: "Tables",
-      path: "/tables",
-      tab: "tables",
-    });
-    const customersDestination = posWorkspaceDestinations.find(
-      (destination) => destination.id === "customers",
-    );
-    expect(customersDestination).toMatchObject({
-      label: "Customers",
-      path: "/customers",
-      tab: "customers",
-    });
-    const reportsDestination = posWorkspaceDestinations.find(
-      (destination) => destination.id === "reports",
-    );
-    expect(reportsDestination).toMatchObject({
-      label: "Reports",
-      path: "/reports",
-      tab: "reports",
-    });
+        const tablesDestination = posWorkspaceDestinations.find(
+            (destination) => destination.id === "tables",
+        );
+        expect(tablesDestination).toMatchObject({
+            label: "Tables",
+            path: "/tables",
+            tab: "tables",
+        });
         expect(isPosMoreDestinationActive("/tables")).toBe(false);
-        expect(isPosMoreDestinationActive("/customers")).toBe(true);
-        expect(isPosMoreDestinationActive("/reports")).toBe(true);
+        expect(isPosMoreDestinationActive("/kots")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
         expect(isPosMoreDestinationActive("/printer")).toBe(true);
     });
 
     test("hides Tables from POS navigation when Table Management is disabled", () => {
         expect(
-            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: true }).map(
-                (destination) => destination.id,
-            ),
+            getVisiblePosWorkspaceDestinations({
+                tableManagementEnabled: true,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
         ).toContain("tables");
         expect(
-            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: false }).map(
-                (destination) => destination.id,
-            ),
+            getVisiblePosWorkspaceDestinations({
+                tableManagementEnabled: false,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
         ).not.toContain("tables");
         expect(
-      getVisiblePosPrimaryMobileDestinations({
-        tableManagementEnabled: false,
-      }).map((destination) => destination.id),
+            getVisiblePosPrimaryMobileDestinations({
+                tableManagementEnabled: false,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
         ).toEqual(["products", "bills"]);
         expect(
-      getVisiblePosPrimaryMobileDestinations({
-        tableManagementEnabled: true,
-      }).map((destination) => destination.id),
+            getVisiblePosPrimaryMobileDestinations({
+                tableManagementEnabled: true,
+                kotSystemEnabled: true,
+            }).map((destination) => destination.id),
         ).toEqual(["products", "tables", "bills"]);
     });
 

@@ -159,7 +159,6 @@ import {
 import { toast } from "sonner";
 
 import { usePosMobileNav } from "@/components/pos/pos-mobile-nav-context";
-import CustomerDirectory from "@/components/customers/customer-directory";
 import CheckoutCustomerFields from "@/components/billing/checkout-customer-fields";
 import CustomizeProductDialog, {
   type CustomizeAddOnSelection,
@@ -172,7 +171,6 @@ import SaleDetailDialog from "@/components/billing/sale-detail-dialog";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 import { PriceDisplay } from "@repo/ui/components/price-display";
 import ProductTypeBadge from "@/components/catalog/product-type-badge";
-import ProductSalesSummary from "@/components/reports/product-sales-summary";
 import CommercialAccessDenied from "@/components/commercial-access-denied";
 import type { BillingWorkspaceMode } from "@/lib/billing-mode";
 import {
@@ -369,8 +367,7 @@ type SettlementMode = "full" | "partial" | "due";
 type SaleSort = "newest" | "oldest" | "highest" | "lowest";
 type SalesPaymentMethodFilter = "all" | "cash" | "upi" | "card";
 type BillPaymentMethod = Exclude<SalesPaymentMethodFilter, "all">;
-type BillingPanelTab =
-  "products" | "bills" | "reports" | "customers";
+type BillingPanelTab = "products" | "bills";
 type InvoiceAction = "print" | "whatsapp";
 
 const SERVICE_MODE_OPTIONS: Array<{
@@ -512,17 +509,14 @@ const discountPresetPercentages = [
 type BillingPageProps = {
     mode?: BillingWorkspaceMode;
     session?: DeviceSessionDTO | null;
-  initialPanelTab?:
-    "products" | "bills" | "reports" | "customers";
+  initialPanelTab?: "products" | "bills";
     productSearch?: string;
     salesSearch?: string;
-    customerSearch?: string;
     onPanelTabChange?: (
         tab: PosPanelTab,
         composerHandoff?: PosComposerHandoff,
     ) => void;
     onProductSearchChange?: (value: string) => void;
-    onCustomerSearchChange?: (value: string) => void;
     pendingComposerHandoff?: PosComposerHandoff | null;
     onComposerHandoffConsumed?: () => void;
 };
@@ -533,10 +527,8 @@ const BillingPage = ({
     initialPanelTab = "products",
     productSearch: productSearchProp,
     salesSearch: salesSearchProp,
-    customerSearch: customerSearchProp,
     onPanelTabChange,
     onProductSearchChange,
-    onCustomerSearchChange,
     pendingComposerHandoff = null,
     onComposerHandoffConsumed,
 }: BillingPageProps) => {
@@ -1358,12 +1350,7 @@ const BillingPage = ({
             return;
         }
 
-        if (
-            leftPanelTab === "products" ||
-            leftPanelTab === "bills" ||
-            leftPanelTab === "reports" ||
-            leftPanelTab === "customers"
-        ) {
+        if (leftPanelTab === "products" || leftPanelTab === "bills") {
             onPanelTabChange(leftPanelTab);
         }
     }, [isDeviceMode, leftPanelTab, onPanelTabChange]);
@@ -3448,16 +3435,7 @@ const BillingPage = ({
                         </div>
                     ) : null}
 
-                    {canMutate && leftPanelTab === "reports" ? (
-                        <div className="min-h-full p-4 max-lg:pb-2 lg:p-6 lg:pb-6">
-              {session ? (
-                <ProductSalesSummary
-                  mode="pos"
-                  storeName={session.store.name}
-                />
-              ) : null}
-                        </div>
-                    ) : canMutate && leftPanelTab === "products" ? (
+                    {canMutate && leftPanelTab === "products" ? (
                         <>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                 {barcodeScanningEnabled ? (
@@ -3888,21 +3866,6 @@ const BillingPage = ({
                                 </div>
                             </div>
                         </>
-                    ) : canMutate && leftPanelTab === "customers" ? (
-                        <CustomerDirectory
-                            mode="device"
-                            organizationId={organizationId}
-                            storeId={selectedStoreId}
-                            selectedCustomerId={selectedCustomerId}
-                            searchValue={customerSearchProp}
-                            onSearchChange={onCustomerSearchChange}
-                            onUseForOrder={(customer) => {
-                                setSelectedCustomerId(customer.id);
-                                setSelectedCustomerFallback(customer);
-                                setCustomerSearch(customer.phone || customer.name);
-                                onPanelTabChange?.("products");
-                            }}
-                        />
                     ) : (
                         <>
                             <div className="mb-3 flex flex-wrap items-center gap-2 lg:hidden">

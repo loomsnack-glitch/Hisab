@@ -1,6 +1,10 @@
 import type { StoreCommercialStatusDTO } from "@repo/types";
 
-export type CommercialFeatureKey = "catalog_products" | "money_account_tracking" | "whatsapp";
+export type CommercialFeatureKey =
+    | "catalog_products"
+    | "money_account_tracking"
+    | "whatsapp"
+    | "reports";
 
 export type CommercialAccessPausedState = {
     badge: string;
@@ -33,6 +37,13 @@ const FEATURE_COPY: Record<
         missingFromPlan: "This Store's current access does not include WhatsApp.",
         expired: "Renew this Store's license to restore WhatsApp messaging.",
         noPlan: "Store WhatsApp unlocks as soon as this Store has messaging access.",
+    },
+    reports: {
+        label: "Reports",
+        title: "Reports access paused",
+        missingFromPlan: "This Store's current access does not include Reports.",
+        expired: "Renew this Store's license to restore Reports.",
+        noPlan: "Reports unlock as soon as this Store has reporting access.",
     },
 };
 

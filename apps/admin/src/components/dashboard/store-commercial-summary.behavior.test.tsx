@@ -39,6 +39,24 @@ const activeTrialStatus = {
 };
 
 describe("Store commercial summary", () => {
+    test("shows hours only when less than one day remains", () => {
+        const markup = renderToStaticMarkup(
+            <StoreCommercialSummary
+                commercialStatus={{
+                    ...activeTrialStatus,
+                    baseAccess: {
+                        ...activeTrialStatus.baseAccess!,
+                        endsAt: new Date("2026-09-14T20:00:00.000Z"),
+                    },
+                }}
+                now={new Date("2026-09-14T11:30:00.000Z")}
+            />,
+        );
+
+        expect(markup).toContain("9h left");
+        expect(markup).not.toContain("d left");
+    });
+
     test("shows the current Plan and a compact precise remaining time", () => {
         const markup = renderToStaticMarkup(
             <StoreCommercialSummary
@@ -48,7 +66,7 @@ describe("Store commercial summary", () => {
         );
 
         expect(markup).toContain("Trial");
-        expect(markup).toContain("2d 2h left");
+        expect(markup).toContain("2d left");
     });
 
     test("shows a clear empty state for a Store without a current Plan", () => {
@@ -90,8 +108,8 @@ describe("Store commercial summary", () => {
         );
 
         expect(markup).toContain("Trial");
-        expect(markup).toContain("29d 23h left");
-        expect(markup).not.toContain("6d 23h left");
+        expect(markup).toContain("29d left");
+        expect(markup).not.toContain("6d left");
     });
 
     test("shows the active Store Access Grant when no Store License is active", () => {
@@ -124,7 +142,7 @@ describe("Store commercial summary", () => {
         );
 
         expect(markup).toContain("All current Modules");
-        expect(markup).toContain("29d 23h left");
+        expect(markup).toContain("29d left");
         expect(markup).not.toContain("No active plan");
     });
 
@@ -149,8 +167,43 @@ describe("Store commercial summary", () => {
             </QueryClientProvider>,
         );
 
-        expect(markup).toContain("Current plan");
+        expect(markup).not.toContain("Current plan");
         expect(markup).toContain("Trial");
-        expect(markup).toContain("2d 2h left");
+        expect(markup).toContain("2d left");
+        expect(markup).toContain("border-red-500/35");
+    });
+
+    test("keeps the navbar badge grey when more than seven days remain", () => {
+        const queryClient = new QueryClient();
+        queryClient.setQueryData(commercialLicenseKeys.status(organizationId, storeId), {
+            status: "success" as const,
+            data: {
+                commercialStatus: {
+                    ...activeTrialStatus,
+                    baseAccess: {
+                        ...activeTrialStatus.baseAccess!,
+                        endsAt: new Date("2026-09-24T10:00:00.000Z"),
+                    },
+                },
+            },
+            code: 200,
+        });
+
+        const markup = renderToStaticMarkup(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter initialEntries={[`/organizations/${organizationId}/workspaces/${storeId}/products`]}>
+                    <Routes>
+                        <Route
+                            path="/organizations/:organizationId/workspaces/:storeId/products"
+                            element={<StoreWorkspacePlanNavbarSummary now={new Date("2026-09-14T11:30:00.000Z")} />}
+                        />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+
+        expect(markup).toContain("9d left");
+        expect(markup).toContain("bg-muted/60");
+        expect(markup).not.toContain("border-red-500/35");
     });
 });
