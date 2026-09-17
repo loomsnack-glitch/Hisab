@@ -8,6 +8,10 @@ import {
   replayPendingCloudWebhookEvents,
   reconcileStaleCloudOutbox,
 } from "./modules/tenant/whatsapp/cloud-api/cloud-runtime";
+import {
+  dispatchPlatformOutbox,
+  reconcileStalePlatformOutbox,
+} from "./modules/tenant/whatsapp/platform-outbox.runtime";
 
 const port = Number(process.env.PORT) || 8001;
 const hostname = process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0";
@@ -80,3 +84,25 @@ const stopCloudOutboxReconciliation = () => clearInterval(cloudOutboxReconciliat
 process.once("SIGINT", stopCloudOutboxReconciliation);
 process.once("SIGTERM", stopCloudOutboxReconciliation);
 process.once("SIGQUIT", stopCloudOutboxReconciliation);
+
+const platformOutboxDispatch = setInterval(() => {
+  void dispatchPlatformOutbox().catch((error) => {
+    console.warn("[whatsapp-platform] outbox dispatch failed", error instanceof Error ? error.message : "unknown error");
+  });
+}, 5_000);
+platformOutboxDispatch.unref();
+const stopPlatformOutboxDispatch = () => clearInterval(platformOutboxDispatch);
+process.once("SIGINT", stopPlatformOutboxDispatch);
+process.once("SIGTERM", stopPlatformOutboxDispatch);
+process.once("SIGQUIT", stopPlatformOutboxDispatch);
+
+const platformOutboxReconciliation = setInterval(() => {
+  void reconcileStalePlatformOutbox().catch((error) => {
+    console.warn("[whatsapp-platform] stale outbox reconciliation failed", error instanceof Error ? error.message : "unknown error");
+  });
+}, 60_000);
+platformOutboxReconciliation.unref();
+const stopPlatformOutboxReconciliation = () => clearInterval(platformOutboxReconciliation);
+process.once("SIGINT", stopPlatformOutboxReconciliation);
+process.once("SIGTERM", stopPlatformOutboxReconciliation);
+process.once("SIGQUIT", stopPlatformOutboxReconciliation);

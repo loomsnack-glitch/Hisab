@@ -45,6 +45,7 @@ const deps = () => {
   const calls = {
     messages: [] as unknown[],
     platformMessages: [] as unknown[],
+    platformStatuses: [] as unknown[],
     statuses: [] as unknown[],
     completed: 0,
     ignored: [] as unknown[],
@@ -60,6 +61,10 @@ const deps = () => {
       ingestPlatformMessage: async (data: unknown) => {
         calls.platformMessages.push(data);
         return { stored: true };
+      },
+      updatePlatformStatus: async (...data: unknown[]) => {
+        calls.platformStatuses.push(data);
+        return "updated" as "updated" | "stale" | "missing";
       },
       updateStatus: async (...data: unknown[]) => {
         calls.statuses.push(data);
@@ -141,6 +146,35 @@ describe("processCloudWebhookEvent", () => {
     expect(result).toEqual({ status: "completed", processed: 1, ignored: 0 });
     expect(state.calls.statuses).toHaveLength(0);
     expect(state.calls.completed).toBe(1);
+  });
+
+  test("reconciles platform delivery statuses without a tenant account", async () => {
+    const state = deps();
+    state.injected.resolvePlatformSender = async () => true;
+    const result = await processCloudWebhookEvent(
+      claim({ accountId: null, payload: {
+        entry: [{
+          id: "waba-1",
+          changes: [{
+            value: {
+              metadata: { phone_number_id: "phone-1" },
+              statuses: [{
+                id: "wamid-platform-1",
+                biz_opaque_callback_data: "invoice:platform-1",
+                status: "delivered",
+                timestamp: "1700000000",
+                recipient_id: "919876543210",
+              }],
+            },
+          }],
+        }],
+      } }),
+      state.injected,
+    );
+
+    expect(result).toEqual({ status: "completed", processed: 1, ignored: 0 });
+    expect(state.calls.platformStatuses).toHaveLength(1);
+    expect(state.calls.statuses).toHaveLength(0);
   });
 
   test("ignores a receipt containing only deferred events", async () => {

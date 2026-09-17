@@ -40,6 +40,8 @@ import {
     createPlatformTemplateOutbox,
     GANATRI_PLATFORM_SENDER_KEY,
 } from "./platform-outbox.repository";
+import { buildPlatformTemplateComponents, resolvePlatformTemplate } from "./platform-template-health";
+import { createPublicInvoiceUrl } from "./public-invoice.service";
 
 const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
@@ -303,6 +305,8 @@ export const createMessageTemplate = async (
 ) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    if (policy?.mode === "ganatri_utility") return { status: "error" as const, message: "Ganatri Utility templates are managed by Ganatri", data: null, code: STATUS_CODES.CONFLICT };
     const validation = validateWhatsAppTemplate(data.kind, data.body, scope.store?.whatsappLinks ?? []);
     if (validation.unknownTokens.length > 0) return { status: "error" as const, message: `Unknown template tokens: ${validation.unknownTokens.join(", ")}`, data: null, code: STATUS_CODES.BAD_REQUEST };
     try {
@@ -323,6 +327,8 @@ export const updateMessageTemplate = async (
 ) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    if (policy?.mode === "ganatri_utility") return { status: "error" as const, message: "Ganatri Utility templates are managed by Ganatri", data: null, code: STATUS_CODES.CONFLICT };
     if (data.body !== undefined) {
         const existing = await messageTemplate.getTemplate(organizationId, storeId, templateId);
         if (!existing) return { status: "error" as const, message: "Template not found", data: null, code: STATUS_CODES.NOT_FOUND };
@@ -343,6 +349,8 @@ export const updateMessageTemplate = async (
 export const deleteMessageTemplate = async (userId: string, organizationId: string, storeId: string, templateId: string) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    if (policy?.mode === "ganatri_utility") return { status: "error" as const, message: "Ganatri Utility templates are managed by Ganatri", data: null, code: STATUS_CODES.CONFLICT };
     const deleted = await messageTemplate.deleteTemplate(organizationId, storeId, templateId);
     return deleted
         ? { status: "success" as const, message: "WhatsApp message template deleted", data: null, code: STATUS_CODES.SUCCESS }
@@ -390,6 +398,8 @@ const queueDueReminderForStore = async (
         const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
         try {
             const config = requireWhatsAppPlatformConfig();
+            const template = await resolvePlatformTemplate("due_reminder", config);
+            const invoiceUrl = saleId ? await createPublicInvoiceUrl(organizationId, storeId, saleId) : null;
             const queued = await createPlatformTemplateOutbox({
                 organizationId,
                 storeId,
@@ -399,12 +409,14 @@ const queueDueReminderForStore = async (
                 idempotencyKey,
                 snapshot: {
                     senderKey: GANATRI_PLATFORM_SENDER_KEY,
+                    templateKind: "due_reminder",
                     phoneNumberId: config.phoneNumberId,
                     wabaId: config.wabaId,
                     graphVersion: config.graphVersion,
                     templateName: config.dueTemplateName,
                     templateLanguage: config.templateLanguage,
                     policyVersion: policy.revision,
+                    components: buildPlatformTemplateComponents("due_reminder", template, getDueReminderTemplateValues(customer, reminderSales, store.name, store.whatsappLinks, invoiceUrl)),
                 },
             });
             return {

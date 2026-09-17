@@ -1,16 +1,20 @@
 import { randomUUID } from "node:crypto";
+import type { CloudTemplateComponent } from "./cloud-api/cloud-outbound";
+import type { PlatformTemplateKind } from "./platform-template-health";
 import { pg } from "@/config/db";
 
 export const GANATRI_PLATFORM_SENDER_KEY = "ganatri_utility" as const;
 
 export type PlatformSenderSnapshot = Readonly<{
   senderKey: typeof GANATRI_PLATFORM_SENDER_KEY;
+  templateKind: PlatformTemplateKind;
   phoneNumberId: string;
   wabaId: string;
   graphVersion: string;
   templateName: string;
   templateLanguage: string;
   policyVersion: number;
+  components: CloudTemplateComponent[];
 }>;
 
 export type PlatformTemplateOutboxRequest = Readonly<{
@@ -44,6 +48,9 @@ const snapshotForInsert = (snapshot: PlatformSenderSnapshot): PlatformSenderSnap
   if (snapshot.senderKey !== GANATRI_PLATFORM_SENDER_KEY) {
     throw new Error("Platform sender key is invalid");
   }
+  if (snapshot.templateKind !== "bill" && snapshot.templateKind !== "due_reminder") {
+    throw new Error("Platform template kind is invalid");
+  }
   if (!/^\d{6,32}$/.test(snapshot.phoneNumberId) || !/^\d{6,32}$/.test(snapshot.wabaId)) {
     throw new Error("Platform sender identity is invalid");
   }
@@ -58,6 +65,9 @@ const snapshotForInsert = (snapshot: PlatformSenderSnapshot): PlatformSenderSnap
   }
   if (!Number.isInteger(snapshot.policyVersion) || snapshot.policyVersion < 1) {
     throw new Error("Platform policy version is invalid");
+  }
+  if (!Array.isArray(snapshot.components) || snapshot.components.length > 20) {
+    throw new Error("Platform template components are invalid");
   }
   return snapshot;
 };
@@ -98,6 +108,30 @@ export const createPlatformTemplateOutboxInDatabase = async (
     }
     return recordFrom(existing as Record<string, unknown>, true);
   }
+
+  const [policy] = await tx`
+    SELECT mode, revision
+    FROM whatsapp_store_policies
+    WHERE organization_id = ${params.organizationId}
+      AND store_id = ${params.storeId}
+      AND effective_to IS NULL
+    FOR UPDATE
+  `;
+  if (!policy || policy.mode !== "ganatri_utility" || Number(policy.revision) !== snapshot.policyVersion) {
+    throw new Error("Ganatri Utility Store policy changed; retry the send");
+  }
+
+  const [customer] = await tx`
+    SELECT id
+    FROM customers
+    WHERE id = ${params.customerId}
+      AND organization_id = ${params.organizationId}
+      AND is_active = TRUE
+      AND phone = ${params.customerPhone}
+      AND whatsapp_suppressed = FALSE
+      AND utility_opted_in = TRUE
+  `;
+  if (!customer) throw new Error("Customer WhatsApp utility consent is no longer valid");
 
   const [message] = await tx`
     INSERT INTO whatsapp_messages (

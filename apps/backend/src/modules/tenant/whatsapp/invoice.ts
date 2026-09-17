@@ -36,6 +36,7 @@ import {
   createPlatformTemplateOutbox,
   GANATRI_PLATFORM_SENDER_KEY,
 } from "./platform-outbox.repository";
+import { buildPlatformTemplateComponents, resolvePlatformTemplate } from "./platform-template-health";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -192,11 +193,15 @@ const queuePlatformInvoiceForStore = async (
   storeId: string,
   sale: SaleDetailDTO,
   customerPhone: string,
+  store: { name: string; whatsappLinks: StoreMessageLink[] },
+  organizationName: string,
   policyVersion: number,
   idempotencyKey: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   try {
     const config = requireWhatsAppPlatformConfig();
+    const template = await resolvePlatformTemplate("bill", config);
+    const invoiceUrl = await createPublicInvoiceUrl(organizationId, storeId, sale.id);
     const queued = await createPlatformTemplateOutbox({
       organizationId,
       storeId,
@@ -206,12 +211,19 @@ const queuePlatformInvoiceForStore = async (
       idempotencyKey,
       snapshot: {
         senderKey: GANATRI_PLATFORM_SENDER_KEY,
+        templateKind: "bill",
         phoneNumberId: config.phoneNumberId,
         wabaId: config.wabaId,
         graphVersion: config.graphVersion,
         templateName: config.billTemplateName,
         templateLanguage: config.templateLanguage,
         policyVersion,
+        components: buildPlatformTemplateComponents("bill", template, getInvoiceTemplateValues(sale, {
+          organizationName,
+          storeName: store.name,
+          links: store.whatsappLinks,
+          invoiceUrl,
+        })),
       },
     });
     return response(sale.id, queued, queued.deduplicated ?? false);
@@ -285,6 +297,10 @@ export const queueInvoiceForStore = async (
   }
 
   const policy = await getCurrentPolicy(organizationId, storeId);
+  const organization = await organizationRepository.getOrganizationById(organizationId);
+  if (!organization) {
+    return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  }
   const admission = policy
     ? admitStoreWhatsAppIntent({
         mode: policy.mode,
@@ -314,6 +330,8 @@ export const queueInvoiceForStore = async (
       storeId,
       sale,
       parsedPhone.data,
+      { name: store.name, whatsappLinks: store.whatsappLinks },
+      organization.name,
       policy.revision,
       invoiceIdempotencyKey(saleId, options),
     );
@@ -352,16 +370,6 @@ export const queueInvoiceForStore = async (
       message: "Connect the Store WhatsApp account before sending invoices",
       data: null,
       code: STATUS_CODES.CONFLICT,
-    };
-  }
-
-  const organization = await organizationRepository.getOrganizationById(organizationId);
-  if (!organization) {
-    return {
-      status: "error",
-      message: "Organization not found",
-      data: null,
-      code: STATUS_CODES.NOT_FOUND,
     };
   }
 
@@ -527,6 +535,13 @@ export const retryInvoice = async (
   if (!store) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
   const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
   if (entitlementError) return entitlementError;
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  if (policy?.mode === "ganatri_utility") {
+    const retried = await repository.retryPlatformInvoiceOutbox(organizationId, storeId, saleId);
+    return retried
+      ? response(saleId, retried, true)
+      : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
+  }
   const account = await repository.getAccount(organizationId, storeId);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(organizationId, storeId, account.id, saleId);
@@ -576,6 +591,13 @@ export const retryInvoiceForDevice = async (
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
   if (entitlementError) return entitlementError;
+  const policy = await getCurrentPolicy(session.organization.id, session.store.id);
+  if (policy?.mode === "ganatri_utility") {
+    const retried = await repository.retryPlatformInvoiceOutbox(session.organization.id, session.store.id, saleId);
+    return retried
+      ? response(saleId, retried, true)
+      : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
+  }
   const account = await repository.getAccount(session.organization.id, session.store.id);
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(session.organization.id, session.store.id, account.id, saleId);

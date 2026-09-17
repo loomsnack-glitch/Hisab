@@ -41,6 +41,14 @@ export type CloudWebhookProcessorDependencies = {
     wabaId: string,
     phoneNumberId: string,
   ) => Promise<{ stored: boolean }>;
+  updatePlatformStatus?: (
+    providerMessageId: string,
+    callbackData: string | null,
+    status: "sent" | "delivered" | "read" | "failed",
+    occurredAt: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+  ) => Promise<"updated" | "stale" | "missing">;
   updateTemplateStatus: (event: CloudNormalizedTemplateStatusEvent) => Promise<boolean | void>;
   complete: (
     event: Pick<CloudWebhookEventClaim, "id" | "leaseOwner">,
@@ -107,8 +115,12 @@ const dependencies: CloudWebhookProcessorDependencies = {
       contactPhoneNumber: data.contactPhoneNumber,
       displayName: data.displayName,
       body: data.body,
-      occurredAt: data.occurredAt,
+      occurredAt: String(data.occurredAt),
     });
+  },
+  updatePlatformStatus: async (...args) => {
+    const { updatePlatformMessageStatus } = await import("../whatsapp.repository");
+    return updatePlatformMessageStatus(...args);
   },
   updateTemplateStatus: async event => {
     const { applyCloudTemplateProviderStatus } = await import("./cloud-template-submission.repository");
@@ -236,6 +248,19 @@ export const processCloudWebhookEvent = async (
             event.wabaId,
             event.phoneNumberId,
           );
+        } else {
+          if (!deps.updatePlatformStatus) {
+            throw new CloudWebhookRetryableError("platform_status_handler_unavailable", "Platform status handler is unavailable");
+          }
+          const updated = await deps.updatePlatformStatus(
+            event.providerMessageId,
+            event.callbackData,
+            event.status,
+            event.occurredAt,
+            event.failureCode,
+            event.failureMessage,
+          );
+          if (updated === "missing") throw new CloudWebhookRetryableError("platform_message_not_found", "Platform status arrived before its outbound message was stored");
         }
         processed += 1;
         continue;

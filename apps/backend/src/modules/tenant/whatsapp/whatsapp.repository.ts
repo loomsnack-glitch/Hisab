@@ -1339,6 +1339,76 @@ export const updateCloudMessageStatus = async (
     });
 };
 
+export const updatePlatformMessageStatus = async (
+    providerMessageId: string,
+    callbackData: string | null,
+    status: "sent" | "delivered" | "read" | "failed",
+    occurredAt: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+): Promise<"updated" | "stale" | "missing"> => pg.begin(async tx => {
+    const [existing] = await tx`
+        SELECT message.id, message.status AS message_status,
+               outbox.id AS outbox_id, outbox.status AS outbox_status
+        FROM whatsapp_messages message
+        LEFT JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        WHERE message.platform_sender_key = 'ganatri_utility'
+          AND message.direction = 'outbound'
+          AND (
+            message.provider_message_id = ${providerMessageId}
+            OR (
+              message.provider_message_id IS NULL
+              AND ${callbackData}::text IS NOT NULL
+              AND message.idempotency_key = ${callbackData}
+            )
+          )
+        ORDER BY CASE WHEN message.provider_message_id = ${providerMessageId} THEN 0 ELSE 1 END
+        LIMIT 1
+        FOR UPDATE OF message
+    `;
+    if (!existing) return "missing";
+    const [row] = await tx`
+        UPDATE whatsapp_messages
+        SET status = CASE
+                WHEN ${status} = 'read' THEN 'read'::whatsapp_message_status_enum
+                WHEN status IN ('read', 'delivered', 'failed') THEN status
+                WHEN ${status} = 'delivered' THEN 'delivered'::whatsapp_message_status_enum
+                WHEN ${status} = 'failed' THEN 'failed'::whatsapp_message_status_enum
+                ELSE 'sent'::whatsapp_message_status_enum
+            END,
+            cloud_status_at = ${occurredAt}::timestamptz,
+            sent_at = CASE WHEN ${status} IN ('sent', 'delivered', 'read') THEN COALESCE(sent_at, ${occurredAt}::timestamptz) ELSE sent_at END,
+            delivered_at = CASE WHEN ${status} IN ('delivered', 'read') THEN COALESCE(delivered_at, ${occurredAt}::timestamptz) ELSE delivered_at END,
+            read_at = CASE WHEN ${status} = 'read' THEN COALESCE(read_at, ${occurredAt}::timestamptz) ELSE read_at END,
+            failure_code = CASE WHEN ${status} IN ('read', 'delivered') THEN NULL WHEN ${status} = 'failed' THEN ${failureCode} ELSE failure_code END,
+            failure_message = CASE WHEN ${status} IN ('read', 'delivered') THEN NULL WHEN ${status} = 'failed' THEN ${failureMessage} ELSE failure_message END,
+            provider_message_id = ${providerMessageId}
+        WHERE id = ${existing.id}
+          AND (cloud_status_at IS NULL OR cloud_status_at <= ${occurredAt}::timestamptz)
+        RETURNING id
+    `;
+    if (!row) return "stale";
+    if (existing.outbox_id && status === "failed") {
+        await tx`
+            UPDATE whatsapp_outbox
+            SET status = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                last_error_code = LEFT(${failureCode ?? "platform_delivery_failed"}, 100),
+                last_error_message = LEFT(${failureMessage ?? "Platform provider reported delivery failure"}, 1000),
+                updated_at = NOW()
+            WHERE id = ${existing.outbox_id}
+              AND status IN ('pending', 'processing', 'retryable', 'reconciling')
+        `;
+    } else if (existing.outbox_id && status !== "failed" && existing.outbox_status === "reconciling") {
+        await tx`
+            UPDATE whatsapp_outbox
+            SET status = 'sent', lease_owner = NULL, lease_expires_at = NULL,
+                last_error_code = NULL, last_error_message = NULL, updated_at = NOW()
+            WHERE id = ${existing.outbox_id} AND status = 'reconciling'
+        `;
+    }
+    return "updated";
+});
+
 export const retryInvoiceOutbox = async (
     organizationId: string,
     storeId: string,
@@ -1417,6 +1487,71 @@ export const retryInvoiceOutbox = async (
                   outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
               }
             : null;
+    });
+};
+
+export const retryPlatformInvoiceOutbox = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    return pg.begin(async tx => {
+        const [outbox] = await tx`
+            UPDATE whatsapp_outbox
+            SET status = 'pending', next_attempt_at = NOW(), lease_owner = NULL,
+                lease_expires_at = NULL, last_error_code = NULL,
+                last_error_message = NULL, updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND store_id = ${storeId}
+              AND sender_kind = 'ganatri_platform'
+              AND platform_sender_key = 'ganatri_utility'
+              AND sale_id = ${saleId}
+              AND kind = 'template'
+              AND status IN ('retryable', 'dead_letter')
+              AND EXISTS (
+                SELECT 1 FROM whatsapp_messages invoice_message
+                WHERE invoice_message.id = whatsapp_outbox.message_id
+                  AND invoice_message.idempotency_key LIKE 'invoice:%'
+              )
+            RETURNING id, message_id, status
+        `;
+        if (!outbox) {
+            const [existing] = await tx`
+                SELECT o.id AS outbox_id, o.status AS outbox_status,
+                       m.id AS message_id, m.status AS message_status
+                FROM whatsapp_outbox o
+                INNER JOIN whatsapp_messages m ON m.id = o.message_id
+                WHERE o.organization_id = ${organizationId}
+                  AND o.store_id = ${storeId}
+                  AND o.sender_kind = 'ganatri_platform'
+                  AND o.platform_sender_key = 'ganatri_utility'
+                  AND o.sale_id = ${saleId}
+                  AND o.kind = 'template'
+                  AND m.idempotency_key LIKE 'invoice:%'
+                ORDER BY o.created_at DESC
+                LIMIT 1
+            `;
+            return existing
+                ? {
+                    messageId: String(existing.message_id),
+                    outboxId: String(existing.outbox_id),
+                    messageStatus: existing.message_status as InvoiceOutboxRecord["messageStatus"],
+                    outboxStatus: existing.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+                }
+                : null;
+        }
+        await tx`
+            UPDATE whatsapp_messages
+            SET status = 'queued', provider_message_id = NULL, failure_code = NULL, failure_message = NULL,
+                sent_at = NULL, delivered_at = NULL, read_at = NULL
+            WHERE id = ${outbox.message_id}
+        `;
+        return {
+            messageId: String(outbox.message_id),
+            outboxId: String(outbox.id),
+            messageStatus: "queued" as InvoiceOutboxRecord["messageStatus"],
+            outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
+        };
     });
 };
 

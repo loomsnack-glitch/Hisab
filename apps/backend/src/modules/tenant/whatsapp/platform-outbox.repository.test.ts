@@ -28,6 +28,19 @@ describe("platform WhatsApp outbox contract", () => {
     const rollback = "platform-outbox-rollback-probe";
     try {
       await database.begin(async transaction => {
+        await transaction`
+          UPDATE whatsapp_store_policies
+          SET mode = 'ganatri_utility', revision = revision + 1
+          WHERE organization_id = ${scope.organization_id}
+            AND store_id = ${scope.store_id}
+            AND effective_to IS NULL
+        `;
+        const [policy] = await transaction`
+          SELECT revision FROM whatsapp_store_policies
+          WHERE organization_id = ${scope.organization_id}
+            AND store_id = ${scope.store_id}
+            AND effective_to IS NULL
+        `;
         const request = {
           organizationId: String(scope.organization_id),
           storeId: String(scope.store_id),
@@ -36,14 +49,16 @@ describe("platform WhatsApp outbox contract", () => {
           idempotencyKey: "phase3-platform-outbox-probe",
           snapshot: {
             senderKey: GANATRI_PLATFORM_SENDER_KEY,
+            templateKind: "bill" as const,
             phoneNumberId: "123456789012345",
             wabaId: "987654321098765",
             graphVersion: "v26.0",
             templateName: "ganatri_bill",
             templateLanguage: "en_US",
-            policyVersion: 1,
+            policyVersion: Number(policy.revision),
+            components: [],
           },
-        } as const;
+        };
 
         const first = await createPlatformTemplateOutboxInDatabase(request, transaction);
         const duplicate = await createPlatformTemplateOutboxInDatabase(request, transaction);

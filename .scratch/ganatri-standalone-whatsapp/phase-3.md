@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 3
 
-Status: 3.4 committed; Phase 3 complete with documented follow-ups
+Status: Review fixes complete; awaiting review-fix commit
 Phase: 3 — Ganatri Utility sender
 
 ## Outcome
@@ -300,3 +300,26 @@ them automatically.
 - Phase 3 follow-ups: provider template health/cache, platform dispatcher and
   delivery-event reconciliation, template-management route guards, and
   delivery/consent completion remain in the later planned slices.
+
+## Phase 3 review and correction record
+
+The whole Phase 3 diff was reviewed against this specification, the domain
+context, the Console credential boundary, and the repository's backend module
+patterns. The review found and corrected these substantive gaps:
+
+- Platform queue creation now locks and rechecks the current Store policy
+  revision and requires active Customer utility consent, matching phone, and
+  suppression status before persistence.
+- Configured platform templates are fetched from the configured WABA at queue
+  and dispatch time and must match the fixed name, language, approved status,
+  Utility category, and positional variable contract. Immutable provider
+  parameters are stored in the sender snapshot.
+- Platform outbox rows now have a real claim/lease/dispatch/retry/reconcile
+  runtime, including provider status reconciliation and invoice retry support;
+  they no longer depend on the Organization Cloud account dispatcher.
+- Promotions and local template create/update/delete operations now reject a
+  Ganatri Utility Store even when historical Organization account rows remain.
+- Review verification: 36 focused tests passed, backend production build
+  passed, touched-file TypeScript diagnostics are absent, and
+  `git diff --check` passed. The repository-wide TypeScript baseline still has
+  unrelated pre-existing diagnostics.

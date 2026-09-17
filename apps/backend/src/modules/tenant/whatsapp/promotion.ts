@@ -24,6 +24,7 @@ import { retryCloudOutboxNow } from "./cloud-api/cloud-outbox.repository";
 import { createCloudTemplateOutbox } from "./cloud-api/cloud-template-outbox.repository";
 import type { CloudTemplateSendSnapshot } from "./cloud-api/cloud-template-admission";
 import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
+import { getCurrentPolicy } from "./whatsapp-policy.repository";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_CAMPAIGN_RECIPIENTS = 1_000;
@@ -178,6 +179,8 @@ export const retryPromotionRecipient = async (
   campaignId: string,
   recipientId: string,
 ): Promise<ServiceResponse<{ recipientId: string; action: "retry"; outboxId: string } | null>> => {
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
   const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
   if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
   if (target.status !== "retryable" || target.outbox_status !== "retryable" || !target.outbox_id) {
@@ -195,6 +198,8 @@ export const resendPromotionRecipient = async (
   campaignId: string,
   recipientId: string,
 ): Promise<ServiceResponse<{ recipientId: string; action: "resend"; outboxId: string } | null>> => {
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
   const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
   if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
   if (promotionRecipientResendIsBlocked(target.failure_code, target.updated_at)) {
@@ -444,6 +449,8 @@ export const createPromotion = async (
     };
   const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
   if (entitlementError) return entitlementError;
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
   const account = await repository.getAccount(organizationId, storeId);
   if (!account)
     return {
