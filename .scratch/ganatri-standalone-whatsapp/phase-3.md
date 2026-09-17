@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 3
 
-Status: Review fixes complete; awaiting review-fix commit
+Status: Complete with documented follow-ups
 Phase: 3 — Ganatri Utility sender
 
 ## Outcome
