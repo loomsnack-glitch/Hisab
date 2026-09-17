@@ -186,7 +186,8 @@ drops only the new policy table/type and does not touch existing WhatsApp data.
 - Development database result: 149 migrations applied, 0 pending.
 - Existing data counts remained unchanged: 4 WhatsApp accounts, 1 account
   assignment, 784 messages, and 119 outbox rows.
-- Phase 2.3 must not start until this subphase commit gate is complete.
+- Phase 2.3 followed after this subphase commit gate; this review record is
+  retained for the completed migration checkpoint.
 
 ## 2.3 Subphase plan — policy transitions and entitlement
 
@@ -263,7 +264,7 @@ outbox records remain intact.
   a concurrent unlink cannot leave a newly selected Cloud policy unvalidated.
 - Full backend typecheck remains a pre-existing baseline failure set; no new
   policy-file diagnostics remain.
-- Phase 2.4 is the next subphase after this commit gate.
+- Phase 2.4 followed after this commit gate; this review record is retained.
 
 ## 2.4 Subphase plan — Store-Customer association schema and event seams
 
@@ -332,7 +333,7 @@ conversations, messages, and outbox records remain untouched.
   and activity-event counts are zero after the rollback-only probe.
 - No existing Customer, Sale, conversation, message, or outbox rows were
   changed.
-- Phase 2.5 is the remaining subphase and is next after this commit gate.
+- Phase 2.5 followed after this commit gate; this review record is retained.
 
 ## 2.5 Subphase plan — final Phase 2 audit and contract review
 
