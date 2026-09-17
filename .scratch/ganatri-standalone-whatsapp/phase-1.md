@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 1
 
-Status: Phase 1 complete with follow-ups; closeout commit pending
+Status: Phase 1 complete with documented follow-ups
 Phase: 1 — Integrated Admin and Store Console foundation
 
 ## Outcome
@@ -34,7 +34,7 @@ promotions, database policy changes, and POS authentication changes.
 
 ## 1.1 Subphase plan — integrated feature boundary and navigation
 
-Status: Phase 1.4 final review complete; closeout commit pending
+Status: Phase 1.1 committed; review record retained
 
 ### User-facing outcome
 
@@ -131,10 +131,11 @@ backend, POS, database, migrations, or unrelated Admin-mobile work.
   backend/provider behavior remain outside this slice.
 - Existing focused coverage passed: 38 tests across Admin navigation,
   Organization WhatsApp, and Store Workspace WhatsApp route/panel behavior.
-- Admin build passed. Full Admin typecheck and lint remain blocked by existing
-  unrelated baseline errors, including known errors in broader catalog,
-  customer, invoice, report, vendor, and WhatsApp component typing/lint paths;
-  no source file was changed in this subphase to mask those failures.
+- Admin build passed. Full Admin typecheck and lint remain blocked by
+  pre-existing baseline errors, including broader catalog, customer, invoice,
+  report, vendor, and WhatsApp component typing/lint paths. These errors were
+  not introduced by Phase 1; no source file was changed in this subphase to
+  mask them.
 - Browser visual verification was not available in this session; it remains a
   release follow-up rather than a reason to add a new app.
 - Phase 1.1 is committed; this subphase is now active under the next approved
@@ -195,7 +196,7 @@ not enter those routes.
 
 ## 1.3 Subphase plan — Organization/Store scoped UI shell
 
-Status: Plan reviewed; validation in progress
+Status: Plan reviewed; validation complete
 
 ### User-facing outcome
 
@@ -248,11 +249,12 @@ user from viewing another Store's WhatsApp data.
   authenticated home routing.
 - Admin build was already passing from the Phase 1.2 verification; no source
   files changed in this subphase, so the result remains applicable.
-- Full Admin typecheck/lint baseline failures remain unchanged and unrelated.
+- Full Admin typecheck/lint baseline failures remain unchanged and were not
+  introduced by this subphase.
 
 ## 1.4 Subphase plan — Phase 1 verification and review
 
-Status: Plan reviewed; final verification in progress
+Status: Final verification and review complete
 
 ### Outcome
 
@@ -290,12 +292,13 @@ foundation boundary. Do not begin Phase 2 or add WhatsApp provider behavior.
 - Focused Phase 1 verification passed: 52 tests covering authentication,
   Organization scope, Store routes, Store Workspace, Admin navigation, and
   WhatsApp pages.
-- Full Admin suite result: 390 passed and 28 unrelated existing failures in
+- Full Admin suite result: 390 passed and 28 pre-existing failures in
   Expense Categories, Money Accounts, Service Tables, Billing, and barcode
   scanning tests. These are baseline failures and were not changed.
 - Admin production build passed. Existing chunk-size warnings remain.
-- Full Admin typecheck and lint remain baseline failures outside this Phase 1
-  boundary; no unrelated source was changed to hide them.
+- Full Admin typecheck and lint remain pre-existing baseline failures, including
+  some WhatsApp-path errors; they were not introduced by Phase 1 and no source
+  was changed to hide them.
 - Browser visual verification remains pending because no browser surface was
   available in this session.
 - Phase 1 is complete with the documented verification follow-ups. Phase 2

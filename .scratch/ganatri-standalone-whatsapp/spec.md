@@ -949,12 +949,11 @@ credentials were read or printed.
 - In this plan, “Store Console” means the selected Store Workspace inside
   Admin. `apps/console` remains the Platform Administrator inspection console
   and cannot manage tenant WhatsApp data.
-- The configured development database reports 136 applied migrations and 12
+- The configured development database reports 148 applied migrations and zero
   pending migrations.
-- The pending migrations include
-  `20260915090000_add_whatsapp_cloud_provider_phone_status.sql`, which is
-  relevant to Cloud phone health. No migration was applied during this
-  baseline.
+- The Cloud phone-status migration
+  `20260915090000_add_whatsapp_cloud_provider_phone_status.sql` was applied
+  during the Phase 0 development baseline.
 - WhatsApp account inventory: one historical `baileys` account is connected,
   one historical `baileys` account is failed, one Cloud account is connecting,
   and one Cloud account is connected. The historical Baileys rows must remain

@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 1 complete with follow-ups; closeout commit pending
+Status: Phase 1 complete with documented follow-ups
 Last updated: 2026-09-17
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -39,7 +39,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 ## Current baseline
 
 - Branch: `feat/ganatri-standalone-whatsapp`.
-- Fixed point: `79290fa` (last committed planning checkpoint).
+- Fixed point: `9e465f8` (integrated-plan checkpoint before Phase 1 execution).
 - Phase 0 source/database baseline completed on 2026-09-17.
 - Development database: 148 migrations applied, 0 pending.
 - The WhatsApp phone-status migration is applied.
@@ -51,8 +51,8 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
   cutover.
 - Existing OTP/invitation logging still requires redaction before Phase 3
   platform tenant delivery.
-- Phase 1.1, 1.2, and 1.3 are committed. Phase 1.4 final verification and
-  standards/spec review are complete; the closeout commit is pending.
+- Phase 1.1, 1.2, 1.3, and 1.4 are committed. Phase 1 final verification and
+  standards/spec review are complete, with documented follow-ups.
 
 ## Phase roadmap
 
