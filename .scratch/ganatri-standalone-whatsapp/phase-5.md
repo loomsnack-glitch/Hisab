@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 5
 
-Status: 5.1 committed; 5.2 next
+Status: 5.1 review fix committed; 5.2 next
 Phase: 5 — Organization template lifecycle
 
 ## Outcome
@@ -79,3 +79,51 @@ calling Meta or resolving a credential.
 
 Draft persistence is committed; 5.2 may add idempotent Meta submission and
 provider status synchronization.
+
+### 5.1 review correction
+
+The 5.1 review found that a creator editing a saved draft could receive the
+older active draft instead of updating it. Draft requests now carry an optional
+submission ID, update only an editable `draft` row scoped to the same
+Organization/WABA, and preserve the no-Meta-call boundary. The Admin dialog
+retains the draft ID after saving so later saves update the same draft.
+
+- Latest focused template tests: 19 passed, 0 failed.
+- Backend and Admin production builds: passed.
+
+## 5.2 Subphase plan — Meta submission and status sync
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+The creator can submit one saved draft idempotently to Meta. Provider approval,
+rejection, pause, disable, and pending updates are applied by ordered webhook
+identity without exposing credentials or accidentally moving a Store default.
+
+### Scope
+
+- Review and harden the existing submission claim/idempotency, provider upload,
+  provider-template refresh, and failure-state transitions.
+- Ensure provider status updates are matched by WABA/template identity and
+  ordered by provider timestamp.
+- Add focused tests for duplicate submission, stale status, approval, reject,
+  pending, provider failure, and no credential/payload leakage.
+- Preserve draft-only behavior and defer explicit Store publish to 5.3.
+
+### Non-goals
+
+- No automatic Store default replacement.
+- No archive/rollback or new template component model beyond current
+  validation.
+
+### Verification
+
+- Cloud template service, submission repository, provider client, and webhook
+  processor tests.
+- Backend/Admin builds and `git diff --check`.
+
+### Exit gate
+
+Meta submission and safe provider status synchronization are verified and
+committed before 5.3 binding/publish work begins.

@@ -250,6 +250,7 @@ export const WhatsAppCloudTemplateSubmissionSchema = z.object({
 });
 
 export const WhatsAppCreateCloudTemplateSubmissionSchema = z.object({
+    submissionId: z.uuid("Invalid draft submission id").nullable().optional(),
     storeId: z.uuid("Invalid store id").nullable().optional(),
     whatsappBusinessAccountId: z.uuid("Invalid internal Cloud business account id"),
     localTemplateId: z.uuid("Invalid local template id").nullable().optional(),

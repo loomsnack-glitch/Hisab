@@ -109,6 +109,35 @@ export const createCloudTemplateSubmission = async (
   return existingSubmission;
 });
 
+export const updateCloudTemplateDraft = async (
+  organizationId: string,
+  submissionId: string,
+  input: CloudTemplateSubmissionInput,
+  updatedBy: string,
+): Promise<WhatsAppCloudTemplateSubmissionDTO | null> => {
+  const [row] = await pg`
+    UPDATE whatsapp_cloud_template_submissions
+    SET originating_store_id = ${input.originatingStoreId ?? null},
+        local_template_id = ${input.localTemplateId ?? null},
+        kind = ${input.kind},
+        friendly_name = ${input.friendlyName},
+        meta_template_name = ${input.metaTemplateName},
+        language_code = ${input.languageCode},
+        category = ${input.category},
+        requested_components = ${input.requestedComponents}::jsonb,
+        sample_values = ${input.sampleValues}::jsonb,
+        idempotency_key = ${input.idempotencyKey},
+        updated_by = ${updatedBy},
+        updated_at = NOW()
+    WHERE id = ${submissionId}
+      AND organization_id = ${organizationId}
+      AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}
+      AND status = 'draft'
+    RETURNING *
+  `;
+  return row ? mapSubmission(row as Record<string, unknown>) : null;
+};
+
 export const claimCloudTemplateSubmission = async (
   organizationId: string,
   submissionId: string,

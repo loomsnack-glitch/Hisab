@@ -39,6 +39,7 @@ import {
   getCloudTemplateSubmission,
   updateCloudTemplateSubmission,
   listCloudTemplateSubmissions,
+  updateCloudTemplateDraft,
   type CloudTemplateSubmissionInput,
 } from "./cloud-template-submission.repository";
 
@@ -68,6 +69,7 @@ type CloudTemplateServiceDependencies = {
   getSubmission: typeof getCloudTemplateSubmission;
   updateSubmission: typeof updateCloudTemplateSubmission;
   listSubmissions: typeof listCloudTemplateSubmissions;
+  updateDraft: typeof updateCloudTemplateDraft;
   isAccountAssignedToStore: typeof isCloudAccountAssignedToStore;
   recordAudit: typeof recordCloudTemplateAuditEvent;
   archiveBinding: typeof archiveCloudTemplateBinding;
@@ -108,6 +110,7 @@ const dependencies = (): CloudTemplateServiceDependencies => ({
   getSubmission: getCloudTemplateSubmission,
   updateSubmission: updateCloudTemplateSubmission,
   listSubmissions: listCloudTemplateSubmissions,
+  updateDraft: updateCloudTemplateDraft,
   isAccountAssignedToStore: isCloudAccountAssignedToStore,
   recordAudit: recordCloudTemplateAuditEvent,
   archiveBinding: archiveCloudTemplateBinding,
@@ -639,7 +642,7 @@ export const saveCloudTemplateDraft = async (
     }
     const components = validateSubmissionComponents(data.components, data.sampleValues);
     validateKindSpecificComponents(data.kind, components);
-    const submission = await deps.createSubmission({
+    const draftInput = {
       organizationId,
       whatsappBusinessAccountId: data.whatsappBusinessAccountId,
       originatingStoreId: data.storeId ?? null,
@@ -653,7 +656,11 @@ export const saveCloudTemplateDraft = async (
       sampleValues: data.sampleValues,
       idempotencyKey: data.idempotencyKey,
       createdBy: userId,
-    });
+    } satisfies CloudTemplateSubmissionInput;
+    const submission = data.submissionId
+      ? await deps.updateDraft(organizationId, data.submissionId, draftInput, userId)
+      : await deps.createSubmission(draftInput);
+    if (!submission) return { status: "error", message: "Cloud template draft not found or is no longer editable", data: null, code: STATUS_CODES.CONFLICT };
     if (submission.status !== "draft") {
       return { status: "error", message: "This template draft already has a provider lifecycle state", data: null, code: STATUS_CODES.CONFLICT };
     }

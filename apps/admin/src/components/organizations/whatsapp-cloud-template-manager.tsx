@@ -297,6 +297,7 @@ const WhatsAppCloudTemplateManager = ({
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<WhatsAppMessageTemplateKind>("bill");
   const [friendlyName, setFriendlyName] = useState("");
+  const [draftSubmissionId, setDraftSubmissionId] = useState<string | null>(null);
   const [languageCode, setLanguageCode] = useState("en_US");
   const [body, setBody] = useState(cloudAuthoringBody("bill"));
   const [footer, setFooter] = useState("");
@@ -525,6 +526,7 @@ const WhatsAppCloudTemplateManager = ({
   };
   const buildTemplateSubmission = async () => {
     const template = {
+      ...(draftSubmissionId ? { submissionId: draftSubmissionId } : {}),
       storeId,
       whatsappBusinessAccountId: businessAccountId,
       kind,
@@ -601,6 +603,7 @@ const WhatsAppCloudTemplateManager = ({
         toast.error(response.message);
       } else {
         setSubmitError(null);
+        setDraftSubmissionId(response.data?.submission.id ?? null);
         invalidate();
         toast.success("Template draft saved");
       }
@@ -671,6 +674,7 @@ const WhatsAppCloudTemplateManager = ({
   });
   const openCreate = () => {
     setSubmitError(null);
+    setDraftSubmissionId(null);
     setKind("bill");
     setFriendlyName("");
     setLanguageCode("en_US");
@@ -745,6 +749,7 @@ const WhatsAppCloudTemplateManager = ({
         .join("|"),
     );
     setSubmitError(null);
+    setDraftSubmissionId(null);
     setOpen(true);
   };
   const selectedKind = kinds.find((item) => item.value === kind)!;
