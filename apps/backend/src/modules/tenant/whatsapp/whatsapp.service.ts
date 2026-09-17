@@ -156,6 +156,14 @@ export const assignAccount = async (
         };
     }
 
+    const candidate = await repository.getAccountById(accountId);
+    if (!candidate || candidate.organizationId !== organizationId) {
+        return { status: "error", message: "WhatsApp account not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    if (candidate.provider !== "cloud_api") {
+        return { status: "error", message: "Only Organization Cloud accounts can be linked to a Store", data: null, code: STATUS_CODES.CONFLICT };
+    }
+
     try {
         const account = await repository.assignAccountToStore(organizationId, accountId, storeId, userId);
         if (!account) {
@@ -175,6 +183,9 @@ export const assignAccount = async (
                 data: null,
                 code: STATUS_CODES.CONFLICT,
             };
+        }
+        if (error instanceof repository.WhatsAppStoreAccountConflictError) {
+            return { status: "error", message: error.message, data: null, code: STATUS_CODES.CONFLICT };
         }
         throw error;
     }

@@ -287,6 +287,13 @@ export const getAccountsForOrganization = async (organizationId: string): Promis
     return rows.map(mapAccount);
 };
 
+export class WhatsAppStoreAccountConflictError extends Error {
+    constructor() {
+        super("This Store already has a WhatsApp account");
+        this.name = "WhatsAppStoreAccountConflictError";
+    }
+}
+
 export const assignAccountToStore = async (
     organizationId: string,
     accountId: string,
@@ -327,7 +334,19 @@ export const assignAccountToStore = async (
             ON CONFLICT (whatsapp_account_id, store_id) DO NOTHING
             RETURNING store_id
         `;
-        if (!assignment) return getAccountForTransaction(tx, accountId);
+        if (!assignment) {
+            const [storeAssignment] = await tx`
+                SELECT whatsapp_account_id
+                FROM whatsapp_account_stores
+                WHERE organization_id = ${organizationId}
+                  AND store_id = ${storeId}
+                LIMIT 1
+            `;
+            if (storeAssignment && String(storeAssignment.whatsapp_account_id) !== accountId) {
+                throw new WhatsAppStoreAccountConflictError();
+            }
+            return getAccountForTransaction(tx, accountId);
+        }
 
         await tx`
             UPDATE whatsapp_accounts

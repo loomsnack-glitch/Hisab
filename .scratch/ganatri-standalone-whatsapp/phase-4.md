@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 4
 
-Status: 4.3 committed; 4.4 next
+Status: 4.4 implementation and verification in progress
 Phase: 4 — Organization Cloud connection
 
 ## Outcome
@@ -190,3 +190,38 @@ revoked, and Business-App phones remain blocked.
 
 Account health and lifecycle are committed; 4.4 may now review assignment,
 phone uniqueness, shared-number defaults, and race behavior.
+
+## 4.4 Subphase plan — Assignment compatibility review
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+An Organization Cloud phone can be reused by multiple Stores, each Store can
+have only one linked Organization Cloud phone, and shared-number inbound
+routing remains deterministic. Concurrent Store-link attempts return a clear
+conflict instead of falsely reporting success for the losing account.
+
+### Scope
+
+- Review the existing `whatsapp_account_stores` constraints, deferred default
+  trigger, assignment transaction, and unlink fallback ordering.
+- Fix the Store-level assignment race and reject new historical/Baileys links;
+  existing historical rows remain readable.
+- Preserve first-linked default inbound Store behavior and oldest remaining
+  assignment fallback on unlink.
+- Add migration/repository contract coverage for uniqueness, default routing,
+  row locks, and conflict detection. Do not add a new assignment table or
+  alter queued message snapshots.
+
+### Verification
+
+- Focused assignment/migration tests and backend build/type diagnostics.
+- Development migration status remains clean; existing account/assignment
+  counts are not rewritten.
+- Review the Admin link/unlink API path for Organization scoping and safe DTOs.
+
+### Exit gate
+
+Assignment compatibility and race-safe behavior are reviewed, verified, and
+committed; Phase 4 then receives a phase-level validation and final review.

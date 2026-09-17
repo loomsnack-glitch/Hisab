@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 4.4 in progress
+Status: Phase 4 complete with documented follow-ups
 Last updated: 2026-09-18
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -71,7 +71,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Complete with follow-ups | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Complete with follow-ups | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Complete with follow-ups | Fixed bill/due messages use the common outbox safely. |
-| 4 | Organization Cloud connection | 4.1–4.4 | In progress (4.4) | Embedded Signup produces a validated, encrypted Cloud account. |
+| 4 | Organization Cloud connection | 4.1–4.4 | Complete with follow-ups | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Not started | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Not started | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Not started | Existing Admin/POS boundaries cut over without data loss. |
@@ -92,8 +92,10 @@ documented follow-ups. Phase 4.1 plan, edge-case coverage, verification, and
 review are complete and committed. Phase 4.2 server exchange/provisioning
 cleanup, verification, and review are complete and committed. Phase 4.3
 account lifecycle/health, rotation, verification, and review are complete and
-committed. Phase 4.4 is next. Phases 8 and 9 are intentionally deferred from
-the initial release.
+committed. Phase 4.4 assignment compatibility, race fix, verification, and
+review are complete and committed. Phase 4 is complete with documented
+follow-ups. Phases 8 and 9 are intentionally deferred from the initial
+release.
 
 ## Recovery checkpoint
 
