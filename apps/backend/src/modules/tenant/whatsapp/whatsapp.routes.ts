@@ -50,6 +50,7 @@ import {
 } from "./cloud-api/cloud-template.service";
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
+import { whatsappAdministratorMutationMiddleware } from "./whatsapp-authorization";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -71,6 +72,7 @@ const unexpectedError = (c: Context, error?: unknown) => {
 };
 
 userRouter.use("*", authMiddleware);
+userRouter.use("/:organizationId/*", whatsappAdministratorMutationMiddleware);
 registerCloudOnboardingRoutes(userRouter, startCloudOnboarding, {
     complete: completeCloudAccountProvisioning,
     list: listCloudAccountsForOrganization,

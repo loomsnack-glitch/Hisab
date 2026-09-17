@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 2
 
-Status: Not started
+Status: Phase 2.1 verified; commit gate pending
 Phase: 2 — Policy, authorization, and Customer association foundation
 
 ## Outcome
@@ -52,3 +52,70 @@ for every later sender operation.
 - Customer association creation, migration, repeated-event, source-history, and
   last-activity tests.
 - Typecheck, focused backend tests, migration audit, and diff review.
+
+## 2.1 Subphase plan — creator/administrator authorization seam
+
+Status: Plan reviewed; implementation and verification complete
+
+### User-facing outcome
+
+Only the Organization creator/administrator can perform WhatsApp management
+mutations through authenticated tenant routes. Read operations retain the
+existing Organization access behavior. Unauthorized requests fail before a
+WhatsApp service or provider operation runs.
+
+### Scope
+
+- Add a reusable WhatsApp management authorization decision and middleware.
+- Use the existing creator-scoped Organization access repository boundary.
+- Apply the guard to authenticated WhatsApp mutation methods, including Cloud
+  onboarding, account linking, template, consent, delivery, conversation, and
+  promotion mutations.
+- Preserve existing 400 responses for invalid Organization identifiers.
+- Add behavior tests for creator allow, unauthorized deny, invalid scope, and
+  read-method pass-through.
+
+### Non-goals
+
+- No membership-role schema or new role model; creator is the current
+  administrator until Organization roles exist.
+- No changes to read authorization, POS Device Authentication, Platform Console,
+  sender policy, Store configuration, Customer associations, or provider code.
+- No database migration.
+
+### Public seam
+
+`whatsappAdministratorMutationMiddleware` is the single route-level seam. It
+checks only authenticated user requests and only mutating HTTP methods. The
+decision returns a safe denial response without exposing Organization data.
+
+### Verification plan
+
+- Unit-test the authorization decision and middleware with injected Organization
+  lookup behavior.
+- Verify the WhatsApp router registers the middleware after `authMiddleware`.
+- Run focused authorization and existing WhatsApp backend tests.
+- Run backend typecheck and `git diff --check`.
+
+### Rollback
+
+Remove only the new authorization module, its tests, and the single WhatsApp
+router middleware registration. Existing service and route behavior remains
+otherwise unchanged.
+
+### 2.1 Review result
+
+- Standards review: passed. Authorization is isolated in one reusable module,
+  uses the existing Organization repository seam, and is registered after
+  authentication without changing Platform Console or POS middleware.
+- Specification review: passed. Mutating authenticated WhatsApp routes require
+  creator/administrator access; reads remain unchanged; invalid scope is
+  rejected before service access.
+- Verification passed: 6 focused authorization tests and the backend production
+  build.
+- Full backend typecheck remains a pre-existing baseline failure set; the new
+  authorization module does not appear in the remaining diagnostics.
+- The organization-setup test is blocked by missing MinIO endpoint
+  configuration in the test environment; authorization and onboarding route
+  tests themselves pass.
+- Phase 2.2 must not start until this subphase commit gate is resumed.
