@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 2.1 verified; commit gate pending
+Status: Phase 2.2 verified; commit gate pending
 Last updated: 2026-09-17
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -53,8 +53,9 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
   platform tenant delivery.
 - Phase 1.1, 1.2, 1.3, and 1.4 are committed. Phase 1 final verification and
   standards/spec review are complete, with documented follow-ups.
-- Phase 2.1 authorization implementation and verification are complete; its
-  commit gate is pending. Phase 2.2 and later subphases have not started.
+- Phase 2.1 authorization implementation and verification are committed. Phase
+  2.2 migration and verification are complete; its commit gate is pending.
+  Later subphases have not started.
 
 ## Phase roadmap
 
@@ -62,7 +63,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | --- | --- | --- | --- | --- |
 | 0 | Baseline and contract lock | 0.1–0.4 | Complete | Sender/policy boundaries and development migration state recorded. |
 | 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Complete with follow-ups | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
-| 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Commit gate (2.1) | Every policy mutation, Customer association, and send path is backend-authorized. |
+| 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Commit gate (2.2) | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Not started | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Not started | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Not started | Approved templates can be explicitly published per Store. |
@@ -77,9 +78,10 @@ Phase 0 is complete as a planning/baseline checkpoint. The product direction
 is integrated into Admin and Store Console; Phase 1.1, 1.2, 1.3, and 1.4 have
 passed their focused verification, standards/spec review, and commit gates.
 Phase 1 is complete with documented baseline and browser follow-ups. Phase 2.1
-implementation, verification, and standards/spec review are complete; its
-commit gate is pending. Later Phase 2 subphases remain blocked until that gate.
-Phases 8 and 9 are intentionally deferred from the initial release.
+implementation, verification, standards/spec review, and commit gate are
+complete. Phase 2.2 implementation and review are complete and its commit gate
+is pending. Later Phase 2 subphases remain blocked until that gate. Phases 8
+and 9 are intentionally deferred from the initial release.
 
 ## Recovery checkpoint
 

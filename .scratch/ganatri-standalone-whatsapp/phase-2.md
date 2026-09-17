@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 2
 
-Status: Phase 2.1 verified; commit gate pending
+Status: Phase 2.2 verified; commit gate pending
 Phase: 2 — Policy, authorization, and Customer association foundation
 
 ## Outcome
@@ -55,7 +55,7 @@ for every later sender operation.
 
 ## 2.1 Subphase plan — creator/administrator authorization seam
 
-Status: Plan reviewed; implementation and verification complete
+Status: Phase 2.2 plan reviewed; migration verified; commit pending
 
 ### User-facing outcome
 
@@ -119,3 +119,71 @@ otherwise unchanged.
   configuration in the test environment; authorization and onboarding route
   tests themselves pass.
 - Phase 2.2 must not start until this subphase commit gate is resumed.
+
+## 2.2 Subphase plan — Store configuration/history schema
+
+Status: Plan reviewed; implementation in progress
+
+### User-facing outcome
+
+Every Store has a durable WhatsApp policy history with one current policy row.
+The policy records whether the Store is disabled, uses Ganatri Utility, or uses
+an Organization Cloud account, without changing existing accounts, messages,
+outbox rows, or assignments.
+
+### Scope
+
+- Add an additive `whatsapp_store_policies` migration and mode enum.
+- Persist Organization/Store scope, mode, optional Organization Cloud account,
+  revision, effective timestamps, and actor metadata.
+- Enforce one current policy per Store and one revision per Store history.
+- Enforce composite Organization/Store and Organization/account foreign keys.
+- Enforce that only `organization_cloud` carries an account reference; disabled
+  and Ganatri Utility policies carry no tenant account.
+- Backfill existing Stores with revision-one `disabled` policies without
+  changing existing WhatsApp account assignments or delivery records.
+- Add migration-contract tests and verify the migration against the development
+  database.
+
+### Non-goals
+
+- No policy transition service or resolver; that is Phase 2.3.
+- No automatic policy enablement for existing or new Stores beyond the safe
+  disabled backfill.
+- No sender/account replacement, entitlement logic, Customer associations,
+  provider, UI, POS, or existing WhatsApp table rewrite.
+
+### Public seam
+
+The database policy history is the durable seam for later policy reads and
+transitions. Historical rows are retained; Phase 2.3 will own serialized
+transitions and current-row updates.
+
+### Verification plan
+
+- Test migration structure, backfill intent, constraints, and reversible down
+  migration.
+- Run `dbmate status` before and after applying the development migration.
+- Confirm existing WhatsApp account, assignment, message, and outbox counts are
+  unchanged.
+- Run focused backend tests, backend build, and `git diff --check`.
+
+### Rollback
+
+Use the migration down path only before dependent policy transitions exist. It
+drops only the new policy table/type and does not touch existing WhatsApp data.
+
+### 2.2 Review result
+
+- Standards review: passed. The migration is additive, tenant-anchored with
+  composite foreign keys, and reversible without altering existing WhatsApp
+  tables or records.
+- Specification review: passed. Each existing Store received a revision-one
+  `disabled` policy; mode/account consistency and one-current-row constraints
+  are persisted for later transitions.
+- Verification passed: 4 migration-contract tests, development migration
+  application, and backend data/constraint inventory.
+- Development database result: 149 migrations applied, 0 pending.
+- Existing data counts remained unchanged: 4 WhatsApp accounts, 1 account
+  assignment, 784 messages, and 119 outbox rows.
+- Phase 2.3 must not start until this subphase commit gate is complete.
