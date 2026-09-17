@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 1
 
-Status: Phase 1.1 phase review complete — commit gate pending
+Status: Phase 1.2 verified; commit gate pending
 Phase: 1 — Integrated Admin and Store Console foundation
 
 ## Outcome
@@ -34,7 +34,7 @@ promotions, database policy changes, and POS authentication changes.
 
 ## 1.1 Subphase plan — integrated feature boundary and navigation
 
-Status: Plan reviewed; existing boundary validated; commit intentionally pending
+Status: Phase 1.2 plan reviewed; existing boundary validated; commit pending
 
 ### User-facing outcome
 
@@ -137,8 +137,61 @@ backend, POS, database, migrations, or unrelated Admin-mobile work.
   no source file was changed in this subphase to mask those failures.
 - Browser visual verification was not available in this session; it remains a
   release follow-up rather than a reason to add a new app.
-- Commit is intentionally pending at the requested phase-review gate. Phase
-  1.2 must not start until the commit gate is resumed.
+- Phase 1.1 is committed; this subphase is now active under the next approved
+  phase-loop gate.
+
+## 1.2 Subphase plan — existing auth and API boundary
+
+Status: Plan reviewed; validation complete
+
+### User-facing outcome
+
+WhatsApp uses the existing Admin user session and API boundary. An authenticated
+Admin user can reach the Organization WhatsApp workspace and Store Workspace
+WhatsApp panel, while unauthenticated or device-authenticated POS requests do
+not enter those routes.
+
+### Scope
+
+- Verify Admin's `userAuthenticate` session bootstrap and logout behavior.
+- Verify existing Admin API clients and query keys are reused by WhatsApp
+  surfaces.
+- Verify protected Organization and Store Workspace routes redirect safely.
+- Verify unauthorized, expired-session, network-error, and retry states use
+  existing Admin patterns.
+
+### Non-goals
+
+- No new auth store, cookie, token, API client, backend route, or middleware.
+- No POS Device Authentication changes.
+- No WhatsApp sender, template, policy, Customer, database, or provider work.
+
+### Verification plan
+
+- Run existing Admin auth, app identity, route, Organization, Store Workspace,
+  and WhatsApp tests.
+- Run Admin typecheck, lint, and build; separate existing baseline failures.
+- Confirm no `deviceAuthenticate` or new auth boundary is introduced.
+- Run `git diff --check` and inspect only Phase 1 planning/status changes.
+
+### Exit criteria
+
+- Existing user authentication remains the only Admin WhatsApp auth boundary.
+- Existing API clients are used without a parallel transport layer.
+- Focused auth/scope tests pass and known baseline failures are recorded.
+
+### 1.2 Review result
+
+- Standards review: passed. Existing Admin authentication, query keys, API
+  clients, and route guards are reused; no parallel auth boundary was added.
+- Specification review: passed. Admin remains user-authenticated, Store
+  Workspace remains Store-scoped, and POS Device Authentication remains
+  outside the WhatsApp feature boundary.
+- Verification passed: 44 focused tests across login/session, Organization
+  scope, Store routes, Store Workspace, and WhatsApp pages.
+- No source change was required because the approved boundary already exists.
+- The full Admin typecheck/lint baseline remains separately documented from
+  Phase 1.2; no unrelated errors were changed.
 
 ## Phase 1 review boundary
 

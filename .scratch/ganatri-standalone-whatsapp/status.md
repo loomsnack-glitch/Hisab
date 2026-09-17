@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 1.1 phase review complete; commit gate pending
+Status: Phase 1.2 verified; commit gate pending
 Last updated: 2026-09-17
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -51,16 +51,16 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
   cutover.
 - Existing OTP/invitation logging still requires redaction before Phase 3
   platform tenant delivery.
-- Phase 1.1 validated the existing Admin Organization WhatsApp workspace and
-  Admin Store Workspace WhatsApp panel; no source change was needed. The
-  commit gate is pending and no Phase 1.2 work has started.
+- Phase 1.1 validated and committed the existing Admin Organization WhatsApp
+  workspace and Admin Store Workspace WhatsApp panel. Phase 1.2 has passed its
+  focused auth/API verification and is pending its subphase commit.
 
 ## Phase roadmap
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
 | 0 | Baseline and contract lock | 0.1–0.4 | Complete | Sender/policy boundaries and development migration state recorded. |
-| 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Phase review (1.1) | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
+| 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Commit gate (1.2) | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Not started | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Not started | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Not started | Embedded Signup produces a validated, encrypted Cloud account. |
@@ -74,9 +74,10 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 
 Phase 0 is complete as a planning/baseline checkpoint. The product direction
 is integrated into Admin and Store Console; Phase 1.1 has passed its focused
-verification and standards/spec review. The loop is stopped at the Phase 1.1
-phase-review gate as requested; its commit gate and Phase 1.2 will not start in
-this run. Phases 8 and 9 are intentionally deferred from the initial release.
+verification, standards/spec review, and commit gate. Phase 1.2 has passed its
+focused verification and review and is at its commit gate. Later phases remain
+blocked until Phase 1 completes. Phases 8 and 9 are intentionally deferred
+from the initial release.
 
 ## Recovery checkpoint
 
