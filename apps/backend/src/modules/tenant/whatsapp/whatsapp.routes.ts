@@ -19,6 +19,7 @@ import {
     WhatsAppCreateCloudTemplateSubmissionSchema,
     WhatsAppUseCloudTemplateForStoreSchema,
     WhatsAppRegisterCloudPhoneSchema,
+    WhatsAppSetStorePolicySchema,
 } from "@repo/types";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { handleServiceResponse } from "@/helpers/service.helper";
@@ -51,6 +52,7 @@ import {
 import * as consentService from "./cloud-api/customer-consent.service";
 import * as cloudSafetyService from "./cloud-api/cloud-safety.service";
 import { whatsappAdministratorMutationMiddleware } from "./whatsapp-authorization";
+import { getStorePolicy, setStorePolicy } from "./whatsapp-policy.service";
 
 const uuidSchema = z.uuid("Invalid id");
 const userRouter = new Hono<{ Variables: AppVariables }>();
@@ -472,6 +474,37 @@ userRouter.get("/:organizationId/stores/:storeId/whatsapp/account", async c => {
         return unexpectedError(c, error);
     }
 });
+
+userRouter.get("/:organizationId/stores/:storeId/whatsapp/policy", async c => {
+    try {
+        const organizationId = c.req.param("organizationId");
+        const storeId = c.req.param("storeId");
+        const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+        if (invalid) return c.json(invalid, invalid.code);
+        return handleServiceResponse(c, await getStorePolicy(c.get("authUser").id, organizationId, storeId));
+    } catch (error) {
+        return unexpectedError(c, error);
+    }
+});
+
+userRouter.patch(
+    "/:organizationId/stores/:storeId/whatsapp/policy",
+    validateSchema("json", WhatsAppSetStorePolicySchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const storeId = c.req.param("storeId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(storeId, "Invalid store id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await setStorePolicy(c.get("authUser").id, organizationId, storeId, c.req.valid("json")),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
 
 userRouter.post(
     "/:organizationId/stores/:storeId/whatsapp/account/assign",

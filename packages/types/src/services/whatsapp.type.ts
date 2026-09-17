@@ -71,6 +71,11 @@ import {
     WhatsAppCloudProvisioningAttemptSchema,
     WhatsAppCloudOnboardingStateResponseSchema,
     WhatsAppCloudOnboardingResultSchema,
+    WhatsAppStorePolicyModeSchema,
+    WhatsAppStorePolicySenderSchema,
+    WhatsAppStorePolicySchema,
+    WhatsAppStorePolicyResponseSchema,
+    WhatsAppSetStorePolicySchema,
 } from "./whatsapp.schema";
 
 export type OTPRequestData = {
@@ -126,6 +131,11 @@ export type WhatsAppRegisterCloudPhoneJSON = z.infer<typeof WhatsAppRegisterClou
 export type WhatsAppCloudProvisioningAttempt = z.infer<typeof WhatsAppCloudProvisioningAttemptSchema>;
 export type WhatsAppCloudOnboardingStateResponseDTO = z.infer<typeof WhatsAppCloudOnboardingStateResponseSchema>;
 export type WhatsAppCloudOnboardingResultDTO = z.infer<typeof WhatsAppCloudOnboardingResultSchema>;
+export type WhatsAppStorePolicyMode = z.infer<typeof WhatsAppStorePolicyModeSchema>;
+export type WhatsAppStorePolicySenderDTO = z.infer<typeof WhatsAppStorePolicySenderSchema>;
+export type WhatsAppStorePolicyDTO = z.infer<typeof WhatsAppStorePolicySchema>;
+export type WhatsAppStorePolicyResponseDTO = z.infer<typeof WhatsAppStorePolicyResponseSchema>;
+export type WhatsAppSetStorePolicyJSON = z.infer<typeof WhatsAppSetStorePolicySchema>;
 export type WhatsAppMessageTemplateKind = z.infer<typeof WhatsAppMessageTemplateKindSchema>;
 export type WhatsAppMessageTemplateDTO = z.infer<typeof WhatsAppMessageTemplateDTOSchema>;
 export type WhatsAppCreateMessageTemplateJSON = z.infer<typeof WhatsAppCreateMessageTemplateSchema>;

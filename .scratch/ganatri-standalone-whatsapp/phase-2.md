@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 2
 
-Status: Phase 2.2 verified; commit gate pending
+Status: Phase 2.3 verified; commit gate pending
 Phase: 2 — Policy, authorization, and Customer association foundation
 
 ## Outcome
@@ -122,7 +122,7 @@ otherwise unchanged.
 
 ## 2.2 Subphase plan — Store configuration/history schema
 
-Status: Plan reviewed; implementation in progress
+Status: Plan reviewed; implementation and verification complete
 
 ### User-facing outcome
 
@@ -187,3 +187,80 @@ drops only the new policy table/type and does not touch existing WhatsApp data.
 - Existing data counts remained unchanged: 4 WhatsApp accounts, 1 account
   assignment, 784 messages, and 119 outbox rows.
 - Phase 2.3 must not start until this subphase commit gate is complete.
+
+## 2.3 Subphase plan — policy transitions and entitlement
+
+Status: Plan reviewed; implementation in progress
+
+### User-facing outcome
+
+An administrator can read and deliberately change a Store's WhatsApp mode.
+Non-disabled modes require the Store WhatsApp Entitlement. Organization Cloud
+mode requires a same-Organization Cloud account already linked to that Store.
+Every transition creates a new policy revision and leaves queued message data
+untouched.
+
+### Scope
+
+- Add shared policy mode, sender, entitlement, and version contracts.
+- Add policy repository reads and a serialized current-row replacement
+  transaction using row locks and immutable revisions.
+- Add policy read and update tenant routes plus shared service-client methods.
+- Add safe default-disabled initialization for Stores created after migration.
+- Validate same-Organization Cloud account/provider/Store assignment and lock the
+  assignment during the transition.
+- Return structured denial reasons for missing entitlement, invalid sender, and
+  missing Store policy.
+
+### Non-goals
+
+- No sender dispatch changes, outbox rewrites, template lifecycle, Customer
+  association, inbound routing, POS behavior, or Platform Console changes.
+- No automatic fallback between sender modes.
+- No pricing or usage billing behavior.
+
+### Invariants
+
+- At most one open policy row exists for an Organization/Store.
+- Policy revisions increase monotonically for a Store.
+- Disabled and Ganatri Utility policies have no tenant account reference.
+- Organization Cloud policies reference a linked Cloud account from the same
+  Organization.
+- A policy transition never updates existing message or outbox rows.
+
+### Verification plan
+
+- Test request/response contracts, capability mapping, entitlement denial, and
+  same-Organization/Store assignment checks.
+- Test the repository transaction path and policy revision behavior against the
+  development schema without changing existing message/outbox data.
+- Run focused backend/service tests, backend build, migration status, and
+  `git diff --check`.
+
+### Rollback
+
+Disable policy update routes and revert only the Phase 2.3 policy objects and
+additive default-initialization migration. Existing account, message, and
+outbox records remain intact.
+
+### 2.3 Review result
+
+- Standards review: passed. Policy contracts, repository, service, client
+  methods, routes, and default initialization are isolated and reuse existing
+  tenant, entitlement, account, and API boundaries.
+- Specification review: passed. Policy reads expose mode, sender, entitlement,
+  allowed kinds, and version; non-disabled modes require entitlement; Cloud
+  policies require a same-Organization account linked to the Store.
+- Verification passed: 16 focused tests across backend policy service,
+  migration contracts, shared schemas, and service-client endpoints.
+- Backend production build passed.
+- Development database result: 150 migrations applied, 0 pending. Existing
+  counts remained unchanged: 3 Stores, 3 policies, 4 accounts, 1 assignment,
+  784 messages, and 119 outbox rows.
+- A rollback-only new-Store probe confirmed the trigger creates a revision-one
+  `disabled` policy and leaves no test row.
+- The policy transition locks the current row and Store account assignment so
+  a concurrent unlink cannot leave a newly selected Cloud policy unvalidated.
+- Full backend typecheck remains a pre-existing baseline failure set; no new
+  policy-file diagnostics remain.
+- Phase 2.4 is the next subphase after this commit gate.

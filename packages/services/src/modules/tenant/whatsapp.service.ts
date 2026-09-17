@@ -37,6 +37,8 @@ import type {
     WhatsAppCloudOutboxOperationsResponseDTO,
     WhatsAppCloudOutboxActionResponseDTO,
     WhatsAppPublicInvoiceTemplateConfigDTO,
+    WhatsAppSetStorePolicyJSON,
+    WhatsAppStorePolicyResponseDTO,
 } from "@repo/types";
 import { api, handleApiError } from "../../api";
 
@@ -61,8 +63,37 @@ type WhatsAppPromotionRecipientsResponse = ServiceResponse<WhatsAppPromotionReci
 type WhatsAppPromotionRecipientActionResponse = ServiceResponse<WhatsAppPromotionRecipientActionResponseDTO | null>;
 type WhatsAppConversationListResponseType = ServiceResponse<WhatsAppConversationListResponse | null>;
 type WhatsAppConversationResponse = ServiceResponse<WhatsAppConversationMessagesResponse | null>;
+type WhatsAppStorePolicyResponse = ServiceResponse<WhatsAppStorePolicyResponseDTO | null>;
 const accountPath = (organizationId: string, storeId: string) =>
     "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/account";
+
+const policyPath = (organizationId: string, storeId: string) =>
+    "/organizations/" + organizationId + "/stores/" + storeId + "/whatsapp/policy";
+
+export const getWhatsAppStorePolicy = async (
+    organizationId: string,
+    storeId: string,
+): Promise<WhatsAppStorePolicyResponse> => {
+    try {
+        const response = await api.get(policyPath(organizationId, storeId));
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const setWhatsAppStorePolicy = async (
+    organizationId: string,
+    storeId: string,
+    data: WhatsAppSetStorePolicyJSON,
+): Promise<WhatsAppStorePolicyResponse> => {
+    try {
+        const response = await api.patch(policyPath(organizationId, storeId), data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
 
 export const getWhatsAppAccounts = async (organizationId: string): Promise<WhatsAppAccountsResponse> => {
     try {

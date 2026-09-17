@@ -37,6 +37,62 @@ export const WhatsAppCloudAccountStatusSchema = z.enum([
     "failed",
 ]);
 
+export const WhatsAppStorePolicyModeSchema = z.enum([
+    "disabled",
+    "ganatri_utility",
+    "organization_cloud",
+]);
+
+export const WhatsAppStorePolicySenderSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("none") }),
+    z.object({
+        kind: z.literal("ganatri_utility"),
+        displayName: z.literal("Ganatri Utility"),
+    }),
+    z.object({
+        kind: z.literal("organization_cloud"),
+        whatsappAccountId: z.uuid("Invalid WhatsApp account id"),
+        phoneNumber: phoneSchema,
+        accountStatus: WhatsAppAccountStatusSchema,
+        cloudStatus: WhatsAppCloudAccountStatusSchema.nullable(),
+    }),
+]);
+
+export const WhatsAppStorePolicySchema = z.object({
+    id: z.uuid("Invalid Store WhatsApp policy id"),
+    organizationId: z.uuid("Invalid organization id"),
+    storeId: z.uuid("Invalid store id"),
+    mode: WhatsAppStorePolicyModeSchema,
+    sender: WhatsAppStorePolicySenderSchema,
+    entitlement: z.object({
+        featureKey: z.literal("whatsapp"),
+        required: z.boolean(),
+        entitled: z.boolean(),
+        reason: z.string().nullable(),
+    }),
+    allowedKinds: z.array(WhatsAppMessageTemplateKindSchema),
+    version: z.number().int().positive(),
+    effectiveFrom: dtoDateSchema,
+    effectiveTo: dtoDateSchema.nullable(),
+});
+
+export const WhatsAppStorePolicyResponseSchema = z.object({
+    policy: WhatsAppStorePolicySchema,
+});
+
+export const WhatsAppSetStorePolicySchema = z.object({
+    mode: WhatsAppStorePolicyModeSchema,
+    whatsappAccountId: z.uuid("Invalid WhatsApp account id").nullable().optional(),
+}).strict().superRefine((value, context) => {
+    const hasAccount = Boolean(value.whatsappAccountId);
+    if (value.mode === "organization_cloud" && !hasAccount) {
+        context.addIssue({ code: "custom", path: ["whatsappAccountId"], message: "Organization Cloud requires a WhatsApp account" });
+    }
+    if (value.mode !== "organization_cloud" && hasAccount) {
+        context.addIssue({ code: "custom", path: ["whatsappAccountId"], message: "Only Organization Cloud may select a WhatsApp account" });
+    }
+});
+
 export const WhatsAppCloudProvisioningStatusSchema = z.enum([
     "running",
     "completed",
