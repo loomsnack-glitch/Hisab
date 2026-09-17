@@ -94,8 +94,8 @@ cleanup, verification, and review are complete and committed. Phase 4.3
 account lifecycle/health, rotation, verification, and review are complete and
 committed. Phase 4.4 assignment compatibility, race fix, verification, and
 review are complete and committed. Phase 4 is complete with documented
-follow-ups. Phases 8 and 9 are intentionally deferred from the initial
-release.
+follow-ups; Phase 5 is next. Phases 8 and 9 are intentionally deferred from
+the initial release.
 
 ## Recovery checkpoint
 

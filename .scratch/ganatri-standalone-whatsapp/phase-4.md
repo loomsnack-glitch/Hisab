@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 4
 
-Status: 4.4 implementation and verification in progress
+Status: Complete with documented follow-ups
 Phase: 4 — Organization Cloud connection
 
 ## Outcome
@@ -225,3 +225,26 @@ conflict instead of falsely reporting success for the losing account.
 
 Assignment compatibility and race-safe behavior are reviewed, verified, and
 committed; Phase 4 then receives a phase-level validation and final review.
+
+## Phase 4 final verification and review
+
+- Phase commits: `69614db`, `e0a4e03`, `e3c5555`, and `26804c1`.
+- Phase-level Cloud connection suite: 58 passed, 0 failed.
+- Backend production build: passed.
+- Admin production build: passed with the repository-local Vite binary.
+- Development database: 155 migrations applied, 0 pending; no Phase 4
+  migration was required.
+- `git diff --check`: passed.
+- Spec review: Embedded Signup state/replay, server exchange, encrypted-vault
+  binding, resumable provisioning, cleanup, rotation, health gates, revoke,
+  phone registration, multi-Store reuse, one-Store assignment, and
+  deterministic default inbound routing are covered. Historical Baileys rows
+  remain readable but cannot be newly linked.
+- Standards review: existing Admin/backend/service boundaries were extended;
+  no new application or credential format was introduced. Provider tokens are
+  accepted only at backend seams and are absent from DTOs/logs/tests.
+- Baseline limitation: Admin `check-types` still reports pre-existing errors
+  in unrelated catalog, customer, report, vendor, and settings components; no
+  new Embedded Signup/Cloud lifecycle diagnostic was found.
+- Deferred follow-ups: browser/Meta live-account verification, Store policy
+  assignment UI polish, and later template/bill-delivery phase behavior.
