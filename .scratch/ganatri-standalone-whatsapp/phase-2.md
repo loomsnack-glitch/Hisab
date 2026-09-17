@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 2
 
-Status: Phase 2.3 verified; commit gate pending
+Status: Phase 2.4 verified; commit gate pending
 Phase: 2 — Policy, authorization, and Customer association foundation
 
 ## Outcome
@@ -55,7 +55,7 @@ for every later sender operation.
 
 ## 2.1 Subphase plan — creator/administrator authorization seam
 
-Status: Phase 2.2 plan reviewed; migration verified; commit pending
+Status: Phase 2.2 committed; review record retained
 
 ### User-facing outcome
 
@@ -190,7 +190,7 @@ drops only the new policy table/type and does not touch existing WhatsApp data.
 
 ## 2.3 Subphase plan — policy transitions and entitlement
 
-Status: Plan reviewed; implementation in progress
+Status: Phase 2.3 committed; review record retained
 
 ### User-facing outcome
 
@@ -264,3 +264,72 @@ outbox records remain intact.
 - Full backend typecheck remains a pre-existing baseline failure set; no new
   policy-file diagnostics remain.
 - Phase 2.4 is the next subphase after this commit gate.
+
+## 2.4 Subphase plan — Store-Customer association schema and event seams
+
+Status: Plan reviewed; implementation and verification complete
+
+### User-facing outcome
+
+The system can durably explain a Customer's Store relationships without changing
+Organization-wide Customer identity. Each association retains its origin and
+current activity summary, while every qualifying activity is preserved in
+append-only idempotent history.
+
+### Scope
+
+- Add additive association and activity-event migrations with composite tenant
+  foreign keys and uniqueness constraints.
+- Define approved activity sources: migration, Customer creation, completed
+  Sale, routed WhatsApp conversation, explicit Store attachment, and bill/due
+  delivery.
+- Add a transactional event recorder that creates or updates the association
+  summary and deduplicates repeated source events.
+- Preserve `createdInStore` and lifetime `activeInStores` semantics through
+  origin, first-seen, last-activity, and provenance fields.
+- Add migration-contract, event-recorder, duplicate-event, ordering, and
+  rollback tests.
+
+### Non-goals
+
+- No Customer identity change, phone normalization change, or deletion/unlink
+  behavior.
+- No go-live legacy Customer backfill; Phase 7 owns that migration operation.
+- No UI, WhatsApp routing change, sender policy change, delivery admission, or
+  POS scope expansion.
+
+### Public seam
+
+`recordCustomerStoreActivity` is the single event-ingestion seam. Callers pass
+Organization, Customer, Store, source, source reference, occurrence time, and
+actor. The association summary is updated only from a newly inserted event.
+
+### Verification plan
+
+- Test all approved sources, first-origin preservation, last-activity ordering,
+  repeated-event idempotency, and cross-tenant constraints.
+- Run rollback-only development database probes and migration status checks.
+- Run focused backend/types tests, backend build, and `git diff --check`.
+
+### Rollback
+
+Use migration down only before dependent event callers exist. Remove only the
+association tables/types and recorder seam; existing Customers, Sales,
+conversations, messages, and outbox records remain untouched.
+
+### 2.4 Review result
+
+- Standards review: passed. Association storage is additive, tenant-anchored,
+  append-only, and isolated behind one transactional event-recorder seam.
+- Specification review: passed. Origin, first/last activity, source
+  provenance, idempotent source references, and unique Organization/Customer/
+  Store associations are durable without changing Customer identity.
+- Verification passed: 9 migration/schema contract tests, 1 rollback-only real
+  database recorder test, backend build, and whitespace validation.
+- The recorder preserved the first origin, deduplicated repeated events, ignored
+  older activity for recency, and advanced the summary for newer activity.
+- Development database result: 151 migrations applied, 0 pending; association
+  and activity-event counts are zero after the rollback-only probe.
+- No existing Customer, Sale, conversation, message, or outbox rows were
+  changed.
+- Phase 2.5 is the remaining subphase and is next after this commit gate.

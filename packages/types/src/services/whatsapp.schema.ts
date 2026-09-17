@@ -93,6 +93,43 @@ export const WhatsAppSetStorePolicySchema = z.object({
     }
 });
 
+export const WhatsAppCustomerStoreActivitySourceSchema = z.enum([
+    "migration",
+    "customer_creation",
+    "sale_completed",
+    "whatsapp_conversation",
+    "explicit_attachment",
+    "bill_delivery",
+]);
+
+export const WhatsAppCustomerStoreAssociationEventSchema = z.object({
+    id: z.uuid("Invalid Customer Store activity event id"),
+    organizationId: z.uuid("Invalid organization id"),
+    customerId: z.uuid("Invalid customer id"),
+    storeId: z.uuid("Invalid store id"),
+    source: WhatsAppCustomerStoreActivitySourceSchema,
+    sourceReference: z.string().trim().min(1).max(255),
+    occurredAt: dtoDateSchema,
+    createdBy: z.uuid("Invalid actor id").nullable(),
+    createdAt: dtoDateSchema,
+});
+
+export const WhatsAppCustomerStoreAssociationSchema = z.object({
+    id: z.uuid("Invalid Customer Store association id"),
+    organizationId: z.uuid("Invalid organization id"),
+    customerId: z.uuid("Invalid customer id"),
+    storeId: z.uuid("Invalid store id"),
+    originSource: WhatsAppCustomerStoreActivitySourceSchema,
+    originSourceReference: z.string().trim().min(1).max(255),
+    firstSeenAt: dtoDateSchema,
+    lastActivityAt: dtoDateSchema,
+    lastActivitySource: WhatsAppCustomerStoreActivitySourceSchema,
+    lastActivitySourceReference: z.string().trim().min(1).max(255),
+    createdBy: z.uuid("Invalid actor id").nullable(),
+    createdAt: dtoDateSchema,
+    updatedAt: dtoDateSchema,
+});
+
 export const WhatsAppCloudProvisioningStatusSchema = z.enum([
     "running",
     "completed",

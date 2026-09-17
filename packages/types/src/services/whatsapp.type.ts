@@ -76,6 +76,9 @@ import {
     WhatsAppStorePolicySchema,
     WhatsAppStorePolicyResponseSchema,
     WhatsAppSetStorePolicySchema,
+    WhatsAppCustomerStoreActivitySourceSchema,
+    WhatsAppCustomerStoreAssociationEventSchema,
+    WhatsAppCustomerStoreAssociationSchema,
 } from "./whatsapp.schema";
 
 export type OTPRequestData = {
@@ -136,6 +139,9 @@ export type WhatsAppStorePolicySenderDTO = z.infer<typeof WhatsAppStorePolicySen
 export type WhatsAppStorePolicyDTO = z.infer<typeof WhatsAppStorePolicySchema>;
 export type WhatsAppStorePolicyResponseDTO = z.infer<typeof WhatsAppStorePolicyResponseSchema>;
 export type WhatsAppSetStorePolicyJSON = z.infer<typeof WhatsAppSetStorePolicySchema>;
+export type WhatsAppCustomerStoreActivitySource = z.infer<typeof WhatsAppCustomerStoreActivitySourceSchema>;
+export type WhatsAppCustomerStoreAssociationEventDTO = z.infer<typeof WhatsAppCustomerStoreAssociationEventSchema>;
+export type WhatsAppCustomerStoreAssociationDTO = z.infer<typeof WhatsAppCustomerStoreAssociationSchema>;
 export type WhatsAppMessageTemplateKind = z.infer<typeof WhatsAppMessageTemplateKindSchema>;
 export type WhatsAppMessageTemplateDTO = z.infer<typeof WhatsAppMessageTemplateDTOSchema>;
 export type WhatsAppCreateMessageTemplateJSON = z.infer<typeof WhatsAppCreateMessageTemplateSchema>;
