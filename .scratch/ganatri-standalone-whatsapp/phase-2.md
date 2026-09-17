@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 2
 
-Status: Phase 2.4 verified; commit gate pending
+Status: Phase 2 complete with documented follow-ups
 Phase: 2 — Policy, authorization, and Customer association foundation
 
 ## Outcome
@@ -55,7 +55,7 @@ for every later sender operation.
 
 ## 2.1 Subphase plan — creator/administrator authorization seam
 
-Status: Phase 2.2 committed; review record retained
+Status: Phase 2.1 committed; review record retained
 
 ### User-facing outcome
 
@@ -122,7 +122,7 @@ otherwise unchanged.
 
 ## 2.2 Subphase plan — Store configuration/history schema
 
-Status: Plan reviewed; implementation and verification complete
+Status: Phase 2.2 committed; review record retained
 
 ### User-facing outcome
 
@@ -267,7 +267,7 @@ outbox records remain intact.
 
 ## 2.4 Subphase plan — Store-Customer association schema and event seams
 
-Status: Plan reviewed; implementation and verification complete
+Status: Phase 2.4 committed; review record retained
 
 ### User-facing outcome
 
@@ -333,3 +333,52 @@ conversations, messages, and outbox records remain untouched.
 - No existing Customer, Sale, conversation, message, or outbox rows were
   changed.
 - Phase 2.5 is the remaining subphase and is next after this commit gate.
+
+## 2.5 Subphase plan — final Phase 2 audit and contract review
+
+Status: Final verification and review complete
+
+### Outcome
+
+Close Phase 2 after verifying that authorization, Store policy history,
+entitlement-gated transitions, and Customer–Store activity history work
+together without changing existing WhatsApp delivery data.
+
+### Verification
+
+- Run the combined Phase 2 authorization, policy, schema, migration, service,
+  and association test suite.
+- Re-run backend production build and backend typecheck diagnostics.
+- Confirm development database migration status and invariant counts.
+- Review all Phase 2 commits on standards and specification axes.
+- Confirm no existing accounts, assignments, Customers, Sales, conversations,
+  messages, or outbox rows were rewritten.
+- Record MinIO/test-environment and pre-existing typecheck follow-ups without
+  masking them or expanding scope.
+
+### Exit criteria
+
+- 2.1 through 2.5 are verified, reviewed, documented, and committed.
+- Phase 3 remains the next phase; no sender-delivery work starts in Phase 2.
+
+### Phase 2 final review
+
+- Standards review: passed. Authorization, policy contracts, migrations,
+  repository/service seams, and Customer activity storage remain isolated and
+  tenant-scoped; existing WhatsApp tables and POS/Platform Console boundaries
+  were preserved.
+- Specification review: passed. Phase 2 now provides creator/admin mutation
+  authorization, three policy modes, entitlement-aware policy transitions,
+  one-current-row history, same-Organization Cloud assignment checks, and
+  append-only Customer–Store activity history.
+- Focused Phase 2 verification passed: 27 contract/service tests plus 1
+  rollback-only real-database association test.
+- Backend production build passed.
+- Development database result: 151 migrations applied, 0 pending. Final
+  invariant counts: 3 Stores, 3 policies, 4 accounts, 1 assignment, 1,005
+  Customers, 0 persisted probe associations, 0 persisted probe events, 784
+  messages, and 119 outbox rows.
+- Full backend typecheck retains pre-existing diagnostics outside this Phase 2
+  change set; no new Phase 2 diagnostics remain in the focused build/tests.
+- Phase 1 browser verification remains a documented follow-up. Phase 3 is the
+  next implementation phase and has not started.
