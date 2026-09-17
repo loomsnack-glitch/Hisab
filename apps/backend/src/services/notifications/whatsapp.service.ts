@@ -6,8 +6,6 @@ export const sendWhatsAppOTP = async ({ loginId, otp }: OTPRequestData): Promise
         if (!loginId || !otp) {
             return { status: "error", message: "loginId or OTP is missing", data: null, code: STATUS_CODES.BAD_REQUEST };
         }
-        console.log(`Sending WhatsApp OTP to ${loginId}: ${otp}`);
-
         if (process.env.NODE_ENV === "production") {
             const response = await axios({
                 method: 'POST',
@@ -52,15 +50,12 @@ export const sendWhatsAppOTP = async ({ loginId, otp }: OTPRequestData): Promise
                     }
                 }
             });
-            console.log("WhatsApp OTP sent successfully", JSON.stringify(response.data, null, 2));
-
             return { status: "success", message: "OTP sent successfully", data: response.data, code: STATUS_CODES.SUCCESS };
         } else {
-            console.log("WhatsApp OTP sent successfully", otp);
             return { status: "success", message: "OTP sent successfully", data: otp, code: STATUS_CODES.SUCCESS };
         }
     } catch (error) {
-        console.log(`Failed to send OTP in whatsapp.service.ts : sendWhatsAppOTP`, error)
+        console.error("WhatsApp OTP delivery failed");
         return { status: "error", message: "Failed to send OTP in whatsapp.service.ts : sendWhatsAppOTP", data: null, code: STATUS_CODES.INTERNAL_SERVER_ERROR };
     }
 };
@@ -87,8 +82,6 @@ export const sendWhatsAppOrgInvite = async ({
     inviterName: string;
 }): Promise<void> => {
     try {
-        console.log({ mobile, orgName, inviterName });
-
         const formattedMobile = mobile.startsWith("+")
             ? mobile.substring(1)
             : mobile;
@@ -122,18 +115,8 @@ export const sendWhatsAppOrgInvite = async ({
                 },
             });
 
-            console.log(
-                `WhatsApp org invite sent to ${mobile} for org "${orgName}"`
-            );
-        } else {
-            console.log(
-                `[DEV] WhatsApp org invite → ${mobile}: "${inviterName}" invited user to "${orgName}".`
-            );
         }
-    } catch (error: any) {
-        console.error(
-            "WhatsApp error response:",
-            error?.response?.data || error
-        );
+    } catch (error) {
+        console.error("WhatsApp organization invitation delivery failed");
     }
 };

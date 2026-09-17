@@ -34,6 +34,13 @@ export type CloudWebhookProcessorDependencies = {
     failureMessage: string | null,
   ) => Promise<CloudMessageStatusUpdateResult>;
   resolveAccount: (wabaId: string, phoneNumberId: string) => Promise<string | null>;
+  resolvePlatformSender?: (wabaId: string, phoneNumberId: string) => Promise<boolean>;
+  isPlatformWaba?: (wabaId: string) => Promise<boolean>;
+  ingestPlatformMessage?: (
+    data: WhatsAppMessageEventJSON,
+    wabaId: string,
+    phoneNumberId: string,
+  ) => Promise<{ stored: boolean }>;
   updateTemplateStatus: (event: CloudNormalizedTemplateStatusEvent) => Promise<boolean | void>;
   complete: (
     event: Pick<CloudWebhookEventClaim, "id" | "leaseOwner">,
@@ -75,6 +82,33 @@ const dependencies: CloudWebhookProcessorDependencies = {
   resolveAccount: async (wabaId, phoneNumberId) => {
     const { findCloudAccountId } = await import("./cloud-webhook.repository");
     return findCloudAccountId(wabaId, phoneNumberId);
+  },
+  resolvePlatformSender: async (wabaId, phoneNumberId) => {
+    const { readWhatsAppPlatformConfig } = await import("@/services/notifications/whatsapp-platform-config");
+    const result = readWhatsAppPlatformConfig();
+    return result.status === "configured"
+      && result.config.wabaId === wabaId
+      && result.config.phoneNumberId === phoneNumberId;
+  },
+  isPlatformWaba: async wabaId => {
+    const { readWhatsAppPlatformConfig } = await import("@/services/notifications/whatsapp-platform-config");
+    const result = readWhatsAppPlatformConfig();
+    return result.status === "configured" && result.config.wabaId === wabaId;
+  },
+  ingestPlatformMessage: async (data, wabaId, phoneNumberId) => {
+    const { recordPlatformInboundReply } = await import("../platform-inbound.repository");
+    if (data.direction !== "inbound" || data.messageType !== "text" || !data.body) {
+      throw new CloudWebhookRetryableError("platform_message_not_supported", "Platform inbound message cannot be retained");
+    }
+    return recordPlatformInboundReply({
+      wabaId,
+      phoneNumberId,
+      providerMessageId: data.providerMessageId,
+      contactPhoneNumber: data.contactPhoneNumber,
+      displayName: data.displayName,
+      body: data.body,
+      occurredAt: data.occurredAt,
+    });
   },
   updateTemplateStatus: async event => {
     const { applyCloudTemplateProviderStatus } = await import("./cloud-template-submission.repository");
@@ -172,6 +206,10 @@ export const processCloudWebhookEvent = async (
     let processed = 0;
     for (const event of actionable) {
       if (event.kind === "template_status") {
+        if (deps.isPlatformWaba && await deps.isPlatformWaba(event.wabaId)) {
+          processed += 1;
+          continue;
+        }
         const updated = await deps.updateTemplateStatus(event);
         if (updated === false) {
           throw new CloudWebhookRetryableError(
@@ -182,10 +220,27 @@ export const processCloudWebhookEvent = async (
         processed += 1;
         continue;
       }
-      const accountId = await deps.resolveAccount(
-        event.wabaId,
-        event.phoneNumberId,
-      );
+      const platformSender = deps.resolvePlatformSender
+        ? await deps.resolvePlatformSender(event.wabaId, event.phoneNumberId)
+        : false;
+      if (platformSender) {
+        if (event.kind === "message") {
+          if (!deps.ingestPlatformMessage) {
+            throw new CloudWebhookRetryableError(
+              "platform_inbound_handler_unavailable",
+              "Platform inbound handler is unavailable",
+            );
+          }
+          await deps.ingestPlatformMessage(
+            messagePayload(event),
+            event.wabaId,
+            event.phoneNumberId,
+          );
+        }
+        processed += 1;
+        continue;
+      }
+      const accountId = await deps.resolveAccount(event.wabaId, event.phoneNumberId);
       if (!accountId) {
         throw new CloudWebhookRetryableError(
           "cloud_account_not_found",

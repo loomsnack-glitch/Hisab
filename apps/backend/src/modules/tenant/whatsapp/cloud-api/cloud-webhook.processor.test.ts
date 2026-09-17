@@ -44,6 +44,7 @@ const textReceipt = {
 const deps = () => {
   const calls = {
     messages: [] as unknown[],
+    platformMessages: [] as unknown[],
     statuses: [] as unknown[],
     completed: 0,
     ignored: [] as unknown[],
@@ -54,6 +55,10 @@ const deps = () => {
     injected: {
       ingestMessage: async (_accountId: string, data: unknown) => {
         calls.messages.push(data);
+        return { stored: true };
+      },
+      ingestPlatformMessage: async (data: unknown) => {
+        calls.platformMessages.push(data);
         return { stored: true };
       },
       updateStatus: async (...data: unknown[]) => {
@@ -90,6 +95,52 @@ describe("processCloudWebhookEvent", () => {
     expect(state.calls.messages).toHaveLength(1);
     expect(state.calls.completed).toBe(1);
     expect(state.calls.failed).toHaveLength(0);
+  });
+
+  test("retains platform replies internally and never sends them to an Organization account", async () => {
+    const state = deps();
+    state.injected.resolvePlatformSender = async () => true;
+    const result = await processCloudWebhookEvent(
+      claim({ accountId: null, payload: textReceipt }),
+      state.injected,
+    );
+
+    expect(result).toEqual({ status: "completed", processed: 1, ignored: 0 });
+    expect(state.calls.platformMessages).toHaveLength(1);
+    expect(state.calls.messages).toHaveLength(0);
+    expect(state.calls.statuses).toHaveLength(0);
+    expect(state.calls.completed).toBe(1);
+  });
+
+  test("does not apply platform template status events to Organization templates", async () => {
+    const state = deps();
+    state.injected.isPlatformWaba = async () => true;
+    const result = await processCloudWebhookEvent(
+      claim({
+        payload: {
+          object: "whatsapp_business_account",
+          entry: [{
+            id: "waba-1",
+            changes: [{
+              field: "message_template_status_update",
+              value: {
+                event: "APPROVED",
+                message_template_id: "platform-template-1",
+                message_template_name: "ganatri_bill",
+                message_template_language: "en_US",
+                category: "UTILITY",
+                timestamp: "1760000000",
+              },
+            }],
+          }],
+        },
+      }),
+      state.injected,
+    );
+
+    expect(result).toEqual({ status: "completed", processed: 1, ignored: 0 });
+    expect(state.calls.statuses).toHaveLength(0);
+    expect(state.calls.completed).toBe(1);
   });
 
   test("ignores a receipt containing only deferred events", async () => {

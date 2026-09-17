@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 3
 
-Status: 3.3 committed; 3.4 next
+Status: 3.4 committed; Phase 3 complete with documented follow-ups
 Phase: 3 — Ganatri Utility sender
 
 ## Outcome
@@ -245,3 +245,58 @@ explicit next delivery seams, not implicit client bypasses.
 - Deliberate follow-up: provider template health, platform dispatch/retry
   consumption, and template-management route guards remain explicit 3.4/
   delivery work.
+
+## 3.4 Subphase plan — Redaction and hidden inbound handling
+
+Status: Committed; review record retained
+
+### User-facing outcome
+
+Platform OTP/invitation delivery no longer writes sensitive values to logs.
+Replies to the Ganatri-owned number are retained for internal operations only;
+they do not become Organization conversations and the system does not answer
+them automatically.
+
+### Scope
+
+- Remove OTPs, recipient phone numbers, invitation names, and raw provider
+  response/error payloads from the existing notification logs while preserving
+  current response and delivery behavior.
+- Normalize supported platform text replies into a dedicated internal table
+  with sender identity, provider idempotency, bounded contact/body fields, and
+  no Organization/Store conversation foreign keys.
+- Route platform webhook message events to that table before tenant-account
+  resolution; deduplicate provider retries and clear the raw webhook receipt
+  after normal processing through the existing webhook lifecycle.
+- Ignore platform template-status events rather than applying them to
+  Organization Cloud template assets. Never send an automatic reply.
+- Keep no Organization-facing route or DTO for the internal table.
+
+### Verification
+
+- Processor tests prove hidden platform replies bypass tenant ingestion and
+  template-status updates.
+- Migration contract tests prove internal ownership, bounded content, and
+  sender/provider uniqueness.
+- Notification log audit proves OTP, PII, and provider payload values are not
+  logged.
+- Backend build and focused tests pass; development migration status is clean.
+- The optional DB retention probe is present but was not counted as passing in
+  this closeout because Bun 1.3.11 intermittently segfaulted/timed out while
+  opening the test connection; the production repository path remains covered
+  by the migration contract and processor seams.
+
+### Final verification and review record
+
+- Focused processor, migration, and log-audit tests: 14 passed, 0 failed.
+- Backend production build: passed; `git diff --check`: passed.
+- Development database: 155 migrations applied, 0 pending.
+- Spec review: platform inbound is internal-only, no automatic response is
+  emitted, and no Organization-visible conversation is created.
+- Standards review: the normalized repository validates before SQL, dedupes by
+  sender/provider id, keeps raw payload ownership in the existing webhook
+  lifecycle, and exposes no new public route. Notification failures are
+  generic in logs.
+- Phase 3 follow-ups: provider template health/cache, platform dispatcher and
+  delivery-event reconciliation, template-management route guards, and
+  delivery/consent completion remain in the later planned slices.
