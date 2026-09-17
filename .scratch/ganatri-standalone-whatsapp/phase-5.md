@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 5
 
-Status: 5.2 committed; 5.3 next
+Status: 5.3 implementation and verification in progress
 Phase: 5 — Organization template lifecycle
 
 ## Outcome
@@ -142,3 +142,35 @@ committed before 5.3 binding/publish work begins.
   credentials remain backend-only, and duplicate submissions stay idempotent.
 - Standards review: the conflict is represented as a typed repository error
   and mapped through the existing safe service error boundary.
+
+## 5.3 Subphase plan — Store binding and explicit publish
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+Only an approved, correctly categorized Cloud template can become the selected
+Store default. Publication is explicit, scoped to the Store's current Cloud
+policy and WABA, and keeps Cloud/local default state aligned under concurrent
+changes.
+
+### Scope
+
+- Reuse the existing binding/default repository and explicit publish actions.
+- Enforce current Store `organization_cloud` policy/account scope at the
+  database boundary, not only through UI or stale historical assignments.
+- Keep one active Cloud default per Store/kind and synchronize the associated
+  local template default on re-publish and rollback.
+- Preserve approval/category/variable validation and defer archive/rollback
+  lifecycle review to 5.4.
+
+### Verification
+
+- Focused binding/service tests and repository contract checks.
+- Concurrent default uniqueness and cross-Organization/WABA/Store cases.
+- Backend/Admin builds and `git diff --check`.
+
+### Exit gate
+
+Store binding and explicit publication are verified and committed before 5.4
+archive/rollback/audit review begins.

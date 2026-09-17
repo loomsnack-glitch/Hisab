@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 5.3 plan recorded; implementation next
+Status: Phase 5.3 implementation and verification in progress
 Last updated: 2026-09-18
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -72,7 +72,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Complete with follow-ups | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Complete with follow-ups | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Complete with follow-ups | Embedded Signup produces a validated, encrypted Cloud account. |
-| 5 | Organization template lifecycle | 5.1–5.4 | In progress (5.2) | Approved templates can be explicitly published per Store. |
+| 5 | Organization template lifecycle | 5.1–5.4 | In progress (5.3) | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Not started | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Not started | Existing Admin/POS boundaries cut over without data loss. |
 | 8 | Later inbox and replies | 8.1–8.3 | Deferred | Organization Cloud conversations are Store-scoped and safe. |
@@ -98,7 +98,7 @@ complete and committed. Phase 4 is complete with documented follow-ups;
 Phase 5.1 draft persistence, review correction, verification, and review are
 complete and committed. Phase 5.2 submission/status synchronization,
 idempotency hardening, verification, and review are complete and committed.
-Phase 5.3 is next.
+Phase 5.3 binding/publish work is in progress.
 Phases 8 and 9 are intentionally deferred from the initial release.
 
 ## Recovery checkpoint

@@ -305,6 +305,12 @@ export const createCloudTemplateBinding = async (input: {
     INNER JOIN whatsapp_accounts accounts
       ON accounts.id = assignments.whatsapp_account_id
      AND accounts.organization_id = assignments.organization_id
+    INNER JOIN whatsapp_store_policies policies
+      ON policies.organization_id = assignments.organization_id
+     AND policies.store_id = assignments.store_id
+     AND policies.mode = 'organization_cloud'
+     AND policies.whatsapp_account_id = accounts.id
+     AND policies.effective_to IS NULL
     WHERE assignments.organization_id = ${input.organizationId}
       AND assignments.store_id = ${input.storeId}
       AND accounts.provider = 'cloud_api'
@@ -366,6 +372,12 @@ export const createCloudTemplateDefaultBinding = async (input: {
     SELECT 1
     FROM whatsapp_account_stores assignments
     INNER JOIN whatsapp_accounts accounts ON accounts.id = assignments.whatsapp_account_id AND accounts.organization_id = assignments.organization_id
+    INNER JOIN whatsapp_store_policies policies
+      ON policies.organization_id = assignments.organization_id
+     AND policies.store_id = assignments.store_id
+     AND policies.mode = 'organization_cloud'
+     AND policies.whatsapp_account_id = accounts.id
+     AND policies.effective_to IS NULL
     WHERE assignments.organization_id = ${input.organizationId}
       AND assignments.store_id = ${input.storeId}
       AND accounts.provider = 'cloud_api'
@@ -396,6 +408,24 @@ export const createCloudTemplateDefaultBinding = async (input: {
     if (!existingAsset || existingAsset.status !== "approved" || existingAsset.category !== (input.kind === "promotion" ? "marketing" : "utility")) {
       throw new Error("Cloud WhatsApp template must be approved and match the message category");
     }
+    await tx`
+      UPDATE whatsapp_message_templates
+      SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+        AND is_default = TRUE
+        AND is_active = TRUE
+    `;
+    await tx`
+      UPDATE whatsapp_message_templates
+      SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE id = ${existing.local_template_id}
+        AND organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+        AND is_active = TRUE
+    `;
     await tx`
       UPDATE whatsapp_cloud_template_bindings
       SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
@@ -638,6 +668,15 @@ export const rollbackCloudTemplateBinding = async (
       AND language_code = ${target.language_code}
       AND is_active = TRUE
   `;
+  await tx`
+    UPDATE whatsapp_message_templates
+    SET is_default = FALSE, updated_by = ${restoredBy}, updated_at = NOW()
+    WHERE organization_id = ${organizationId}
+      AND store_id = ${target.store_id}
+      AND kind = ${target.kind}
+      AND is_default = TRUE
+      AND is_active = TRUE
+  `;
   const [row] = await tx`
     UPDATE whatsapp_cloud_template_bindings
     SET is_active = TRUE,
@@ -649,6 +688,15 @@ export const rollbackCloudTemplateBinding = async (
     WHERE organization_id = ${organizationId}
       AND id = ${bindingId}
     RETURNING *
+  `;
+  await tx`
+    UPDATE whatsapp_message_templates
+    SET is_default = TRUE, updated_by = ${restoredBy}, updated_at = NOW()
+    WHERE id = ${target.local_template_id}
+      AND organization_id = ${organizationId}
+      AND store_id = ${target.store_id}
+      AND kind = ${target.kind}
+      AND is_active = TRUE
   `;
   return row ? mapBinding(row as Record<string, unknown>) : null;
 });
