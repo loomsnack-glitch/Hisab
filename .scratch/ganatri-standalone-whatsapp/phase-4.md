@@ -248,3 +248,22 @@ committed; Phase 4 then receives a phase-level validation and final review.
   new Embedded Signup/Cloud lifecycle diagnostic was found.
 - Deferred follow-ups: browser/Meta live-account verification, Store policy
   assignment UI polish, and later template/bill-delivery phase behavior.
+
+## Whole-phase review correction record
+
+The complete Phase 4 diff was reviewed again after closeout. Confirmed issues
+were fixed in the follow-up review commit:
+
+- Token rotation was incorrectly hidden behind the development-only manual API
+  setup flag; the production Admin workspace now exposes rotation for every
+  provisioned Cloud account while keeping test-account creation gated.
+- Assignment conflict handling now checks the Store-level conflict after the
+  account-level insert race, so a losing concurrent link cannot report false
+  success.
+- New Store links reject historical Baileys accounts, while existing historic
+  rows remain readable.
+- Meta phone status now projects to a send-safe Cloud health state and both
+  Cloud queue admission and outbox claiming require registered, verified,
+  non-coexistence health.
+- Review verification after the fixes: focused tests passed, backend/Admin
+  builds passed, and the working tree remained scoped to Phase 4 files.

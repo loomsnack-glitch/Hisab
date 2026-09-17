@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
-import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, registerCloudPhoneForOrganization, revokeCloudAccountForOrganization, rotateCloudCredentialForOrganization } from "./cloud-account.service";
+import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, registerCloudPhoneForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
 import { CloudOnboardingExchangeError } from "./cloud-onboarding-exchange";
 import { WhatsAppCloudApiError } from "./cloud-api.client";
 import type { CloudProvisioningState } from "./cloud-provisioning";

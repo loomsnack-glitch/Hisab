@@ -490,7 +490,7 @@ const WhatsAppOrganizationPage = () => {
                                                     Register number
                                                 </Button>
                                             ) : null}
-                                            {manualCloudSetupEnabled && cloudSnapshot?.wabaId && cloudSnapshot.phoneNumberId ? (
+                                            {cloudSnapshot?.wabaId && cloudSnapshot.phoneNumberId ? (
                                                 <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setUpdateTokenAccountId(account.id); setUpdateAccessToken(""); }}>
                                                     <KeyRound className="size-4" />
                                                     Update token
@@ -585,7 +585,7 @@ const WhatsAppOrganizationPage = () => {
                 </DialogContent>
             </Dialog> : null}
 
-            {manualCloudSetupEnabled ? <Dialog open={Boolean(updateTokenAccountId)} onOpenChange={open => { if (!updateTokenMutation.isPending && !open) { setUpdateTokenAccountId(""); setUpdateAccessToken(""); } }}>
+            <Dialog open={Boolean(updateTokenAccountId)} onOpenChange={open => { if (!updateTokenMutation.isPending && !open) { setUpdateTokenAccountId(""); setUpdateAccessToken(""); } }}>
                 <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Update Cloud API token</DialogTitle>
@@ -601,7 +601,7 @@ const WhatsAppOrganizationPage = () => {
                         <DialogFooter><Button type="button" variant="outline" className="rounded-full" disabled={updateTokenMutation.isPending} onClick={() => { setUpdateTokenAccountId(""); setUpdateAccessToken(""); }}>Cancel</Button><Button type="submit" className="rounded-full" disabled={updateTokenMutation.isPending || !updateTokenAccount?.wabaId || !updateTokenAccount.phoneNumberId || !updateAccessToken.trim()}>{updateTokenMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-4" />}Update token</Button></DialogFooter>
                     </form>
                 </DialogContent>
-            </Dialog> : null}
+            </Dialog>
 
             <Dialog open={Boolean(registerAccountId)} onOpenChange={open => { if (!cloudRegisterMutation.isPending && !open) { setRegisterAccountId(""); setRegisterPin(""); } }}>
                 <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
