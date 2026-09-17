@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Plan reset to integrated Admin/Store Console feature; Phase 1 not started
+Status: Phase 1.1 phase review complete; commit gate pending
 Last updated: 2026-09-17
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -45,20 +45,22 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 - The WhatsApp phone-status migration is applied.
 - Historical Baileys rows remain readable; new Baileys work is out of scope.
 - Existing Admin WhatsApp routes remain the Organization management workspace.
-- Store Console receives only a selected-Store WhatsApp panel.
+- The Store Console surface is Admin's selected-Store Workspace WhatsApp panel;
+  `apps/console` remains Platform Administrator inspection only.
 - POS `/whatsapp` remains device-scoped and will redirect to POS home at
   cutover.
 - Existing OTP/invitation logging still requires redaction before Phase 3
   platform tenant delivery.
-- The former uncommitted `apps/whatsapp` shell was removed after the product
-  direction changed. No Phase 1 implementation is currently in progress.
+- Phase 1.1 validated the existing Admin Organization WhatsApp workspace and
+  Admin Store Workspace WhatsApp panel; no source change was needed. The
+  commit gate is pending and no Phase 1.2 work has started.
 
 ## Phase roadmap
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
 | 0 | Baseline and contract lock | 0.1–0.4 | Complete | Sender/policy boundaries and development migration state recorded. |
-| 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Not started | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
+| 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Phase review (1.1) | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Not started | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Not started | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Not started | Embedded Signup produces a validated, encrypted Cloud account. |
@@ -71,13 +73,15 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 ## Phase approval state
 
 Phase 0 is complete as a planning/baseline checkpoint. The product direction
-is now integrated into Admin and Store Console; Phase 1 must restart at its
-new 1.1 boundary and still follow the subphase plan/review/commit gates.
-Phases 8 and 9 are intentionally deferred from the initial release.
+is integrated into Admin and Store Console; Phase 1.1 has passed its focused
+verification and standards/spec review. The loop is stopped at the Phase 1.1
+phase-review gate as requested; its commit gate and Phase 1.2 will not start in
+this run. Phases 8 and 9 are intentionally deferred from the initial release.
 
 ## Recovery checkpoint
 
 The previous Phase 1.1 standalone shell was never committed and has been
-removed. Its workspace-lock entries were also removed. The integrated plan
-now reuses existing Admin and Store Console boundaries. The unrelated
+removed. Its workspace-lock entries were also removed. The integrated Phase
+1.1 boundary is already present in Admin's Organization and Store Workspace
+routes, so no duplicate app or source change was introduced. The unrelated
 `.scratch/admin-mobile/` files remain preserved.

@@ -946,6 +946,9 @@ credentials were read or printed.
 - The tracked mainline applications are `apps/admin`, `apps/pos`,
   `apps/mobile`, `apps/console`, and `apps/backend`. No separate WhatsApp app
   is part of the target architecture.
+- In this plan, “Store Console” means the selected Store Workspace inside
+  Admin. `apps/console` remains the Platform Administrator inspection console
+  and cannot manage tenant WhatsApp data.
 - The configured development database reports 136 applied migrations and 12
   pending migrations.
 - The pending migrations include
