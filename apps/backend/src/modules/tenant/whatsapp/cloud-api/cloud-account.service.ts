@@ -19,6 +19,7 @@ import {
 } from "./cloud-provisioning";
 import {
   createCloudProvisioningAttempt,
+  clearCloudProvisioningCredential,
   getCloudProvisioningAttempt,
   updateCloudProvisioningAttempt,
   type CloudProvisioningAttemptRecord,
@@ -76,6 +77,7 @@ type CloudAccountServiceDependencies = {
   getProvisioningAttempt: typeof getCloudProvisioningAttempt;
   createProvisioningAttempt: typeof createCloudProvisioningAttempt;
   updateProvisioningAttempt: typeof updateCloudProvisioningAttempt;
+  clearProvisioningCredential: typeof clearCloudProvisioningCredential;
   syncTemplates: (userId: string, organizationId: string, accountId: string, vault: WhatsAppCloudCredentialVault) => Promise<unknown>;
 };
 
@@ -94,6 +96,7 @@ const defaultDependencies = (): CloudAccountServiceDependencies => ({
   getProvisioningAttempt: getCloudProvisioningAttempt,
   createProvisioningAttempt: createCloudProvisioningAttempt,
   updateProvisioningAttempt: updateCloudProvisioningAttempt,
+  clearProvisioningCredential: clearCloudProvisioningCredential,
   syncTemplates: async (userId, organizationId, accountId, vault) => {
     const { syncCloudTemplatesForAccount } = await import("./cloud-template.service");
     return syncCloudTemplatesForAccount(userId, organizationId, accountId, { vault });
@@ -272,6 +275,7 @@ export const completeCloudAccountProvisioning = async (
   const deps = { ...defaultDependencies(), ...injected };
   let attempt: CloudProvisioningAttemptRecord | null = null;
   let state = createCloudProvisioningState();
+  let credentialForCleanup: { reference: string; keyVersion: string } | null = null;
   try {
     if (!await deps.organizationAccess(organizationId, userId)) {
       return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
@@ -298,6 +302,7 @@ export const completeCloudAccountProvisioning = async (
     let phoneNumberId = attempt?.providerPhoneNumberId ?? verified.phoneNumberId;
     if (attempt?.credentialReference && attempt.credentialKeyVersion) {
       credential = { reference: attempt.credentialReference, keyVersion: attempt.credentialKeyVersion };
+      credentialForCleanup = credential;
       accessToken = await deps.vault.resolve(credential);
       state = attempt.state.status === "failed" ? resumeCloudProvisioning(attempt.state) : attempt.state;
     } else {
@@ -317,6 +322,7 @@ export const completeCloudAccountProvisioning = async (
         ownerKey: `waba:${wabaId}`,
         accessToken,
       });
+      credentialForCleanup = credential;
       state = completeCloudProvisioningStep(state, "authorization_received");
       try {
         attempt = await deps.createProvisioningAttempt({
@@ -397,6 +403,17 @@ export const completeCloudAccountProvisioning = async (
       code: STATUS_CODES.CREATED,
     };
   } catch (error) {
+    const invalidIdentity = error instanceof Error && (
+      error.message === "Cloud WABA identity did not match onboarding result"
+      || error.message === "Cloud phone identity was not found in the WABA"
+      || error.message === "WhatsApp Cloud WABA is owned by another organization"
+    );
+    if (invalidIdentity && credentialForCleanup) {
+      await deps.vault.revoke(credentialForCleanup).catch(() => undefined);
+      if (attempt) {
+        await deps.clearProvisioningCredential({ organizationId, attemptId: attempt.id }).catch(() => undefined);
+      }
+    }
     if (attempt && state.status !== "completed" && state.status !== "cancelled") {
       const failed = failCloudProvisioning(state, providerError(error), "Cloud account provisioning could not be completed");
       await deps.updateProvisioningAttempt({ organizationId, attemptId: attempt.id, state: failed }).catch(() => undefined);

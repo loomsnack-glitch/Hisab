@@ -184,6 +184,70 @@ describe("Cloud account provisioning service", () => {
     }
   });
 
+  test("revokes and clears a temporary credential when the provider phone identity is invalid", async () => {
+    const state = createCloudOnboardingState({ organizationId, userId, secret });
+    const calls: string[] = [];
+    const previousSecret = process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET;
+    process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET = secret;
+    try {
+      const response = await completeCloudAccountProvisioning(userId, organizationId, {
+        state: state.token,
+        code: "authorization-code",
+        wabaId: "1234567890",
+        phoneNumberId: "9876543210",
+      }, {
+        exchange: { exchange: async () => "provider-token" },
+        consumeReplayStore: { consume: async () => true },
+        createClient: () => ({
+          async getBusinessAccount(wabaId: string) { return { id: wabaId, name: "Ganatri" }; },
+          async getPhoneNumbers() { return { data: [{ id: "different-phone", display_phone_number: "+919876543210" }] }; },
+          async subscribeBusinessAccount() { calls.push("subscribe"); },
+        }),
+        vault: {
+          async store() { return { reference: "secret://cloud/temporary", keyVersion: "kms-v1" }; },
+          async resolve() { return "provider-token"; },
+          async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+          async revoke(binding) { calls.push(`revoke:${binding.reference}`); },
+        },
+        createProvisioningAttempt: async input => ({
+          id: "attempt-invalid-phone",
+          organizationId,
+          whatsappAccountId: null,
+          whatsappBusinessAccountId: null,
+          idempotencyKey: "attempt-invalid-phone",
+          providerWabaId: input.providerWabaId,
+          providerPhoneNumberId: input.providerPhoneNumberId,
+          credentialReference: input.credentialReference,
+          credentialKeyVersion: input.credentialKeyVersion,
+          state: input.state,
+        }),
+        getProvisioningAttempt: async () => null,
+        updateProvisioningAttempt: async input => {
+          calls.push(`update:${input.state.status}`);
+          return null;
+        },
+        clearProvisioningCredential: async input => {
+          calls.push(`clear:${input.attemptId}`);
+          return true;
+        },
+        persist: async () => { throw new Error("must not persist an invalid phone"); },
+        syncTemplates: async () => ({ status: "success" }),
+      });
+
+      expect(response.status).toBe("error");
+      expect(response.message).toBe("Cloud phone identity was not found in the WABA");
+      expect(calls).toEqual([
+        "update:running",
+        "revoke:secret://cloud/temporary",
+        "clear:attempt-invalid-phone",
+        "update:failed",
+      ]);
+    } finally {
+      if (previousSecret === undefined) delete process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET;
+      else process.env.WHATSAPP_CLOUD_ONBOARDING_STATE_SECRET = previousSecret;
+    }
+  });
+
   test("refreshes provider metadata without exposing the access token", async () => {
     const snapshot = cloudSnapshot({
       verifiedName: "Old name",

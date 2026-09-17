@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 4
 
-Status: 4.1 committed; 4.2 next
+Status: 4.2 committed; 4.3 next
 Phase: 4 — Organization Cloud connection
 
 ## Outcome
@@ -40,7 +40,7 @@ Embedded Signup, with encrypted credentials and resumable provisioning.
 
 ## 4.1 Subphase plan — Embedded Signup client flow
 
-Status: In progress; plan reviewed and recorded
+Status: Committed; review record retained
 
 ### User-facing outcome
 
@@ -97,3 +97,55 @@ subphase is committed before 4.2 server exchange/provisioning work begins.
 - Admin typecheck remains a pre-existing baseline failure set in unrelated
   catalog/customer/report components; no new Embedded Signup diagnostic was
   introduced.
+
+## 4.2 Subphase plan — Server exchange and provisioning
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+After a valid Embedded Signup completion, the backend exchanges the one-time
+authorization result, verifies the WABA and phone against Meta, stores only an
+opaque encrypted-vault binding, and resumes safe provider work without
+persisting plaintext credentials or invalid identity bindings.
+
+### Scope
+
+- Preserve the existing signed-state replay and idempotency seams from 4.1.
+- Harden resumable provisioning cleanup: temporary credential bindings are
+  revoked when WABA/phone identity validation fails or local attempt creation
+  fails; resumable provider failures retain only the opaque binding needed for
+  retry.
+- Keep WABA and phone identity checks tied to the authenticated Organization,
+  reject cross-Organization conflicts, and persist only safe account metadata.
+- Add focused tests for invalid identity cleanup, vault failure, duplicate
+  completion, and successful resumable provisioning.
+- Do not add refresh/revoke/rotation UI or Store assignment changes; those are
+  4.3/4.4 scope.
+
+### Public seam and verification
+
+`completeCloudAccountProvisioning` remains the service seam. Run its focused
+tests, onboarding exchange/result tests, backend build/type diagnostics, and
+database migration status checks. No access token may appear in returned DTOs,
+logs, provisioning rows, or test snapshots.
+
+### Exit gate
+
+Server exchange and resumable provisioning cleanup are verified and committed
+before account-health/lifecycle work starts in 4.3.
+
+### Verification and review record
+
+- Provisioning, exchange, result, state, route, and service tests: 35 passed,
+  0 failed.
+- Invalid WABA/phone identity now revokes the temporary vault binding and
+  clears its resumable attempt reference; ordinary provider failures retain the
+  opaque binding for safe resume.
+- Backend production build: passed; `git diff --check`: passed.
+- Spec review: no access token is returned or persisted in provisioning rows,
+  identity mismatches cannot leave a usable temporary binding, and duplicate /
+  replay behavior remains idempotent.
+- Standards review: cleanup is injected through the existing provisioning
+  repository seam, preserving the service's testability and avoiding a second
+  credential-storage abstraction.

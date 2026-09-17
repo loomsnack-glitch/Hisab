@@ -110,3 +110,18 @@ export const updateCloudProvisioningAttempt = async (input: {
   `;
   return row ? mapAttempt(row as AttemptRow) : null;
 };
+
+export const clearCloudProvisioningCredential = async (input: {
+  organizationId: string;
+  attemptId: string;
+}): Promise<boolean> => {
+  const rows = await pg`
+    UPDATE whatsapp_cloud_provisioning_attempts
+    SET credential_reference = NULL,
+        credential_key_version = NULL,
+        updated_at = NOW()
+    WHERE id = ${input.attemptId}
+      AND organization_id = ${input.organizationId}
+  `;
+  return rows.count === 1;
+};
