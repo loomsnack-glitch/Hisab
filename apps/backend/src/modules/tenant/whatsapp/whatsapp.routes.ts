@@ -44,6 +44,7 @@ import {
     createCloudTemplateBindingForStore,
     listCloudTemplateBindingsForStore,
     submitCloudTemplateForAccount,
+    saveCloudTemplateDraft,
     listCloudTemplateSubmissionsForAccount,
     setCloudTemplateDefaultForSubmission,
     setCloudTemplateAssetDefaultForStore,
@@ -302,6 +303,22 @@ userRouter.post("/:organizationId/whatsapp/cloud/template-bindings/:bindingId/ro
         return unexpectedError(c, error);
     }
 });
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/accounts/:accountId/templates/draft",
+    validateSchema("json", WhatsAppCreateCloudTemplateSubmissionSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const accountId = c.req.param("accountId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(c, await saveCloudTemplateDraft(c.get("authUser").id, organizationId, accountId, c.req.valid("json")));
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
 
 userRouter.post(
     "/:organizationId/whatsapp/cloud/accounts/:accountId/templates",

@@ -10,6 +10,7 @@ import {
   getWhatsAppPublicInvoiceTemplateConfig,
   rollbackWhatsAppCloudTemplateBinding,
   submitWhatsAppCloudTemplate,
+  saveWhatsAppCloudTemplateDraft,
   syncWhatsAppCloudTemplates,
 } from "@repo/services";
 import {
@@ -522,6 +523,37 @@ const WhatsAppCloudTemplateManager = ({
       ],
     });
   };
+  const buildTemplateSubmission = async () => {
+    const template = {
+      storeId,
+      whatsappBusinessAccountId: businessAccountId,
+      kind,
+      friendlyName: friendlyName.trim(),
+      metaTemplateName: slugify(friendlyName),
+      languageCode: languageCode.trim(),
+      components: [
+        ...(headerFormat !== "none"
+          ? [{ type: "HEADER", format: headerFormat.toUpperCase() }]
+          : []),
+        { type: "BODY", text: body.trim() },
+        ...(footer.trim() ? [{ type: "FOOTER", text: footer.trim() }] : []),
+        ...(urlButton.trim()
+          ? [{ type: "BUTTONS", buttons: [{ type: "URL", text: invoiceButtonLabel(kind), url: urlButton.trim() }] }]
+          : []),
+      ],
+      sampleValues: Object.fromEntries(sampleValues.split("|").map((value, index) => [String(index + 1), value.trim()])),
+      ...(headerSample
+        ? { headerSampleBase64: headerSample.base64, headerSampleFileName: headerSample.fileName, headerSampleMimeType: headerSample.mimeType }
+        : {}),
+    };
+    const idempotencyKey = await contentIdempotencyKey(businessAccountId, {
+      friendlyName: template.friendlyName,
+      languageCode: template.languageCode,
+      kind: template.kind,
+      content: template,
+    });
+    return { ...template, idempotencyKey };
+  };
   const syncMutation = useMutation({
     mutationFn: () =>
       syncWhatsAppCloudTemplates(organizationId, selectedAccountId),
@@ -539,59 +571,7 @@ const WhatsAppCloudTemplateManager = ({
     },
   });
   const submitMutation = useMutation({
-    mutationFn: async () => {
-      const template = {
-        storeId,
-        whatsappBusinessAccountId: businessAccountId,
-        kind,
-        friendlyName: friendlyName.trim(),
-        metaTemplateName: slugify(friendlyName),
-        languageCode: languageCode.trim(),
-        components: [
-          ...(headerFormat !== "none"
-            ? [{ type: "HEADER", format: headerFormat.toUpperCase() }]
-            : []),
-          { type: "BODY", text: body.trim() },
-          ...(footer.trim() ? [{ type: "FOOTER", text: footer.trim() }] : []),
-          ...(urlButton.trim()
-            ? [
-                {
-                  type: "BUTTONS",
-                  buttons: [
-                    {
-                      type: "URL",
-                      text: invoiceButtonLabel(kind),
-                      url: urlButton.trim(),
-                    },
-                  ],
-                },
-              ]
-            : []),
-        ],
-        sampleValues: Object.fromEntries(
-          sampleValues
-            .split("|")
-            .map((value, index) => [String(index + 1), value.trim()]),
-        ),
-        ...(headerSample
-          ? {
-              headerSampleBase64: headerSample.base64,
-              headerSampleFileName: headerSample.fileName,
-              headerSampleMimeType: headerSample.mimeType,
-            }
-          : {}),
-      };
-      const idempotencyKey = await contentIdempotencyKey(businessAccountId, {
-        friendlyName: template.friendlyName,
-        languageCode: template.languageCode,
-        kind: template.kind,
-        content: template,
-      });
-      return submitWhatsAppCloudTemplate(organizationId, selectedAccountId, {
-        ...template,
-        idempotencyKey,
-      });
-    },
+    mutationFn: async () => submitWhatsAppCloudTemplate(organizationId, selectedAccountId, await buildTemplateSubmission()),
     onMutate: () => setSubmitError(null),
     onSuccess: (response) => {
       if (response.status !== "success") {
@@ -609,6 +589,24 @@ const WhatsAppCloudTemplateManager = ({
         error,
         "Template could not be submitted",
       );
+      setSubmitError(message);
+      toast.error(message);
+    },
+  });
+  const draftMutation = useMutation({
+    mutationFn: async () => saveWhatsAppCloudTemplateDraft(organizationId, selectedAccountId, await buildTemplateSubmission()),
+    onSuccess: (response) => {
+      if (response.status !== "success") {
+        setSubmitError(response.message);
+        toast.error(response.message);
+      } else {
+        setSubmitError(null);
+        invalidate();
+        toast.success("Template draft saved");
+      }
+    },
+    onError: (error) => {
+      const message = mutationErrorMessage(error, "Template draft could not be saved");
       setSubmitError(message);
       toast.error(message);
     },
@@ -1657,6 +1655,14 @@ const WhatsAppCloudTemplateManager = ({
             <Button
               type="button"
               variant="outline"
+              className="rounded-xl"
+              disabled={draftMutation.isPending || submitMutation.isPending || !businessAccountId || !friendlyName.trim() || !body.trim() || hasUnsupportedPlaceholder || hasEdgePlaceholder}
+              onClick={() => draftMutation.mutate()}
+            >
+              {draftMutation.isPending ? <RefreshCw className="size-4 animate-spin" /> : <FileText className="size-4" />} Save draft
+            </Button>
+            <Button
+              type="button"
               className="rounded-xl"
               onClick={() => setPreviewCardId(null)}
             >

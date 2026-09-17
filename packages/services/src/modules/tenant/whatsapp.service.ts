@@ -232,6 +232,19 @@ export const submitWhatsAppCloudTemplate = async (
     }
 };
 
+export const saveWhatsAppCloudTemplateDraft = async (
+    organizationId: string,
+    accountId: string,
+    data: WhatsAppCreateCloudTemplateSubmissionJSON,
+): Promise<WhatsAppCloudSubmissionResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/whatsapp/cloud/accounts/${accountId}/templates/draft`, data);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const getWhatsAppCloudTemplateSubmissions = async (
     organizationId: string,
     accountId: string,

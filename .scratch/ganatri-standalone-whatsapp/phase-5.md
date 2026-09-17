@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 5
 
-Status: Not started
+Status: 5.1 committed; 5.2 next
 Phase: 5 — Organization template lifecycle
 
 ## Outcome
@@ -34,3 +34,48 @@ and explicit Store binding/default publishing.
 - Concurrent default publish uniqueness tests.
 - Cross-Organization/WABA/Store binding tests.
 - Archive/rollback and audit-event tests.
+
+## 5.1 Subphase plan — Draft persistence
+
+Status: Committed; review record retained
+
+### User-facing outcome
+
+The Organization creator can save a validated Cloud template draft from the
+existing Admin authoring dialog. Draft persistence stores the WABA/Store
+context, kind, language, components, samples, and idempotency identity without
+calling Meta or resolving a credential.
+
+### Scope
+
+- Add a dedicated backend draft-save seam and route separate from Meta
+  submission.
+- Reuse the existing component/name/language/kind validation and
+  Organization/Store/WABA scope checks.
+- Add the shared service client and Admin Save draft action.
+- Preserve existing submission behavior; draft save cannot change a draft into
+  a provider lifecycle state.
+
+### Non-goals
+
+- No Meta submission, provider upload, approval webhook, Store default publish,
+  archive, or rollback behavior in this subphase.
+- Header sample binary upload remains part of submission/provider flow; draft
+  authoring retains the validated component/sample metadata.
+
+### Verification and review record
+
+- Template service/repository tests: 25 passed, 0 failed.
+- Draft test proves the credential vault and provider client are not called.
+- Backend production build: passed; Admin production build: passed;
+  `git diff --check`: passed.
+- Spec review: draft persistence is separate from Meta submission and remains
+  WABA-scoped with optional Store origin.
+- Standards review: the new seam reuses existing submission validation,
+  service-client, route, and Admin dialog boundaries without a second template
+  model.
+
+### Exit gate
+
+Draft persistence is committed; 5.2 may add idempotent Meta submission and
+provider status synchronization.

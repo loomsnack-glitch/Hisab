@@ -615,6 +615,60 @@ export const submitCloudTemplateForAccount = async (
   }
 };
 
+export const saveCloudTemplateDraft = async (
+  userId: string,
+  organizationId: string,
+  accountId: string,
+  data: WhatsAppCreateCloudTemplateSubmissionJSON,
+  injected: Partial<CloudTemplateServiceDependencies> = {},
+): Promise<ServiceResponse<{ submission: WhatsAppCloudTemplateSubmissionDTO; template: null } | null>> => {
+  const deps = { ...dependencies(), ...injected };
+  try {
+    validateSubmissionMetadata(data);
+    const organizationDenial = await requireWhatsAppOrganization(deps.organizationAccess, organizationId, userId);
+    if (organizationDenial) return organizationDenial;
+    const account = await deps.getAccount(organizationId, accountId);
+    if (!account?.wabaId || account.whatsappBusinessAccountId !== data.whatsappBusinessAccountId) return accountNotFound();
+    if (data.storeId) {
+      const storeDenial = await requireStoreFeatureEntitlement(data.storeId, "whatsapp");
+      if (storeDenial) return storeDenial;
+      if (!await organizationRepository.getStoreById(organizationId, data.storeId)) return { status: "error", message: "Store not found", data: null, code: STATUS_CODES.NOT_FOUND };
+      if (!await deps.isAccountAssignedToStore(organizationId, data.storeId, data.whatsappBusinessAccountId)) {
+        return { status: "error", message: "WhatsApp Cloud account is not assigned to this Store", data: null, code: STATUS_CODES.CONFLICT };
+      }
+    }
+    const components = validateSubmissionComponents(data.components, data.sampleValues);
+    validateKindSpecificComponents(data.kind, components);
+    const submission = await deps.createSubmission({
+      organizationId,
+      whatsappBusinessAccountId: data.whatsappBusinessAccountId,
+      originatingStoreId: data.storeId ?? null,
+      localTemplateId: data.localTemplateId ?? null,
+      kind: data.kind,
+      friendlyName: data.friendlyName,
+      metaTemplateName: data.metaTemplateName,
+      languageCode: data.languageCode,
+      category: categoryForKind(data.kind),
+      requestedComponents: components,
+      sampleValues: data.sampleValues,
+      idempotencyKey: data.idempotencyKey,
+      createdBy: userId,
+    });
+    if (submission.status !== "draft") {
+      return { status: "error", message: "This template draft already has a provider lifecycle state", data: null, code: STATUS_CODES.CONFLICT };
+    }
+    return {
+      status: "success",
+      message: "Cloud template draft saved",
+      data: { submission, template: null },
+      code: STATUS_CODES.SUCCESS,
+    };
+  } catch (error) {
+    const safe = safeSubmissionError(error);
+    return { status: "error", message: safe.message, data: null, code: STATUS_CODES.BAD_REQUEST };
+  }
+};
+
 export const listCloudTemplatesForAccount = async (
   userId: string,
   organizationId: string,

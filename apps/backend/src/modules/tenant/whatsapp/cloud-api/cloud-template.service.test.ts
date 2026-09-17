@@ -20,6 +20,7 @@ const {
   archiveCloudTemplateBindingForStore,
   listCloudTemplatesForAccount,
   rollbackCloudTemplateBindingForStore,
+  saveCloudTemplateDraft,
   setCloudTemplateDefaultForSubmission,
   submitCloudTemplateForAccount,
   syncCloudTemplatesForAccount,
@@ -46,6 +47,57 @@ const accountSnapshot = {
 };
 
 describe("Cloud template synchronization service", () => {
+  test("saves a validated draft without resolving credentials or calling Meta", async () => {
+    resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({ entitled: true, featureKey, evidence: [] }));
+    let providerCalled = false;
+    const response = await saveCloudTemplateDraft(userId, organizationId, accountId, {
+      storeId,
+      whatsappBusinessAccountId: businessAccountId,
+      kind: "bill",
+      friendlyName: "Bill draft",
+      metaTemplateName: "bill_draft",
+      languageCode: "en_US",
+      components: [{ type: "BODY", text: "Hello {{1}}" }],
+      sampleValues: { "1": "Asha" },
+      idempotencyKey: "draft-idempotency-1",
+    }, {
+      organizationAccess: async () => true,
+      getAccount: async () => accountSnapshot,
+      isAccountAssignedToStore: async () => true,
+      createSubmission: async input => ({
+        id: "77777777-7777-4777-8777-777777777777",
+        organizationId,
+        whatsappBusinessAccountId: input.whatsappBusinessAccountId,
+        originatingStoreId: input.originatingStoreId,
+        localTemplateId: null,
+        kind: input.kind,
+        friendlyName: input.friendlyName,
+        metaTemplateName: input.metaTemplateName,
+        languageCode: input.languageCode,
+        category: input.category,
+        requestedComponents: input.requestedComponents,
+        sampleValues: input.sampleValues,
+        idempotencyKey: input.idempotencyKey,
+        metaTemplateId: null,
+        status: "draft",
+        rejectionReason: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        submittedAt: null,
+        providerUpdatedAt: null,
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: "2026-09-18T10:00:00.000Z",
+        updatedAt: "2026-09-18T10:00:00.000Z",
+      }),
+      getCredential: async () => { throw new Error("draft must not resolve a credential"); },
+      createClient: () => { providerCalled = true; throw new Error("draft must not call Meta"); },
+    });
+    expect(response.status).toBe("success");
+    expect(response.data?.submission.status).toBe("draft");
+    expect(providerCalled).toBe(false);
+  });
+
   test("discovers provider templates with an in-memory credential and upserts normalized assets", async () => {
     let upserted: unknown[] = [];
     resolveFeatureEntitlement.mockImplementation(async (_storeId, featureKey) => ({
