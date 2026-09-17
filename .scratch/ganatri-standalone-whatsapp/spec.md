@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Admin and Store Console
 
-Status: updated and approved; Phase 0 complete; Phase 1 reset for integrated implementation
+Status: updated and approved; Phase 0 and Phase 1 complete with documented follow-ups
 
 ## Problem
 

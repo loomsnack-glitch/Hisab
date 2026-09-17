@@ -138,8 +138,7 @@ backend, POS, database, migrations, or unrelated Admin-mobile work.
   mask them.
 - Browser visual verification was not available in this session; it remains a
   release follow-up rather than a reason to add a new app.
-- Phase 1.1 is committed; this subphase is now active under the next approved
-  phase-loop gate.
+- Phase 1.1 is committed and its review record is retained.
 
 ## 1.2 Subphase plan — existing auth and API boundary
 
@@ -192,7 +191,7 @@ not enter those routes.
   scope, Store routes, Store Workspace, and WhatsApp pages.
 - No source change was required because the approved boundary already exists.
 - The full Admin typecheck/lint baseline remains separately documented from
-  Phase 1.2; no unrelated errors were changed.
+  Phase 1.2; no baseline errors were changed.
 
 ## 1.3 Subphase plan — Organization/Store scoped UI shell
 
