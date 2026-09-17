@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 4
 
-Status: Not started
+Status: 4.1 committed; 4.2 next
 Phase: 4 — Organization Cloud connection
 
 ## Outcome
@@ -37,3 +37,63 @@ Embedded Signup, with encrypted credentials and resumable provisioning.
 - Concurrent phone assignment tests.
 - Multiple-Store assignment and one-linked-number-per-Store tests.
 - Admin/Store Console browser flow with no token exposure.
+
+## 4.1 Subphase plan — Embedded Signup client flow
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+An Organization administrator can start Meta Embedded Signup from the existing
+Admin WhatsApp workspace and receive only a short-lived signed onboarding state
+plus safe WABA/phone identifiers. Cancelled, incomplete, untrusted, malformed,
+and timed-out browser messages do not reach the backend completion action.
+
+### Scope
+
+- Review and harden the existing Admin Embedded Signup message parser and
+  completion controller; do not create a new app, route tree, or credential
+  client.
+- Keep the backend start response limited to signed state and expiry metadata.
+- Validate Facebook message origin, event/type, WABA/phone presence, and
+  single-settlement behavior in the browser seam.
+- Preserve the existing backend state binding to Organization and user and
+  atomic replay store; provider exchange, WABA/phone ownership validation,
+  vault persistence, and resumable provisioning remain 4.2 scope.
+- Ensure the client never stores or logs an access token, authorization code,
+  PIN, or credential binding.
+
+### Non-goals
+
+- No Meta API exchange or credential-vault change.
+- No Store assignment or account-health mutation.
+- No production browser verification claim; static/client tests cover this
+  subphase unless a browser session is available.
+
+### Public seams and verification
+
+- `readEmbeddedSignupSession(origin, data)` remains the pure browser message
+  boundary.
+- `embeddedSignupLoginOptions(configId)` remains the SDK option boundary.
+- Run Admin Embedded Signup tests, backend onboarding state/result/route tests,
+  Admin build, backend build, and diff/type checks.
+
+### Exit gate
+
+The client/start-state boundary is reviewed, edge cases are covered, and the
+subphase is committed before 4.2 server exchange/provisioning work begins.
+
+### Verification and review record
+
+- Embedded Signup client, signed state, result, exchange, service, and route
+  tests: 28 passed, 0 failed.
+- Added coverage for incomplete finish events and Facebook lookalike origins.
+- Admin production build: passed with the repository-local Vite binary.
+- Backend production build: passed; `git diff --check`: passed.
+- Spec review: the client receives only safe identifiers and the signed state;
+  provider exchange and credential persistence remain in 4.2.
+- Standards review: the existing pure message parser and SDK-option seam were
+  extended without adding a second browser flow or exposing credentials.
+- Admin typecheck remains a pre-existing baseline failure set in unrelated
+  catalog/customer/report components; no new Embedded Signup diagnostic was
+  introduced.

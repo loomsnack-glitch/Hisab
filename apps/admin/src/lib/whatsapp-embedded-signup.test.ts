@@ -49,8 +49,18 @@ describe("WhatsApp Embedded Signup session intake", () => {
         })).toEqual({ kind: "cancel" });
     });
 
+    test("treats an incomplete finish as a safe non-completion", () => {
+        expect(readEmbeddedSignupSession("https://business.facebook.com", {
+            type: "WA_EMBEDDED_SIGNUP",
+            event: "FINISH_ONLY_WABA",
+            data: { waba_id: "123456789012345" },
+        })).toEqual({ kind: "finish_incomplete", wabaId: "123456789012345", phoneNumberId: "" });
+    });
+
     test("ignores non-Facebook origins and non-session messages", () => {
         expect(readEmbeddedSignupSession("https://admin.ganatri.in", JSON.stringify(finishPayload))).toBeNull();
+        expect(readEmbeddedSignupSession("https://facebook.com.attacker", finishPayload)).toBeNull();
+        expect(readEmbeddedSignupSession("https://evilfacebook.com", finishPayload)).toBeNull();
         expect(readEmbeddedSignupSession("https://www.facebook.com", { type: "OTHER" })).toBeNull();
         expect(readEmbeddedSignupSession("https://www.facebook.com", "not-json")).toBeNull();
     });
