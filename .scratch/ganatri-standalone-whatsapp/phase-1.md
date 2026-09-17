@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 1
 
-Status: Phase 1.2 verified; commit gate pending
+Status: Phase 1.3 verified; commit gate pending
 Phase: 1 — Integrated Admin and Store Console foundation
 
 ## Outcome
@@ -34,7 +34,7 @@ promotions, database policy changes, and POS authentication changes.
 
 ## 1.1 Subphase plan — integrated feature boundary and navigation
 
-Status: Phase 1.2 plan reviewed; existing boundary validated; commit pending
+Status: Phase 1.3 plan reviewed; existing boundary validated; commit pending
 
 ### User-facing outcome
 
@@ -192,6 +192,63 @@ not enter those routes.
 - No source change was required because the approved boundary already exists.
 - The full Admin typecheck/lint baseline remains separately documented from
   Phase 1.2; no unrelated errors were changed.
+
+## 1.3 Subphase plan — Organization/Store scoped UI shell
+
+Status: Plan reviewed; validation in progress
+
+### User-facing outcome
+
+Admin users can move between Organization-wide WhatsApp and the selected Store
+Workspace WhatsApp panel without losing scope. Refresh-safe routes, visible
+context, and existing loading/empty/error/permission states prevent a Store
+user from viewing another Store's WhatsApp data.
+
+### Scope
+
+- Verify Organization and Store Workspace route construction and refresh state.
+- Verify Admin navigation highlights the correct Organization or Store context.
+- Verify the Store Workspace WhatsApp tab uses the selected Store ID only.
+- Verify unknown, cross-Organization, loading, empty, entitlement-denied, and
+  network-error states remain inside existing shell patterns.
+- Verify light/dark, responsive, keyboard, and safe mobile navigation behavior
+  where covered by the existing Admin UI tests.
+
+### Non-goals
+
+- No new navigation shell, route family, Store Console application, or layout
+  system.
+- No cross-Store inbox, sender policy, template, Customer, provider, or
+  database behavior.
+- No POS route changes.
+
+### Verification plan
+
+- Run Admin navigation, Organization scope, Store route, Store Workspace, and
+  WhatsApp page tests.
+- Run Admin build and record existing typecheck/lint baseline failures.
+- Inspect route and query-key usage for Organization/Store scope.
+- Run `git diff --check` and inspect only Phase 1 planning/status changes.
+
+### Exit criteria
+
+- Organization and Store Workspace routes remain distinct and refresh-safe.
+- Store Workspace WhatsApp data is keyed by the selected Organization/Store.
+- Existing shell states and scope denial behavior remain intact.
+
+### 1.3 Review result
+
+- Standards review: passed. Existing Admin navigation, Store Workspace gate,
+  route helpers, query keys, and shared shell states are reused.
+- Specification review: passed. Organization-wide WhatsApp stays in Admin and
+  Store Workspace WhatsApp remains scoped to the selected Store; no Platform
+  Console or POS surface was expanded.
+- Verification passed: 52 focused tests across Organization scope, Store route
+  separation, Store Workspace, WhatsApp pages, Admin navigation, and
+  authenticated home routing.
+- Admin build was already passing from the Phase 1.2 verification; no source
+  files changed in this subphase, so the result remains applicable.
+- Full Admin typecheck/lint baseline failures remain unchanged and unrelated.
 
 ## Phase 1 review boundary
 
