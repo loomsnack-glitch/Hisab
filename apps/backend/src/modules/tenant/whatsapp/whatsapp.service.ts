@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
     STATUS_CODES,
+    phoneSchema,
     validateWhatsAppTemplate,
     type ServiceResponse,
     type StatusCode,
@@ -32,6 +33,13 @@ import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 import * as publicInvoiceService from "./public-invoice.service";
 import * as promotionService from "./promotion";
 import * as messageTemplate from "./message-template";
+import { getCurrentPolicy } from "./whatsapp-policy.repository";
+import { admitStoreWhatsAppIntent } from "./platform-admission";
+import { requireWhatsAppPlatformConfig } from "@/services/notifications/whatsapp-platform-config";
+import {
+    createPlatformTemplateOutbox,
+    GANATRI_PLATFORM_SENDER_KEY,
+} from "./platform-outbox.repository";
 
 const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
@@ -358,6 +366,66 @@ const queueDueReminderForStore = async (
     if (sales.length === 0) return { status: "error", message: "This customer has no due bills in this Store", data: null, code: STATUS_CODES.CONFLICT };
     const reminderSales = saleId ? sales.filter(sale => sale.id === saleId) : sales;
     if (reminderSales.length === 0) return { status: "error", message: "This bill has no remaining due amount", data: null, code: STATUS_CODES.CONFLICT };
+
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    const admission = policy
+        ? admitStoreWhatsAppIntent({ mode: policy.mode, intent: "due_reminder", customMessage })
+        : {
+            admitted: false as const,
+            reason: "store_disabled" as const,
+            message: "WhatsApp delivery policy is not initialized for this Store",
+        };
+    if (!admission.admitted) return { status: "error", message: admission.message, data: null, code: STATUS_CODES.CONFLICT };
+    if (admission.sender === "ganatri_utility" && policy) {
+        const parsedPhone = phoneSchema.safeParse(customer.phone);
+        if (!parsedPhone.success) return { status: "error", message: "A customer with a valid international phone number is required for WhatsApp reminders", data: null, code: STATUS_CODES.BAD_REQUEST };
+        const window = new Date().toISOString().slice(0, 10);
+        const fingerprint = createHash("sha256").update(JSON.stringify({
+            organizationId,
+            storeId,
+            customerId,
+            sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
+            window,
+        })).digest("hex");
+        const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
+        try {
+            const config = requireWhatsAppPlatformConfig();
+            const queued = await createPlatformTemplateOutbox({
+                organizationId,
+                storeId,
+                customerId,
+                customerPhone: parsedPhone.data,
+                saleId: saleId ?? null,
+                idempotencyKey,
+                snapshot: {
+                    senderKey: GANATRI_PLATFORM_SENDER_KEY,
+                    phoneNumberId: config.phoneNumberId,
+                    wabaId: config.wabaId,
+                    graphVersion: config.graphVersion,
+                    templateName: config.dueTemplateName,
+                    templateLanguage: config.templateLanguage,
+                    policyVersion: policy.revision,
+                },
+            });
+            return {
+                status: "success",
+                message: queued.deduplicated ? "Due reminder is already queued for WhatsApp" : "Due reminder queued for WhatsApp",
+                data: {
+                    customerId,
+                    saleId: saleId ?? null,
+                    messageId: queued.messageId,
+                    outboxId: queued.outboxId,
+                    messageStatus: queued.messageStatus as WhatsAppReminderQueueResponseDTO["messageStatus"],
+                    outboxStatus: queued.outboxStatus as WhatsAppReminderQueueResponseDTO["outboxStatus"],
+                },
+                code: queued.deduplicated ? STATUS_CODES.SUCCESS : STATUS_CODES.CREATED,
+            };
+        } catch (error) {
+            console.error("[whatsapp] Ganatri Utility due-reminder admission failed", error instanceof Error ? error.message : "unknown");
+            return { status: "error", message: "Ganatri Utility sender is not ready for due-reminder delivery", data: null, code: STATUS_CODES.CONFLICT };
+        }
+    }
+
     const account = await repository.getAccount(organizationId, storeId);
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };

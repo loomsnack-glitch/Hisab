@@ -29,6 +29,13 @@ import {
 import { cloudMediaUrlTtlSeconds } from "./cloud-api/cloud-media";
 import { cloudFeatureCallersEnabled } from "./cloud-api/cloud-feature";
 import { createPublicInvoiceUrl, renderBrandedSalePdf } from "./public-invoice.service";
+import { getCurrentPolicy } from "./whatsapp-policy.repository";
+import { admitStoreWhatsAppIntent } from "./platform-admission";
+import { requireWhatsAppPlatformConfig } from "@/services/notifications/whatsapp-platform-config";
+import {
+  createPlatformTemplateOutbox,
+  GANATRI_PLATFORM_SENDER_KEY,
+} from "./platform-outbox.repository";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
@@ -180,6 +187,48 @@ const response = (
   code: alreadyQueued ? STATUS_CODES.SUCCESS : STATUS_CODES.CREATED,
 });
 
+const queuePlatformInvoiceForStore = async (
+  organizationId: string,
+  storeId: string,
+  sale: SaleDetailDTO,
+  customerPhone: string,
+  policyVersion: number,
+  idempotencyKey: string,
+): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
+  try {
+    const config = requireWhatsAppPlatformConfig();
+    const queued = await createPlatformTemplateOutbox({
+      organizationId,
+      storeId,
+      customerId: sale.customerId!,
+      customerPhone,
+      saleId: sale.id,
+      idempotencyKey,
+      snapshot: {
+        senderKey: GANATRI_PLATFORM_SENDER_KEY,
+        phoneNumberId: config.phoneNumberId,
+        wabaId: config.wabaId,
+        graphVersion: config.graphVersion,
+        templateName: config.billTemplateName,
+        templateLanguage: config.templateLanguage,
+        policyVersion,
+      },
+    });
+    return response(sale.id, queued, queued.deduplicated ?? false);
+  } catch (error) {
+    console.error(
+      "[whatsapp] Ganatri Utility invoice admission failed",
+      error instanceof Error ? error.message : "unknown",
+    );
+    return {
+      status: "error",
+      message: "Ganatri Utility sender is not ready for bill delivery",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
+};
+
 export const queueInvoiceForStore = async (
   organizationId: string,
   storeId: string,
@@ -233,6 +282,41 @@ export const queueInvoiceForStore = async (
       data: null,
       code: STATUS_CODES.BAD_REQUEST,
     };
+  }
+
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  const admission = policy
+    ? admitStoreWhatsAppIntent({
+        mode: policy.mode,
+        intent: "bill",
+        customMessage,
+        templateId,
+      })
+    : {
+        admitted: false as const,
+        reason: "store_disabled" as const,
+        message: "WhatsApp delivery policy is not initialized for this Store",
+      };
+  if (!admission.admitted) {
+    return { status: "error", message: admission.message, data: null, code: STATUS_CODES.CONFLICT };
+  }
+  if (admission.sender === "ganatri_utility" && policy) {
+    if (!options.resend) {
+      const existing = await repository.getPlatformInvoiceOutbox(
+        organizationId,
+        storeId,
+        saleId,
+      );
+      if (existing) return response(sale.id, existing, true);
+    }
+    return queuePlatformInvoiceForStore(
+      organizationId,
+      storeId,
+      sale,
+      parsedPhone.data,
+      policy.revision,
+      invoiceIdempotencyKey(saleId, options),
+    );
   }
 
   const account = await repository.getAccount(organizationId, storeId);
@@ -405,6 +489,10 @@ const getExistingInvoice = async (
   storeId: string,
   saleId: string,
 ): Promise<repository.InvoiceOutboxRecord | null> => {
+  const policy = await getCurrentPolicy(organizationId, storeId);
+  if (policy?.mode === "ganatri_utility") {
+    return repository.getPlatformInvoiceOutbox(organizationId, storeId, saleId);
+  }
   const account = await repository.getAccount(organizationId, storeId);
   return account ? repository.getInvoiceOutbox(organizationId, storeId, account.id, saleId) : null;
 };

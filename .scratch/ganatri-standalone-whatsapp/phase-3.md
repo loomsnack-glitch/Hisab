@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 3
 
-Status: 3.2 committed; 3.3 next
+Status: 3.3 committed; 3.4 next
 Phase: 3 — Ganatri Utility sender
 
 ## Outcome
@@ -180,3 +180,68 @@ and committed. No tenant route or sender dispatcher consumes the new seam until
 - Deliberate follow-up: provider health, Store policy/entitlement, consent,
   fixed-template admission, and dispatcher consumption remain blocked to 3.3
   and later delivery work.
+
+## 3.3 Subphase plan — Fixed bill/due admission
+
+Status: Committed; review record retained
+
+### User-facing outcome
+
+Stores in `ganatri_utility` can queue only bill and due-reminder work through
+the platform outbox. Store users cannot select a template, write free-form
+text, create promotion work, or turn an Organization Cloud action into a
+platform send. Disabled Stores remain blocked and Organization Cloud keeps its
+existing admission path.
+
+### Scope
+
+- Add a pure Ganatri Utility admission matrix for bill, due reminder,
+  promotion, text, reply, custom-template, and template-management intents.
+- Resolve the current Store policy at queue time and fail closed when the
+  policy is missing, disabled, or incompatible with the requested intent.
+- For admitted bill/due work, resolve the backend platform configuration and
+  create the account-less common-outbox record with the immutable policy and
+  sender snapshot from 3.2.
+- Preserve current Organization Cloud template/binding, consent, quota, and
+  outbox code paths; do not broaden them to platform sends.
+- Keep provider template existence/category/approval/placeholder health behind
+  a distinct adapter seam so it can be verified and cached without allowing a
+  caller to bypass the fixed name policy.
+
+### Verification
+
+- Negative matrix proves promotion, free-form, reply, custom-template, and
+  template-management intents are rejected for Ganatri Utility.
+- Bill/due admission rejects custom text and user-selected templates.
+- Policy/configuration failures happen before an outbox row is written.
+- Real-DB bill/due probe uses a rollback transaction and verifies platform
+  sender snapshot plus policy version; existing Cloud-focused tests/build stay
+  green.
+
+### Exit gate
+
+The fixed admission seam and bill/due queue integration are reviewed, verified,
+and committed. Provider health implementation and platform dispatch remain
+explicit next delivery seams, not implicit client bypasses.
+
+### Verification and review record
+
+- Admission negative matrix and Store-mode tests: 12 passed, 0 failed.
+- Real development-DB platform outbox probe: 2 tests passed, including
+  idempotent bill/due-shaped persistence and rollback coverage.
+- Development database: 154 migrations applied, 0 pending.
+- Backend production build: passed; `git diff --check`: passed.
+- Spec review: Ganatri Utility queueing admits only bill/due intent, rejects
+  custom text and user-selected templates, and records the current policy
+  revision in the platform snapshot. Disabled and missing-policy Stores fail
+  before queueing; Organization Cloud retains its existing path.
+- Standards review: admission is pure and independently tested; configuration
+  and repository errors return safe user messages; no token or provider
+  payload enters a DTO. Platform invoice resend indexing was corrected in an
+  additive follow-up migration before commit.
+- Runtime note: one combined Bun test invocation hit a transient Bun 1.3.11
+  process crash after the focused suite passed; the real-DB probe was rerun in
+  isolation and passed.
+- Deliberate follow-up: provider template health, platform dispatch/retry
+  consumption, and template-management route guards remain explicit 3.4/
+  delivery work.
