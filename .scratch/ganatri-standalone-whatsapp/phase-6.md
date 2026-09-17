@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 6
+# Ganatri WhatsApp — Phase 6
 
 Status: Not started
 Phase: 6 — Bill and due delivery
@@ -33,5 +33,5 @@ Ganatri Utility and Organization Cloud.
 - Bill/due success and complete negative matrix.
 - Timeout, rate-limit, permanent rejection, delayed webhook, and dead-letter tests.
 - Policy switch during pending, sending, sent, delivered, and failed states.
-- POS and standalone callers both resolve the same policy.
+- Admin, Store Console, and POS callers all resolve the same policy.
 - Focused backend/UI tests, typecheck, build, and browser verification.

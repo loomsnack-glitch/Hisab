@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 2
+# Ganatri WhatsApp — Phase 2
 
 Status: Not started
 Phase: 2 — Policy, authorization, and Customer association foundation

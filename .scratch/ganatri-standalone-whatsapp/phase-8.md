@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 8
+# Ganatri WhatsApp — Phase 8
 
 Status: Deferred
 Phase: 8 — Organization Cloud inbox and replies

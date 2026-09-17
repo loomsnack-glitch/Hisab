@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 4
+# Ganatri WhatsApp — Phase 4
 
 Status: Not started
 Phase: 4 — Organization Cloud connection
@@ -36,4 +36,4 @@ Embedded Signup, with encrypted credentials and resumable provisioning.
 - Provider status refresh and webhook state tests.
 - Concurrent phone assignment tests.
 - Multiple-Store assignment and one-linked-number-per-Store tests.
-- Admin/standalone browser flow with no token exposure.
+- Admin/Store Console browser flow with no token exposure.

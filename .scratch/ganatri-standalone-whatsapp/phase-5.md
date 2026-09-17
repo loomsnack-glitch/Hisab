@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 5
+# Ganatri WhatsApp — Phase 5
 
 Status: Not started
 Phase: 5 — Organization template lifecycle

@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 3
+# Ganatri WhatsApp — Phase 3
 
 Status: Not started
 Phase: 3 — Ganatri Utility sender

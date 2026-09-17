@@ -1,16 +1,17 @@
-# Standalone Ganatri WhatsApp — Phase Loop Status
+# Ganatri WhatsApp — Phase Loop Status
 
-Status: Paused at Phase 1.1; multi-number/Customer-association plan update active
+Status: Plan reset to integrated Admin/Store Console feature; Phase 1 not started
 Last updated: 2026-09-17
 
-This is the single execution status tracker for the approved Standalone
-Ganatri WhatsApp effort. The product specification and decision register are
+This is the single execution status tracker for the approved Ganatri WhatsApp
+effort. The product specification and decision register are
 in [spec.md](./spec.md). Each phase has its own execution record and must use
 the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKILL.md).
 
 ## Scope
 
-- Standalone, user-authenticated Ganatri WhatsApp application.
+- Ganatri WhatsApp feature integrated into the existing Admin and Store Console
+  applications.
 - Store modes: `disabled`, `ganatri_utility`, and `organization_cloud`.
 - Organizations may connect multiple numbers; a number may serve multiple
   Stores; each Store has one linked Organization number.
@@ -38,24 +39,26 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 ## Current baseline
 
 - Branch: `feat/ganatri-standalone-whatsapp`.
-- Fixed point: `e7901ff` (last committed planning checkpoint).
+- Fixed point: `79290fa` (last committed planning checkpoint).
 - Phase 0 source/database baseline completed on 2026-09-17.
 - Development database: 148 migrations applied, 0 pending.
 - The WhatsApp phone-status migration is applied.
 - Historical Baileys rows remain readable; new Baileys work is out of scope.
-- Existing POS `/whatsapp` inbox and Admin WhatsApp routes remain until the
-  Phase 7 cutover.
+- Existing Admin WhatsApp routes remain the Organization management workspace.
+- Store Console receives only a selected-Store WhatsApp panel.
+- POS `/whatsapp` remains device-scoped and will redirect to POS home at
+  cutover.
 - Existing OTP/invitation logging still requires redaction before Phase 3
   platform tenant delivery.
-- Phase 1.1 created an uncommitted app shell; verification and commit are
-  paused while the multi-number/Customer-association plan is updated.
+- The former uncommitted `apps/whatsapp` shell was removed after the product
+  direction changed. No Phase 1 implementation is currently in progress.
 
 ## Phase roadmap
 
 | Phase | Goal | Subphases | Status | Exit condition |
 | --- | --- | --- | --- | --- |
 | 0 | Baseline and contract lock | 0.1–0.4 | Complete | Sender/policy boundaries and development migration state recorded. |
-| 1 | Standalone application foundation | 1.1–1.4 | Paused (1.1) | Authenticated app shell reaches scoped Store workspace. |
+| 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Not started | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Not started | Every policy mutation, Customer association, and send path is backend-authorized. |
 | 3 | Ganatri Utility sender | 3.1–3.4 | Not started | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Not started | Embedded Signup produces a validated, encrypted Cloud account. |
@@ -67,18 +70,14 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 
 ## Phase approval state
 
-Phase 0 is complete as a planning/baseline checkpoint. Phase 1 is approved by
-the product decision record but implementation must still follow the
-subphase plan/review/commit gates. Phases 8 and 9 are intentionally deferred
-from the initial release. Phase 1.1 implementation is paused before
-verification/commit while the multi-number and Customer-association plan is
-updated.
+Phase 0 is complete as a planning/baseline checkpoint. The product direction
+is now integrated into Admin and Store Console; Phase 1 must restart at its
+new 1.1 boundary and still follow the subphase plan/review/commit gates.
+Phases 8 and 9 are intentionally deferred from the initial release.
 
 ## Recovery checkpoint
 
-Phase 1.1 implementation was interrupted before verification or commit when
-the product direction changed to support multiple Organization WhatsApp
-numbers and shared account-to-Store assignments. The uncommitted
-`apps/whatsapp` shell and `bun.lock` change are preserved for later review;
-they must not be discarded or mixed into the multi-number design work. The
-unrelated `.scratch/admin-mobile/` files remain preserved as well.
+The previous Phase 1.1 standalone shell was never committed and has been
+removed. Its workspace-lock entries were also removed. The integrated plan
+now reuses existing Admin and Store Console boundaries. The unrelated
+`.scratch/admin-mobile/` files remain preserved.

@@ -1,6 +1,6 @@
-# Standalone Ganatri WhatsApp
+# Ganatri WhatsApp — Admin and Store Console
 
-Status: approved; Phase 0 complete; ready for Phase 1
+Status: updated and approved; Phase 0 complete; Phase 1 reset for integrated implementation
 
 ## Problem
 
@@ -8,17 +8,19 @@ WhatsApp capability is currently spread across Ganatri Admin, Ganatri POS, and
 the backend. The current code supports Organization-owned Meta Cloud accounts,
 Store assignment, Cloud template revisions, customer consent, promotions,
 invoice/due delivery, conversations, webhooks, and durable outbox processing.
-It does not yet provide one focused WhatsApp application or a clear policy for
-using either a Ganatri-managed sender or an Organization-owned sender.
+It does not yet provide one consistent WhatsApp feature across Admin and Store
+Console or a clear policy for using either a Ganatri-managed sender or an
+Organization-owned sender.
 
-The new application must let an Organization choose how each Store uses
+The integrated feature must let an Organization choose how each Store uses
 WhatsApp without exposing credentials, bypassing Meta approval, mixing Stores,
 or allowing a restricted utility-only sender to perform marketing work.
 
 ## Goal
 
-Create a standalone, user-authenticated Ganatri WhatsApp application that
-provides explicit Store-level WhatsApp policy selection:
+Extend the existing user-authenticated Ganatri Admin and Store Console
+applications with an integrated WhatsApp feature that provides explicit
+Store-level WhatsApp policy selection:
 
 1. `disabled` — the Store does not use WhatsApp through Ganatri.
 2. `ganatri_utility` — use Ganatri's server-configured sender for bill and due
@@ -26,9 +28,9 @@ provides explicit Store-level WhatsApp policy selection:
 3. `organization_cloud` — use a Cloud account connected by the Organization
    through Meta Embedded Signup, subject to permissions and approved templates.
 
-The standalone application reuses the existing backend delivery, webhook,
-consent, template, and outbox boundaries. It does not create a second
-WhatsApp delivery engine.
+The Admin workspace and Store Console panel reuse the existing backend
+delivery, webhook, consent, template, and outbox boundaries. They do not create
+a second WhatsApp delivery engine.
 
 ## Approved decisions
 
@@ -42,7 +44,7 @@ WhatsApp delivery engine.
   number at a time.
 - Replies received by the Ganatri-managed utility sender are retained
   internally for provider/audit handling but are not shown to Organization
-  users in the standalone WhatsApp application.
+  users in the Admin or Store Console WhatsApp surfaces.
 - Ganatri-managed utility replies receive no automatic response. The utility
   sender is strictly limited to bill and due-reminder delivery templates.
 - Both Ganatri Utility and Organization Cloud modes require the existing
@@ -78,15 +80,15 @@ WhatsApp delivery engine.
   capabilities: Ganatri Utility is limited to fixed bill/due delivery, while
   Organization Cloud may use inbox, replies, approved templates, promotions,
   consent, and delivery management under the approved controls.
-- The initial standalone release includes authentication, Organization/Store
-  selection, all three sender modes, Embedded Signup, Store linking, the full
-  Organization Cloud template lifecycle, bill/due delivery, consent, delivery
-  status, and retry. Inbox, free-form replies, promotions, campaigns, and
-  advanced operations follow in later releases.
-- Existing Admin WhatsApp URLs redirect to the standalone WhatsApp app with
-  only safe Organization, Store, and tab context. POS `/whatsapp` does not
-  cross into the user-authenticated standalone app; it redirects to POS home
-  while POS keeps bill/due actions and status visibility.
+- The initial integrated release includes existing user authentication,
+  Organization/Store context, all three sender modes, Embedded Signup, Store
+  linking, the full Organization Cloud template lifecycle, bill/due delivery,
+  consent, delivery status, and retry. Inbox, free-form replies, promotions,
+  campaigns, and advanced operations follow in later releases.
+- Existing Admin WhatsApp routes remain the primary Organization management
+  workspace, and the Store Console receives a Store-scoped WhatsApp panel.
+  POS `/whatsapp` does not cross authentication boundaries and redirects to POS
+  home while POS keeps bill/due actions and status visibility.
 
 ## Existing code baseline
 
@@ -103,7 +105,7 @@ WhatsApp delivery engine.
   `authMiddleware` in
   `apps/backend/src/modules/tenant/whatsapp/whatsapp.routes.ts`.
 - Device-scoped POS WhatsApp routes remain under `/pos`; they must not be
-  reused as the standalone application's authentication model.
+  reused as the Admin or Store Console user-authentication model.
 - `WHATSAPP_API_URL` and `WHATSAPP_API_TOKEN` currently support platform OTP
   and invitation notifications in
   `apps/backend/src/services/notifications/whatsapp.service.ts`.
@@ -229,7 +231,8 @@ Suggested role defaults are only recommendations and require approval:
 
 - Names, languages, kinds, and variable mapping are environment/code-owned.
 - Only bill and due-reminder templates are configured for tenant utility sends.
-- The standalone UI exposes status and configuration health, not template CRUD.
+- Admin and Store Console expose status and configuration health according to
+  scope; platform templates remain read-only and are not tenant template CRUD.
 - Missing or invalid configuration fails closed with an actionable error.
 
 ### Organization templates
@@ -285,7 +288,8 @@ allowed only within the provider's open customer-service window.
 
 ## Application experience
 
-The standalone app should be a focused Organization-user application:
+The integrated WhatsApp feature should provide focused Organization and Store
+experiences inside the existing applications:
 
 1. Login and session bootstrap using the existing user-authenticated model.
 2. Organization and Store picker with the selected Store always visible.
@@ -300,14 +304,20 @@ The standalone app should be a focused Organization-user application:
 10. Consent and suppression history.
 11. Delivery safety, quota, outbox, and webhook health for authorized users.
 
+Admin owns Organization-wide connection, number, template, routing, and
+delivery management. Store Console shows only the selected Store's linked
+number, policy, entitlement, template readiness, customer relationships, and
+delivery state. Backend capabilities remain authoritative for both surfaces.
+
 The UI should explain why an action is unavailable, but backend authorization
 must remain authoritative.
 
 ## UI alignment contract
 
-The standalone application must feel like another Ganatri workspace, not a
+The WhatsApp feature must feel native to the existing Ganatri workspaces, not a
 separate product with a new visual language. Its visual source of truth is the
-current Ganatri Admin web portal and the shared `packages/ui` primitives.
+current Ganatri Admin and Store Console UI plus the shared `packages/ui`
+primitives.
 
 ### Shared visual language
 
@@ -329,20 +339,16 @@ current Ganatri Admin web portal and the shared `packages/ui` primitives.
 
 ### Workspace shell
 
-- Use an app-owned standalone shell with Ganatri branding, while following the
-  Admin shell's header, page-width, card, sidebar, and mobile navigation
-  geometry.
-- Desktop uses a compact workspace navigation with the same active-state rail,
-  rounded navigation rows, sticky header, and backdrop treatment as Admin.
-- Mobile uses a fixed bottom navigation or focused menu sheet consistent with
-  Admin's mobile navigation patterns; content remains scrollable above the
-  safe-area inset.
-- Keep the standalone navigation focused on WhatsApp: Overview, Numbers,
+- Use the existing Admin shell for Organization-wide WhatsApp management and
+  the existing Store Console shell for Store-scoped WhatsApp management.
+- Keep Admin navigation focused on WhatsApp pages such as Overview, Numbers,
   Stores, Templates, Delivery, and Settings as phases make them available.
-- Do not copy the full Admin sidebar or expose unrelated Catalog, Billing,
-  Finance, POS, or Console destinations.
-- Keep the current Organization and Store context visible in the header or
-  workspace switcher so a shared number is never shown without scope.
+- Add only a Store-scoped WhatsApp entry to Store Console; do not copy the
+  Organization-wide number or template workspace into it.
+- Do not expose unrelated Catalog, Billing, Finance, POS, or Console
+  destinations through the WhatsApp feature.
+- Keep the current Organization and Store context visible in each existing
+  shell so a shared number is never shown without scope.
 
 ### Page and component patterns
 
@@ -361,9 +367,10 @@ current Ganatri Admin web portal and the shared `packages/ui` primitives.
   responsive dialog geometry.
 - Keep success/error feedback in the shared toast pattern; do not introduce a
   second toast library or inline alert style for normal mutations.
-- Customer details show `Created in Store`, lifetime `Active in Stores`,
+- Admin customer details show `Created in Store`, lifetime `Active in Stores`,
   `lastActivityAt`, activity provenance, WhatsApp number, routed Store, and
-  routing reason using the existing Admin detail/card patterns.
+  routing reason using existing detail/card patterns. Store Console shows only
+  the current Store's relationship and safe scoped routing state.
 
 ### Responsive and accessibility contract
 
@@ -472,19 +479,20 @@ phase plan -> smallest implementation -> focused verification
 - Confirm the current mainline route, auth, Cloud account, Store assignment,
   template, consent, webhook, and outbox seams.
 - Resolve the current Admin/POS message-history route inconsistency.
-- Decide whether the standalone app is a new web app or a separately deployed
-  surface of Admin's codebase.
+- Confirm the integrated Admin management workspace and Store Console scoped
+  panel boundaries.
 - Approve the three Store modes, one-sender-per-Store recommendation, reply
   handling for the Ganatri sender, and role/capability policy.
 
 Gate: decisions recorded; no implementation begins with an ambiguous sender or
 authorization model.
 
-### Phase 1 — Standalone application foundation
+### Phase 1 — Integrated Admin and Store Console foundation
 
-- Create the app shell, package scripts, app identity, same-origin API base,
-  user login, logout, session bootstrap, error boundary, and Store picker.
-- Add route-level authentication and Organization scoping.
+- Reuse existing Admin and Store Console app shells, package boundaries, user
+  authentication, session bootstrap, error handling, and API clients.
+- Add the Admin WhatsApp workspace and Store Console WhatsApp panel with
+  explicit Organization/Store scoping and no provider mutations yet.
 
 Gate: unauthenticated users cannot reach protected routes; user sessions and
 Organization scope survive refresh; app checks pass.
@@ -501,7 +509,7 @@ configured bill/due templates.
 
 ### Phase 3 — Organization Cloud connection
 
-- Move/reuse Embedded Signup in the standalone app.
+- Reuse Embedded Signup from the Admin WhatsApp workspace.
 - Preserve signed state, replay protection, resumable provisioning, encrypted
   credential storage, WABA/phone validation, and webhook subscription.
 - Add refresh, revoke, phone-registration, and token-rotation health states.
@@ -533,7 +541,7 @@ default-uniqueness tests pass.
 
 - Route bill and due actions through the resolved Store policy.
 - Add provider health, consent, idempotency, immutable snapshot, retry, and
-  deliberate resend behavior to the standalone UI.
+  deliberate resend behavior to Admin and Store Console surfaces.
 
 Gate: both sender modes work; disabled, entitlement, consent, invalid-template,
   duplicate, and provider-failure cases fail safely.
@@ -605,7 +613,6 @@ and manual browser verification pass.
 The product decisions are complete. The implementation may still resolve
 technical details without changing the approved behavior:
 
-- Exact standalone application package name, origin, and deployment wiring.
 - Exact database table/constraint names for Store policy history and platform
   sender references.
 - The adapter that maps the platform sender into the existing durable outbox.
@@ -614,10 +621,11 @@ technical details without changing the approved behavior:
 
 ## Recommended first implementation slice
 
-After Phase 0 approval, implement Phase 1 and Phase 2 first: a standalone
-authenticated shell plus the Ganatri utility-only mode. This validates the
-most controlled path—fixed environment templates, no customer-owned token,
-no marketing, and no template CRUD—before exposing Embedded Signup and the
+After Phase 0 approval, implement Phase 1 and Phase 2 first: the integrated
+Admin/Store Console foundation plus the Ganatri utility-only mode. This
+validates the most controlled path—fixed environment templates, no
+customer-owned token, no marketing, and no template CRUD—before exposing
+Embedded Signup and the
 larger Organization-owned feature set.
 
 ## Approved decision register
@@ -639,8 +647,8 @@ without changing their meaning.
 | D09 | Store WhatsApp policy and sender assignment use a separate history-aware configuration record. | Policy changes are auditable and do not mutate message history or reroute queued work. |
 | D10 | Existing Cloud assignments migrate to Organization Cloud; all other existing and new Stores start disabled. | Ganatri Utility is never enabled implicitly. |
 | D11 | Ganatri Utility is bill/due-only; Organization Cloud may later use inbox, replies, approved templates, promotions, consent, and delivery controls. | Sender policy controls both UI visibility and backend admission. |
-| D12 | Initial release includes authentication, Store policy, both sender modes, Embedded Signup, Store linking, the full Organization Cloud template lifecycle, bill/due delivery, consent, delivery status, and retry. | Inbox, free-form replies, promotions, campaigns, and advanced operations are later release slices. |
-| D13 | Existing Admin WhatsApp URLs redirect to the standalone app; POS `/whatsapp` does not cross authentication boundaries and redirects to POS home. | Safe Organization/Store/tab context may be preserved for Admin; secrets never appear in URLs. |
+| D12 | Initial integrated release uses existing user authentication, Admin/Store Console context, both sender modes, Embedded Signup, Store linking, the full Organization Cloud template lifecycle, bill/due delivery, consent, delivery status, and retry. | Inbox, free-form replies, promotions, campaigns, and advanced operations are later release slices. |
+| D13 | Existing Admin WhatsApp routes remain the Organization management workspace, Store Console receives a Store-scoped WhatsApp panel, and POS `/whatsapp` redirects to POS home without crossing authentication boundaries. | Existing app sessions and safe Store context are preserved; secrets never appear in URLs. |
 | D14 | Customer visibility shows both the Store where the Customer was created and all Stores where the Customer is active. | Customer identity remains Organization-owned; Store origin and Store activity are separate facts. |
 | D15 | During go-live migration, every existing Customer is assigned to the Organization's first-created Store as its migration origin. New Customers created after go-live record their actual creation Store. | Migration origin is explicitly marked as migrated; future origin is Store-observed. Active Store activity remains separately derived. |
 | D16 | After go-live, creating a Customer requires a selected Store. Organization-level creation without Store context is not allowed. | Every new Customer has a reliable Store origin; the Organization-wide Customer identity remains shared. |
@@ -652,12 +660,12 @@ without changing their meaning.
 | D22 | Organization Cloud templates are WABA-scoped, while Store defaults are scoped by Store, selected outbound number's WABA, message kind, and language. | A WABA template is reusable, but a Store's selected sender must have a valid matching default. |
 | D23 | A shared WhatsApp number has one default inbound Store: the first linked Store initially, administrator-changeable, with oldest remaining promotion on unlink and unassigned internal events when no Store remains. | Shared-number inbound routing remains deterministic and audited. |
 | D24 | Customer Store activity includes Store creation, completed Sales, routed WhatsApp conversations, explicit Store attachment, and bill/due delivery; drafts, voids, and failed unscoped attempts do not count. | Store activity reflects meaningful Customer relationships rather than abandoned or failed work. |
-| D25 | Admin and standalone WhatsApp show Customer Store relationships, while POS shows only the authenticated Store's relationship. | Cross-Store visibility is available to administrators without broadening POS scope. |
+| D25 | Admin shows Organization-wide Customer Store relationships, Store Console shows only the selected Store's relationship, and POS shows only the authenticated Store's relationship. | Cross-Store visibility is available to administrators without broadening Store Console or POS scope. |
 | D26 | Store-Customer relationships are persisted with provenance and timestamps, unique per Organization, Customer, and Store. Each relationship has a current summary plus append-only activity events with source, occurrence time, and idempotent source reference. | Admin can explain why a Customer is associated with a Store and query both current recency and complete migration/activity history. |
 | D27 | An Organization may connect multiple WhatsApp numbers, a number may serve multiple Stores, but each Store has only one linked Organization number. | A Store must replace its current linked number before using another. |
 | D28 | Replacing a Store's linked number is an explicit atomic switch. Old history and queued messages retain the old number; new work uses the replacement after the switch. | A Store never has two linked numbers or an implicit fallback during replacement. |
-| D29 | Retain the existing connect-then-explicit-link workflow as the baseline. A newly connected number starts unlinked, can be linked to eligible Stores, and is usable only after its Store link and checks pass. | The standalone app reuses existing account/linking APIs and adds only the missing policy, atomic replacement, and Customer visibility behavior. |
-| D30 | Do not rewrite the existing account connection/linking APIs. Reuse them in the standalone app and add only focused extensions required by multi-number policy and Customer associations. | Existing Cloud onboarding and account ownership behavior remains stable. |
+| D29 | Retain the existing connect-then-explicit-link workflow as the baseline. A newly connected number starts unlinked, can be linked to eligible Stores, and is usable only after its Store link and checks pass. | Admin reuses existing account/linking APIs and Store Console consumes only authorized Store-scoped results. |
+| D30 | Do not rewrite the existing account connection/linking APIs. Reuse them from Admin and add only focused extensions required by multi-number policy and Customer associations. | Existing Cloud onboarding and account ownership behavior remains stable. |
 | D31 | Store-Customer associations and their activity events are append-only. Unlinking or inactivity does not delete the association or its history. | Admin retains complete Store relationship and last-activity evidence. |
 | D32 | `activeInStores` is lifetime-based with no automatic expiry. Each association retains `originSource`, `firstSeenAt`, `lastActivityAt`, and `lastActivitySource`; append-only events retain every qualifying activity source and occurrence. | Admin can filter by recency without deleting or hiding historical Store relationships. |
 
@@ -820,8 +828,8 @@ Administrator concern and must not be exposed through tenant routes.
 
 ### Customer Store visibility
 
-Customers remain Organization-owned records. The standalone WhatsApp app may
-show two separate Store relationships:
+Customers remain Organization-owned records. The integrated WhatsApp feature
+may show two separate Store relationships:
 
 - `createdInStore`: the explicit Store recorded when a new Customer is first
   created through a Store workflow.
@@ -936,8 +944,8 @@ database queries. No message bodies, phone numbers, access tokens, or other
 credentials were read or printed.
 
 - The tracked mainline applications are `apps/admin`, `apps/pos`,
-  `apps/mobile`, `apps/console`, and `apps/backend`. The standalone WhatsApp
-  application does not exist yet.
+  `apps/mobile`, `apps/console`, and `apps/backend`. No separate WhatsApp app
+  is part of the target architecture.
 - The configured development database reports 136 applied migrations and 12
   pending migrations.
 - The pending migrations include
@@ -992,10 +1000,10 @@ Phase 0 resolution:
 
 Implementation follow-ups before affected phases:
 
-- Select the exact standalone app origin/package name before Phase 1 app
+- Confirm the existing Admin and Store Console route ownership before Phase 1
   wiring.
-- Finalize Admin redirect timing and POS navigation-removal details before
-  Phase 7 cutover.
+- Finalize Admin/Store Console navigation timing and POS navigation-removal
+  details before Phase 7 cutover.
 
 Deliverables:
 
@@ -1007,22 +1015,21 @@ Deliverables:
 
 Exit gate: no unresolved sender ownership or Store-cardinality contradiction.
 
-### Phase 1 — Standalone app foundation
+### Phase 1 — Integrated Admin and Store Console foundation
 
-Objective: create the independently deployable user-authenticated application
-without moving WhatsApp behavior yet.
+Objective: establish the integrated Admin and Store Console WhatsApp surfaces
+without moving WhatsApp behavior or creating a new application.
 
 Work:
 
-- Add the new workspace application and package metadata.
-- Establish app-specific document title, manifest, icon, and workspace marker.
-- Configure same-origin `/api` access and development proxy.
-- Reuse user login, logout, session bootstrap, and error states.
-- Add organization selection and Store selection with safe URL state.
+- Reuse the existing Admin and Store Console workspace packages and metadata.
+- Reuse existing document identity, theme, navigation, API client, login,
+  logout, session bootstrap, and error states.
+- Add the Admin WhatsApp workspace and Store Console WhatsApp panel with safe
+  Organization/Store context.
 - Add route guards for unauthenticated, unknown Organization, and unknown
-  Store states.
-- Add an application-level error boundary and network-error presentation.
-- Add the initial shell with clear mode/status placeholders.
+  Store states at the existing application boundaries.
+- Add clear non-mutating mode/status placeholders in both surfaces.
 
 Tests:
 
@@ -1030,9 +1037,11 @@ Tests:
 - Refresh persistence and logout tests.
 - Unknown Organization/Store denial tests.
 - API base URL and application identity tests.
-- No device-authenticated POS cookie or token is accepted by the app.
+- No device-authenticated POS cookie or token is accepted by Admin or Store
+  Console WhatsApp routes.
 
-Exit gate: the app runs independently and exposes no WhatsApp mutation yet.
+Exit gate: Admin and Store Console expose correctly scoped WhatsApp surfaces
+without provider calls or WhatsApp mutation.
 
 ### Phase 2 — Authorization and Store policy foundation
 
@@ -1100,13 +1109,13 @@ delivery tracking and no Organization-visible conversation surface.
 
 ### Phase 4 — Organization Cloud connection
 
-Objective: move existing Embedded Signup capability into the standalone app
-without changing credential ownership.
+Objective: reuse existing Embedded Signup capability from the Admin WhatsApp
+workspace without changing credential ownership.
 
 Work:
 
 - Reuse the existing signed onboarding state and replay protection.
-- Launch Meta Embedded Signup from the standalone app.
+- Launch Meta Embedded Signup from the Admin WhatsApp workspace.
 - Complete the server-side authorization exchange.
 - Validate WABA identity, phone identity, phone registration, and account
   ownership.
@@ -1166,7 +1175,7 @@ Organization Cloud Stores; Ganatri Utility remains read-only/fixed.
 
 ### Phase 6 — Bill and due delivery in both modes
 
-Objective: make the initial standalone release useful and operationally safe.
+Objective: make the initial integrated release useful and operationally safe.
 
 Work:
 
@@ -1195,7 +1204,7 @@ Tests:
 
 Exit gate: initial release acceptance criteria pass for both sender modes.
 
-### Phase 7 — Migration and standalone cutover
+### Phase 7 — Migration and integrated cutover
 
 Objective: move existing behavior without accidental activation or auth mixing.
 
@@ -1208,10 +1217,10 @@ Work:
 - Do not automatically enable Ganatri Utility.
 - Preserve historical messages, provider events, submissions, bindings, and
   outbox records.
-- Add configurable standalone-app origin for Admin redirects.
-- Redirect Admin WhatsApp routes with safe Organization/Store/tab context.
-- Redirect POS `/whatsapp` to POS home without sending device users through the
-  user-authenticated standalone app.
+- Keep Admin WhatsApp routes in Admin and add the Store Console WhatsApp panel
+  with safe Organization/Store context.
+- Redirect POS `/whatsapp` to POS home without crossing into user-authenticated
+  Admin or Store Console routes.
 - Keep POS bill/due actions and status indicators working according to the
   resolved Store policy.
 
@@ -1223,8 +1232,8 @@ Migration checks:
 - No queued outbox row loses its sender/account reference.
 - Rollback restores route behavior and leaves historical records unchanged.
 
-Exit gate: browser verification confirms Admin, standalone WhatsApp, and POS
-do not cross authentication or Store boundaries.
+Exit gate: browser verification confirms Admin, Store Console, and POS do not
+cross authentication or Store boundaries.
 
 ### Phase 8 — Later inbox and customer replies
 
@@ -1260,18 +1269,21 @@ unapproved/misbound template, regardless of client input.
 
 ## Initial release route and capability map
 
-The exact package name and host remain technical follow-ups, but the initial
-standalone surface should contain these conceptual routes:
+The feature remains inside the existing application route trees. The initial
+integrated surfaces should contain these conceptual routes:
 
 ```text
-/login
-/
-/stores
-/stores/:storeId
-/stores/:storeId/connection
-/stores/:storeId/templates
-/stores/:storeId/delivery
-/settings
+Admin:
+  /whatsapp
+  /whatsapp/numbers
+  /whatsapp/stores
+  /whatsapp/templates
+  /whatsapp/delivery
+  /whatsapp/settings
+
+Store Console:
+  /stores/:storeId/whatsapp
+  /stores/:storeId/whatsapp/delivery
 ```
 
 Initial release visibility:
@@ -1291,9 +1303,11 @@ Initial release visibility:
 
 ### Boundary checks
 
-- Standalone app accepts only user authentication.
+- Admin and Store Console WhatsApp routes accept only their existing user
+  authentication and scope.
 - POS accepts only Device Authentication.
-- Admin redirects never include Store Device secrets or WhatsApp credentials.
+- No cross-application redirect carries Store Device secrets or WhatsApp
+  credentials.
 - Platform credentials never reach React, DTOs, logs, URLs, or client storage.
 - Organization IDs, Store IDs, account IDs, binding IDs, and submission IDs are
   checked against the authenticated Organization before use.
@@ -1328,16 +1342,14 @@ Initial release visibility:
 
 ### Required focused commands at implementation closeout
 
-- `bun run --cwd <standalone-app> check-types`
-- `bun run --cwd <standalone-app> test`
-- `bun run --cwd <standalone-app> build`
 - `bun run --cwd apps/admin check-types`
 - `bun run --cwd apps/pos check-types`
+- Store Console package typecheck, tests, lint, and build.
 - Focused backend WhatsApp tests.
 - Migration dry-run/status verification against the configured development
   database.
 - `git diff --check`.
-- Browser verification for standalone, Admin redirect, and POS boundary.
+- Browser verification for Admin, Store Console, and POS boundaries.
 
 ## Rollout and rollback plan
 
@@ -1347,10 +1359,11 @@ Initial release visibility:
 2. Validate platform sender configuration and fixed templates read-only.
 3. Deploy backend resolver and outbox support behind a disabled feature flag.
 4. Migrate existing Cloud assignments to explicit policy records.
-5. Enable standalone authentication and Store policy UI.
+5. Enable the integrated Admin and Store Console WhatsApp UI.
 6. Enable Ganatri Utility bill/due delivery for explicitly selected Stores.
 7. Enable Organization Cloud onboarding and delivery.
-8. Cut over Admin links and retire the POS conversation route.
+8. Keep Admin WhatsApp routes in place, enable Store Console scope, and retire
+   the POS conversation route by redirecting `/whatsapp` to POS home.
 9. Monitor outbox, provider events, consent denials, and delivery failures.
 
 ### Rollback

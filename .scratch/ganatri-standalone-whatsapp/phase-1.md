@@ -1,128 +1,131 @@
-# Standalone Ganatri WhatsApp — Phase 1
+# Ganatri WhatsApp — Phase 1
 
-Status: Paused — subphase 1.1 interrupted before verification/commit
-Phase: 1 — Standalone application foundation
+Status: Reset to integrated Admin/Store Console plan; implementation not started
+Phase: 1 — Integrated Admin and Store Console foundation
 
 ## Outcome
 
-Create an independently deployable, user-authenticated WhatsApp application
-that can select an Organization and Store but cannot mutate WhatsApp data until
-later phases authorize those actions.
+Add the WhatsApp feature to the existing user-authenticated Admin and Store
+Console applications. Admin owns Organization-wide management; Store Console
+shows and operates only within the selected Store. No new WhatsApp frontend,
+deployment, port, manifest, or authentication boundary is created.
 
 ## Scope guardrails
 
-Included: app package, identity, API base, login, logout, session bootstrap,
-Organization/Store routing, shell, loading, empty, error, and unauthorized
-states.
+Included: existing Admin WhatsApp workspace, Store Console WhatsApp panel,
+shared UI primitives, existing user authentication/API clients, Organization
+and Store context, scoped navigation, loading/empty/error/unauthorized states,
+and safe route boundaries.
 
-Excluded: sender configuration, Meta onboarding, template mutation, sending,
-inbox, promotions, database policy changes, and POS authentication.
+Excluded: new app package, new frontend origin, new authentication system,
+sender configuration, Meta onboarding, template mutation, sending, inbox,
+promotions, database policy changes, and POS authentication changes.
 
 ## Subphase map
 
 | Subphase | Outcome | Depends on | Exit evidence |
 | --- | --- | --- | --- |
-| 1.1 | App/package boundary and identity | Phase 0 | Independent dev/build entry, title, manifest, and workspace marker |
-| 1.2 | User auth and API boundary | 1.1 | Login/logout/bootstrap and same-origin API checks |
-| 1.3 | Organization/Store navigation shell | 1.2 | Scoped routes survive refresh and reject unknown scope |
+| 1.1 | Integrated feature boundary and navigation | Phase 0 | Admin workspace and Store Console entry are identified and scoped |
+| 1.2 | Existing auth and API boundary | 1.1 | Existing user session/API clients are reused without POS auth |
+| 1.3 | Organization/Store scoped UI shell | 1.2 | Admin and Store Console context survives refresh and scope is enforced |
 | 1.4 | Foundation verification and review | 1.1–1.3 | Focused tests, typecheck, build, diff review, status update, commit |
 
-## 1.1 Subphase plan — app/package boundary and identity
+## 1.1 Subphase plan — integrated feature boundary and navigation
 
-Status: Plan reviewed; implementation paused before verification/commit
+Status: Plan reviewed; implementation not started
 
 ### User-facing outcome
 
-The repository has a separately runnable Ganatri WhatsApp web application
-named `apps/whatsapp`. It has its own browser identity, manifest, development
-port, API proxy, and non-mutating shell. It does not yet authenticate users,
-load Organizations, call WhatsApp APIs, or render POS behavior.
+Users find WhatsApp in the existing Admin and Store Console applications. Admin
+opens the Organization-wide WhatsApp workspace. Store Console opens a
+Store-scoped WhatsApp panel. Both use their existing shells and sessions.
 
 ### Scope
 
-- Add the `apps/whatsapp` workspace package and Vite entry point.
-- Add app-specific TypeScript, ESLint, manifest, title, favicon, and theme
-  metadata wiring.
-- Import the shared UI styles and use the existing workspace package aliases.
-- Add a small shell that proves the app is the standalone WhatsApp workspace
-  while following the Ganatri Admin typography, semantic tokens, header/card
-  geometry, responsive spacing, dark mode, and focus patterns.
-- Add pure identity/manifest tests.
+- Identify and extend the current Admin WhatsApp route/page boundary.
+- Add the Store Console WhatsApp entry and placeholder panel at the existing
+  Store-scoped route boundary.
+- Reuse existing Admin and Store Console navigation, layout, theme, and UI
+  primitives.
+- Keep Organization and Store context visible in every WhatsApp surface.
+- Add only non-mutating placeholders for later connection, template, policy,
+  and delivery states.
 
 ### Non-goals
 
-- No login, logout, session bootstrap, Organization query, or Store query.
-- No backend, database, migration, WhatsApp account, template, or outbox code.
-- No Admin route changes and no POS route changes.
-- No copied Admin dashboard, inbox, promotion, or template UI.
+- No `apps/whatsapp` package or standalone app shell.
+- No separate Vite port, manifest, deployment origin, or API client.
+- No login/logout implementation; existing application sessions are reused in
+  subphase 1.2.
+- No backend, database, migration, provider, sender, template, or outbox code.
+- No POS route or device-authentication changes.
 
 ### Dependencies and seams
 
-- Existing `apps/admin` and `apps/console` Vite/Turbo conventions.
-- Shared `@repo/assets`, `@repo/services`, `@repo/types`, and `@repo/ui` aliases.
-- Same-origin `/api` proxy target `http://127.0.0.1:8001`.
-- App-owned identity module and manifest builder.
+- Existing `apps/admin` WhatsApp workspace and Admin shell.
+- Existing Store Console application shell and Store-scoped routing.
+- Shared `@repo/ui` styles, components, semantic tokens, and theme provider.
+- Existing user-authenticated API client and backend tenant routes.
+- Store context from the existing Store Console session/route.
 
 ### Internal review
 
-- The package name `whatsapp` is an implementation name within the approved
-  standalone-app boundary; it does not change the product decision.
-- The shell deliberately has no provider call, preventing Phase 1.1 from
-  pulling in authentication or sender behavior.
-- The app uses shared primitives/styles without copying Admin pages and keeps
-  its navigation focused on WhatsApp.
-- The development port is isolated from Admin, POS, and Console.
-- Existing staged/untracked unrelated files remain outside this subphase.
+- Admin is the only Organization-wide management surface.
+- Store Console is a projection of the selected Store and never becomes a
+  cross-Store management surface.
+- Both surfaces reuse existing authentication and API boundaries.
+- POS remains device-authenticated and is not used as a user-authenticated
+  WhatsApp management surface.
+- No new product, public API, database, or deployment decision is introduced.
 
 ### Verification plan
 
-- `bun run --cwd apps/whatsapp check-types`
-- `bun test apps/whatsapp/src`
-- `bun run --cwd apps/whatsapp build`
-- `git diff --check`
-- Inspect staged scope before the focused subphase commit.
-- Browser visual check at desktop and narrow mobile widths in light and dark
-  themes.
+- Inspect Admin and Store Console route ownership and navigation scope.
+- Run focused Admin and Store Console typechecks, tests, lint, and builds.
+- Verify the WhatsApp entries render in their existing shells.
+- Check Organization/Store context, light/dark theme, responsive layout, and
+  loading/empty/error/permission states.
+- Run `git diff --check` and inspect staged scope before commit.
 
 ### Rollback
 
-Remove only the new `apps/whatsapp` package and its phase/status record if
-verification fails. Do not touch backend, Admin, POS, database, or unrelated
-Admin mobile files.
-
-## Recovery checkpoint
-
-The `apps/whatsapp` shell was created, but Phase 1.1 verification and commit
-were intentionally paused when the product scope changed to multi-number and
-shared Store assignments. `bun.lock` was modified by the interrupted workspace
-installation. Preserve both changes until the Phase 1.1 boundary is reviewed
-again after the updated plan is approved.
+Revert only the current Admin/Store Console WhatsApp changes. Do not touch
+backend, POS, database, migrations, or unrelated Admin-mobile work.
 
 ## Public seams
 
-- User-authenticated session only; never accept POS Device Authentication.
-- Shared `@repo/services` and `@repo/types` before new API contracts.
-- App-owned routing and identity; shared UI primitives only where appropriate.
-- Same-origin `/api` in production and explicit development proxy configuration.
+- Admin accepts the existing user-authenticated Organization session.
+- Store Console accepts its existing user-authenticated Store scope.
+- POS accepts only Device Authentication.
+- Shared backend/API contracts are reused before adding focused WhatsApp
+  extensions in later phases.
+- Shared UI primitives and semantic tokens are preferred over new components.
 
 ## Acceptance criteria
 
-- Unauthenticated users reach only login and public error states.
-- Valid users can select only Organizations returned for their session.
-- Store routes reject an unknown or cross-Organization Store.
-- Refresh preserves safe Organization/Store context without credentials in URLs.
-- Login, logout, expired session, network failure, and retry states are usable.
-- No WhatsApp mutation or provider call occurs in Phase 1.
+- No new `apps/whatsapp` package exists after this reset.
+- Admin has the Organization-wide WhatsApp entry and Store Console has a
+  Store-scoped WhatsApp entry.
+- Admin can represent Organization/Store context without leaking credentials.
+- Store Console cannot display or mutate another Store's WhatsApp data.
+- Existing user authentication is reused; POS device authentication is not
+  accepted by Admin or Store Console.
+- Phase 1 introduces no WhatsApp provider call or data mutation.
+
+## Phase 1 review boundary
+
+This phase creates the integrated application boundary only. Sender policy,
+Customer associations, platform utility delivery, Cloud onboarding, template
+lifecycle, and bill/due delivery remain in later phases.
+
+The former uncommitted standalone app shell was removed when the product
+direction changed. Phase 1 must restart at subphase 1.1 using the existing
+Admin and Store Console applications.
 
 ## Verification
 
-- Standalone app typecheck, focused tests, lint, and build.
-- Route/auth boundary tests.
-- API base URL and app identity tests.
+- Focused Admin and Store Console typecheck, tests, lint, and build.
+- Route and scope boundary tests.
+- Existing user session/API boundary checks.
+- Light/dark, responsive, accessibility, loading, empty, and error checks.
 - `git diff --check` and staged-scope review.
-
-## Risks and rollback
-
-- Do not copy the POS Device session boundary into this app.
-- Keep the phase reversible as app-only files and package wiring.
-- Stop if an API change is required; record a new contract decision.

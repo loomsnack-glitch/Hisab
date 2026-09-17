@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 0
+# Ganatri WhatsApp — Phase 0
 
 Status: Completed
 Phase: 0 — Baseline and contract lock

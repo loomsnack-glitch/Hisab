@@ -1,4 +1,4 @@
-# Standalone Ganatri WhatsApp — Phase 9
+# Ganatri WhatsApp — Phase 9
 
 Status: Deferred
 Phase: 9 — Promotions and operational controls
