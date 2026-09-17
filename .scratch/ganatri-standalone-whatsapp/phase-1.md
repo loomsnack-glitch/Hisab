@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 1
 
-Status: Phase 1.3 verified; commit gate pending
+Status: Phase 1 complete with follow-ups; closeout commit pending
 Phase: 1 — Integrated Admin and Store Console foundation
 
 ## Outcome
@@ -34,7 +34,7 @@ promotions, database policy changes, and POS authentication changes.
 
 ## 1.1 Subphase plan — integrated feature boundary and navigation
 
-Status: Phase 1.3 plan reviewed; existing boundary validated; commit pending
+Status: Phase 1.4 final review complete; closeout commit pending
 
 ### User-facing outcome
 
@@ -249,6 +249,57 @@ user from viewing another Store's WhatsApp data.
 - Admin build was already passing from the Phase 1.2 verification; no source
   files changed in this subphase, so the result remains applicable.
 - Full Admin typecheck/lint baseline failures remain unchanged and unrelated.
+
+## 1.4 Subphase plan — Phase 1 verification and review
+
+Status: Plan reviewed; final verification in progress
+
+### Outcome
+
+Close Phase 1 after confirming that the integrated Admin Organization WhatsApp
+workspace and Admin Store Workspace WhatsApp panel satisfy the approved
+foundation boundary. Do not begin Phase 2 or add WhatsApp provider behavior.
+
+### Verification
+
+- Run the complete Admin test suite and the focused Phase 1 suite.
+- Run Admin typecheck, lint, and production build.
+- Review all Phase 1 commits on standards and specification axes.
+- Confirm no backend, database, provider, POS, Platform Console, or new-app
+  files entered the Phase 1 scope.
+- Record browser visual verification as a follow-up if no browser surface is
+  available.
+
+### Exit criteria
+
+- Phase 1 commits are limited to the integrated planning/status checkpoint.
+- Existing Admin auth, Organization scope, Store Workspace scope, navigation,
+  and WhatsApp route/panel tests pass.
+- Known baseline failures and unverified browser checks are documented.
+- Phase 2 remains the next phase and is not started in this run.
+
+### Phase 1 final review
+
+- Standards review: passed. Phase 1 commits contain only the approved
+  integrated planning/status checkpoint; no parallel app, Platform Console
+  mutation, backend change, database change, or POS authentication change was
+  introduced.
+- Specification review: passed. Admin owns Organization-wide WhatsApp and its
+  Store Workspace owns selected-Store WhatsApp scope, using existing auth,
+  navigation, API, and UI boundaries.
+- Focused Phase 1 verification passed: 52 tests covering authentication,
+  Organization scope, Store routes, Store Workspace, Admin navigation, and
+  WhatsApp pages.
+- Full Admin suite result: 390 passed and 28 unrelated existing failures in
+  Expense Categories, Money Accounts, Service Tables, Billing, and barcode
+  scanning tests. These are baseline failures and were not changed.
+- Admin production build passed. Existing chunk-size warnings remain.
+- Full Admin typecheck and lint remain baseline failures outside this Phase 1
+  boundary; no unrelated source was changed to hide them.
+- Browser visual verification remains pending because no browser surface was
+  available in this session.
+- Phase 1 is complete with the documented verification follow-ups. Phase 2
+  remains unstarted.
 
 ## Phase 1 review boundary
 
