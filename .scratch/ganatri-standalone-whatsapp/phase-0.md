@@ -15,7 +15,7 @@ and security boundaries are recorded before implementation begins.
 | --- | --- | --- | --- | --- |
 | 0.1 | Source and route inventory | Approved spec | Admin/POS/backend route inventory recorded | Docs-only; no commit yet |
 | 0.2 | Database and migration baseline | 0.1 | 148 applied, 0 pending; aggregate WhatsApp inventory recorded | Docs-only; no commit yet |
-| 0.3 | Product contract lock | 0.1, 0.2 | Approved decision register D01–D13 | Docs-only; no commit yet |
+| 0.3 | Product contract lock | 0.1, 0.2 | Approved decision register D01–D32 | Docs-only; no commit yet |
 | 0.4 | Phase-loop execution setup | 0.3 | Status tracker and phase records created | Docs-only; no commit yet |
 
 ## Findings

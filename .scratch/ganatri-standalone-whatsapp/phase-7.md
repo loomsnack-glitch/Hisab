@@ -22,8 +22,10 @@ activating Stores unexpectedly or crossing Admin/POS authentication boundaries.
 - Existing Organization Cloud assignments become `organization_cloud`.
 - Stores without an assignment become `disabled`.
 - Ganatri Utility is never enabled implicitly.
-- Conflicting Organization-owned phone assignments must be reported and
-  quarantined or abort the migration; never choose silently.
+- Stores with multiple existing Organization-owned phone assignments must be
+  reported and quarantined or abort the migration; never choose silently.
+- Existing shared number assignments are preserved and receive a deterministic
+  default inbound Store.
 - Historical accounts, submissions, bindings, messages, provider events, and
   outbox records are retained.
 
@@ -31,14 +33,18 @@ activating Stores unexpectedly or crossing Admin/POS authentication boundaries.
 
 - Admin legacy WhatsApp URLs redirect to the standalone origin with only safe
   Organization, Store, and tab context.
-- POS `/whatsapp` must not redirect to the user-authenticated standalone app.
-- POS keeps bill/due action/status behavior while the conversation route is
-  retired according to the final cutover implementation.
+- POS `/whatsapp` redirects to POS home and must not cross into the
+  user-authenticated standalone app.
+- POS keeps bill/due action/status behavior; only the conversation route is
+  removed from the POS navigation.
 
 ## Verification
 
 - Read-only dry-run counts before migration.
 - Before/after assignment and outbox-reference checks.
+- No Store has more than one linked Organization-owned phone.
+- Existing shared Organization-owned number assignments are preserved.
+- Every shared number has one valid default inbound Store.
 - Rollback and repeated-migration idempotency.
 - Browser checks with Admin and POS sessions open concurrently.
 - No device secret, user token, or WhatsApp credential in redirect URLs.

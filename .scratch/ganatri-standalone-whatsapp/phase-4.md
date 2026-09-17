@@ -25,7 +25,9 @@ Embedded Signup, with encrypted credentials and resumable provisioning.
 - Vault failure does not persist plaintext credentials.
 - Old credentials remain active until replacement validation succeeds.
 - Unregistered, suspended, revoked, and unhealthy phones cannot send.
-- Organization-owned phone assignment cannot be shared across Stores.
+- Each Store has only one linked Organization-owned phone.
+- One Organization-owned phone may be linked to multiple Stores.
+- The shared phone's default inbound Store is deterministic and auditable.
 
 ## Verification
 
@@ -33,4 +35,5 @@ Embedded Signup, with encrypted credentials and resumable provisioning.
 - Credential-vault failure and rotation rollback tests.
 - Provider status refresh and webhook state tests.
 - Concurrent phone assignment tests.
+- Multiple-Store assignment and one-linked-number-per-Store tests.
 - Admin/standalone browser flow with no token exposure.

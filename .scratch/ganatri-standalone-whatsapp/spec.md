@@ -37,9 +37,9 @@ WhatsApp delivery engine.
 - The outbox records the selected sender reference in the immutable message
   snapshot, so queued work is never silently rerouted when a Store changes its
   WhatsApp policy.
-- In v1, one physical WhatsApp phone can be actively assigned to only one
-  Store. An Organization may connect multiple phone numbers, but a phone is
-  never shared across Stores.
+- In v1, an Organization may connect multiple WhatsApp numbers, a number may
+  serve multiple Stores, and each Store has only one linked Organization
+  number at a time.
 - Replies received by the Ganatri-managed utility sender are retained
   internally for provider/audit handling but are not shown to Organization
   users in the standalone WhatsApp application.
@@ -79,14 +79,14 @@ WhatsApp delivery engine.
   Organization Cloud may use inbox, replies, approved templates, promotions,
   consent, and delivery management under the approved controls.
 - The initial standalone release includes authentication, Organization/Store
-  selection, all three sender modes, Embedded Signup, Store linking, bill/due
-  delivery, consent, delivery status, retry, and basic template status. Inbox,
-  free-form replies, promotions, campaigns, and advanced operations follow in
-  later releases.
+  selection, all three sender modes, Embedded Signup, Store linking, the full
+  Organization Cloud template lifecycle, bill/due delivery, consent, delivery
+  status, and retry. Inbox, free-form replies, promotions, campaigns, and
+  advanced operations follow in later releases.
 - Existing Admin WhatsApp URLs redirect to the standalone WhatsApp app with
   only safe Organization, Store, and tab context. POS `/whatsapp` does not
-  cross into the user-authenticated standalone app; it is retired or redirected
-  to POS home while POS keeps bill/due actions and status visibility.
+  cross into the user-authenticated standalone app; it redirects to POS home
+  while POS keeps bill/due actions and status visibility.
 
 ## Existing code baseline
 
@@ -191,10 +191,10 @@ events, audit history, and already queued immutable snapshots. Pending work
 must finish under its original sender/policy or fail clearly; it must never be
 rerouted to a different sender.
 
-Sharing one phone number across multiple Stores is a separate decision. It is
-not recommended for v1 because a new inbound message does not reliably carry
-the Store that should own it. If shared numbers are later allowed, explicit
-inbound routing rules and a shared-inbox ownership model are required.
+An Organization-owned phone may be linked to multiple Stores. Each shared phone
+has one default inbound Store and the approved routing precedence is used for
+new inbound messages. A Store itself may have only one linked Organization
+number and must explicitly replace it before using another.
 
 ## Authorization model
 
@@ -303,6 +303,92 @@ The standalone app should be a focused Organization-user application:
 The UI should explain why an action is unavailable, but backend authorization
 must remain authoritative.
 
+## UI alignment contract
+
+The standalone application must feel like another Ganatri workspace, not a
+separate product with a new visual language. Its visual source of truth is the
+current Ganatri Admin web portal and the shared `packages/ui` primitives.
+
+### Shared visual language
+
+- Use the existing semantic CSS variables from `@repo/ui`: `background`,
+  `foreground`, `card`, `muted`, `primary`, `destructive`, `border`, `input`,
+  and `ring`.
+- Use the existing web typography: DM Sans for body/interface text and Plus
+  Jakarta Sans through the `font-display` utility for prominent headings.
+- Use the existing Ganatri blue primary and semantic green/amber/red status
+  treatments. WhatsApp green is an accent for identity/status, not a second
+  global theme.
+- Reuse `@repo/ui` Button, Card, Badge, Input, Select, Tabs, Dialog, Sheet,
+  Spinner, Skeleton, Empty, Tooltip, and toast primitives before adding a new
+  component.
+- Preserve the existing border, radius, spacing, shadow, backdrop, and focus
+  ring patterns. Avoid one-off raw colors or a parallel design-token system.
+- Support the existing light/dark theme behavior through the web app's theme
+  provider and semantic tokens.
+
+### Workspace shell
+
+- Use an app-owned standalone shell with Ganatri branding, while following the
+  Admin shell's header, page-width, card, sidebar, and mobile navigation
+  geometry.
+- Desktop uses a compact workspace navigation with the same active-state rail,
+  rounded navigation rows, sticky header, and backdrop treatment as Admin.
+- Mobile uses a fixed bottom navigation or focused menu sheet consistent with
+  Admin's mobile navigation patterns; content remains scrollable above the
+  safe-area inset.
+- Keep the standalone navigation focused on WhatsApp: Overview, Numbers,
+  Stores, Templates, Delivery, and Settings as phases make them available.
+- Do not copy the full Admin sidebar or expose unrelated Catalog, Billing,
+  Finance, POS, or Console destinations.
+- Keep the current Organization and Store context visible in the header or
+  workspace switcher so a shared number is never shown without scope.
+
+### Page and component patterns
+
+- Use the Admin page rhythm: page title, short description, primary action,
+  responsive content width, and grouped cards/sections.
+- Sender cards show phone identity, WABA/provider health, linked Stores,
+  default inbound Store, active outbound Store assignments, and safe actions.
+- Store cards show the selected mode, linked number, entitlement state,
+  template readiness, customer association summary, and the next action.
+- Use explicit badges for Connected, Needs attention, Disabled, Pending,
+  Approved, Rejected, Default, and Ambiguous routing.
+- Use dashed muted cards for empty states, amber cards for actionable warnings,
+  destructive cards for blocked/error states, and skeletons for initial loads.
+- Use dialogs/sheets for connect, link, replace, publish, archive, rollback,
+  and destructive confirmation actions. Preserve the existing rounded and
+  responsive dialog geometry.
+- Keep success/error feedback in the shared toast pattern; do not introduce a
+  second toast library or inline alert style for normal mutations.
+- Customer details show `Created in Store`, lifetime `Active in Stores`,
+  `lastActivityAt`, activity provenance, WhatsApp number, routed Store, and
+  routing reason using the existing Admin detail/card patterns.
+
+### Responsive and accessibility contract
+
+- Verify at desktop widths, tablet widths, and narrow phone widths; no page may
+  require horizontal scrolling for ordinary Store/number management.
+- Preserve keyboard focus rings, visible labels, semantic headings, button
+  names, dialog focus trapping, and status announcements.
+- Provide loading, empty, permission-denied, entitlement-denied, unhealthy
+  sender, missing-template, and network-error states for every data surface.
+- Keep touch targets and mobile bottom navigation clear of safe-area insets.
+- Respect reduced-motion preferences and avoid animation as the only status
+  indicator.
+
+### Visual verification
+
+Each UI subphase must check:
+
+- Light and dark themes.
+- Desktop and narrow mobile layouts.
+- Loading, empty, success, warning, error, and permission-denied states.
+- Keyboard/focus behavior and screen-reader labels.
+- Store/number context visibility in shared-number scenarios.
+- Consistency with representative Admin pages such as the Dashboard shell,
+  Store settings, WhatsApp workspace, and commercial status cards.
+
 ## Edge-case catalogue
 
 ### Connection and configuration
@@ -335,8 +421,8 @@ must remain authoritative.
 - User disables WhatsApp: block new work but retain history and audit records.
 - Organization deletes or archives a Store: prevent new sends and preserve
   historical message records according to existing Store retention rules.
-- One sender is accidentally linked to multiple Stores: prevent this in v1 or
-  require an explicit shared-inbox decision before allowing it.
+- One sender is linked to multiple Stores: preserve the assignments, verify the
+  default inbound Store, and label any fallback or ambiguous routing.
 
 ### Templates and sending
 
@@ -512,8 +598,6 @@ and manual browser verification pass.
   templates.
 - Making Meta approval optional or bypassing consent/suppression rules.
 - Automatically falling back between sender modes.
-- Allowing shared phone numbers across Stores without an explicit routing and
-  shared-inbox design.
 - Rewriting historical WhatsApp messages, outbox records, or credentials.
 
 ## Implementation follow-ups
@@ -545,7 +629,7 @@ without changing their meaning.
 | ID | Approved decision | Consequence |
 | --- | --- | --- |
 | D01 | Ganatri Utility and Organization Cloud use the same durable WhatsApp outbox and delivery pipeline. | Sender choice is a resolver concern; queued work keeps its original sender snapshot. |
-| D02 | One Organization-owned physical WhatsApp phone is assigned to only one Store in v1. | Organization-owned phone assignments cannot be shared across Stores. The Ganatri platform phone is an explicit platform-level exception for outbound utility delivery only. |
+| D02 | Each Store has one linked Organization-owned WhatsApp number in v1; an Organization-owned number may be linked to multiple Stores. | A Store has one linked number, while an Organization may reuse a connected number across its Stores. The Ganatri platform phone remains a separate platform-level exception for outbound utility delivery only. |
 | D03 | Replies received by the Ganatri sender are stored internally, hidden from Organization users, and receive no automatic response. | Ganatri Utility is outbound bill/due notification only. |
 | D04 | Both sender modes require the existing WhatsApp Store Entitlement. | Pricing and usage billing remain deferred, but access is not an entitlement bypass. |
 | D05 | Until Organization roles exist, the Organization creator/administrator alone manages WhatsApp. | Connection, templates, Store assignment, promotions, consent, and delivery operations are administrator-only. |
@@ -555,16 +639,34 @@ without changing their meaning.
 | D09 | Store WhatsApp policy and sender assignment use a separate history-aware configuration record. | Policy changes are auditable and do not mutate message history or reroute queued work. |
 | D10 | Existing Cloud assignments migrate to Organization Cloud; all other existing and new Stores start disabled. | Ganatri Utility is never enabled implicitly. |
 | D11 | Ganatri Utility is bill/due-only; Organization Cloud may later use inbox, replies, approved templates, promotions, consent, and delivery controls. | Sender policy controls both UI visibility and backend admission. |
-| D12 | Initial release includes authentication, Store policy, both sender modes, Embedded Signup, Store linking, bill/due delivery, consent, delivery status, retry, and basic template status. | Inbox, free-form replies, promotions, campaigns, and advanced operations are later release slices. |
-| D13 | Existing Admin WhatsApp URLs redirect to the standalone app; POS `/whatsapp` does not cross authentication boundaries and is retired or redirected to POS home. | Safe Organization/Store/tab context may be preserved; secrets never appear in URLs. |
+| D12 | Initial release includes authentication, Store policy, both sender modes, Embedded Signup, Store linking, the full Organization Cloud template lifecycle, bill/due delivery, consent, delivery status, and retry. | Inbox, free-form replies, promotions, campaigns, and advanced operations are later release slices. |
+| D13 | Existing Admin WhatsApp URLs redirect to the standalone app; POS `/whatsapp` does not cross authentication boundaries and redirects to POS home. | Safe Organization/Store/tab context may be preserved for Admin; secrets never appear in URLs. |
+| D14 | Customer visibility shows both the Store where the Customer was created and all Stores where the Customer is active. | Customer identity remains Organization-owned; Store origin and Store activity are separate facts. |
+| D15 | During go-live migration, every existing Customer is assigned to the Organization's first-created Store as its migration origin. New Customers created after go-live record their actual creation Store. | Migration origin is explicitly marked as migrated; future origin is Store-observed. Active Store activity remains separately derived. |
+| D16 | After go-live, creating a Customer requires a selected Store. Organization-level creation without Store context is not allowed. | Every new Customer has a reliable Store origin; the Organization-wide Customer identity remains shared. |
+| D17 | For a WhatsApp number shared by multiple Stores, inbound routing prefers existing conversation context, latest outbound Store, a single active Store, then the number's default inbound Store; ambiguous/default routing is labeled. | One number can serve multiple Stores without hiding the routing reason from Admin. |
+| D18 | A new Customer's creation Store immediately appears in `activeInStores`; later Sales, conversations, or explicit Store activity add other Stores. | Creation establishes an initial Store association without changing Organization-wide Customer identity. |
+| D19 | During migration, every legacy Customer uses the first-created Store as its migration origin and initial active Store; historical Sales and WhatsApp activity add other active Stores. | Existing Customers receive a usable baseline association without losing known Store activity. |
+| D20 | An Organization may connect multiple WhatsApp numbers, each number may serve multiple Stores, but each Store has one active outbound Organization number at a time. | Multiple numbers are available without ambiguity about which number sends Store messages. |
+| D21 | The Organization administrator explicitly selects each Store's active outbound Organization number; unhealthy numbers block new sends and never trigger automatic fallback. | Sender changes are deliberate, auditable, and preserved in queued message snapshots. |
+| D22 | Organization Cloud templates are WABA-scoped, while Store defaults are scoped by Store, selected outbound number's WABA, message kind, and language. | A WABA template is reusable, but a Store's selected sender must have a valid matching default. |
+| D23 | A shared WhatsApp number has one default inbound Store: the first linked Store initially, administrator-changeable, with oldest remaining promotion on unlink and unassigned internal events when no Store remains. | Shared-number inbound routing remains deterministic and audited. |
+| D24 | Customer Store activity includes Store creation, completed Sales, routed WhatsApp conversations, explicit Store attachment, and bill/due delivery; drafts, voids, and failed unscoped attempts do not count. | Store activity reflects meaningful Customer relationships rather than abandoned or failed work. |
+| D25 | Admin and standalone WhatsApp show Customer Store relationships, while POS shows only the authenticated Store's relationship. | Cross-Store visibility is available to administrators without broadening POS scope. |
+| D26 | Store-Customer relationships are persisted with provenance and timestamps, unique per Organization, Customer, and Store. Each relationship has a current summary plus append-only activity events with source, occurrence time, and idempotent source reference. | Admin can explain why a Customer is associated with a Store and query both current recency and complete migration/activity history. |
+| D27 | An Organization may connect multiple WhatsApp numbers, a number may serve multiple Stores, but each Store has only one linked Organization number. | A Store must replace its current linked number before using another. |
+| D28 | Replacing a Store's linked number is an explicit atomic switch. Old history and queued messages retain the old number; new work uses the replacement after the switch. | A Store never has two linked numbers or an implicit fallback during replacement. |
+| D29 | Retain the existing connect-then-explicit-link workflow as the baseline. A newly connected number starts unlinked, can be linked to eligible Stores, and is usable only after its Store link and checks pass. | The standalone app reuses existing account/linking APIs and adds only the missing policy, atomic replacement, and Customer visibility behavior. |
+| D30 | Do not rewrite the existing account connection/linking APIs. Reuse them in the standalone app and add only focused extensions required by multi-number policy and Customer associations. | Existing Cloud onboarding and account ownership behavior remains stable. |
+| D31 | Store-Customer associations and their activity events are append-only. Unlinking or inactivity does not delete the association or its history. | Admin retains complete Store relationship and last-activity evidence. |
+| D32 | `activeInStores` is lifetime-based with no automatic expiry. Each association retains `originSource`, `firstSeenAt`, `lastActivityAt`, and `lastActivitySource`; append-only events retain every qualifying activity source and occurrence. | Admin can filter by recency without deleting or hiding historical Store relationships. |
 
 ### Decision interpretation requiring explicit implementation handling
 
-D02 and D08 are represented distinctly. D02 governs an Organization-owned
-phone assignment. D08 makes one Ganatri platform phone available for
-platform-owned outbound utility delivery. The approved exception allows the
-Ganatri platform phone to serve multiple Stores because Ganatri Utility has no
-Organization-visible inbox, no replies, and no inbound Store routing. The
+D02 and D08 are represented distinctly. D02 governs the Store-side cardinality
+of Organization-owned assignments: one linked Organization number per Store,
+with one number allowed to serve multiple Stores. D08 makes one Ganatri
+platform phone available for platform-owned outbound utility delivery. The
 platform phone must not be represented as an Organization-owned Store
 assignment.
 
@@ -670,7 +772,10 @@ Required invariants:
   sender reference.
 - An Organization-owned account belongs to the same Organization as the
   Store.
-- A physical Organization-owned phone has at most one active Store assignment.
+- A Store has at most one linked Organization-owned phone.
+- An Organization-owned phone may have multiple Store assignments.
+- Each shared phone has exactly one default inbound Store while it has active
+  Store assignments.
 - Policy changes are serialized and audited.
 - Historical configurations remain readable after a switch.
 
@@ -712,6 +817,44 @@ canReplyInConversation
 The initial release grants management capabilities only to the Organization
 creator/administrator. Platform sender management remains a Platform
 Administrator concern and must not be exposed through tenant routes.
+
+### Customer Store visibility
+
+Customers remain Organization-owned records. The standalone WhatsApp app may
+show two separate Store relationships:
+
+- `createdInStore`: the explicit Store recorded when a new Customer is first
+  created through a Store workflow.
+- `activeInStores`: every Store where the Customer has qualifying activity,
+  such as Customer creation, a completed Sale, a Store-scoped WhatsApp
+  conversation, explicit Store attachment, or bill/due delivery. It is
+  lifetime-based; recency is represented by `lastActivityAt`, not automatic
+  removal.
+
+These values must not be collapsed into one field. A Customer may have one
+origin Store and many active Stores.
+
+Each Store-Customer association stores a current summary with
+`originSource`, `firstSeenAt`, `lastActivityAt`, and `lastActivitySource`. Every
+qualifying event also appends an association activity record with its source,
+occurrence time, and an idempotent source reference. The summary is updated
+transactionally from the event; it is a read-optimized view, not a replacement
+for the history. Repeated source events are deduplicated, and no association
+or activity event is deleted for unlinking or inactivity.
+
+For go-live migration, every existing Customer in an Organization with at
+least one Store is intentionally assigned to that Organization's first-created
+Store. The assignment is marked with a migration source so it is not confused
+with an observed creation event. Organizations with no Store retain a null
+origin until a Store exists. After go-live, every new Customer creation must
+record the actual Store that created it. Historical `activeInStores` remains
+derived independently from Store-scoped Sales and WhatsApp activity.
+
+For a WhatsApp account assigned to multiple Stores, inbound routing uses this
+precedence: existing conversation context, latest outbound message Store,
+Customer activity in exactly one Store, then the account's default inbound
+Store. If the result is a default or ambiguous route, Admin displays that
+routing reason alongside the Customer's Store relationships.
 
 ## State machines
 
@@ -851,8 +994,8 @@ Implementation follow-ups before affected phases:
 
 - Select the exact standalone app origin/package name before Phase 1 app
   wiring.
-- Finalize Admin redirect timing and POS route retirement details before Phase
-  7 cutover.
+- Finalize Admin redirect timing and POS navigation-removal details before
+  Phase 7 cutover.
 
 Deliverables:
 
@@ -1067,7 +1210,7 @@ Work:
   outbox records.
 - Add configurable standalone-app origin for Admin redirects.
 - Redirect Admin WhatsApp routes with safe Organization/Store/tab context.
-- Retire or redirect POS `/whatsapp` without sending device users through the
+- Redirect POS `/whatsapp` to POS home without sending device users through the
   user-authenticated standalone app.
 - Keep POS bill/due actions and status indicators working according to the
   resolved Store policy.

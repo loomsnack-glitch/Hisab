@@ -1,6 +1,6 @@
 # Standalone Ganatri WhatsApp — Phase 1
 
-Status: Not started
+Status: Paused — subphase 1.1 interrupted before verification/commit
 Phase: 1 — Standalone application foundation
 
 ## Outcome
@@ -26,6 +26,77 @@ inbox, promotions, database policy changes, and POS authentication.
 | 1.2 | User auth and API boundary | 1.1 | Login/logout/bootstrap and same-origin API checks |
 | 1.3 | Organization/Store navigation shell | 1.2 | Scoped routes survive refresh and reject unknown scope |
 | 1.4 | Foundation verification and review | 1.1–1.3 | Focused tests, typecheck, build, diff review, status update, commit |
+
+## 1.1 Subphase plan — app/package boundary and identity
+
+Status: Plan reviewed; implementation paused before verification/commit
+
+### User-facing outcome
+
+The repository has a separately runnable Ganatri WhatsApp web application
+named `apps/whatsapp`. It has its own browser identity, manifest, development
+port, API proxy, and non-mutating shell. It does not yet authenticate users,
+load Organizations, call WhatsApp APIs, or render POS behavior.
+
+### Scope
+
+- Add the `apps/whatsapp` workspace package and Vite entry point.
+- Add app-specific TypeScript, ESLint, manifest, title, favicon, and theme
+  metadata wiring.
+- Import the shared UI styles and use the existing workspace package aliases.
+- Add a small shell that proves the app is the standalone WhatsApp workspace
+  while following the Ganatri Admin typography, semantic tokens, header/card
+  geometry, responsive spacing, dark mode, and focus patterns.
+- Add pure identity/manifest tests.
+
+### Non-goals
+
+- No login, logout, session bootstrap, Organization query, or Store query.
+- No backend, database, migration, WhatsApp account, template, or outbox code.
+- No Admin route changes and no POS route changes.
+- No copied Admin dashboard, inbox, promotion, or template UI.
+
+### Dependencies and seams
+
+- Existing `apps/admin` and `apps/console` Vite/Turbo conventions.
+- Shared `@repo/assets`, `@repo/services`, `@repo/types`, and `@repo/ui` aliases.
+- Same-origin `/api` proxy target `http://127.0.0.1:8001`.
+- App-owned identity module and manifest builder.
+
+### Internal review
+
+- The package name `whatsapp` is an implementation name within the approved
+  standalone-app boundary; it does not change the product decision.
+- The shell deliberately has no provider call, preventing Phase 1.1 from
+  pulling in authentication or sender behavior.
+- The app uses shared primitives/styles without copying Admin pages and keeps
+  its navigation focused on WhatsApp.
+- The development port is isolated from Admin, POS, and Console.
+- Existing staged/untracked unrelated files remain outside this subphase.
+
+### Verification plan
+
+- `bun run --cwd apps/whatsapp check-types`
+- `bun test apps/whatsapp/src`
+- `bun run --cwd apps/whatsapp build`
+- `git diff --check`
+- Inspect staged scope before the focused subphase commit.
+- Browser visual check at desktop and narrow mobile widths in light and dark
+  themes.
+
+### Rollback
+
+Remove only the new `apps/whatsapp` package and its phase/status record if
+verification fails. Do not touch backend, Admin, POS, database, or unrelated
+Admin mobile files.
+
+## Recovery checkpoint
+
+The `apps/whatsapp` shell was created, but Phase 1.1 verification and commit
+were intentionally paused when the product scope changed to multi-number and
+shared Store assignments. `bun.lock` was modified by the interrupted workspace
+installation. Preserve both changes until the Phase 1.1 boundary is reviewed
+again after the updated plan is approved.
 
 ## Public seams
 
