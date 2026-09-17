@@ -36,6 +36,7 @@ import {
     refreshCloudAccountForOrganization,
     registerCloudPhoneForOrganization,
     revokeCloudAccountForOrganization,
+    rotateCloudCredentialForOrganization,
 } from "./cloud-api/cloud-account.service";
 import {
     listCloudTemplatesForAccount,
@@ -89,6 +90,10 @@ const manualCloudAccountSchema = z.object({
     accessToken: z.string().trim().min(1).max(4096),
 });
 
+const cloudTokenRotationSchema = z.object({
+    accessToken: z.string().trim().min(1).max(4096),
+}).strict();
+
 userRouter.post(
     "/:organizationId/whatsapp/cloud/manual",
     validateSchema("json", manualCloudAccountSchema),
@@ -123,6 +128,30 @@ userRouter.post(
                     organizationId,
                     accountId,
                     c.req.valid("json").pin,
+                ),
+            );
+        } catch (error) {
+            return unexpectedError(c, error);
+        }
+    },
+);
+
+userRouter.post(
+    "/:organizationId/whatsapp/cloud/accounts/:accountId/rotate-token",
+    validateSchema("json", cloudTokenRotationSchema),
+    async c => {
+        try {
+            const organizationId = c.req.param("organizationId");
+            const accountId = c.req.param("accountId");
+            const invalid = invalidUuid(organizationId, "Invalid organization id") ?? invalidUuid(accountId, "Invalid Cloud account id");
+            if (invalid) return c.json(invalid, invalid.code);
+            return handleServiceResponse(
+                c,
+                await rotateCloudCredentialForOrganization(
+                    c.get("authUser").id,
+                    organizationId,
+                    accountId,
+                    c.req.valid("json").accessToken,
                 ),
             );
         } catch (error) {

@@ -61,6 +61,20 @@ export type CloudAccountScope = {
   status: WhatsAppCloudAccountSnapshot["status"];
 };
 
+export const cloudHealthForProviderPhone = (input: {
+  status: string | null;
+  codeVerificationStatus: string | null;
+  isOnBizApp: boolean | null;
+}): CloudAccountHealthStatus => {
+  const status = input.status?.trim().toUpperCase() ?? "";
+  const verification = input.codeVerificationStatus?.trim().toUpperCase() ?? "";
+  if (input.isOnBizApp === true) return "needs_action";
+  if (status === "SUSPENDED") return "suspended";
+  if (status === "DISCONNECTED") return "disconnected";
+  if (status === "CONNECTED" && verification === "VERIFIED" && input.isOnBizApp === false) return "connected";
+  return "needs_action";
+};
+
 const providerId = (value: string, label: string): string => {
   const normalized = value.trim();
   if (!/^\d{1,64}$/.test(normalized)) {
@@ -236,6 +250,11 @@ export const persistProvisionedCloudAccount = async (
   const providerCodeVerificationStatus = providerStatusText(input.providerCodeVerificationStatus, 64);
   const providerPlatformType = providerStatusText(input.providerPlatformType, 64);
   const providerIsOnBizApp = nullableBoolean(input.providerIsOnBizApp);
+  const cloudStatus = cloudHealthForProviderPhone({
+    status: providerPhoneStatus,
+    codeVerificationStatus: providerCodeVerificationStatus,
+    isOnBizApp: providerIsOnBizApp,
+  });
 
   return pg.begin(async (tx) => {
     const [business] = await tx`
@@ -303,7 +322,7 @@ export const persistProvisionedCloudAccount = async (
         'cloud_api',
         ${phoneNumber},
         ${phoneNumber},
-        'connected',
+        ${legacyAccountStatusForCloudHealth(cloudStatus)},
         ${business.id},
         ${phoneNumberId},
         ${verifiedName},
@@ -314,7 +333,7 @@ export const persistProvisionedCloudAccount = async (
         ${providerPlatformType},
         ${providerIsOnBizApp},
         NOW(),
-        'connected',
+        ${cloudStatus},
         ${input.createdBy},
         ${input.createdBy}
       )
@@ -323,7 +342,7 @@ export const persistProvisionedCloudAccount = async (
         whatsapp_business_account_id = EXCLUDED.whatsapp_business_account_id,
         phone_number = EXCLUDED.phone_number,
         phone_number_normalized = EXCLUDED.phone_number_normalized,
-        status = 'connected',
+        status = ${legacyAccountStatusForCloudHealth(cloudStatus)},
         cloud_verified_name = EXCLUDED.cloud_verified_name,
         cloud_quality_rating = EXCLUDED.cloud_quality_rating,
         cloud_messaging_limit = EXCLUDED.cloud_messaging_limit,
@@ -332,7 +351,7 @@ export const persistProvisionedCloudAccount = async (
         cloud_provider_platform_type = EXCLUDED.cloud_provider_platform_type,
         cloud_provider_is_on_biz_app = EXCLUDED.cloud_provider_is_on_biz_app,
         cloud_limit_synced_at = EXCLUDED.cloud_limit_synced_at,
-        cloud_status = 'connected',
+        cloud_status = ${cloudStatus},
         updated_by = EXCLUDED.updated_by,
         updated_at = NOW()
       WHERE whatsapp_accounts.organization_id = EXCLUDED.organization_id
@@ -419,6 +438,11 @@ export const refreshCloudAccountMetadata = async (input: {
   const wabaId = providerId(input.wabaId, "WABA ID");
   const phoneNumberId = providerId(input.phoneNumberId, "Phone Number ID");
   const phoneNumber = normalizeCloudPhoneNumber(input.phoneNumber);
+  const cloudStatus = cloudHealthForProviderPhone({
+    status: input.providerPhoneStatus,
+    codeVerificationStatus: input.providerCodeVerificationStatus,
+    isOnBizApp: input.providerIsOnBizApp,
+  });
 
   return pg.begin(async tx => {
     const [business] = await tx`
@@ -456,8 +480,8 @@ export const refreshCloudAccountMetadata = async (input: {
           cloud_provider_platform_type = ${providerStatusText(input.providerPlatformType, 64)},
           cloud_provider_is_on_biz_app = ${nullableBoolean(input.providerIsOnBizApp)},
           cloud_limit_synced_at = NOW(),
-          cloud_status = 'connected',
-          status = 'connected',
+          cloud_status = ${cloudStatus},
+          status = ${legacyAccountStatusForCloudHealth(cloudStatus)},
           cloud_last_graph_api_at = NOW(),
           cloud_last_error_code = NULL,
           cloud_last_error_message = NULL,

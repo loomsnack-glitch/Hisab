@@ -14,6 +14,7 @@ import {
     refreshWhatsAppCloudAccount,
     registerWhatsAppCloudPhone,
     revokeWhatsAppCloudAccount,
+    rotateWhatsAppCloudToken,
     getOrganizationDetails,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
@@ -279,11 +280,7 @@ const WhatsAppOrganizationPage = () => {
             if (!updateTokenAccount?.wabaId || !updateTokenAccount.phoneNumberId) {
                 throw new Error("WhatsApp Cloud account identity is unavailable");
             }
-            return manuallyProvisionWhatsAppCloudAccount(organizationId, {
-                wabaId: updateTokenAccount.wabaId,
-                phoneNumberId: updateTokenAccount.phoneNumberId,
-                accessToken: updateAccessToken,
-            });
+            return rotateWhatsAppCloudToken(organizationId, updateTokenAccount.id, updateAccessToken);
         },
         onSuccess: response => {
             if (response.status !== "success") {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  cloudHealthForProviderPhone,
   legacyAccountStatusForCloudHealth,
   mapCloudAccountSnapshot,
   normalizeCloudPhoneNumber,
@@ -9,6 +10,13 @@ import {
 const uuid = "11111111-1111-4111-8111-111111111111";
 
 describe("Cloud account persistence boundary", () => {
+  test("maps provider phone health to a send-safe Cloud account state", () => {
+    expect(cloudHealthForProviderPhone({ status: "CONNECTED", codeVerificationStatus: "VERIFIED", isOnBizApp: false })).toBe("connected");
+    expect(cloudHealthForProviderPhone({ status: "DISCONNECTED", codeVerificationStatus: "VERIFIED", isOnBizApp: false })).toBe("disconnected");
+    expect(cloudHealthForProviderPhone({ status: "SUSPENDED", codeVerificationStatus: "VERIFIED", isOnBizApp: false })).toBe("suspended");
+    expect(cloudHealthForProviderPhone({ status: "CONNECTED", codeVerificationStatus: "VERIFIED", isOnBizApp: true })).toBe("needs_action");
+    expect(cloudHealthForProviderPhone({ status: "CONNECTED", codeVerificationStatus: null, isOnBizApp: false })).toBe("needs_action");
+  });
   test("projects Cloud health into the compatible legacy account status", () => {
     expect(legacyAccountStatusForCloudHealth("connected")).toBe("connected");
     expect(legacyAccountStatusForCloudHealth("disconnected")).toBe("disconnected");

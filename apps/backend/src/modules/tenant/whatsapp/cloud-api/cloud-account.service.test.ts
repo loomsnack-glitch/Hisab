@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createCloudOnboardingState } from "./cloud-onboarding";
-import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, registerCloudPhoneForOrganization, revokeCloudAccountForOrganization } from "./cloud-account.service";
+import { completeCloudAccountProvisioning, manuallyProvisionCloudAccount, refreshCloudAccountForOrganization, registerCloudPhoneForOrganization, revokeCloudAccountForOrganization, rotateCloudCredentialForOrganization } from "./cloud-account.service";
 import { CloudOnboardingExchangeError } from "./cloud-onboarding-exchange";
 import { WhatsAppCloudApiError } from "./cloud-api.client";
 import type { CloudProvisioningState } from "./cloud-provisioning";
@@ -25,6 +25,7 @@ const {
   manuallyProvisionCloudAccount,
   refreshCloudAccountForOrganization,
   revokeCloudAccountForOrganization,
+  rotateCloudCredentialForOrganization,
 } = await import("./cloud-account.service");
 
 const cloudSnapshot = (overrides: Partial<WhatsAppCloudAccountSnapshot> = {}): WhatsAppCloudAccountSnapshot => ({
@@ -375,6 +376,57 @@ describe("Cloud account provisioning service", () => {
     });
     expect(response.status).toBe("success");
     expect(calls).toEqual(["revoke-secret", `revoke-db:${userId}`]);
+  });
+
+  test("validates a replacement token before swapping bindings and revokes the old binding after success", async () => {
+    const snapshot = cloudSnapshot();
+    const calls: string[] = [];
+    const response = await rotateCloudCredentialForOrganization(userId, organizationId, snapshot.id, "replacement-token", {
+      organizationAccess: async () => true,
+      getSnapshot: async () => snapshot,
+      getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/old", keyVersion: "kms-v1" }),
+      vault: {
+        async store(input) { calls.push(`store:${input.accessToken}`); return { reference: "secret://cloud/new", keyVersion: "kms-v2" }; },
+        async resolve() { return "old-token"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke(binding) { calls.push(`revoke:${binding.reference}`); },
+      },
+      createClient: () => ({
+        async getBusinessAccount() { return { id: snapshot.wabaId, name: "Ganatri" }; },
+        async getPhoneNumbers() { return { data: [{ id: snapshot.phoneNumberId, display_phone_number: "+919876543210", status: "CONNECTED", is_on_biz_app: false }] }; },
+        async subscribeBusinessAccount() {},
+      }),
+      rotateBinding: async input => {
+        calls.push(`rotate:${input.credential.reference}`);
+        return true;
+      },
+    });
+    expect(response.status).toBe("success");
+    expect(calls).toEqual(["store:replacement-token", "rotate:secret://cloud/new", "revoke:secret://cloud/old"]);
+  });
+
+  test("keeps the old binding when replacement identity validation fails", async () => {
+    const snapshot = cloudSnapshot();
+    const calls: string[] = [];
+    const response = await rotateCloudCredentialForOrganization(userId, organizationId, snapshot.id, "replacement-token", {
+      organizationAccess: async () => true,
+      getSnapshot: async () => snapshot,
+      getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/old", keyVersion: "kms-v1" }),
+      vault: {
+        async store() { calls.push("store"); return { reference: "secret://cloud/new", keyVersion: "kms-v2" }; },
+        async resolve() { return "old-token"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke(binding) { calls.push(`revoke:${binding.reference}`); },
+      },
+      createClient: () => ({
+        async getBusinessAccount() { return { id: "another-waba", name: "Ganatri" }; },
+        async getPhoneNumbers() { return { data: [] }; },
+        async subscribeBusinessAccount() {},
+      }),
+      rotateBinding: async () => { calls.push("rotate"); return true; },
+    });
+    expect(response.status).toBe("error");
+    expect(calls).toEqual([]);
   });
 
   test("manually provisions an API Setup account when the flag is enabled, including in production", async () => {

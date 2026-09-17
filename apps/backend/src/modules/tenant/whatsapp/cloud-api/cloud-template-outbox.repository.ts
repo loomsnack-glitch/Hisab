@@ -105,6 +105,9 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
       AND account.organization_id = ${params.organizationId}
       AND account.provider = 'cloud_api'
       AND account.cloud_status = 'connected'
+      AND account.cloud_provider_phone_status = 'CONNECTED'
+      AND account.cloud_provider_code_verification_status = 'VERIFIED'
+      AND account.cloud_provider_is_on_biz_app IS NOT TRUE
       AND binding.is_active = TRUE
       AND asset.status = 'approved'
     FOR UPDATE OF account, binding, asset

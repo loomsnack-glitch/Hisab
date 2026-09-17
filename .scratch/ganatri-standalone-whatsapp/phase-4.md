@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 4
 
-Status: 4.2 committed; 4.3 next
+Status: 4.3 committed; 4.4 next
 Phase: 4 — Organization Cloud connection
 
 ## Outcome
@@ -149,3 +149,44 @@ before account-health/lifecycle work starts in 4.3.
 - Standards review: cleanup is injected through the existing provisioning
   repository seam, preserving the service's testability and avoiding a second
   credential-storage abstraction.
+
+## 4.3 Subphase plan — Account health and lifecycle
+
+Status: Committed; plan and review record retained
+
+### User-facing outcome
+
+Organization administrators can refresh, register, revoke, and rotate a Cloud
+account safely. A phone is send-eligible only when Meta reports a registered,
+verified, non-coexistence connected state; suspended, disconnected, unverified,
+revoked, and Business-App phones remain blocked.
+
+### Scope
+
+- Add a dedicated token-rotation API/service seam that validates the replacement
+  token against the existing WABA/phone before swapping the vault binding.
+- Keep the old binding active until the replacement is validated and the DB
+  reference swap succeeds; revoke the old binding only after success and clean
+  up a replacement binding on swap failure.
+- Project Meta phone health into Cloud account status and require the same
+  health in Cloud template admission and outbox claiming.
+- Preserve existing refresh, revoke, and phone-registration behavior and avoid
+  Store assignment changes until 4.4.
+
+### Verification and review record
+
+- Cloud account service/repository/outbox lifecycle tests: 27 passed, 0 failed.
+- Rotation tests cover successful swap, old-binding revocation, and failed
+  replacement identity validation retaining the old binding.
+- Health tests cover connected, disconnected, suspended, coexistence, and
+  unverified states; unhealthy phones are excluded from queue/claim paths.
+- Backend production build: passed; `git diff --check`: passed.
+- Spec review: replacement validation precedes storage swap, credentials remain
+  opaque, and unhealthy phones cannot send.
+- Standards review: rotation reuses the existing vault/repository interfaces;
+  no new credential format or public secret-bearing DTO was introduced.
+
+### Exit gate
+
+Account health and lifecycle are committed; 4.4 may now review assignment,
+phone uniqueness, shared-number defaults, and race behavior.

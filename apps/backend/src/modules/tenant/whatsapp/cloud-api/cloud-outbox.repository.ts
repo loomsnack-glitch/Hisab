@@ -344,6 +344,9 @@ export const claimNextCloudOutbox = async (
         AND account.provider = 'cloud_api'
         AND account.cloud_status = 'connected'
         AND account.cloud_phone_number_id IS NOT NULL
+        AND account.cloud_provider_phone_status = 'CONNECTED'
+        AND account.cloud_provider_code_verification_status = 'VERIFIED'
+        AND account.cloud_provider_is_on_biz_app IS NOT TRUE
         AND business.credential_reference IS NOT NULL
         AND business.credential_key_version IS NOT NULL
         AND EXISTS (

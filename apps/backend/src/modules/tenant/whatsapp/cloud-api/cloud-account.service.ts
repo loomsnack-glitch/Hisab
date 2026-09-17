@@ -38,6 +38,8 @@ import {
   refreshCloudAccountMetadata,
   recordCloudAccountHealth,
   revokeCloudAccount,
+  rotateCloudCredentialBinding,
+  type CloudCredentialBindingRecord,
 } from "./cloud-account.repository";
 import { createCloudAuthorizationCodeExchange, createConfiguredCloudClient } from "./cloud-provider";
 import { WhatsAppCloudApiError } from "./cloud-api.client";
@@ -73,6 +75,7 @@ type CloudAccountServiceDependencies = {
   getCredentialBinding: typeof getCloudCredentialBinding;
   refreshMetadata: typeof refreshCloudAccountMetadata;
   revokeAccount: typeof revokeCloudAccount;
+  rotateBinding: typeof rotateCloudCredentialBinding;
   recordHealth: typeof recordCloudAccountHealth;
   getProvisioningAttempt: typeof getCloudProvisioningAttempt;
   createProvisioningAttempt: typeof createCloudProvisioningAttempt;
@@ -92,6 +95,7 @@ const defaultDependencies = (): CloudAccountServiceDependencies => ({
   getCredentialBinding: getCloudCredentialBinding,
   refreshMetadata: refreshCloudAccountMetadata,
   revokeAccount: revokeCloudAccount,
+  rotateBinding: rotateCloudCredentialBinding,
   recordHealth: recordCloudAccountHealth,
   getProvisioningAttempt: getCloudProvisioningAttempt,
   createProvisioningAttempt: createCloudProvisioningAttempt,
@@ -707,6 +711,69 @@ export const revokeCloudAccountForOrganization = async (
     return {
       status: "error",
       message: code === "vault_unavailable" ? "WhatsApp Cloud credential storage is not configured" : "WhatsApp Cloud account could not be revoked",
+      data: null,
+      code: code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST,
+    };
+  }
+};
+
+export const rotateCloudCredentialForOrganization = async (
+  userId: string,
+  organizationId: string,
+  accountId: string,
+  replacementAccessToken: string,
+  injected: Partial<CloudAccountServiceDependencies> = {},
+): Promise<ServiceResponse<WhatsAppCloudAccountSnapshot | null>> => {
+  const deps = { ...defaultDependencies(), ...injected };
+  let oldBinding: CloudCredentialBindingRecord | null = null;
+  let replacementBinding: { reference: string; keyVersion: string } | null = null;
+  try {
+    if (!await deps.organizationAccess(organizationId, userId)) {
+      return { status: "error", message: "Organization not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    }
+    const snapshot = await deps.getSnapshot(organizationId, accountId);
+    if (!snapshot || !snapshot.wabaId || !snapshot.phoneNumberId) {
+      return { status: "error", message: "WhatsApp Cloud account is not fully provisioned", data: null, code: STATUS_CODES.CONFLICT };
+    }
+    oldBinding = await deps.getCredentialBinding(organizationId, accountId);
+    if (!oldBinding) {
+      return { status: "error", message: "WhatsApp Cloud account credential is unavailable", data: null, code: STATUS_CODES.CONFLICT };
+    }
+    const accessToken = assertCloudAccessToken(replacementAccessToken);
+    const client = deps.createClient(accessToken);
+    const [business, phones] = await Promise.all([
+      client.getBusinessAccount(snapshot.wabaId),
+      client.getPhoneNumbers(snapshot.wabaId),
+    ]);
+    if (String(business.id ?? "") !== snapshot.wabaId) throw new Error("Cloud WABA identity did not match the account");
+    const phone = (phones.data ?? []).map(phoneFromProvider).find(candidate => candidate.id === snapshot.phoneNumberId);
+    if (!phone) throw new Error("Cloud phone identity was not found in the WABA");
+
+    replacementBinding = await deps.vault.store({
+      organizationId,
+      ownerKey: `waba:${snapshot.wabaId}`,
+      accessToken,
+    });
+    const rotated = await deps.rotateBinding({
+      organizationId,
+      businessAccountId: oldBinding.businessAccountId,
+      credential: replacementBinding,
+      updatedBy: userId,
+    });
+    if (!rotated) throw new Error("WhatsApp Cloud account credential could not be rotated");
+    await deps.vault.revoke(oldBinding).catch(() => undefined);
+    return {
+      status: "success",
+      message: "WhatsApp Cloud token rotated",
+      data: await deps.getSnapshot(organizationId, accountId),
+      code: STATUS_CODES.SUCCESS,
+    };
+  } catch (error) {
+    if (replacementBinding && oldBinding) await deps.vault.revoke(replacementBinding).catch(() => undefined);
+    const code = providerError(error);
+    return {
+      status: "error",
+      message: code === "vault_unavailable" ? "WhatsApp Cloud credential storage is not configured" : "WhatsApp Cloud token could not be rotated",
       data: null,
       code: code === "vault_unavailable" ? STATUS_CODES.SERVICE_UNAVAILABLE : STATUS_CODES.BAD_REQUEST,
     };
