@@ -320,6 +320,24 @@ export const createCloudTemplateBinding = async (input: {
   if (!assignment) throw new Error("Cloud WhatsApp account is not assigned to this Store");
   if (input.isDefault) {
     await tx`
+      UPDATE whatsapp_message_templates
+      SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+        AND is_default = TRUE
+        AND is_active = TRUE
+    `;
+    await tx`
+      UPDATE whatsapp_message_templates
+      SET is_default = TRUE, updated_by = ${input.createdBy}, updated_at = NOW()
+      WHERE id = ${input.localTemplateId}
+        AND organization_id = ${input.organizationId}
+        AND store_id = ${input.storeId}
+        AND kind = ${input.kind}
+        AND is_active = TRUE
+    `;
+    await tx`
       UPDATE whatsapp_cloud_template_bindings
       SET is_default = FALSE, updated_by = ${input.createdBy}, updated_at = NOW()
       WHERE organization_id = ${input.organizationId}
@@ -658,6 +676,25 @@ export const rollbackCloudTemplateBinding = async (
   `;
   if (!target) return null;
   if (target.status !== "approved") throw new Error("Only an approved Cloud template can be restored");
+  const [scope] = await tx`
+    SELECT 1
+    FROM whatsapp_account_stores assignments
+    INNER JOIN whatsapp_accounts accounts
+      ON accounts.id = assignments.whatsapp_account_id
+     AND accounts.organization_id = assignments.organization_id
+     AND accounts.whatsapp_business_account_id = ${target.whatsapp_business_account_id}
+     AND accounts.provider = 'cloud_api'
+    INNER JOIN whatsapp_store_policies policies
+      ON policies.organization_id = assignments.organization_id
+     AND policies.store_id = assignments.store_id
+     AND policies.mode = 'organization_cloud'
+     AND policies.whatsapp_account_id = accounts.id
+     AND policies.effective_to IS NULL
+    WHERE assignments.organization_id = ${organizationId}
+      AND assignments.store_id = ${target.store_id}
+    FOR UPDATE OF assignments, policies
+  `;
+  if (!scope) throw new Error("Cloud template binding is not for the Store's current WhatsApp sender");
   await tx`
     UPDATE whatsapp_cloud_template_bindings
     SET is_default = FALSE, updated_by = ${restoredBy}, updated_at = NOW()

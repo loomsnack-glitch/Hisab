@@ -16,5 +16,6 @@ describe("Cloud template binding boundary", () => {
     expect(source).toContain("SET is_default = FALSE");
     expect(source).toContain("SET is_default = TRUE");
     expect(source).toContain("target.local_template_id");
+    expect(source).toContain("Cloud template binding is not for the Store's current WhatsApp sender");
   });
 });

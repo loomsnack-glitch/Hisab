@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 5
 
-Status: 5.3 implementation and verification in progress
+Status: Complete with documented follow-ups
 Phase: 5 — Organization template lifecycle
 
 ## Outcome
@@ -174,3 +174,58 @@ changes.
 
 Store binding and explicit publication are verified and committed before 5.4
 archive/rollback/audit review begins.
+
+## 5.4 Subphase plan — Archive, rollback, and audit review
+
+Status: In progress; plan reviewed and recorded
+
+### User-facing outcome
+
+Creators can archive or restore Cloud template bindings without deleting
+history. Rollback is allowed only for an approved template that still belongs
+to the Store's current Cloud sender, keeps local/Cloud defaults aligned, and
+records an auditable lifecycle event.
+
+### Scope
+
+- Require rollback to use the current Store policy, selected Cloud account, and
+  matching WABA/Store assignment.
+- Preserve approved-only rollback, active/default uniqueness, and local-template
+  default synchronization.
+- Keep archive/rollback audit events creator-scoped and historical records
+  retained.
+- Review final Phase 5 service/repository/UI behavior; no bill/due delivery or
+  later inbox/campaign work.
+
+### Verification
+
+- Archive/rollback/audit tests and binding contract tests.
+- Full Phase 5 template suite, backend/Admin builds, and `git diff --check`.
+- Database migration status and worktree boundary verification.
+
+### Exit gate
+
+Phase 5 template lifecycle is reviewed, verified, documented, and committed;
+only then can the phase-level closeout report Phase 5 complete with follow-ups.
+
+## Phase 5 final verification and review
+
+- Phase commits: `9d8f583`, `3dd687b`, `d76dba2`, and `4aa0fc4`.
+- Final focused template service, repository, submission, binding, provider,
+  and webhook suite: 27 tests passed, 0 failed; the broader 5.2 validation
+  covered 50 tests.
+- Backend production build: passed.
+- Admin production build: passed with the repository-local Vite binary.
+- `git diff --check`: passed.
+- Development database: 155 migrations applied, 0 pending; no Phase 5
+  migration was required.
+- Spec review: drafts are persisted separately from Meta submission; active
+  name/idempotency conflicts are explicit; provider statuses are ordered and
+  do not auto-publish; approved Store defaults are explicit, scoped, unique,
+  auditable, archivable, and rollbackable.
+- Standards review: WABA/Organization/Store checks stay in backend service or
+  repository boundaries, credentials remain vault-only, and existing Admin
+  template UI/service seams are reused.
+- Deferred follow-ups: live Meta approval/webhook verification, richer persisted
+  draft media handling, and bill/due delivery behavior remain later release
+  gates; no release claim is made for those phases.
