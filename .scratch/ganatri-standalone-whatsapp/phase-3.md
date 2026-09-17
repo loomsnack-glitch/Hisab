@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 3
 
-Status: 3.1 committed; 3.2 next
+Status: 3.2 committed; 3.3 next
 Phase: 3 — Ganatri Utility sender
 
 ## Outcome
@@ -112,3 +112,71 @@ or tenant delivery code consumes it until the next subphase.
   checks belong to 3.2/3.3 when the sender adapter has a provider client.
 - No database, route, OTP, invitation, or existing tenant delivery behavior
   changed in this subphase.
+
+## 3.2 Subphase plan — Platform sender/outbox representation
+
+Status: Committed; review record retained
+
+### User-facing outcome
+
+Ganatri Utility bill/due work can be represented in the existing durable
+WhatsApp delivery model without pretending that the platform sender is an
+Organization account. Existing Organization Cloud and historical account rows
+remain valid and continue using their current path.
+
+### Scope
+
+- Add an explicit platform sender kind and immutable, non-secret sender
+  snapshot on `whatsapp_outbox`.
+- Allow platform messages to be account-less and conversation-less while
+  retaining the Store, recipient phone, customer, message, status, retry, and
+  idempotency fields needed by the common delivery lifecycle.
+- Add constraints and partial uniqueness rules so Organization-account rows
+  keep their current invariants and platform rows cannot claim an account or
+  omit their sender reference/snapshot.
+- Add a backend repository seam that creates an idempotent platform template
+  message/outbox pair. Admission, consent, and provider-template health remain
+  the next subphase concerns.
+- Keep Cloud queries naturally scoped to Organization account rows; do not
+  route platform work through tenant account credentials.
+
+### Public seam
+
+`createPlatformTemplateOutbox(request)` persists a platform sender snapshot
+containing only sender key, phone-number ID, WABA ID, Graph version, template
+name/language, and policy version. It never accepts or stores a token.
+
+### Verification
+
+- Migration contract tests cover nullable account/conversation fields,
+  sender-kind checks, platform uniqueness, and down migration cleanup.
+- Repository tests cover create, idempotent replay, cross-Store key conflict,
+  and rollback on failed outbox creation.
+- Development DB migration status remains clean after applying the additive
+  migration; pre-existing WhatsApp counts are unchanged.
+- Existing Cloud focused tests/build remain green.
+
+### Exit gate
+
+The additive migration and platform outbox repository are reviewed, verified,
+and committed. No tenant route or sender dispatcher consumes the new seam until
+3.3 admission is complete.
+
+### Verification and review record
+
+- Focused migration/repository tests with the development database: 7 passed,
+  0 failed.
+- The real-DB probe verified account-less message persistence, immutable
+  platform sender snapshot fields, idempotent replay, and transaction rollback.
+- Development database: 153 migrations applied, 0 pending.
+- Backend production build: passed; `git diff --check`: passed.
+- Spec review: platform work is represented in the common message/outbox
+  lifecycle, while the sender remains distinct from Organization accounts and
+  no Cloud credential path can claim the platform rows.
+- Standards review: the migration is additive, existing rows retain the
+  Organization-account default, cross-scope message linkage is constrained,
+  and the follow-up migration hardens the message sender check after the
+  initial schema was applied.
+- Deliberate follow-up: provider health, Store policy/entitlement, consent,
+  fixed-template admission, and dispatcher consumption remain blocked to 3.3
+  and later delivery work.

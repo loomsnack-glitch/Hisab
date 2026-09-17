@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 3.1 in progress
+Status: Phase 3.2 in progress
 Last updated: 2026-09-17
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -41,7 +41,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 - Branch: `feat/ganatri-standalone-whatsapp`.
 - Fixed point: `9e465f8` (integrated-plan checkpoint before Phase 1 execution).
 - Phase 0 source/database baseline completed on 2026-09-17.
-- Development database: 151 migrations applied, 0 pending.
+- Development database: 153 migrations applied, 0 pending.
 - The WhatsApp phone-status migration is applied.
 - Historical Baileys rows remain readable; new Baileys work is out of scope.
 - Existing Admin WhatsApp routes remain the Organization management workspace.
@@ -57,8 +57,9 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 - Phase 2.1 through 2.5 are verified and committed. Phase 2 final verification
   and standards/spec review are complete with documented follow-ups.
 - Phase 3.1 plan, implementation, focused verification, and standards/spec
-  review are complete and committed. No platform sender or tenant delivery
-  route has been changed yet; Phase 3.2 is next.
+  review are complete and committed. Phase 3.2 plan is recorded; its additive
+  sender/outbox representation, real-DB probe, and review are complete and
+  committed. Phase 3.3 is next.
 
 ## Phase roadmap
 
@@ -67,7 +68,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 0 | Baseline and contract lock | 0.1–0.4 | Complete | Sender/policy boundaries and development migration state recorded. |
 | 1 | Integrated Admin and Store Console foundation | 1.1–1.4 | Complete with follow-ups | Admin and Store Console expose correctly scoped WhatsApp surfaces. |
 | 2 | Policy, authorization, and Customer association foundation | 2.1–2.5 | Complete with follow-ups | Every policy mutation, Customer association, and send path is backend-authorized. |
-| 3 | Ganatri Utility sender | 3.1–3.4 | In progress (3.1) | Fixed bill/due messages use the common outbox safely. |
+| 3 | Ganatri Utility sender | 3.1–3.4 | In progress (3.3) | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Not started | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Not started | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Not started | Both sender modes deliver idempotent, consent-safe messages. |
@@ -84,8 +85,9 @@ Phase 1 is complete with documented baseline and browser follow-ups. Phase 2.1,
 2.2, 2.3, and 2.4 implementation, verification, standards/spec review, and
 commit gates are complete. Phase 2.5 final verification and review are complete.
 Phase 2 is complete with documented backend typecheck and Phase 1 browser
-follow-ups. Phase 3.1 is complete with documented follow-ups; Phase 3.2 is
-next. Phases 8 and 9 are intentionally deferred from the initial release.
+follow-ups. Phase 3.1 and 3.2 are complete with documented follow-ups; Phase
+3.3 is next. Phases 8 and 9 are intentionally deferred from the initial
+release.
 
 ## Recovery checkpoint
 
