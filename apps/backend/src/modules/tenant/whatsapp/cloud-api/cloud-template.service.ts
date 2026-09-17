@@ -40,6 +40,7 @@ import {
   updateCloudTemplateSubmission,
   listCloudTemplateSubmissions,
   updateCloudTemplateDraft,
+  CloudTemplateSubmissionNameConflictError,
   type CloudTemplateSubmissionInput,
 } from "./cloud-template-submission.repository";
 
@@ -280,6 +281,9 @@ const validateSubmissionMetadata = (data: WhatsAppCreateCloudTemplateSubmissionJ
 };
 
 const safeSubmissionError = (error: unknown): { code: string; message: string } => {
+  if (error instanceof CloudTemplateSubmissionNameConflictError || (error instanceof Error && error.name === "CloudTemplateSubmissionNameConflictError")) {
+    return { code: "cloud_template_name_conflict", message: error.message };
+  }
   const validationMessage = error instanceof Error && [
     "Cloud template components are invalid",
     "Cloud template component is invalid",

@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 5
 
-Status: 5.1 review fix committed; 5.2 next
+Status: 5.2 committed; 5.3 next
 Phase: 5 — Organization template lifecycle
 
 ## Outcome
@@ -127,3 +127,18 @@ identity without exposing credentials or accidentally moving a Store default.
 
 Meta submission and safe provider status synchronization are verified and
 committed before 5.3 binding/publish work begins.
+
+### Verification and review record
+
+- Cloud template service, submission repository, provider client, and webhook
+  processor tests: 36 passed, 0 failed.
+- Active-name idempotency now returns a conflict when different content uses
+  an existing active draft/submission; it never submits the older content.
+- Existing claim/retry/status ordering remains covered, including approval,
+  rejection, pending, pause, disable, and stale provider events.
+- Backend production build: passed; Admin production build: passed;
+  `git diff --check`: passed.
+- Spec review: provider status changes do not publish Store defaults, provider
+  credentials remain backend-only, and duplicate submissions stay idempotent.
+- Standards review: the conflict is represented as a typed repository error
+  and mapped through the existing safe service error boundary.

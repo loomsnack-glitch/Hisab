@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 5.2 plan recorded; implementation next
+Status: Phase 5.3 plan recorded; implementation next
 Last updated: 2026-09-18
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -96,7 +96,9 @@ committed. Phase 4.4 assignment compatibility, race fix, verification, and
 review are complete and committed. The whole-phase review fixes are also
 complete and committed. Phase 4 is complete with documented follow-ups;
 Phase 5.1 draft persistence, review correction, verification, and review are
-complete and committed. Phase 5.2 plan is recorded; implementation is next.
+complete and committed. Phase 5.2 submission/status synchronization,
+idempotency hardening, verification, and review are complete and committed.
+Phase 5.3 is next.
 Phases 8 and 9 are intentionally deferred from the initial release.
 
 ## Recovery checkpoint

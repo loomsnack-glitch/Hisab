@@ -21,6 +21,13 @@ export type CloudTemplateSubmissionInput = {
   createdBy: string;
 };
 
+export class CloudTemplateSubmissionNameConflictError extends Error {
+  constructor() {
+    super("A Cloud template with this name and language already has an active draft or submission");
+    this.name = "CloudTemplateSubmissionNameConflictError";
+  }
+}
+
 const mapSubmission = (row: Record<string, unknown>): WhatsAppCloudTemplateSubmissionDTO => {
   const mapped = snakeToCamel(row) as Record<string, unknown>;
   return WhatsAppCloudTemplateSubmissionSchema.parse({
@@ -94,7 +101,7 @@ export const createCloudTemplateSubmission = async (
       ORDER BY updated_at DESC
       LIMIT 1
     `;
-    if (activeByName) return mapSubmission(activeByName as Record<string, unknown>);
+    if (activeByName) throw new CloudTemplateSubmissionNameConflictError();
     throw new Error("Cloud template submission could not be created");
   }
   const existingSubmission = mapSubmission(existing as Record<string, unknown>);
