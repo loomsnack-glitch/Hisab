@@ -137,6 +137,7 @@ const attachCustomerForScope = async (
     scope: Scope,
     conversationId: string,
     data: WhatsAppAttachConversationCustomerJSON,
+    createdBy: string | null,
 ): Promise<ServiceResponse<WhatsAppConversationDTO | null>> => {
     const conversation = await repository.attachConversationCustomer(
         scope.organizationId,
@@ -144,6 +145,7 @@ const attachCustomerForScope = async (
         scope.account.id,
         conversationId,
         data.customerId,
+        createdBy,
     );
     return conversation
         ? success(conversation, "Customer attached to WhatsApp conversation")
@@ -207,7 +209,7 @@ export const attachCustomer = async (
 ) => {
     const scoped = await scopeForUser(userId, organizationId, storeId);
     return scoped.status === "success" && scoped.data
-        ? attachCustomerForScope(scoped.data, conversationId, data)
+        ? attachCustomerForScope(scoped.data, conversationId, data, userId)
         : scoped as unknown as ServiceResponse<WhatsAppConversationDTO>;
 };
 
@@ -218,7 +220,7 @@ export const attachCustomerForDevice = async (
 ) => {
     const scoped = await scopeForDevice(session);
     return scoped.status === "success" && scoped.data
-        ? attachCustomerForScope(scoped.data, conversationId, data)
+        ? attachCustomerForScope(scoped.data, conversationId, data, null)
         : scoped as unknown as ServiceResponse<WhatsAppConversationDTO>;
 };
 

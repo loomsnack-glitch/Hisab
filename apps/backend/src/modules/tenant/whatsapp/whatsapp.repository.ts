@@ -16,6 +16,7 @@ import { snakeToCamel } from "@/utils/case";
 import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.repository";
 import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
 import { buildCloudTemplatePreview } from "./cloud-api/cloud-template-preview";
+import { recordCustomerStoreActivityInDatabase } from "./customer-store-association.repository";
 
 type AccountRow = Record<string, unknown>;
 
@@ -853,23 +854,36 @@ export const attachConversationCustomer = async (
     accountId: string,
     conversationId: string,
     customerId: string,
+    createdBy: string | null,
 ): Promise<WhatsAppConversationDTO | null> => {
-    const [row] = await pg`
-        UPDATE whatsapp_conversations conversation
-        SET customer_id = ${customerId},
-            display_name = customer.name,
-            updated_at = NOW()
-        FROM customers customer
-        WHERE conversation.id = ${conversationId}
-          AND conversation.organization_id = ${organizationId}
-          AND conversation.store_id = ${storeId}
-          AND conversation.whatsapp_account_id = ${accountId}
-          AND customer.id = ${customerId}
-          AND customer.organization_id = ${organizationId}
-          AND regexp_replace(COALESCE(customer.phone, ''), '[^0-9]', '', 'g') = regexp_replace(conversation.contact_phone_number, '[^0-9]', '', 'g')
-        RETURNING conversation.*
-    `;
-    return row ? mapConversation(row) : null;
+    return pg.begin(async tx => {
+        const [row] = await tx`
+            UPDATE whatsapp_conversations conversation
+            SET customer_id = ${customerId},
+                display_name = customer.name,
+                updated_at = NOW()
+            FROM customers customer
+            WHERE conversation.id = ${conversationId}
+              AND conversation.organization_id = ${organizationId}
+              AND conversation.store_id = ${storeId}
+              AND conversation.whatsapp_account_id = ${accountId}
+              AND customer.id = ${customerId}
+              AND customer.organization_id = ${organizationId}
+              AND regexp_replace(COALESCE(customer.phone, ''), '[^0-9]', '', 'g') = regexp_replace(conversation.contact_phone_number, '[^0-9]', '', 'g')
+            RETURNING conversation.*
+        `;
+        if (!row) return null;
+        await recordCustomerStoreActivityInDatabase(tx, {
+            organizationId,
+            customerId,
+            storeId,
+            source: "explicit_attachment",
+            sourceReference: conversationId,
+            occurredAt: new Date(),
+            createdBy,
+        });
+        return mapConversation(row);
+    });
 };
 
 export const createMessageEvent = async (params: MessageEventParams): Promise<{ message: WhatsAppMessageDTO; created: boolean }> => {
@@ -928,6 +942,16 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
                         updated_at = NOW()
                     WHERE id = ${conversation.id}
                 `;
+                if (params.customerId) {
+                    await recordCustomerStoreActivityInDatabase(tx, {
+                        organizationId: params.organizationId,
+                        customerId: params.customerId,
+                        storeId: params.storeId,
+                        source: "whatsapp_conversation",
+                        sourceReference: params.providerMessageId,
+                        occurredAt: params.occurredAt,
+                    });
+                }
                 return { message: mapMessage(reconciled), created: false };
             }
         }
@@ -959,6 +983,17 @@ export const createMessageEvent = async (params: MessageEventParams): Promise<{ 
             `;
             if (!existing) throw new Error("Failed to load existing WhatsApp message");
             return { message: mapMessage(existing), created: false };
+        }
+
+        if (params.customerId) {
+            await recordCustomerStoreActivityInDatabase(tx, {
+                organizationId: params.organizationId,
+                customerId: params.customerId,
+                storeId: params.storeId,
+                source: "whatsapp_conversation",
+                sourceReference: params.providerMessageId,
+                occurredAt: params.occurredAt,
+            });
         }
 
         await tx`

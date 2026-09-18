@@ -166,7 +166,7 @@ export const listCustomerStoreAssociations = async (
           AND customer_id = ${customerId}
         ORDER BY last_activity_at DESC, store_id ASC
     `;
-    return rows.map(row => mapAssociation(row as Record<string, unknown>));
+    return rows.map((row: Record<string, unknown>) => mapAssociation(row));
 };
 
 export { recordCustomerStoreActivityInDatabase };

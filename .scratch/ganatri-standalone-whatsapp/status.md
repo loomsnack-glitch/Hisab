@@ -75,7 +75,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 5 | Organization template lifecycle | 5.1–5.4 | Complete with follow-ups | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Complete with follow-ups | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Complete with follow-ups | Existing Admin/POS boundaries cut over without data loss. |
-| 8 | Organization Cloud inbox and replies | 8.1–8.3 | In progress — 8.1 complete; 8.2 next | Organization Cloud conversations are Store-scoped and safe. |
+| 8 | Organization Cloud inbox and replies | 8.1–8.3 | In progress — 8.2 complete; 8.3 next | Organization Cloud conversations are Store-scoped and safe. |
 | 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
 
 ## Phase approval state

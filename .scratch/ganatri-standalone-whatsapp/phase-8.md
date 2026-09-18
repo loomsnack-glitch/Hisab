@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 8
 
-Status: 8.1 complete; 8.2 and 8.3 deferred
+Status: 8.2 complete; 8.3 deferred
 Phase: 8 — Organization Cloud inbox and replies
 
 ## Outcome
@@ -96,3 +96,90 @@ before 8.2 begins.
 - Touched-file TypeScript diagnostics and `git diff --check`: passed.
 - Browser/live-provider verification remains a release-environment follow-up;
   8.2 customer matching and attachment behavior has not started.
+
+### 8.2 Subphase plan — Exact Customer matching and safe attachments
+
+Status: Complete; reviewed and ready to commit
+
+User-facing outcome: A Store's Organization Cloud inbox links a conversation
+only to the Organization Customer with the exact normalized WhatsApp phone
+number. Staff can explicitly attach that exact Customer, and authorized users
+can open private inbound documents through short-lived signed URLs without
+seeing storage keys or another Store's media.
+
+Scope:
+
+- Keep matching exact and phone-based; do not match by display name, partial
+  phone, or an Organization Customer from another Organization.
+- Record the Customer–Store relationship when a matched conversation becomes
+  active and when staff explicitly attach a Customer, using the existing
+  idempotent activity ledger.
+- Require explicit attachment to remain within the current Store, Organization,
+  selected Cloud account, conversation, and exact contact phone boundary.
+- Keep attachment objects private; resolve the message only through all scope
+  columns, require configured private storage, and return only a short-lived
+  signed URL.
+- Preserve the existing size-bounded, hashed object key and cleanup behavior
+  for inbound documents.
+
+Non-goals:
+
+- No free-form replies, template replies, consent-window enforcement, or
+  outbound attachment sending; those belong to 8.3.
+- No fuzzy matching, automatic Customer creation, cross-Store Customer
+  migration, or Organization-wide inbox.
+- No change to Ganatri Utility visibility or the retired POS conversation
+  route.
+
+Dependencies and public seams:
+
+- 8.1 Cloud-only Store conversation scope.
+- `customer-store-association.repository.ts` and its idempotent activity
+  ledger.
+- `conversation.ts`, `whatsapp.repository.ts`, private storage signing, and
+  the existing Admin inbox candidate/attachment controls.
+
+Acceptance criteria:
+
+- An exact phone match records a Store relationship with source
+  `whatsapp_conversation` and an idempotent provider-message reference.
+- Explicit attachment records source `explicit_attachment` and cannot attach
+  a Customer with a different phone, Organization, Store scope, or account.
+- Attachment lookup cannot cross conversation, message, Store, Organization,
+  or account boundaries; no raw object key is returned.
+- Signed attachment URLs expire in the existing five-minute window, and
+  missing storage fails closed.
+
+Verification plan:
+
+- Focused association/repository tests and conversation policy contract tests.
+- Attachment scope, private-storage, expiry, exact-phone, and cross-Store
+  negative tests.
+- Existing Admin inbox tests plus backend/Admin typecheck and builds.
+- `git diff --check` and a final standards/spec review before the 8.2 commit.
+
+8.2 exit gate: exact matching and Customer–Store activity are durable,
+attachment access is private and Store-scoped, focused checks/builds pass, and
+the subphase is reviewed and committed before 8.3 begins.
+
+### 8.2 review and verification
+
+- Exact Organization phone matching now records an idempotent
+  `whatsapp_conversation` Customer–Store activity event in the same database
+  transaction as the conversation message.
+- Explicit Customer attachment now validates Organization, Store, account,
+  conversation, and normalized phone equality, then records an idempotent
+  `explicit_attachment` event with the authenticated actor where available.
+- Attachment lookup remains private and fail-closed: all scope columns are
+  required, the private bucket must be configured, and only a five-minute
+  signed URL is returned.
+- Focused 8.2 contract tests: 3 passed; Customer–Store repository test was
+  skipped because the local database fixture was unavailable.
+- Full WhatsApp regression: 298 passed, 3 skipped, 0 failed.
+- Backend build, Admin build, touched-file TypeScript diagnostics, and
+  `git diff --check`: passed.
+- Existing Admin Organization WhatsApp test has one unrelated baseline failure
+  (`ReferenceError: FileText is not defined`); it is outside the 8.2 diff and
+  remains a release follow-up.
+- Browser/live-provider verification remains a release-environment follow-up;
+  8.3 reply and service-window behavior has not started.
