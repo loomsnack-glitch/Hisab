@@ -117,7 +117,7 @@ export const listCloudOutboxOperations = async (
 };
 
 export type CloudOperatorActionSummary = {
-  action: "retry" | "dead_letter";
+  action: "retry" | "dead_letter" | "campaign_stop";
   count: number;
   lastAt: string | null;
 };

@@ -21,8 +21,8 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 - Organization Cloud uses Meta Embedded Signup and approved Store bindings.
 - Both modes use the same durable outbox and require WhatsApp Store
   Entitlement.
-- Initial release ends after bill/due delivery and operational status.
-- Inbox, free-form replies, promotions, and campaigns are later phases.
+- Initial integrated delivery, inbox/replies, promotions, and operational
+  safety controls are implemented with release-environment follow-ups.
 
 ## Execution rules
 
@@ -100,8 +100,9 @@ complete and committed. Phase 5.2 submission/status synchronization,
 idempotency hardening, verification, and review are complete and committed.
 Phase 5.3 binding/publish scope hardening, verification, and review are
 complete and committed. Phase 5.4 archive/rollback/audit review is complete
-with documented follow-ups; Phase 5 is complete and Phase 6 is next. Phase 9
-remains intentionally deferred from the initial release.
+with documented follow-ups; Phase 5 is complete and Phase 6 is next. Phases 8
+and 9 are complete with documented browser, live-provider, and database
+follow-ups.
 
 The Phase 5 final review loop then corrected Store/sender/kind/language default
 replacement scope, rejected submission/provider language drift, removed
@@ -113,7 +114,8 @@ Phase 6.2 due-delivery implementation, review, and verification are complete;
 Phase 6.3 status/retry/resend implementation, review, and verification are
 complete; Phase 6.4 whole-phase standards/spec review and closeout are
 complete with documented release-environment follow-ups. Phase 7 migration and
-cutover is next.
+cutover, Phase 8 inbox/replies, and Phase 9 promotions/operations are complete
+with documented release-environment follow-ups.
 
 Phase 7.1 dry-run inventory, 7.2 idempotent policy migration, 7.3 Store
 Workspace cutover verification, and 7.4 POS route retirement are complete with
