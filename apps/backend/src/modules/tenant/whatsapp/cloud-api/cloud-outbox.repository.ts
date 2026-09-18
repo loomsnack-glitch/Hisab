@@ -139,6 +139,47 @@ export const listCloudOperatorActionSummary = async (
   }));
 };
 
+export type CloudOperatorActionRecord = {
+  action: "retry" | "dead_letter" | "campaign_stop";
+  outboxId: string;
+  storeName: string;
+  actorUserId: string | null;
+  previousStatus: string;
+  nextStatus: string;
+  createdAt: string;
+};
+
+export const listCloudOperatorActions = async (
+  organizationId: string,
+  limit = 20,
+): Promise<CloudOperatorActionRecord[]> => {
+  const rows = await pg`
+    SELECT action.action,
+           action.outbox_id,
+           stores.name AS store_name,
+           action.actor_user_id,
+           action.previous_status,
+           action.next_status,
+           action.created_at
+    FROM whatsapp_cloud_operator_actions action
+    INNER JOIN whatsapp_outbox outbox ON outbox.id = action.outbox_id
+    INNER JOIN stores ON stores.id = outbox.store_id
+      AND stores.organization_id = action.organization_id
+    WHERE action.organization_id = ${organizationId}
+    ORDER BY action.created_at DESC, action.id DESC
+    LIMIT ${Math.min(Math.max(Math.trunc(limit), 1), 100)}
+  `;
+  return rows.map((row: Record<string, unknown>) => ({
+    action: String(row.action) as CloudOperatorActionRecord["action"],
+    outboxId: String(row.outbox_id),
+    storeName: String(row.store_name),
+    actorUserId: row.actor_user_id ? String(row.actor_user_id) : null,
+    previousStatus: String(row.previous_status),
+    nextStatus: String(row.next_status),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  }));
+};
+
 const updateCampaignAfterDeadLetter = async (tx: Bun.TransactionSQL, outboxId: string): Promise<void> => {
   await tx`
     UPDATE whatsapp_campaign_recipients

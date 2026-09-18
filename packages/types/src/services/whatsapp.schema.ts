@@ -312,9 +312,23 @@ export const WhatsAppCloudSafetySchema = z.object({
         lastReceivedAt: dtoDateSchema.nullable(),
     }),
     operatorActions: z.array(z.object({
-        action: z.enum(["retry", "dead_letter"]),
+        action: z.enum(["retry", "dead_letter", "campaign_stop"]),
         count: z.number().int().nonnegative(),
         lastAt: dtoDateSchema.nullable(),
+    })),
+    operatorAudit: z.array(z.object({
+        action: z.enum(["retry", "dead_letter", "campaign_stop"]),
+        outboxId: z.uuid(),
+        storeName: z.string().trim().min(1).max(255),
+        actorUserId: z.uuid().nullable(),
+        previousStatus: WhatsAppOutboxStatusSchema,
+        nextStatus: WhatsAppOutboxStatusSchema,
+        createdAt: dtoDateSchema,
+    })),
+    alerts: z.array(z.object({
+        key: z.string().trim().min(1).max(100),
+        severity: z.enum(["warning", "error"]),
+        message: z.string().trim().min(1).max(500),
     })),
 });
 

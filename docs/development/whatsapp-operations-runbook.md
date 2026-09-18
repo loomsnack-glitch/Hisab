@@ -105,3 +105,28 @@ Historical records may contain the retired provider/status vocabulary. Keep
 those values readable for reporting and message history. Provider cleanup is a
 separate, database-gated operation requiring an inventory, backup, dependency
 review, and an explicit migration decision.
+
+## Cloud promotions and safety controls
+
+Promotions are available only for an Organization Cloud Store with an approved
+marketing binding, eligible Store Customers, marketing consent, no
+suppression, and available cooldown/quota capacity. The Ganatri Utility sender
+must never be used for marketing.
+
+Use the Admin Promotions surface to inspect campaign progress and recipient
+delivery states. Stop only when queued work should be cancelled; retry a
+retryable recipient, and resend a dead-lettered recipient only after confirming
+the current Store policy still selects the same Cloud sender and the template
+snapshot remains valid.
+
+Use Cloud sending controls to inspect quota, outbox, webhook, reconciliation,
+alerts, and recent operator audit history. Campaign stops, retries, and
+dead-letter actions are recorded with the acting user and status transition.
+The operational surfaces show counters and bounded metadata only; never use
+them to retrieve webhook payloads, message bodies, access tokens, or
+credentials.
+
+If a dead-letter alert or reconciliation warning appears, preserve historical
+records, inspect the bounded error code, and reconcile stale work before
+considering a resend. Browser and live Meta verification remain required
+before production release.

@@ -338,11 +338,12 @@ export const getCloudQuotaLedgerSummary = async (organizationId: string): Promis
 export const cancelCloudCampaign = async (
   organizationId: string,
   campaignKey: string,
+  actorUserId: string,
 ): Promise<number> => pg.begin(async tx => {
   const normalizedCampaignKey = campaignKeyFor(campaignKey);
   if (!normalizedCampaignKey) throw new Error("Cloud campaign key is invalid");
   const rows = await tx`
-    SELECT outbox.id AS outbox_id, outbox.message_id, reservation.id AS reservation_id
+    SELECT outbox.id AS outbox_id, outbox.message_id, outbox.status AS outbox_status, reservation.id AS reservation_id
     FROM whatsapp_outbox outbox
     INNER JOIN whatsapp_cloud_quota_reservations reservation
       ON reservation.id = outbox.cloud_quota_reservation_id
@@ -375,6 +376,15 @@ export const cancelCloudCampaign = async (
       UPDATE whatsapp_campaign_recipients
       SET status = 'cancelled', failure_code = 'campaign_cancelled', failure_message = 'Cloud campaign was stopped before dispatch', updated_at = NOW()
       WHERE outbox_id = ${row.outbox_id}
+    `;
+    await tx`
+      INSERT INTO whatsapp_cloud_operator_actions (
+        organization_id, actor_user_id, outbox_id, action, previous_status, next_status
+      ) VALUES (
+        ${organizationId}, ${actorUserId}, ${row.outbox_id}, 'campaign_stop',
+        ${row.outbox_status}::whatsapp_outbox_status_enum,
+        'cancelled'::whatsapp_outbox_status_enum
+      )
     `;
     await releaseCloudQuota(tx, String(row.reservation_id));
   }

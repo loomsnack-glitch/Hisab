@@ -65,7 +65,10 @@ export const getCloudWebhookHealth = async (
     const date = new Date(String(value));
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
   };
-  const nonNegative = (value: unknown): number => Math.max(0, Math.trunc(Number(value ?? 0)));
+  const nonNegative = (value: unknown): number => {
+    const number = Number(value ?? 0);
+    return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : 0;
+  };
   return {
     pendingCount: nonNegative(row?.pending_count),
     processingCount: nonNegative(row?.processing_count),

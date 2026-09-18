@@ -16,6 +16,7 @@ import {
   retryCloudOutboxNow,
   deadLetterCloudOutboxNow,
   listCloudOperatorActionSummary,
+  listCloudOperatorActions,
   type CloudOutboxActionAttempt,
   type CloudOutboxActionResult,
 } from "./cloud-outbox.repository";
@@ -35,6 +36,8 @@ type CloudSafetyData = {
   outbox: CloudOutboxReconciliationSummary;
   webhook: CloudWebhookHealthSummary;
   operatorActions: Awaited<ReturnType<typeof listCloudOperatorActionSummary>>;
+  operatorAudit: Awaited<ReturnType<typeof listCloudOperatorActions>>;
+  alerts: Array<{ key: string; severity: "warning" | "error"; message: string }>;
 };
 
 const notFound = (): ServiceResponse<null> => ({
@@ -57,16 +60,33 @@ export const getCloudSafety = async (
 ): Promise<ServiceResponse<CloudSafetyData | null>> => {
   const accessError = await access(userId, organizationId);
   if (accessError) return accessError;
+  const [policy, usage, reconciliation, outbox, webhook, operatorActions, operatorAudit] = await Promise.all([
+    getCloudQuotaPolicy(organizationId),
+    getCloudQuotaLedgerSummary(organizationId),
+    getCloudQuotaReconciliation(organizationId),
+    getCloudOutboxReconciliationSummary(organizationId),
+    getCloudWebhookHealth(organizationId),
+    listCloudOperatorActionSummary(organizationId),
+    listCloudOperatorActions(organizationId),
+  ]);
+  const alerts: CloudSafetyData["alerts"] = [];
+  if (outbox.deadLetterCount > 0) alerts.push({ key: "cloud_outbox_dead_letters", severity: "error", message: `${outbox.deadLetterCount} Cloud outbox item(s) are dead-lettered` });
+  if (webhook.deadLetterCount > 0) alerts.push({ key: "cloud_webhook_dead_letters", severity: "error", message: `${webhook.deadLetterCount} Cloud webhook event(s) are dead-lettered` });
+  if (reconciliation.missingReservedEvents + reconciliation.missingSettlementEvents + reconciliation.missingReleaseEvents > 0) {
+    alerts.push({ key: "cloud_quota_reconciliation", severity: "warning", message: "Cloud quota reconciliation has missing ledger events" });
+  }
   return {
     status: "success",
     message: "WhatsApp Cloud safety status fetched successfully",
     data: {
-      policy: await getCloudQuotaPolicy(organizationId),
-      usage: await getCloudQuotaLedgerSummary(organizationId),
-      reconciliation: await getCloudQuotaReconciliation(organizationId),
-      outbox: await getCloudOutboxReconciliationSummary(organizationId),
-      webhook: await getCloudWebhookHealth(organizationId),
-      operatorActions: await listCloudOperatorActionSummary(organizationId),
+      policy,
+      usage,
+      reconciliation,
+      outbox,
+      webhook,
+      operatorActions,
+      operatorAudit,
+      alerts,
     },
     code: STATUS_CODES.SUCCESS,
   };
@@ -190,7 +210,7 @@ export const stopCloudCampaign = async (
   const accessError = await access(userId, organizationId);
   if (accessError) return accessError;
   try {
-    const cancelledCount = await cancelCloudCampaign(organizationId, campaignKey);
+    const cancelledCount = await cancelCloudCampaign(organizationId, campaignKey, userId);
     return {
       status: "success",
       message: "Cloud campaign stopped",

@@ -100,6 +100,15 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
                 {query.isError || query.data?.status === "error" ? <p className="text-sm text-destructive">{cloudSafetyErrorMessage(safetyError)}</p> : null}
                 {safety ? (
                     <div className="space-y-3">
+                        {safety.alerts.length > 0 ? (
+                            <div className="space-y-2" aria-label="Cloud safety alerts">
+                                {safety.alerts.map(alert => (
+                                    <div key={alert.key} role="alert" className={`rounded-xl border p-3 text-sm ${alert.severity === "error" ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100"}`}>
+                                        {alert.message}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline" className="rounded-full"><Gauge className="mr-1 size-3.5" />Send interval {safety.policy.accountSendIntervalSeconds}s</Badge>
                             <Badge variant="outline" className="rounded-full">Customer cooldown {safety.policy.customerCooldownSeconds}s</Badge>
@@ -120,6 +129,19 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
                                     Audit dead-letter {safety.operatorActions.find(action => action.action === "dead_letter")?.count ?? 0}
                                 </Badge>
                             </div>
+                        </div>
+                        <div className="border-t border-border/60 pt-3">
+                            <p className="mb-2 text-sm font-medium">Recent operator audit</p>
+                            {safety.operatorAudit.length === 0 ? <p className="text-xs text-muted-foreground">No Cloud operator actions recorded.</p> : (
+                                <div className="space-y-2">
+                                    {safety.operatorAudit.map(action => (
+                                        <div key={`${action.outboxId}:${action.createdAt}`} className="flex flex-col gap-1 rounded-xl border border-border/60 bg-background/60 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                                            <span className="font-medium">{action.action.replace("_", " ")} · {action.storeName}</span>
+                                            <span className="text-muted-foreground">{action.previousStatus} → {action.nextStatus} · {formatDateTime(action.createdAt)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="border-t border-border/60 pt-3">
                             <div className="mb-2 flex items-center justify-between gap-2">

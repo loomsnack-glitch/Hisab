@@ -42,7 +42,7 @@ and disabled Stores never gain promotion capability.
 
 ### 9.1 Subphase plan — Marketing admission and campaign creation
 
-Status: Complete; reviewed and ready to commit
+Status: Complete; reviewed and committed
 
 User-facing outcome: An Organization administrator can open the existing
 Promotions surface for an Organization Cloud Store, choose an approved
@@ -119,7 +119,7 @@ reviewed/committed before 9.2 begins.
 
 ### 9.2 Subphase plan — Campaign delivery operations
 
-Status: Implementation in progress
+Status: Complete; reviewed and committed
 
 User-facing outcome: Organization administrators can monitor campaign progress,
 stop queued work, inspect recipient delivery states, and safely retry or resend
@@ -181,7 +181,7 @@ idempotent, sender-safe, audited, reviewed, and committed before 9.3 begins.
 
 ### 9.3 Subphase plan — Safety and operational visibility
 
-Status: Implementation in progress
+Status: Complete; reviewed and committed
 
 User-facing outcome: Organization administrators can see bounded Cloud quota,
 outbox, webhook, reconciliation, and operator-action health from the existing
@@ -233,11 +233,17 @@ redacted, Organization-scoped, reviewed, and committed before Phase 9 closeout.
   webhook payloads, message bodies, tokens, and credentials remain excluded.
 - Admin Cloud sending controls show webhook open/dead-letter health and audit
   counts alongside quota, reconciliation, and outbox controls.
-- Focused webhook/outbox/safety tests: 8 passed.
-- Full WhatsApp regression: 306 passed, 3 skipped, 0 failed.
+- Focused webhook/outbox/safety and campaign-stop migration tests: 9 passed.
+- Full WhatsApp regression: 307 passed, 3 skipped, 0 failed.
 - Admin Organization/safety tests: 5 passed.
 - Backend/Admin production builds, touched-file TypeScript diagnostics, and
   `git diff --check`: passed.
+- Campaign stops now write `campaign_stop` operator audit records with actor,
+  Store/outbox target, and status transition.
+- Safety responses expose bounded alert items and a recent operator-audit
+  history; webhook counters normalize malformed numeric values safely.
+- The campaign-stop audit migration was applied to the development database:
+  159 applied, 0 pending.
 - Browser/live-provider verification and database-backed probes remain release
   environment follow-ups.
 
