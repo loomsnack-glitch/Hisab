@@ -529,6 +529,51 @@ describe("Cloud account provisioning service", () => {
     }
   });
 
+  test("re-registers a Meta CONNECTED Cloud phone with the two-step PIN", async () => {
+    const snapshot = cloudSnapshot({ providerPhoneStatus: "CONNECTED" });
+    const calls: string[] = [];
+    const response = await registerCloudPhoneForOrganization(userId, organizationId, snapshot.id, "123456", {
+      getSnapshot: async () => snapshot,
+      organizationAccess: async () => true,
+      getCredentialBinding: async () => ({ businessAccountId: "44444444-4444-4444-8444-444444444444", reference: "secret://cloud/1", keyVersion: "kms-v1" }),
+      vault: {
+        async store() { return { reference: "unused", keyVersion: "unused" }; },
+        async resolve() { return "resolved-in-memory"; },
+        async rotate() { return { reference: "unused", keyVersion: "unused" }; },
+        async revoke() {},
+      },
+      createClient: () => ({
+        async getBusinessAccount() { return { id: snapshot.wabaId!, name: "Ganatri" }; },
+        async getPhoneNumbers() {
+          calls.push("phones");
+          return {
+            data: [{
+              id: snapshot.phoneNumberId!,
+              display_phone_number: "+919876543210",
+              verified_name: "Ganatri",
+              status: "CONNECTED",
+              is_on_biz_app: false,
+            }],
+          };
+        },
+        async subscribeBusinessAccount() {},
+        async registerPhoneNumber(phoneNumberId: string, pin: string) {
+          expect(phoneNumberId).toBe(snapshot.phoneNumberId);
+          expect(pin).toBe("123456");
+          calls.push("register");
+          return { success: true };
+        },
+      }),
+      refreshMetadata: async input => {
+        expect(input.providerPhoneStatus).toBe("CONNECTED");
+        return cloudSnapshot({ providerPhoneStatus: "CONNECTED" });
+      },
+    });
+    expect(response.status).toBe("success");
+    expect(response.message).toBe("WhatsApp Cloud phone registered");
+    expect(calls).toEqual(["phones", "register", "phones"]);
+  });
+
   test("rejects a wrong PIN without calling register again after Meta 133005", async () => {
     const snapshot = cloudSnapshot({ providerPhoneStatus: "DISCONNECTED" });
     const logged: string[] = [];

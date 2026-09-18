@@ -122,4 +122,20 @@ describe("POS navigation visibility", () => {
             ),
         ).toContain("printer");
     });
+
+    test("includes Settings in the sidebar footer and workspace destinations", () => {
+        const sidebar = renderToStaticMarkup(
+            <MemoryRouter>
+                <PosSidebar isCollapsed={false} onToggle={() => {}} tableManagementEnabled kotSystemEnabled />
+            </MemoryRouter>,
+        );
+
+        expect(sidebar).toContain('href="/settings"');
+        expect(sidebar).toContain("Settings");
+        expect(
+            getVisiblePosWorkspaceDestinations({ tableManagementEnabled: true, kotSystemEnabled: true }).map(
+                (destination) => destination.id,
+            ),
+        ).toContain("settings");
+    });
 });

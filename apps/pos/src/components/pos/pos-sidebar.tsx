@@ -112,9 +112,7 @@ const PosSidebar = ({ isCollapsed, onToggle, billsCount = 0, tableManagementEnab
     const renderFooterItem = (destination: (typeof footerDestinations)[number]) => {
         const Icon = destination.icon;
         const collapsed = isCollapsed;
-        const isActive =
-            location.pathname === destination.path ||
-            (destination.id === "appearance" && location.pathname === "/settings");
+        const isActive = location.pathname === destination.path;
 
         const link = (
             <Link

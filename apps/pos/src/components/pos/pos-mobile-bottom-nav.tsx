@@ -85,8 +85,7 @@ const PosMobileBottomNav = ({ billsCount = 0, tableManagementEnabled, kotSystemE
                         {workspaceDestinations.map((destination) => {
                             const Icon = destination.icon;
                             const isActive = isPosSettingsPath(destination.path)
-                                    ? location.pathname === destination.path ||
-                                      (destination.path === "/appearance" && location.pathname === "/settings")
+                                    ? location.pathname === destination.path
                                     : !isSettingsRoute && destination.tab === activeTab;
 
                             return (

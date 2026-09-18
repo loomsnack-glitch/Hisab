@@ -184,6 +184,23 @@ describe("Organization WhatsApp accounts page", () => {
         expect(markup).toContain("Select a Store to link");
         expect(markup).toContain("Link to Store");
     });
+
+    test("lets an administrator re-register a Meta CONNECTED Cloud phone", () => {
+        const markup = renderWorkspace("accounts", {
+            accounts: [orgWhatsAppAccount],
+            cloudAccounts: [{
+                ...cloudAccountSnapshot,
+                providerPhoneStatus: "CONNECTED",
+                providerCodeVerificationStatus: "VERIFIED",
+                providerPlatformType: "CLOUD_API",
+                providerIsOnBizApp: false,
+            }],
+        });
+
+        expect(markup).toContain("Re-register");
+        expect(markup).toContain("Phone: Registered");
+        expect(markup).not.toContain("Register number");
+    });
 });
 
 describe("Organization WhatsApp templates page", () => {

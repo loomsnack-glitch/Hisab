@@ -608,24 +608,6 @@ export const registerCloudPhoneForOrganization = async (
         code: STATUS_CODES.CONFLICT,
       };
     }
-    if (phone.status === "CONNECTED") {
-      const alreadyRegistered = await deps.refreshMetadata({
-        organizationId,
-        accountId,
-        wabaId: snapshot.wabaId,
-        displayName: typeof business.name === "string" ? business.name : null,
-        phoneNumberId: phone.id,
-        phoneNumber: phone.display_phone_number,
-        verifiedName: phone.verified_name ?? null,
-        qualityRating: phone.quality_rating ?? null,
-        messagingLimit: phone.messaging_limit ?? null,
-        ...providerPhoneFields(phone),
-        updatedBy: userId,
-      });
-      return alreadyRegistered
-        ? { status: "success", message: "WhatsApp Cloud phone is already registered", data: alreadyRegistered, code: STATUS_CODES.SUCCESS }
-        : { status: "error", message: "WhatsApp Cloud account not found", data: null, code: STATUS_CODES.NOT_FOUND };
-    }
     if (!client.registerPhoneNumber) {
       return { status: "error", message: "WhatsApp Cloud phone could not be registered", data: null, code: STATUS_CODES.BAD_REQUEST };
     }

@@ -47,6 +47,9 @@ describe("POS route context", () => {
         expect(getPosLoginPath("/printer")).toBe(
             "/login?returnTo=%2Fprinter",
         );
+        expect(getPosLoginPath("/settings")).toBe(
+            "/login?returnTo=%2Fsettings",
+        );
     });
 
     test("preserves only internal POS return paths after login", () => {
@@ -55,6 +58,7 @@ describe("POS route context", () => {
         expect(getPosReturnPath("/whatsapp")).toBe("/whatsapp");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
         expect(getPosReturnPath("/printer")).toBe("/printer");
+        expect(getPosReturnPath("/settings")).toBe("/settings");
         expect(getPosReturnPath("https://example.com")).toBe("/");
         expect(getPosReturnPath("/login")).toBe("/");
         expect(getPosReturnPath("//evil.example")).toBe("/");
@@ -71,6 +75,7 @@ describe("POS route context", () => {
             "kots",
             "printer",
             "appearance",
+            "settings",
         ]);
         const tablesDestination = posWorkspaceDestinations.find(
             (destination) => destination.id === "tables",
@@ -84,6 +89,7 @@ describe("POS route context", () => {
         expect(isPosMoreDestinationActive("/kots")).toBe(true);
         expect(isPosMoreDestinationActive("/appearance")).toBe(true);
         expect(isPosMoreDestinationActive("/printer")).toBe(true);
+        expect(isPosMoreDestinationActive("/settings")).toBe(true);
     });
 
     test("hides Tables from POS navigation when Table Management is disabled", () => {
@@ -113,7 +119,4 @@ describe("POS route context", () => {
         ).toEqual(["products", "tables", "bills"]);
     });
 
-    test("keeps the POS settings alias inside POS Appearance", () => {
-        expect(isPosMoreDestinationActive("/settings")).toBe(true);
-    });
 });

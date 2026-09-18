@@ -3,6 +3,7 @@ import {
     ChefHat,
     Printer,
     ReceiptText,
+    Settings,
     Settings2,
     Store,
     type LucideIcon,
@@ -26,10 +27,11 @@ export const posWorkspaceDestinations: PosNavDestination[] = [
     { id: "kots", label: "KOT", icon: ChefHat, path: getPosPanelPath("kots"), tab: "kots" },
     { id: "printer", label: "Printer", icon: Printer, path: "/printer" },
     { id: "appearance", label: "Appearance", icon: Settings2, path: "/appearance" },
+    { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
 ];
 
 export const posPrimaryMobileNavIds = ["products", "tables", "bills"] as const;
-export const posFooterDestinationIds = ["printer", "appearance"] as const;
+export const posFooterDestinationIds = ["printer", "appearance", "settings"] as const;
 
 export const isPosSettingsPath = (pathname: string) =>
     pathname === "/appearance" || pathname === "/settings" || pathname === "/printer";

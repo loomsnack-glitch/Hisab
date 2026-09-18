@@ -274,6 +274,8 @@ const WhatsAppOrganizationPage = () => {
         onError: error => toast.error(mutationErrorMessage(error, "WhatsApp Cloud test account could not be connected")),
     });
     const updateTokenAccount = cloudAccounts.find(account => account.id === updateTokenAccountId) ?? null;
+    const registerAccount = cloudAccounts.find(account => account.id === registerAccountId) ?? null;
+    const reRegistering = isMetaCloudPhoneRegistered(registerAccount?.providerPhoneStatus);
     const updateTokenMutation = useMutation({
         mutationFn: () => {
             if (!updateTokenAccount?.wabaId || !updateTokenAccount.phoneNumberId) {
@@ -487,10 +489,10 @@ const WhatsAppOrganizationPage = () => {
                                                 {cloudRefreshMutation.isPending && cloudRefreshMutation.variables === account.id ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                                                 Refresh
                                             </Button>
-                                            {!phoneRegistered && !phoneOnBizApp ? (
+                                            {!phoneOnBizApp ? (
                                                 <Button variant="outline" className="rounded-full" disabled={isBusy} onClick={() => { setRegisterAccountId(account.id); setRegisterPin(""); }}>
                                                     <Phone className="size-4" />
-                                                    Register number
+                                                    {phoneRegistered ? "Re-register" : "Register number"}
                                                 </Button>
                                             ) : null}
                                             {manualCloudSetupEnabled && cloudSnapshot?.wabaId && cloudSnapshot.phoneNumberId ? (
@@ -609,9 +611,11 @@ const WhatsAppOrganizationPage = () => {
             <Dialog open={Boolean(registerAccountId)} onOpenChange={open => { if (!cloudRegisterMutation.isPending && !open) { setRegisterAccountId(""); setRegisterPin(""); } }}>
                 <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-4 sm:p-6">
                     <DialogHeader>
-                        <DialogTitle>Register WhatsApp number</DialogTitle>
+                        <DialogTitle>{reRegistering ? "Re-register WhatsApp number" : "Register WhatsApp number"}</DialogTitle>
                         <DialogDescription>
-                            Meta cannot send until this number is registered. If two-step verification was never set, this PIN becomes the PIN. If it was already set, enter the existing PIN from WhatsApp Manager → Phone numbers → Two-step verification.
+                            {reRegistering
+                                ? "Meta requires re-registration after a display name change. Enter the existing PIN from WhatsApp Manager → Phone numbers → Two-step verification."
+                                : "Meta cannot send until this number is registered. If two-step verification was never set, this PIN becomes the PIN. If it was already set, enter the existing PIN from WhatsApp Manager → Phone numbers → Two-step verification."}
                         </DialogDescription>
                     </DialogHeader>
                     <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (registerAccountId) cloudRegisterMutation.mutate(registerAccountId); }}>
@@ -633,7 +637,7 @@ const WhatsAppOrganizationPage = () => {
                             <Button type="button" variant="outline" className="rounded-full" disabled={cloudRegisterMutation.isPending} onClick={() => { setRegisterAccountId(""); setRegisterPin(""); }}>Cancel</Button>
                             <Button type="submit" className="rounded-full" disabled={cloudRegisterMutation.isPending || !/^\d{6}$/.test(registerPin)}>
                                 {cloudRegisterMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Phone className="size-4" />}
-                                Register number
+                                {reRegistering ? "Re-register number" : "Register number"}
                             </Button>
                         </DialogFooter>
                     </form>

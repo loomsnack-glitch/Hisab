@@ -200,6 +200,7 @@ import {
   readCheckoutBillingAdjustmentsOpen,
   writeCheckoutBillingAdjustmentsOpen,
 } from "@/lib/checkout-billing-adjustments-preferences";
+import { useCheckoutCustomerAutoFocus } from "@/hooks/use-checkout-customer-auto-focus";
 import { isCommercialAccessDeniedMessage } from "@/lib/commercial-access";
 import {
   formatCurrency,
@@ -653,6 +654,7 @@ const BillingPage = ({
     );
     const [serviceMode, setServiceMode] = useState<SaleServiceMode>("dine_in");
     const [billingAdjustmentsOpen, setBillingAdjustmentsOpenState] = useState(false);
+    const { checkoutCustomerAutoFocus } = useCheckoutCustomerAutoFocus();
     const [placeOrderDialogOpen, setPlaceOrderDialogOpen] = useState(false);
     const [replacingSaleId, setReplacingSaleId] = useState<string | null>(null);
     const [replaceConfirmationOpen, setReplaceConfirmationOpen] = useState(false);
@@ -4870,6 +4872,7 @@ const BillingPage = ({
                 }}
             >
                 <DialogContent
+                    initialFocus={checkoutCustomerAutoFocus}
                     className={cn(
                         "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl border-border/70 bg-background/95 p-2 shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:p-3 lg:max-w-4xl lg:p-4 xl:max-w-5xl",
             customerPickerOpen && customerCreateOpen
