@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: Not started
+Status: Plan reviewed; implementation not started
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -51,3 +51,127 @@ Admin/Store Console/POS authentication boundaries.
 - Browser checks with Admin, Store Console, and POS sessions open concurrently.
 - No device secret, user token, or WhatsApp credential appears in route state,
   links, or client-visible configuration.
+
+## Approved Phase 7 execution plan
+
+### Objective
+
+Move existing WhatsApp data and route behavior into the integrated Admin and
+Store Console model without silently enabling Stores, changing historical
+sender ownership, or crossing Organization-user and POS-device boundaries.
+
+### 7.1 Subphase plan — Existing data dry run
+
+Status: Plan reviewed; implementation not started
+
+User-facing outcome: none. This is a read-only operator report that makes the
+cutover decision safe before any policy or route write.
+
+Scope:
+
+- Inventory Organizations, Stores, WhatsApp accounts, account assignments,
+  current Cloud bindings/defaults, current Store policies, queued outbox rows,
+  provider events, submissions, and historical messages.
+- Produce counts for eligible Cloud assignments, unassigned Stores, already
+  disabled Stores, shared-number assignments, missing assignments, stale
+  policies, duplicate Store/account links, and outbox rows whose sender
+  references cannot be resolved.
+- Detect Stores with multiple existing Organization-owned phone assignments;
+  report them as conflicts and abort any write path rather than selecting one.
+- Verify every shared phone has a deterministic default inbound Store or is
+  explicitly quarantined for operator resolution.
+- Record a bounded dry-run report without credentials, tokens, full phones,
+  message bodies, or provider payloads.
+
+Non-goals: no policy activation, assignment rewrite, route change, message
+rewrite, customer migration, or deletion.
+
+Exit evidence: a repeatable dry-run report with zero unclassified write
+conflicts, or an explicit quarantine report that blocks 7.2.
+
+### 7.2 Subphase plan — Policy record migration
+
+Status: Blocked by 7.1 output; implementation not started
+
+Scope:
+
+- For each unambiguous existing Organization Cloud assignment, create or
+  preserve a current `organization_cloud` Store policy pointing to the exact
+  assigned account and record the revision/source.
+- Create `disabled` current policies for Stores without an existing assignment.
+- Never enable `ganatri_utility` implicitly and never replace existing policy
+  history, account assignments, templates, messages, provider events, or
+  outbox rows.
+- Keep shared-number assignment/default-inbound rules intact and make the
+  operation repeatable and idempotent.
+- Fail before writes when dry-run detects multi-account Store conflicts,
+  cross-Organization assignments, invalid account/provider scope, or unresolved
+  queued sender references.
+
+Exit evidence: before/after counts match, repeated execution is a no-op, every
+Store has exactly one current policy, and all historical records remain.
+
+### 7.3 Subphase plan — Admin and Store Console cutover
+
+Status: Depends on 7.2; implementation not started
+
+Scope:
+
+- Keep existing Admin Organization WhatsApp routes as the Organization-wide
+  management workspace.
+- Enable the selected Store's Store Console WhatsApp panel using the existing
+  Store context and backend policy resolver; never trust client-supplied Store
+  scope alone.
+- Verify account, policy, template readiness, customer relationship, and
+  delivery state cards are Store-scoped in Store Console and Organization-scoped
+  in Admin.
+- Preserve safe browser refresh/navigation context without credentials,
+  tokens, OTPs, or private provider payloads in URLs or route state.
+- Roll out behind a reversible feature gate if the existing route surface needs
+  staged enablement; do not create a second delivery engine.
+
+Exit evidence: browser sessions for Admin and Store Console opened concurrently
+cannot read or mutate each other's Store scope, and disabled/unentitled states
+remain actionable and fail closed.
+
+### 7.4 Subphase plan — POS route retirement and rollback review
+
+Status: Depends on 7.2 and 7.3; implementation not started
+
+Scope:
+
+- Redirect POS `/whatsapp` to POS home without crossing into Admin or Store
+  Console authentication or route state.
+- Remove only the POS conversation/inbox navigation surface; preserve POS
+  bill/due queue, status, retry, and resend actions through device-authenticated
+  routes.
+- Verify POS device sessions cannot call user-authenticated Admin routes and
+  Admin sessions cannot call device-only POS routes.
+- Define a reversible frontend/backend route switch and preserve historical
+  conversation/message/outbox records during rollback.
+
+Exit evidence: browser checks with Admin, Store Console, and POS sessions open
+concurrently prove auth isolation, Store isolation, bill/due continuity, and
+safe rollback behavior.
+
+### Phase-level acceptance matrix
+
+- No Store is unexpectedly enabled.
+- Existing Cloud assignments and shared-number defaults are preserved.
+- Every Store has one current policy or a reported migration conflict blocks
+  completion.
+- No historical message, provider event, template submission, binding,
+  customer association, or outbox sender snapshot is rewritten or deleted.
+- Admin, Store Console, and POS use the intended authentication boundary.
+- Repeated dry-run/migration execution is idempotent.
+- Rollback changes route/policy activation only and never deletes history.
+
+### Phase-level verification
+
+- Run read-only dry-run before any migration write and retain its counts.
+- Run migration/constraint/repeated-execution tests and database status.
+- Run backend, Admin, and POS typechecks/builds plus focused browser checks.
+- Compare before/after assignment, policy, outbox, message, provider-event,
+  submission, binding, and audit counts.
+- Run `git diff --check` and a final Standards/Spec review before each commit
+  gate; do not claim physical-device or live-provider verification without it.
