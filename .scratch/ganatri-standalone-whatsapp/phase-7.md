@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: 7.2 complete; 7.3 ready to implement
+Status: 7.3 complete; 7.4 ready to implement
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -150,7 +150,7 @@ Store has exactly one current policy, and all historical records remain.
 
 ### 7.3 Subphase plan — Admin and Store Console cutover
 
-Status: Depends on 7.2; implementation not started
+Status: Complete; reviewed and committed
 
 Scope:
 
@@ -170,6 +170,19 @@ Scope:
 Exit evidence: browser sessions for Admin and Store Console opened concurrently
 cannot read or mutate each other's Store scope, and disabled/unentitled states
 remain actionable and fail closed.
+
+### 7.3 review and verification
+
+- The selected Store Workspace uses the refresh-safe
+  `/organizations/:organizationId/workspaces/:storeId/settings/whatsapp` route
+  and passes that Store ID into the WhatsApp account/policy surface.
+- Existing Organization WhatsApp routes remain available for Organization-wide
+  account/template management; Store Workspace remains Store-scoped.
+- Admin Store Workspace route/scope suite: 32 passed, 243 assertions.
+- Backend WhatsApp authorization, policy, and Store scope suite: 18 passed,
+  47 assertions.
+- No implementation change was needed; the approved Phase 1 Store Workspace
+  boundary already satisfies the 7.3 cutover scope.
 
 ### 7.4 Subphase plan — POS route retirement and rollback review
 

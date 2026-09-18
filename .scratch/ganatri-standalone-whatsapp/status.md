@@ -74,7 +74,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 4 | Organization Cloud connection | 4.1–4.4 | Complete with follow-ups | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Complete with follow-ups | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Complete with follow-ups | Both sender modes deliver idempotent, consent-safe messages. |
-| 7 | Migration and cutover | 7.1–7.4 | In progress — 7.2 complete; 7.3 next | Existing Admin/POS boundaries cut over without data loss. |
+| 7 | Migration and cutover | 7.1–7.4 | In progress — 7.3 complete; 7.4 next | Existing Admin/POS boundaries cut over without data loss. |
 | 8 | Later inbox and replies | 8.1–8.3 | Deferred | Organization Cloud conversations are Store-scoped and safe. |
 | 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
 
