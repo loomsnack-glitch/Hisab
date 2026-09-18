@@ -20,12 +20,33 @@ import * as storage from "@/services/storage";
 import * as repository from "./whatsapp.repository";
 import * as consentRepository from "./cloud-api/customer-consent.repository";
 import { isWhatsAppOptOutKeyword } from "./opt-out";
+import { getCurrentPolicy } from "./whatsapp-policy.repository";
 
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 const SIGNED_URL_SECONDS = 300;
 
 type Scope = { organizationId: string; storeId: string; account: NonNullable<Awaited<ReturnType<typeof repository.getAccount>>> };
+
+const cloudAccountForStorePolicy = async (
+    organizationId: string,
+    storeId: string,
+): Promise<ServiceResponse<Scope["account"] | null>> => {
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    if (policy?.mode !== "organization_cloud" || !policy.whatsappAccountId) {
+        return error("Organization Cloud conversations are not enabled for this Store", STATUS_CODES.CONFLICT);
+    }
+    const account = await repository.getAccountById(policy.whatsappAccountId);
+    if (
+        !account
+        || account.organizationId !== organizationId
+        || account.provider !== "cloud_api"
+        || !account.assignedStoreIds.includes(storeId)
+    ) {
+        return error("The Store's selected Cloud WhatsApp account is unavailable", STATUS_CODES.CONFLICT);
+    }
+    return success(account, "WhatsApp Cloud conversation scope resolved");
+};
 
 const success = <T>(data: T, message: string): ServiceResponse<T> => ({
     status: "success",
@@ -52,16 +73,18 @@ const scopeForUser = async (
     if (!store) return error("Store not found", STATUS_CODES.NOT_FOUND);
     const entitlementError = await requireStoreFeatureEntitlement(storeId, "whatsapp");
     if (entitlementError) return entitlementError;
-    const account = await repository.getAccount(organizationId, storeId);
-    if (!account) return error("Link the Store WhatsApp account first", STATUS_CODES.CONFLICT);
+    const accountScope = await cloudAccountForStorePolicy(organizationId, storeId);
+    if (accountScope.status !== "success" || !accountScope.data) return accountScope as unknown as ServiceResponse<Scope | null>;
+    const account = accountScope.data;
     return success({ organizationId, storeId, account }, "WhatsApp scope resolved");
 };
 
 const scopeForDevice = async (session: DeviceSessionDTO): Promise<ServiceResponse<Scope | null>> => {
     const entitlementError = await requireStoreFeatureEntitlement(session.store.id, "whatsapp");
     if (entitlementError) return entitlementError;
-    const account = await repository.getAccount(session.organization.id, session.store.id);
-    if (!account) return error("Link the Store WhatsApp account first", STATUS_CODES.CONFLICT);
+    const accountScope = await cloudAccountForStorePolicy(session.organization.id, session.store.id);
+    if (accountScope.status !== "success" || !accountScope.data) return accountScope as unknown as ServiceResponse<Scope | null>;
+    const account = accountScope.data;
     return success({ organizationId: session.organization.id, storeId: session.store.id, account }, "WhatsApp scope resolved");
 };
 
