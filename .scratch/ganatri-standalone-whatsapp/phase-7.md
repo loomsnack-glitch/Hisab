@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: 7.1 complete; 7.2 blocked by migration-ledger reconciliation
+Status: 7.1 complete; 7.2 ready to implement
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -102,16 +102,16 @@ conflicts, or an explicit quarantine report that blocks 7.2.
   sender references.
 - The current policy baseline is 3 disabled policies, 0 Cloud policies, and 0
   Ganatri Utility policies; no Store was enabled by the dry run.
-- The migration write gate is blocked only by one historical ledger version,
-  `20260905010000`, recorded in the database but absent from this checkout's
-  migration files. 7.2 must reconcile that baseline before any policy writes.
+- The historical `20260905010000_add_draft_request_id.sql` migration was
+  restored from repository history and the checked-in schema dump aligned;
+  157 migration files and ledger rows now match, so the write gate is clear.
 - The dry-run script performs reads and writes only the bounded JSON report; it
   does not mutate database state or expose credentials, full phones, bodies, or
   provider payloads.
 
 ### 7.2 Subphase plan — Policy record migration
 
-Status: Blocked by 7.1 output; implementation not started
+Status: Depends on 7.1; implementation not started
 
 Scope:
 

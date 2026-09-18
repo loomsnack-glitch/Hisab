@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-18T17:42:16.921Z",
+  "generatedAt": "2026-09-18T17:46:04.989Z",
   "readOnly": true,
   "database": {
     "database": "neondb",
@@ -8,10 +8,8 @@
   },
   "migrations": {
     "appliedLedgerRows": 157,
-    "migrationFiles": 156,
-    "migrationsWithoutFiles": [
-      "20260905010000"
-    ],
+    "migrationFiles": 157,
+    "migrationsWithoutFiles": [],
     "filesWithoutRecords": []
   },
   "organizations": {
@@ -67,9 +65,9 @@
     },
     "outboxRowsWithUnresolvedAccountReference": 0,
     "platformOutboxRowsWithIncompleteSenderReference": 0,
-    "migrationLedgerMismatch": true
+    "migrationLedgerMismatch": false
   },
   "writeGate": {
-    "canStartPolicyMigration": false
+    "canStartPolicyMigration": true
   }
 }

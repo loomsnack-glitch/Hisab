@@ -2143,6 +2143,7 @@ CREATE TABLE public.sales (
     customer_name_snapshot character varying(255),
     customer_phone_snapshot character varying(20),
     service_table_id uuid,
+    draft_request_id uuid,
     service_mode public.sale_service_mode_enum DEFAULT 'dine_in'::public.sale_service_mode_enum NOT NULL,
     CONSTRAINT sales_discount_total_check CHECK (((discount_total >= (0)::numeric) AND (discount_total <= subtotal))),
     CONSTRAINT sales_draft_commit_check CHECK ((((status = 'draft'::public.sale_status_enum) AND (committed_at IS NULL) AND (payment_status = 'pending'::public.payment_status_enum)) OR ((status <> 'draft'::public.sale_status_enum) AND (committed_at IS NOT NULL)))),
@@ -6432,6 +6433,13 @@ CREATE UNIQUE INDEX products_organization_id_product_code_key ON public.products
 --
 
 CREATE UNIQUE INDEX sales_store_completion_request_id_key ON public.sales USING btree (store_id, completion_request_id) WHERE (completion_request_id IS NOT NULL);
+
+
+--
+-- Name: sales_store_draft_request_id_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sales_store_draft_request_id_key ON public.sales USING btree (organization_id, store_id, draft_request_id) WHERE (draft_request_id IS NOT NULL);
 
 
 --
