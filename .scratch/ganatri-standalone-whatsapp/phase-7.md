@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: 7.1 complete; 7.2 ready to implement
+Status: 7.2 complete; 7.3 ready to implement
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -111,7 +111,7 @@ conflicts, or an explicit quarantine report that blocks 7.2.
 
 ### 7.2 Subphase plan — Policy record migration
 
-Status: Depends on 7.1; implementation not started
+Status: Complete; reviewed and committed
 
 Scope:
 
@@ -130,6 +130,23 @@ Scope:
 
 Exit evidence: before/after counts match, repeated execution is a no-op, every
 Store has exactly one current policy, and all historical records remain.
+
+### 7.2 review and verification
+
+- Policy migration report: [phase-7-policy-migration.json](./phase-7-policy-migration.json).
+- First apply changed 1 policy to `organization_cloud` for the existing
+  unambiguous Cloud assignment and kept 2 Stores `disabled`; no Store was
+  enabled as Ganatri Utility.
+- A repeat preview and apply were both no-ops: 0 changed, 3 unchanged, 0
+  conflicts.
+- Post-migration dry run reports 1 current Cloud policy, 2 current disabled
+  policies, 0 stale policies, 0 duplicate Store Cloud assignments, 0 shared
+  inbound-default conflicts, 0 unresolved outbox account references, and 0
+  incomplete platform sender references.
+- Historical counts remain 784 messages, 325 provider events, and 119 outbox
+  rows; no historical sender or message record was rewritten.
+- Migration ledger is reconciled at 157 files and 157 applied rows with no
+  missing file; 7.3 is now the next implementation boundary.
 
 ### 7.3 Subphase plan — Admin and Store Console cutover
 

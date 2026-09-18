@@ -162,7 +162,7 @@ const run = async (): Promise<void> => {
   `;
   const migrationFiles = readdirSync(resolve(import.meta.dir, "../../db/migrations"))
     .filter(file => file.endsWith(".sql"))
-    .map(file => file.split("_", 1)[0]);
+    .map(file => file.split("_", 1)[0] ?? "");
   const migrationRows = await pg`
     SELECT DISTINCT version::text AS version
     FROM schema_migrations
