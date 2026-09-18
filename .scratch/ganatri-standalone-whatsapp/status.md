@@ -76,7 +76,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 6 | Bill/due delivery | 6.1–6.4 | Complete with follow-ups | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Complete with follow-ups | Existing Admin/POS boundaries cut over without data loss. |
 | 8 | Organization Cloud inbox and replies | 8.1–8.3 | Complete with follow-ups | Organization Cloud conversations are Store-scoped and safe. |
-| 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
+| 9 | Promotions and operations | 9.1–9.3 | In progress — 9.1 complete; 9.2 next | Marketing and operational controls are Cloud-only and audited. |
 
 ## Phase approval state
 

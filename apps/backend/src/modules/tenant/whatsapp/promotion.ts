@@ -256,11 +256,18 @@ export const resendPromotionRecipient = async (
 
 type PromotionCandidate = { id: string; name: string; phone: string };
 
-const eligiblePromotionCustomers = async (organizationId: string): Promise<PromotionCandidate[]> => {
+const eligiblePromotionCustomers = async (organizationId: string, storeId: string): Promise<PromotionCandidate[]> => {
   const rows = await pg`
     SELECT id, name, phone
     FROM customers
     WHERE organization_id = ${organizationId}
+      AND EXISTS (
+        SELECT 1
+        FROM whatsapp_customer_store_associations association
+        WHERE association.organization_id = customers.organization_id
+          AND association.customer_id = customers.id
+          AND association.store_id = ${storeId}
+      )
       AND is_active = TRUE
       AND marketing_opted_in = TRUE
       AND marketing_opted_out = FALSE
@@ -338,7 +345,7 @@ const createCloudPromotion = async (
   const localTemplate = await messageTemplate.getTemplate(organizationId, storeId, binding.binding.localTemplateId);
   if (!localTemplate || !localTemplate.isActive || localTemplate.kind !== "promotion") return { status: "error", message: "The selected promotion template is no longer active for this Store", data: null, code: STATUS_CODES.CONFLICT };
   if (data.body.trim() !== localTemplate.body.trim()) return { status: "error", message: "Cloud promotions must use the selected approved promotion template", data: null, code: STATUS_CODES.CONFLICT };
-  const candidates = await eligiblePromotionCustomers(organizationId);
+  const candidates = await eligiblePromotionCustomers(organizationId, storeId);
   if (candidates.length === 0) return { status: "error", message: "No eligible customers with promotional consent and a phone number", data: null, code: STATUS_CODES.CONFLICT };
 
   const hasImage = Boolean(data.imageBase64 && data.imageFileName && data.imageMimeType);
@@ -451,7 +458,8 @@ export const createPromotion = async (
   if (entitlementError) return entitlementError;
   const policy = await getCurrentPolicy(organizationId, storeId);
   if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
-  const account = await repository.getAccount(organizationId, storeId);
+  if (!policy.whatsappAccountId) return { status: "error", message: "Link the Store WhatsApp account before sending promotions", data: null, code: STATUS_CODES.CONFLICT };
+  const account = await repository.getAccountById(policy.whatsappAccountId);
   if (!account)
     return {
       status: "error",
@@ -459,6 +467,14 @@ export const createPromotion = async (
       data: null,
       code: STATUS_CODES.CONFLICT,
     };
+  if (account.organizationId !== organizationId || !account.assignedStoreIds.includes(storeId)) {
+    return {
+      status: "error",
+      message: "The Store's selected WhatsApp account is unavailable",
+      data: null,
+      code: STATUS_CODES.CONFLICT,
+    };
+  }
   if (account.status !== "connected")
     return {
       status: "error",
