@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CloudTemplateComponent } from "./cloud-api/cloud-outbound";
 import type { PlatformTemplateKind } from "./platform-template-health";
+import { recordWhatsAppDeliveryOperatorActionInTransaction, type WhatsAppDeliveryOperatorActionInput } from "./whatsapp.repository";
 import { pg } from "@/config/db";
 
 export const GANATRI_PLATFORM_SENDER_KEY = "ganatri_utility" as const;
@@ -26,6 +27,7 @@ export type PlatformTemplateOutboxRequest = Readonly<{
   messageId?: string;
   idempotencyKey: string;
   snapshot: PlatformSenderSnapshot;
+  operatorAction?: WhatsAppDeliveryOperatorActionInput;
 }>;
 
 export type PlatformTemplateOutboxRecord = Readonly<{
@@ -106,6 +108,9 @@ export const createPlatformTemplateOutboxInDatabase = async (
     if (String(existing.store_id) !== params.storeId) {
       throw new Error("Platform template idempotency key is already used for another Store");
     }
+    if (params.operatorAction) {
+      await recordWhatsAppDeliveryOperatorActionInTransaction(tx, params.operatorAction, String(existing.outbox_id));
+    }
     return recordFrom(existing as Record<string, unknown>, true);
   }
 
@@ -182,6 +187,9 @@ export const createPlatformTemplateOutboxInDatabase = async (
     RETURNING id, status
   `;
   if (!outbox) throw new Error("Failed to create platform template outbox");
+  if (params.operatorAction) {
+    await recordWhatsAppDeliveryOperatorActionInTransaction(tx, params.operatorAction, String(outbox.id));
+  }
 
   return recordFrom({
     message_id: message.id,

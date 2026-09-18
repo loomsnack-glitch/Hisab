@@ -47,7 +47,11 @@ const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const dueReminderObjectKey = (organizationId: string, storeId: string, accountId: string, customerId: string, saleId?: string) =>
     `whatsapp-due-reminders/${organizationId}/${storeId}/${accountId}/${customerId}/${saleId ?? "statement"}.pdf`;
-type DueReminderQueueOptions = { resend?: boolean; requestId?: string };
+type DueReminderQueueOptions = {
+    resend?: boolean;
+    requestId?: string;
+    operatorAction?: repository.WhatsAppDeliveryOperatorActionInput;
+};
 const dueReminderIdempotencyKey = (input: {
     organizationId: string;
     storeId: string;
@@ -445,6 +449,7 @@ const queueDueReminderForStore = async (
                 customerPhone: parsedPhone.data,
                 saleId: saleId ?? null,
                 idempotencyKey,
+                operatorAction: options.operatorAction,
                 snapshot: {
                     senderKey: GANATRI_PLATFORM_SENDER_KEY,
                     templateKind: "due_reminder",
@@ -538,11 +543,11 @@ const queueDueReminderForStore = async (
             const enqueue = userId
                 ? enqueueCloudTemplateSend(userId, organizationId, {
                     storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, componentParameters,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, operatorAction: options.operatorAction, componentParameters,
                 })
                 : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
                     storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, componentParameters,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, operatorAction: options.operatorAction, componentParameters,
                 });
             const queued = await enqueue;
             if (queued.status === "error" || !queued.data) {
@@ -699,19 +704,19 @@ export const resendDueReminder = async (
     const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
     if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
     const resendRequestId = requestId?.trim() || crypto.randomUUID();
-    const queued = await queueDueReminderForStore(organizationId, storeId, sale.customerId, undefined, saleId, userId, { resend: true, requestId: resendRequestId });
-    if (queued.status === "success" && queued.data) {
-        await repository.recordWhatsAppDeliveryOperatorAction({
+    const queued = await queueDueReminderForStore(organizationId, storeId, sale.customerId, undefined, saleId, userId, {
+        resend: true,
+        requestId: resendRequestId,
+        operatorAction: {
             organizationId,
             storeId,
             actorUserId: userId,
             sourceOutboxId: source.data?.outboxId ?? null,
-            outboxId: queued.data.outboxId,
             action: "resend",
             requestId: resendRequestId,
             details: { kind: "due_reminder", saleId },
-        }).catch(error => console.error("[whatsapp] due resend audit failed", error instanceof Error ? error.name : "unknown"));
-    }
+        },
+    });
     return queued;
 };
 
@@ -724,19 +729,19 @@ export const resendDueReminderForDevice = async (
     const sale = await billingRepository.getSaleById(session.organization.id, session.store.id, saleId);
     if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
     const resendRequestId = requestId?.trim() || crypto.randomUUID();
-    const queued = await queueDueReminderForStore(session.organization.id, session.store.id, sale.customerId, undefined, saleId, undefined, { resend: true, requestId: resendRequestId });
-    if (queued.status === "success" && queued.data) {
-        await repository.recordWhatsAppDeliveryOperatorAction({
+    const queued = await queueDueReminderForStore(session.organization.id, session.store.id, sale.customerId, undefined, saleId, undefined, {
+        resend: true,
+        requestId: resendRequestId,
+        operatorAction: {
             organizationId: session.organization.id,
             storeId: session.store.id,
             actorUserId: null,
             sourceOutboxId: source.data?.outboxId ?? null,
-            outboxId: queued.data.outboxId,
             action: "resend",
             requestId: resendRequestId,
             details: { kind: "due_reminder", saleId, actor: "device" },
-        }).catch(error => console.error("[whatsapp] device due resend audit failed", error instanceof Error ? error.name : "unknown"));
-    }
+        },
+    });
     return queued;
 };
 export const replayPendingMessageEvents = conversationService.replayPendingMessageEvents;

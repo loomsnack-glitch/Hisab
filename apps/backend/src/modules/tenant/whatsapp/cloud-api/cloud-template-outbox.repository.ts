@@ -2,6 +2,7 @@ import type { WhatsAppMessageTemplateKind } from "@repo/types";
 import { pg } from "@/config/db";
 import { type CloudTemplateSendSnapshot } from "./cloud-template-admission";
 import { reserveCloudQuota } from "./cloud-quota.repository";
+import { recordWhatsAppDeliveryOperatorActionInTransaction, type WhatsAppDeliveryOperatorActionInput } from "../whatsapp.repository";
 
 export type CloudTemplateOutboxRecord = {
   messageId: string;
@@ -26,6 +27,7 @@ export type CloudTemplateOutboxRequest = {
   idempotencyKey: string;
   campaignKey?: string | null;
   resendLockKey?: string | null;
+  operatorAction?: WhatsAppDeliveryOperatorActionInput;
 };
 
 const idempotencyKeyFor = (value: string): string => {
@@ -79,6 +81,9 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
   if (existing) {
     if (String(existing.organization_id) !== params.organizationId || String(existing.store_id) !== params.storeId || String(existing.customer_id) !== params.customerId) {
       throw new Error("Cloud template idempotency key is already used for another send");
+    }
+    if (params.operatorAction) {
+      await recordWhatsAppDeliveryOperatorActionInTransaction(tx, params.operatorAction, String(existing.outbox_id));
     }
     return recordFrom(existing as Record<string, unknown>);
   }
@@ -215,6 +220,9 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
         DO UPDATE SET message_id = EXCLUDED.message_id, outbox_id = EXCLUDED.outbox_id, status = 'pending', updated_at = NOW()
       `;
     }
+    if (params.operatorAction) {
+      await recordWhatsAppDeliveryOperatorActionInTransaction(tx, params.operatorAction, String(raced.outbox_id));
+    }
     return recordFrom(raced as Record<string, unknown>);
   }
   const [outbox] = await tx`
@@ -228,6 +236,9 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
     RETURNING id, status
   `;
   if (!outbox) throw new Error("Failed to create Cloud template outbox");
+  if (params.operatorAction) {
+    await recordWhatsAppDeliveryOperatorActionInTransaction(tx, params.operatorAction, String(outbox.id));
+  }
   if (params.campaignId) {
     await tx`
       INSERT INTO whatsapp_campaign_recipients (

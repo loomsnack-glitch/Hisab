@@ -46,6 +46,7 @@ const invoiceObjectKey = (organizationId: string, storeId: string, accountId: st
 export type InvoiceQueueOptions = {
   resend?: boolean;
   requestId?: string;
+  operatorAction?: repository.WhatsAppDeliveryOperatorActionInput;
 };
 
 export const invoiceIdempotencyKey = (saleId: string, options: InvoiceQueueOptions): string => {
@@ -67,6 +68,7 @@ const queueCloudInvoiceForStore = async (
   selectedTemplate: WhatsAppMessageTemplateDTO | null,
   templateId?: string,
   idempotencyKey = `invoice:${sale.id}`,
+  operatorAction?: repository.WhatsAppDeliveryOperatorActionInput,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   if (customMessage?.trim()) {
     return { status: "error", message: "Cloud WhatsApp bills must use the approved template", data: null, code: STATUS_CODES.CONFLICT };
@@ -127,11 +129,11 @@ const queueCloudInvoiceForStore = async (
     const enqueue = userId
       ? enqueueCloudTemplateSend(userId, organizationId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
-          bindingId: binding.binding.id, idempotencyKey, intent: "bill", policyVersion, componentParameters,
+          bindingId: binding.binding.id, idempotencyKey, intent: "bill", policyVersion, operatorAction, componentParameters,
         })
       : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
-          bindingId: binding.binding.id, idempotencyKey, intent: "bill", componentParameters,
+          bindingId: binding.binding.id, idempotencyKey, intent: "bill", operatorAction, componentParameters,
         });
     const queued = await enqueue;
     if (queued.status === "error" || !queued.data) return queued as ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>;
@@ -198,6 +200,7 @@ const queuePlatformInvoiceForStore = async (
   organizationName: string,
   policyVersion: number,
   idempotencyKey: string,
+  operatorAction?: repository.WhatsAppDeliveryOperatorActionInput,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> => {
   try {
     const config = requireWhatsAppPlatformConfig();
@@ -210,6 +213,7 @@ const queuePlatformInvoiceForStore = async (
       customerPhone,
       saleId: sale.id,
       idempotencyKey,
+      operatorAction,
       snapshot: {
         senderKey: GANATRI_PLATFORM_SENDER_KEY,
         templateKind: "bill",
@@ -338,6 +342,7 @@ export const queueInvoiceForStore = async (
       organization.name,
       policy.revision,
       invoiceIdempotencyKey(saleId, options),
+      options.operatorAction,
     );
   }
 
@@ -413,6 +418,7 @@ export const queueInvoiceForStore = async (
       selectedTemplate,
       templateId,
       invoiceIdempotencyKey(saleId, options),
+      options.operatorAction,
     );
   } catch (error) {
     try {
@@ -497,20 +503,20 @@ export const resendInvoice = async (
     undefined,
     undefined,
     userId,
-    { resend: true, requestId: resendRequestId },
-  );
-  if (queued.status === "success" && queued.data) {
-    await repository.recordWhatsAppDeliveryOperatorAction({
-      organizationId,
-      storeId,
-      actorUserId: userId,
-      sourceOutboxId: source?.outboxId ?? null,
-      outboxId: queued.data.outboxId,
-      action: "resend",
+    {
+      resend: true,
       requestId: resendRequestId,
-      details: { kind: "bill", saleId },
-    }).catch(error => console.error("[whatsapp] bill resend audit failed", error instanceof Error ? error.name : "unknown"));
-  }
+      operatorAction: {
+        organizationId,
+        storeId,
+        actorUserId: userId,
+        sourceOutboxId: source?.outboxId ?? null,
+        action: "resend",
+        requestId: resendRequestId,
+        details: { kind: "bill", saleId },
+      },
+    },
+  );
   return queued;
 };
 
@@ -592,20 +598,20 @@ export const resendInvoiceForDevice = async (
     undefined,
     undefined,
     undefined,
-    { resend: true, requestId: resendRequestId },
-    );
-    if (queued.status === "success" && queued.data) {
-      await repository.recordWhatsAppDeliveryOperatorAction({
+    {
+      resend: true,
+      requestId: resendRequestId,
+      operatorAction: {
         organizationId: session.organization.id,
         storeId: session.store.id,
         actorUserId: null,
         sourceOutboxId: source?.outboxId ?? null,
-        outboxId: queued.data.outboxId,
         action: "resend",
         requestId: resendRequestId,
         details: { kind: "bill", saleId, actor: "device" },
-      }).catch(error => console.error("[whatsapp] device bill resend audit failed", error instanceof Error ? error.name : "unknown"));
-    }
+      },
+    },
+    );
     return queued;
   })();
 

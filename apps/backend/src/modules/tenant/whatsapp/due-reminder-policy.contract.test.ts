@@ -14,8 +14,8 @@ describe("due-reminder policy boundary", () => {
   });
 
   test("passes the admitted policy revision to both Cloud device and user queue paths", () => {
-    expect(dueSection).toContain("intent: \"due_reminder\", policyVersion: policy.revision, componentParameters");
-    expect(dueSection.match(/intent: \"due_reminder\", policyVersion: policy\.revision, componentParameters/g)?.length).toBe(2);
+    expect(dueSection).toContain("intent: \"due_reminder\", policyVersion: policy.revision");
+    expect(dueSection.match(/intent: \"due_reminder\", policyVersion: policy\.revision/g)?.length).toBe(2);
     expect(dueSection.match(/policyVersion: policy\.revision/g)?.length).toBe(3);
   });
 

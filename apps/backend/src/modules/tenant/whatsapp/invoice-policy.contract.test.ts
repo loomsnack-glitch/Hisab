@@ -9,7 +9,8 @@ describe("bill delivery policy boundary", () => {
   });
 
   test("passes the admitted policy revision to Cloud bill queueing", () => {
-    expect(source).toContain("intent: \"bill\", policyVersion, componentParameters");
+    expect(source).toContain("intent: \"bill\", policyVersion");
+    expect(source).toContain("componentParameters");
     expect(source).toContain("account.id,\n      policy.revision,");
   });
 });

@@ -9,6 +9,7 @@ import { getCloudAccountScope } from "./cloud-account.repository";
 import { admitCloudTemplateSend, type CloudTemplateAdmissionInput } from "./cloud-template-admission";
 import * as consentRepository from "./customer-consent.repository";
 import { createCloudTemplateOutbox, type CloudTemplateOutboxRecord } from "./cloud-template-outbox.repository";
+import type { WhatsAppDeliveryOperatorActionInput } from "../whatsapp.repository";
 import {
   buildCloudTemplateComponents,
   type CloudTemplateComponentInput,
@@ -44,6 +45,7 @@ export const enqueueCloudTemplateSend = async (
     campaignKey?: string | null;
     intent: WhatsAppMessageTemplateKind;
     policyVersion?: number;
+    operatorAction?: WhatsAppDeliveryOperatorActionInput;
     mode?: "template" | "freeform";
     componentParameters?: CloudTemplateComponentInput[];
     lastInboundAt?: string | null;
@@ -96,6 +98,7 @@ export const enqueueCloudTemplateSend = async (
       snapshot: input.policyVersion === undefined
         ? admission.snapshot
         : { ...admission.snapshot, policyVersion: input.policyVersion },
+      operatorAction: input.operatorAction,
       messageId: crypto.randomUUID(),
       idempotencyKey: input.idempotencyKey,
       campaignKey: input.campaignKey,

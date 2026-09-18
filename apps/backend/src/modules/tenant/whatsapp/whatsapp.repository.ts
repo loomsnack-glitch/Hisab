@@ -627,27 +627,38 @@ export const getLatestDueReminderOutboxForStore = (
     saleId: string,
 ): Promise<InvoiceOutboxRecord | null> => getLatestStoreOutbox(organizationId, storeId, saleId, "due-reminder:");
 
-export const recordWhatsAppDeliveryOperatorAction = async (input: {
+export type WhatsAppDeliveryOperatorActionInput = {
     organizationId: string;
     storeId: string;
     actorUserId?: string | null;
     sourceOutboxId?: string | null;
-    outboxId: string;
     action: "retry" | "resend";
     requestId?: string | null;
     details?: Record<string, unknown>;
-}): Promise<void> => {
-    await pg`
+};
+
+export const recordWhatsAppDeliveryOperatorActionInTransaction = async (
+    tx: Bun.TransactionSQL,
+    input: WhatsAppDeliveryOperatorActionInput,
+    outboxId: string,
+): Promise<void> => {
+    await tx`
         INSERT INTO whatsapp_delivery_operator_actions (
             organization_id, store_id, actor_user_id, source_outbox_id,
             outbox_id, action, request_id, details
         ) VALUES (
             ${input.organizationId}, ${input.storeId}, ${input.actorUserId ?? null},
-            ${input.sourceOutboxId ?? null}, ${input.outboxId}, ${input.action},
+            ${input.sourceOutboxId ?? null}, ${outboxId}, ${input.action},
             ${input.requestId ?? null}, ${input.details ?? {}}::jsonb
         )
     `;
 };
+
+export const recordWhatsAppDeliveryOperatorAction = async (
+    input: WhatsAppDeliveryOperatorActionInput & { outboxId: string },
+): Promise<void> => pg.begin(async tx => {
+    await recordWhatsAppDeliveryOperatorActionInTransaction(tx, input, input.outboxId);
+});
 
 export const getCustomerByPhone = async (organizationId: string, phoneNumber: string): Promise<CustomerDTO | null> => {
     const [row] = await pg`
