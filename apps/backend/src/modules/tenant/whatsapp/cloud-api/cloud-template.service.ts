@@ -78,24 +78,6 @@ type CloudTemplateServiceDependencies = {
   organizationAccess: (organizationId: string, userId: string) => Promise<boolean>;
 };
 
-const debugProviderComponents = (template: Record<string, unknown>) =>
-  Array.isArray(template.components)
-    ? template.components.map(component => {
-      if (!component || typeof component !== "object" || Array.isArray(component)) return { valueType: typeof component };
-      const value = component as Record<string, unknown>;
-      return {
-        type: typeof value.type === "string" ? value.type : null,
-        format: typeof value.format === "string" ? value.format : null,
-        textType: value.text === null ? "null" : typeof value.text,
-        textLength: typeof value.text === "string" ? value.text.length : null,
-        keys: Object.keys(value),
-        exampleKeys: value.example && typeof value.example === "object" && !Array.isArray(value.example)
-          ? Object.keys(value.example as Record<string, unknown>)
-          : [],
-      };
-    })
-    : [];
-
 const dependencies = (): CloudTemplateServiceDependencies => ({
   vault: databaseCloudCredentialVault,
   createClient: accessToken => createConfiguredCloudClient(accessToken),
@@ -185,19 +167,12 @@ export const syncCloudTemplatesForAccount = async (
       const key = `${name}:${language}`;
       providerIdentityCounts.set(key, (providerIdentityCounts.get(key) ?? 0) + 1);
     }
-    console.info("[DEBUG-whatsapp-template-sync]", {
-      providerCount: rawProviderTemplates.length,
-      providerDuplicates: [...providerIdentityCounts.entries()]
-        .filter(([, count]) => count > 1)
-        .map(([identity, count]) => ({ identity, count })),
-      providerTemplates: rawProviderTemplates.map(template => ({
-        id: typeof template.id === "string" ? template.id : null,
-        name: typeof template.name === "string" ? template.name : null,
-        language: typeof template.language === "string" ? template.language : null,
-        status: typeof template.status === "string" ? template.status : null,
-        components: debugProviderComponents(template),
-      })),
-    });
+    if (providerIdentityCounts.size !== rawProviderTemplates.length) {
+      console.warn("[whatsapp-template-sync] Meta returned duplicate template identities", {
+        providerCount: rawProviderTemplates.length,
+        uniqueIdentityCount: providerIdentityCounts.size,
+      });
+    }
     const assets = rawProviderTemplates.map(template => normalizeCloudTemplateAsset(organizationId, credential.businessAccountId, template));
     const templates = await deps.upsert(assets);
     const approvedAssetsByMetaId = new Map(
@@ -232,15 +207,6 @@ export const syncCloudTemplatesForAccount = async (
           }),
       );
     }
-    console.info("[DEBUG-whatsapp-template-sync]", {
-      storedAssetCount: templates.length,
-      storedAssets: templates.map(template => ({
-        id: template.id,
-        metaTemplateId: template.metaTemplateId,
-        name: template.name,
-        language: template.languageCode,
-      })),
-    });
     return { status: "success", message: "WhatsApp Cloud templates synchronized", data: { templates }, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     return {
@@ -570,12 +536,6 @@ export const submitCloudTemplateForAccount = async (
       });
       providerPhase = "refresh_provider_templates";
       providerTemplate = findProviderTemplate((await client.getTemplates(account.wabaId)).data ?? [], data.metaTemplateName, data.languageCode);
-      console.info("[DEBUG-whatsapp-template-submit]", {
-        phase: "refresh_provider_templates_response",
-        providerTemplateId: typeof providerTemplate?.id === "string" ? providerTemplate.id : null,
-        providerTemplateName: typeof providerTemplate?.name === "string" ? providerTemplate.name : null,
-        components: providerTemplate ? debugProviderComponents(providerTemplate) : [],
-      });
     }
     const providerTemplateId = String(providerTemplate?.id ?? providerResponse?.id ?? "").trim() || null;
     const status = providerStatusFor(providerTemplate?.status ?? providerResponse?.status);
@@ -594,18 +554,17 @@ export const submitCloudTemplateForAccount = async (
     return { status: "success", message: status === "approved" ? "Cloud template is approved" : "Cloud template submitted to Meta for approval", data: { submission, template: template ?? null }, code: STATUS_CODES.SUCCESS };
   } catch (error) {
     if (error instanceof WhatsAppCloudApiError) {
-      console.error("[DEBUG-whatsapp-template-submit]", {
+      console.error("[whatsapp-template-submit] Meta request failed", {
         phase: providerPhase,
         status: error.status ?? null,
         providerCode: error.providerCode ?? null,
         providerSubcode: error.providerSubcode ?? null,
         fbtraceId: error.fbtraceId ?? null,
-        message: error.message,
       });
     } else {
-      console.error("[DEBUG-whatsapp-template-submit]", {
+      console.error("[whatsapp-template-submit] Template submission failed", {
         phase: providerPhase,
-        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : typeof error,
       });
     }
     const safe = safeSubmissionError(error);
@@ -715,18 +674,6 @@ export const listCloudTemplateSubmissionsForAccount = async (
     if (storeDenial) return storeDenial;
   }
   const submissions = await deps.listSubmissions(organizationId, account.whatsappBusinessAccountId, originatingStoreId);
-  console.info("[DEBUG-whatsapp-template-submissions]", {
-    count: submissions.length,
-    submissions: submissions.map(submission => ({
-      id: submission.id,
-      friendlyName: submission.friendlyName,
-      languageCode: submission.languageCode,
-      kind: submission.kind,
-      status: submission.status,
-      metaTemplateId: submission.metaTemplateId,
-      idempotencyKey: submission.idempotencyKey,
-    })),
-  });
   return {
     status: "success",
     message: "Cloud template submissions fetched successfully",
@@ -753,6 +700,7 @@ export const setCloudTemplateDefaultForSubmission = async (
   const assets = await deps.list(organizationId, submission.whatsappBusinessAccountId);
   const asset = assets.find(item => item.metaTemplateId === submission.metaTemplateId);
   if (!asset) return { status: "error", message: "Refresh Cloud templates before assigning this default", data: null, code: STATUS_CODES.CONFLICT };
+  if (asset.languageCode !== submission.languageCode) return { status: "error", message: "Cloud template language no longer matches the submitted revision", data: null, code: STATUS_CODES.CONFLICT };
   const expectedCategory = submission.kind === "promotion" ? "marketing" : "utility";
   if (asset.status !== "approved" || asset.category !== expectedCategory) return { status: "error", message: "Cloud template is no longer approved for this message type", data: null, code: STATUS_CODES.CONFLICT };
   try {

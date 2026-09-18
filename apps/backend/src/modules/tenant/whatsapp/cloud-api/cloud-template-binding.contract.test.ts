@@ -18,4 +18,15 @@ describe("Cloud template binding boundary", () => {
     expect(source).toContain("target.local_template_id");
     expect(source).toContain("Cloud template binding is not for the Store's current WhatsApp sender");
   });
+
+  test("scopes imported default replacement to the Store, sender, kind, and language", () => {
+    const importMethod = source.slice(
+      source.indexOf("export const createCloudTemplateDefaultBinding"),
+      source.indexOf("export const listCloudTemplateBindings"),
+    );
+    expect(importMethod).toContain("AND store_id = ${input.storeId}");
+    expect(importMethod).toContain("AND whatsapp_business_account_id = ${input.whatsappBusinessAccountId}");
+    expect(importMethod).toContain("AND kind = ${input.kind}");
+    expect(importMethod).toContain("AND language_code = ${asset.language_code}");
+  });
 });

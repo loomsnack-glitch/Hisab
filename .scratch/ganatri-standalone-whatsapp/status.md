@@ -103,6 +103,11 @@ complete and committed. Phase 5.4 archive/rollback/audit review is complete
 with documented follow-ups; Phase 5 is complete and Phase 6 is next. Phases 8
 and 9 are intentionally deferred from the initial release.
 
+The Phase 5 final review loop then corrected Store/sender/kind/language default
+replacement scope, rejected submission/provider language drift, removed
+template-content debug logging, and re-ran the 63-test focused suite plus both
+production builds. The correction commit is the final Phase 5 checkpoint.
+
 ## Recovery checkpoint
 
 The previous Phase 1.1 standalone shell was never committed and has been

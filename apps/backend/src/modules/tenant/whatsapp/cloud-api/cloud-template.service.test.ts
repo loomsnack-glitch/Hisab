@@ -391,6 +391,65 @@ describe("Cloud template synchronization service", () => {
     expect(input?.localTemplateBody).toBe("Hello {{customer_name}}.");
   });
 
+  test("rejects a provider asset whose language differs from the submitted revision", async () => {
+    let bindingCalled = false;
+    const response = await setCloudTemplateDefaultForSubmission(userId, organizationId, "88888888-8888-4888-8888-888888888886", {
+      organizationAccess: async () => true,
+      getSubmission: async () => ({
+        id: "88888888-8888-4888-8888-888888888886",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        originatingStoreId: storeId,
+        localTemplateId: null,
+        kind: "bill" as const,
+        friendlyName: "Bill ready",
+        metaTemplateName: "bill_ready",
+        languageCode: "en_US",
+        category: "utility" as const,
+        requestedComponents: [{ type: "BODY", text: "Hello {{1}}." }],
+        sampleValues: { "1": "Customer" },
+        idempotencyKey: "idem-language-mismatch",
+        metaTemplateId: "meta-language-mismatch",
+        status: "approved" as const,
+        rejectionReason: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        submittedAt: "2026-09-18T10:00:00.000Z",
+        providerUpdatedAt: "2026-09-18T10:00:00.000Z",
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: "2026-09-18T10:00:00.000Z",
+        updatedAt: "2026-09-18T10:00:00.000Z",
+      }),
+      list: async () => [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad",
+        organizationId,
+        whatsappBusinessAccountId: businessAccountId,
+        metaTemplateId: "meta-language-mismatch",
+        name: "bill_ready",
+        languageCode: "hi_IN",
+        category: "utility" as const,
+        status: "approved" as const,
+        components: [{ type: "BODY", text: "नमस्ते {{1}}" }],
+        rejectionReason: null,
+        providerUpdatedAt: null,
+        lastSyncedAt: "2026-09-18T10:00:00.000Z",
+        version: 1,
+      }],
+      createDefaultBinding: async () => {
+        bindingCalled = true;
+        return {} as never;
+      },
+    });
+
+    expect(response).toMatchObject({
+      status: "error",
+      code: 409,
+      message: "Cloud template language no longer matches the submitted revision",
+    });
+    expect(bindingCalled).toBe(false);
+  });
+
   test("archives an active binding and records the lifecycle event", async () => {
     const events: string[] = [];
     const binding = {

@@ -159,8 +159,8 @@ changes.
 - Reuse the existing binding/default repository and explicit publish actions.
 - Enforce current Store `organization_cloud` policy/account scope at the
   database boundary, not only through UI or stale historical assignments.
-- Keep one active Cloud default per Store/kind and synchronize the associated
-  local template default on re-publish and rollback.
+- Keep one active Cloud default per Store, sender/WABA, kind, and language, and
+  synchronize the associated local template default on re-publish and rollback.
 - Preserve approval/category/variable validation and defer archive/rollback
   lifecycle review to 5.4.
 
@@ -210,10 +210,10 @@ only then can the phase-level closeout report Phase 5 complete with follow-ups.
 
 ## Phase 5 final verification and review
 
-- Phase commits: `9d8f583`, `3dd687b`, `d76dba2`, and `4aa0fc4`.
+- Phase commits: `9d8f583`, `3dd687b`, `d76dba2`, `4aa0fc4`, `98f1d85`, plus
+  the Phase 5 review-loop correction commit.
 - Final focused template service, repository, submission, binding, provider,
-  and webhook suite: 27 tests passed, 0 failed; the broader 5.2 validation
-  covered 50 tests.
+  and webhook suite: 63 tests passed, 0 failed, with 144 assertions.
 - Backend production build: passed.
 - Admin production build: passed with the repository-local Vite binary.
 - `git diff --check`: passed.
@@ -229,3 +229,15 @@ only then can the phase-level closeout report Phase 5 complete with follow-ups.
 - Deferred follow-ups: live Meta approval/webhook verification, richer persisted
   draft media handling, and bill/due delivery behavior remain later release
   gates; no release claim is made for those phases.
+
+## Phase 5 review-loop correction
+
+The final review found and corrected two boundary issues before closeout:
+
+- Imported Cloud defaults now clear only the current Store, sender/WABA, kind,
+  and language scope; another Store's default cannot be displaced.
+- A submission cannot be published when the refreshed provider asset has a
+  different language than the submitted revision.
+
+Template-content debug logging was also removed; operational logs retain only
+safe provider error metadata and duplicate-identity counts.
