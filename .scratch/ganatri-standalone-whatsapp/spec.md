@@ -546,35 +546,41 @@ default-uniqueness tests pass.
 Gate: both sender modes work; disabled, entitlement, consent, invalid-template,
   duplicate, and provider-failure cases fail safely.
 
-### Phase 7 — Inbox and customer messaging
+### Phase 7 — Migration and cutover
 
-- Add Store-scoped conversations, customer matching/attachment, message
-  history, attachments, service-window state, and reply permissions.
-- Exclude the Ganatri utility sender unless the platform reply policy is
-  explicitly approved.
+- Inventory existing Store assignments, sender references, conversations,
+  customer associations, and queued work.
+- Migrate each Store to one history-aware policy without rewriting historical
+  messages, outbox records, or sender snapshots.
+- Cut Admin and Store Console over to the selected policy and retire the POS
+  conversation route while preserving POS bill/due status actions.
 
-Gate: replies cannot cross Store or Organization scope; expired windows and
-  suppressed customers are blocked.
+Gate: migration dry run, idempotent policy cutover, route-boundary checks, and
+rollback verification preserve history and never reroute queued work.
 
-### Phase 8 — Promotions and consent
+### Phase 8 — Organization Cloud inbox and replies
+
+- Add Store-scoped conversations, exact Customer matching/attachment, message
+  history, private attachments, service-window state, and reply permissions.
+- Exclude the Ganatri utility sender from Organization inboxes and replies.
+- Allow free-form Cloud replies only inside the provider's open
+  customer-service window and block suppressed Customers.
+
+Gate: replies cannot cross Store or Organization scope; expired windows,
+suppressed Customers, disabled Stores, and non-Cloud senders are blocked.
+
+### Phase 9 — Promotions and operations
 
 - Add approved marketing-template selection, campaign creation, recipient
   consent filtering, cooldown, delivery progress, stop, retry, and resend.
-- Make all promotion routes unavailable for `ganatri_utility`.
-
-Gate: no marketing send can use the platform utility sender or an unapproved
-template, regardless of client input.
-
-### Phase 9 — Safety, observability, and migration
-
 - Add quota/outbox/webhook health, audit views, alerts, reconciliation, safe
   redaction, and operational runbook updates.
-- Decide how existing Admin/POS links and existing Store assignments migrate.
-- Verify no historical messages, templates, credentials, or outbox records are
-  deleted by the new policy model.
+- Make all promotion routes unavailable for `ganatri_utility` and preserve
+  the existing sender/policy boundaries.
 
-Gate: migration dry run, rollback behavior, focused tests, type checks, builds,
-and manual browser verification pass.
+Gate: no marketing send can use the platform utility sender or an unapproved
+template, regardless of client input; operational controls remain audited and
+Store/Organization scoped.
 
 ## Acceptance criteria
 

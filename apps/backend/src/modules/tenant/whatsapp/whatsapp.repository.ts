@@ -793,6 +793,21 @@ export type ConversationReplyQueueResult = {
 export const queueConversationReply = async (
     params: ConversationReplyQueueParams,
 ): Promise<ConversationReplyQueueResult> => pg.begin(async tx => {
+    const [existing] = await tx`
+        SELECT message.*, outbox.id AS outbox_id
+        FROM whatsapp_messages message
+        INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        WHERE message.whatsapp_account_id = ${params.accountId}
+          AND message.idempotency_key = ${params.idempotencyKey}
+          AND message.organization_id = ${params.organizationId}
+          AND message.store_id = ${params.storeId}
+          AND message.conversation_id = ${params.conversationId}
+        FOR UPDATE OF message, outbox
+    `;
+    if (existing) {
+        return { message: mapMessage(existing as Record<string, unknown>), outboxId: String(existing.outbox_id) };
+    }
+
     const [scope] = await tx`
         SELECT conversation.id,
                conversation.contact_phone_number,
@@ -817,8 +832,14 @@ export const queueConversationReply = async (
           ON business.id = account.whatsapp_business_account_id
          AND business.organization_id = account.organization_id
         LEFT JOIN customers customer
-          ON customer.id = conversation.customer_id
-         AND customer.organization_id = conversation.organization_id
+          ON customer.organization_id = conversation.organization_id
+         AND (
+              customer.id = conversation.customer_id
+              OR (
+                  conversation.customer_id IS NULL
+                  AND regexp_replace(COALESCE(customer.phone, ''), '[^0-9]', '', 'g') = regexp_replace(conversation.contact_phone_number, '[^0-9]', '', 'g')
+              )
+         )
         LEFT JOIN LATERAL (
             SELECT MAX(message.created_at) AS last_inbound_at
             FROM whatsapp_messages message
@@ -844,21 +865,6 @@ export const queueConversationReply = async (
         whatsappSuppressed: Boolean(scope.whatsapp_suppressed),
     });
     if (!admission.admitted) throw new Error(admission.message);
-
-    const [existing] = await tx`
-        SELECT message.*, outbox.id AS outbox_id
-        FROM whatsapp_messages message
-        INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
-        WHERE message.whatsapp_account_id = ${params.accountId}
-          AND message.idempotency_key = ${params.idempotencyKey}
-          AND message.organization_id = ${params.organizationId}
-          AND message.store_id = ${params.storeId}
-          AND message.conversation_id = ${params.conversationId}
-        FOR UPDATE OF message, outbox
-    `;
-    if (existing) {
-        return { message: mapMessage(existing as Record<string, unknown>), outboxId: String(existing.outbox_id) };
-    }
 
     const [message] = await tx`
         INSERT INTO whatsapp_messages (

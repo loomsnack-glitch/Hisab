@@ -173,14 +173,14 @@ the subphase is reviewed and committed before 8.3 begins.
 - Attachment lookup remains private and fail-closed: all scope columns are
   required, the private bucket must be configured, and only a five-minute
   signed URL is returned.
-- Focused 8.2 contract tests: 3 passed; Customer–Store repository test was
-  skipped because the local database fixture was unavailable.
+- Focused 8.2 contract tests: 3 passed. The database-backed Customer–Store
+  probe was retried with `apps/backend/.env` and timed out against the external
+  development database; no local fixture was available.
 - Full WhatsApp regression: 298 passed, 3 skipped, 0 failed.
 - Backend build, Admin build, touched-file TypeScript diagnostics, and
   `git diff --check`: passed.
-- Existing Admin Organization WhatsApp test has one unrelated baseline failure
-  (`ReferenceError: FileText is not defined`); it is outside the 8.2 diff and
-  remains a release follow-up.
+- The Admin Organization WhatsApp template suite was subsequently fixed and
+  passes 4/4.
 - Browser/live-provider verification remains a release-environment follow-up;
   8.3 reply and service-window behavior has not started.
 
@@ -222,7 +222,7 @@ Non-goals:
 Dependencies and public seams:
 
 - 8.1 exact Cloud Store scope and 8.2 Customer/attachment boundaries.
-- `admitCloudTemplateSend`'s existing free-form-window semantics.
+- `admitCloudConversationReply` and the existing free-form-window semantics.
 - `whatsapp_messages`, `whatsapp_outbox`, Cloud outbox claim/dispatch, and
   webhook delivery-status reconciliation.
 - Admin `WhatsAppInboxPage` and the existing conversation service client.
@@ -270,7 +270,7 @@ and the subphase is reviewed and committed before Phase 8 closeout.
 - The reply migration was applied to the development database: 158 applied,
   0 pending.
 - Focused 8.3 admission, migration, reply-boundary, and Admin window tests
-  passed; full WhatsApp regression: 300 passed, 3 skipped, 0 failed.
+  passed; final full WhatsApp regression: 302 passed, 3 skipped, 0 failed.
 - Backend/Admin production builds, touched-file TypeScript diagnostics, and
   `git diff --check`: passed.
 - The Admin Organization WhatsApp template suite now passes 4/4 after fixing
@@ -288,4 +288,6 @@ Deferred/release follow-ups:
 
 - Browser verification against an authenticated Admin environment.
 - Live Meta Cloud send/status verification and private object-storage access.
+- Database-backed Customer–Store association verification when the development
+  database is reachable.
 - Phase 9 promotions and operational controls remain deferred.

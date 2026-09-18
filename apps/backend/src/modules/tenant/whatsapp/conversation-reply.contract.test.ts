@@ -15,6 +15,10 @@ describe("Organization Cloud conversation reply boundary", () => {
         expect(repositorySource).toContain("conversation.whatsapp_account_id = ${params.accountId}");
         expect(repositorySource).toContain("admitCloudConversationReply");
         expect(repositorySource).toContain("message.idempotency_key = ${params.idempotencyKey}");
+        expect(repositorySource).toContain("conversation.customer_id IS NULL");
+        expect(repositorySource).toContain("regexp_replace(COALESCE(customer.phone, ''), '[^0-9]', '', 'g') = regexp_replace(conversation.contact_phone_number, '[^0-9]', '', 'g')");
+        expect(repositorySource.indexOf("const [existing] = await tx`"))
+            .toBeLessThan(repositorySource.indexOf("const [scope] = await tx`"));
     });
 
     test("persists text replies as durable Cloud outbox work and dispatches them", () => {
