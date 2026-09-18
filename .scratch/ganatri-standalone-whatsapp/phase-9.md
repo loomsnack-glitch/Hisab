@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 9
 
-Status: 9.1 complete; 9.2 next
+Status: 9.2 complete; 9.3 next
 Phase: 9 — Promotions and operations
 
 ## Outcome
@@ -116,3 +116,65 @@ reviewed/committed before 9.2 begins.
 - Database-backed Customer–Store association verification remains an external
   development-database follow-up from Phase 8; the Store-scope query is
   covered by the 9.1 contract test.
+
+### 9.2 Subphase plan — Campaign delivery operations
+
+Status: Implementation in progress
+
+User-facing outcome: Organization administrators can monitor campaign progress,
+stop queued work, inspect recipient delivery states, and safely retry or resend
+failed recipients. Every operation remains Organization/Store/campaign scoped
+and preserves the original sender/template snapshot.
+
+Scope:
+
+- Revalidate the current Store policy and require recipient retry/resend work
+  to belong to the policy-selected Organization Cloud account.
+- Preserve existing campaign progress aggregation, recipient filtering,
+  cooldown-aware resend protection, Cloud outbox retry/dead-letter transitions,
+  and operator audit records.
+- Keep stop, retry, and resend actions idempotent and fail closed for terminal,
+  cancelled, cross-Store, retired-account, or non-Cloud work.
+- Verify the existing Admin dashboard exposes queued/sending/sent/delivered/
+  read/failed progress, recipient details, stop, retry, and resend feedback.
+
+Non-goals:
+
+- No new quota/health/audit dashboard; that belongs to 9.3.
+- No campaign scheduling, segmentation builder, or new marketing message type.
+- No change to the approved-template or recipient-admission rules from 9.1.
+
+Acceptance criteria:
+
+- Retry and resend reject a recipient whose outbox sender no longer matches the
+  current Store policy-selected Cloud account.
+- Stop cancels only pending/retryable campaign work within the Organization and
+  releases its quota reservations.
+- Recipient actions preserve campaign/store/account scope and write operator
+  audit records where applicable.
+- Admin progress and recipient action states remain consistent with backend
+  status transitions.
+
+Verification plan:
+
+- Focused recipient-action and sender-policy contract tests.
+- Existing Cloud outbox, recipient, resend-cooldown, and campaign dashboard
+  tests.
+- Backend/Admin typechecks and builds, full WhatsApp regression, and
+  `git diff --check`.
+
+9.2 exit gate: campaign progress, stop, retry, and resend are scoped,
+idempotent, sender-safe, audited, reviewed, and committed before 9.3 begins.
+
+### 9.2 review and verification
+
+- Retry and resend now reject recipients whose original outbox account no
+  longer matches the current Store policy-selected Cloud account.
+- Existing stop, progress, recipient inspection, cooldown-aware resend,
+  retry/dead-letter, and operator-audit seams remain in use.
+- Focused operations and recipient tests: 4 passed.
+- Full WhatsApp regression: 305 passed, 3 skipped, 0 failed.
+- Backend build, touched-file TypeScript diagnostics, and `git diff --check`:
+  passed.
+- Admin campaign dashboard behavior remains covered by the existing component
+  surface; browser verification remains a release follow-up.

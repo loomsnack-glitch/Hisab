@@ -183,6 +183,9 @@ export const retryPromotionRecipient = async (
   if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
   const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
   if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (!policy.whatsappAccountId || String(target.whatsapp_account_id) !== policy.whatsappAccountId) {
+    return { status: "error", message: "This recipient belongs to a previous WhatsApp sender and cannot be retried from the current Store policy", data: null, code: STATUS_CODES.CONFLICT };
+  }
   if (target.status !== "retryable" || target.outbox_status !== "retryable" || !target.outbox_id) {
     return { status: "error", message: "This recipient is no longer waiting for a retry", data: null, code: STATUS_CODES.CONFLICT };
   }
@@ -202,6 +205,9 @@ export const resendPromotionRecipient = async (
   if (policy?.mode !== "organization_cloud") return { status: "error", message: "Promotions are unavailable for this Store WhatsApp mode", data: null, code: STATUS_CODES.CONFLICT };
   const target = await promotionRecipientActionTarget(organizationId, storeId, campaignId, recipientId);
   if (!target) return { status: "error", message: "Promotion recipient not found", data: null, code: STATUS_CODES.NOT_FOUND };
+  if (!policy.whatsappAccountId || String(target.whatsapp_account_id) !== policy.whatsappAccountId) {
+    return { status: "error", message: "This recipient belongs to a previous WhatsApp sender and cannot be resent from the current Store policy", data: null, code: STATUS_CODES.CONFLICT };
+  }
   if (promotionRecipientResendIsBlocked(target.failure_code, target.updated_at)) {
     const availableAt = promotionRecipientResendAvailableAt(target.failure_code, target.updated_at);
     return {
