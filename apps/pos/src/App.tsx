@@ -9,7 +9,6 @@ import PosTablesPage from "@/pages/pos-tables-page";
 import PosKotsPage from "@/pages/pos-kots-page";
 import PosAppearancePage from "@/pages/pos-appearance-page";
 import PosPrinterPage from "@/pages/pos-printer-page";
-import { PosWhatsAppInboxPage } from "@/pages/whatsapp-inbox-page";
 import WebAppHead from "@/components/web-app-head";
 import { DisplayScaleProvider } from "@/providers/display-scale-provider";
 import { getDocumentTitle } from "@/lib/app-identity";
@@ -32,7 +31,7 @@ const App = () => {
                         <Route path="tables" element={<PosTablesPage />} />
                         <Route path="customers" element={<Navigate to="/" replace />} />
                         <Route path="reports" element={<Navigate to="/" replace />} />
-                        <Route path="whatsapp" element={<PosWhatsAppInboxPage />} />
+                        <Route path="whatsapp" element={<Navigate to="/" replace />} />
                         <Route path="bills" element={<PosBillsPage />} />
                         <Route path="kots" element={<PosKotsPage />} />
                         <Route path="appearance" element={<PosAppearancePage />} />

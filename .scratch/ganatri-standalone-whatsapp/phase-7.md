@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: 7.3 complete; 7.4 ready to implement
+Status: 7.4 complete; Phase 7 closeout in progress
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -186,7 +186,7 @@ remain actionable and fail closed.
 
 ### 7.4 Subphase plan — POS route retirement and rollback review
 
-Status: Depends on 7.2 and 7.3; implementation not started
+Status: Complete; reviewed and committed
 
 Scope:
 
@@ -203,6 +203,33 @@ Scope:
 Exit evidence: browser checks with Admin, Store Console, and POS sessions open
 concurrently prove auth isolation, Store isolation, bill/due continuity, and
 safe rollback behavior.
+
+### 7.4 review and verification
+
+- POS `/whatsapp` now redirects to POS home without mounting the conversation
+  page or crossing into Admin authentication.
+- POS panel context no longer exposes WhatsApp as a navigable panel tab; bill,
+  due-reminder, status, retry, and resend routes remain device-authenticated.
+- POS route/identity suite: 13 passed, 63 assertions.
+- Backend production build: passed. POS production build: passed.
+- No Admin-auth route was added to POS; `git diff --check` passed.
+- Browser concurrency, live provider, and physical-device checks remain
+  release-environment follow-ups.
+
+## Phase 7 final verification and review
+
+- 7.1 dry run and 7.2 policy migration completed with zero WhatsApp data
+  conflicts; one unambiguous Cloud assignment became `organization_cloud`,
+  two Stores remain `disabled`, and repeated migration execution is a no-op.
+- 7.3 Store Workspace verification passed; existing Admin Store Workspace
+  routing and backend scope boundaries were reused.
+- 7.4 POS route retirement passed; bill/due device flows remain available.
+- Migration baseline is reconciled: 157 migration files and ledger rows match.
+- Full WhatsApp regression remained green at 293 passed, 3 known DB-dependent
+  skips, 0 failed; Phase 7 focused Admin/POS suites also passed.
+- Remaining gates: browser verification with concurrent sessions, live Meta
+  provider verification, and physical-device verification. No release claim
+  is made for those environments.
 
 ### Phase-level acceptance matrix
 

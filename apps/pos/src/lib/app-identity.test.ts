@@ -68,7 +68,7 @@ describe("Ganatri POS identity", () => {
         expect(appSource).toContain('to="/"');
         expect(appSource).toContain('path="bills"');
         expect(appSource).toContain('path="reports"');
-        expect(appSource).toContain('path="whatsapp"');
+        expect(appSource).toContain('<Route path="whatsapp" element={<Navigate to="/" replace />} />');
         expect(appSource).toContain('path="appearance"');
         expect(appSource).toContain('path="printer"');
         expect(appSource).toContain('path="settings"');

@@ -19,18 +19,16 @@ describe("POS route context", () => {
         expect(getPosPanelPath("products")).toBe("/");
         expect(getPosPanelPath("tables")).toBe("/tables");
         expect(getPosPanelPath("bills")).toBe("/bills");
-        expect(getPosPanelPath("whatsapp")).toBe("/whatsapp");
         expect(posPanelConfig.products.path).toBe("/");
         expect(posPanelConfig.tables.path).toBe("/tables");
         expect(posPanelConfig.bills.path).toBe("/bills");
-        expect(posPanelConfig.whatsapp.path).toBe("/whatsapp");
     });
 
     test("falls back to products for the POS root and unknown paths", () => {
         expect(getPosPanelTabFromPath("/")).toBe("products");
         expect(getPosPanelTabFromPath("/tables")).toBe("tables");
         expect(getPosPanelTabFromPath("/bills")).toBe("bills");
-        expect(getPosPanelTabFromPath("/whatsapp")).toBe("whatsapp");
+        expect(getPosPanelTabFromPath("/whatsapp")).toBe("products");
         expect(getPosPanelTabFromPath("/customers")).toBe("products");
         expect(getPosPanelTabFromPath("/reports")).toBe("products");
         expect(getPosPanelTabFromPath("/unknown")).toBe("products");
@@ -52,7 +50,7 @@ describe("POS route context", () => {
     test("preserves only internal POS return paths after login", () => {
         expect(getPosReturnPath("/tables")).toBe("/tables");
         expect(getPosReturnPath("/bills")).toBe("/bills");
-        expect(getPosReturnPath("/whatsapp")).toBe("/whatsapp");
+        expect(getPosReturnPath("/whatsapp")).toBe("/");
         expect(getPosReturnPath("/appearance")).toBe("/appearance");
         expect(getPosReturnPath("/printer")).toBe("/printer");
         expect(getPosReturnPath("https://example.com")).toBe("/");
