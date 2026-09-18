@@ -41,7 +41,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 - Branch: `feat/ganatri-standalone-whatsapp`.
 - Fixed point: `9e465f8` (integrated-plan checkpoint before Phase 1 execution).
 - Phase 0 source/database baseline completed on 2026-09-17.
-- Development database: 155 migrations applied, 0 pending.
+- Development database: 159 migrations applied, 0 pending.
 - The WhatsApp phone-status migration is applied.
 - Historical Baileys rows remain readable; new Baileys work is out of scope.
 - Existing Admin WhatsApp routes remain the Organization management workspace.
