@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 6
 
-Status: 6.3 complete with documented follow-ups; 6.4 next
+Status: Complete with documented follow-ups
 Phase: 6 — Bill and due delivery
 
 ## Outcome
@@ -313,3 +313,52 @@ before 6.3 begins.
   diagnostics: passed. `git diff --check`: passed.
 - Development database: 156 migrations applied, 0 pending; the new delivery
   operator-action migration is applied and represented in `db/schema.sql`.
+
+## 6.4 Subphase plan — Delivery closeout review
+
+Status: Complete; reviewed and committed
+
+### Scope and exit checks
+
+- Review all Phase 6 commits on Standards and Spec axes against the approved
+  bill/due delivery contract.
+- Run the complete WhatsApp regression suite, backend/Admin/POS production
+  builds, touched-file TypeScript diagnostics, `git diff --check`, and database
+  migration status.
+- Verify both sender modes, policy/entitlement/consent/phone/balance gates,
+  immutable snapshots, duplicate idempotency, provider status ordering,
+  bounded retry, dead-letter/reconciliation, and explicit audited resend.
+- Confirm Admin, Store Console, and POS/device callers use the same backend
+  policy boundary and that no secrets or message bodies enter new audit/log
+  records.
+
+### Non-goals
+
+- No Phase 7 migration/cutover work, inbox/reply work, or promotion redesign.
+- No release claim for live Meta credentials, provider webhook delivery, or
+  physical-device verification unless those environments are explicitly run.
+
+### Exit gate
+
+Phase 6 is complete with documented follow-ups only after all four subphases
+are reviewed, verified, committed, and the worktree is clean.
+
+## Phase 6 final verification and review
+
+- Phase commits: `8c8d802` (6.1), `45efca5` (6.2), `46fb44c` (6.3), plus the
+  final status-preservation closeout commit.
+- Standards/spec review: both sender modes use the shared policy-aware outbox;
+  current policy/account scope is enforced at queue and retry boundaries;
+  status reads preserve historical outbox visibility after policy changes;
+  ordinary duplicates remain idempotent; retries reuse immutable snapshots;
+  explicit resends use new request-scoped identities and audited records.
+- Full WhatsApp suite: 293 passed, 3 known database-dependent tests skipped,
+  0 failed, 755 assertions.
+- Backend, Admin, and POS production builds: passed.
+- Touched-file TypeScript diagnostics: passed; unrelated repository-wide
+  baseline diagnostics remain documented outside this phase.
+- `git diff --check`: passed.
+- Development database: 156 migrations applied, 0 pending.
+- Remaining follow-ups: live Meta credentials/webhook delivery, real browser
+  verification across Admin/Store Console, and physical-device verification
+  remain release-environment gates; Phase 7 migration/cutover is next.

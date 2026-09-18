@@ -582,6 +582,51 @@ export const getCustomerReminderOutbox = async (
     };
 };
 
+const getLatestStoreOutbox = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    idempotencyPrefix: "invoice:" | "due-reminder:",
+): Promise<InvoiceOutboxRecord | null> => {
+    const [row] = await pg`
+        SELECT o.id AS outbox_id,
+               o.status AS outbox_status,
+               m.id AS message_id,
+               m.status AS message_status
+        FROM whatsapp_outbox o
+        INNER JOIN whatsapp_messages m ON m.id = o.message_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.sale_id = ${saleId}
+          AND m.idempotency_key LIKE ${idempotencyPrefix + "%"}
+          AND (
+              (${idempotencyPrefix} = 'invoice:' AND o.kind IN ('invoice', 'template'))
+              OR (${idempotencyPrefix} = 'due-reminder:' AND o.kind IN ('text', 'template'))
+          )
+        ORDER BY o.created_at DESC
+        LIMIT 1
+    `;
+    if (!row) return null;
+    return {
+        messageId: String(row.message_id),
+        outboxId: String(row.outbox_id),
+        messageStatus: row.message_status as InvoiceOutboxRecord["messageStatus"],
+        outboxStatus: row.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+    };
+};
+
+export const getLatestInvoiceOutboxForStore = (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => getLatestStoreOutbox(organizationId, storeId, saleId, "invoice:");
+
+export const getLatestDueReminderOutboxForStore = (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => getLatestStoreOutbox(organizationId, storeId, saleId, "due-reminder:");
+
 export const recordWhatsAppDeliveryOperatorAction = async (input: {
     organizationId: string;
     storeId: string;

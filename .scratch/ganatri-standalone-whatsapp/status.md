@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 6.3 complete with documented follow-ups; 6.4 next
+Status: Phase 6 complete with documented follow-ups
 Last updated: 2026-09-18
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
@@ -73,7 +73,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 3 | Ganatri Utility sender | 3.1–3.4 | Complete with follow-ups | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Complete with follow-ups | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Complete with follow-ups | Approved templates can be explicitly published per Store. |
-| 6 | Bill/due delivery | 6.1–6.4 | In progress — 6.3 complete; 6.4 next | Both sender modes deliver idempotent, consent-safe messages. |
+| 6 | Bill/due delivery | 6.1–6.4 | Complete with follow-ups | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Not started | Existing Admin/POS boundaries cut over without data loss. |
 | 8 | Later inbox and replies | 8.1–8.3 | Deferred | Organization Cloud conversations are Store-scoped and safe. |
 | 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
@@ -111,8 +111,9 @@ production builds. The correction commit is the final Phase 5 checkpoint.
 Phase 6.1 bill-delivery implementation, review, and verification are complete;
 Phase 6.2 due-delivery implementation, review, and verification are complete;
 Phase 6.3 status/retry/resend implementation, review, and verification are
-complete; the next boundary is the 6.4 whole-phase closeout. The Phase 5
-checkpoint remains the rollback boundary for the completed 6.1 slice.
+complete; Phase 6.4 whole-phase standards/spec review and closeout are
+complete with documented release-environment follow-ups. Phase 7 migration and
+cutover is next.
 
 ## Recovery checkpoint
 

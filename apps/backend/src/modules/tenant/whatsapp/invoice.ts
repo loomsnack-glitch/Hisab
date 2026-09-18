@@ -519,14 +519,7 @@ const getExistingInvoice = async (
   storeId: string,
   saleId: string,
 ): Promise<repository.InvoiceOutboxRecord | null> => {
-  const policy = await getCurrentPolicy(organizationId, storeId);
-  if (policy?.mode === "ganatri_utility") {
-    return repository.getPlatformInvoiceOutbox(organizationId, storeId, saleId);
-  }
-  const account = policy?.whatsappAccountId
-    ? await repository.getAccountById(policy.whatsappAccountId)
-    : null;
-  return account ? repository.getInvoiceOutbox(organizationId, storeId, account.id, saleId) : null;
+  return repository.getLatestInvoiceOutboxForStore(organizationId, storeId, saleId);
 };
 
 export const getInvoiceStatus = async (

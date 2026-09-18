@@ -615,17 +615,7 @@ const getDueReminderStatusForStore = async (
     const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
     const customerId = sale?.customerId ?? null;
     if (!customerId) return { status: "success", message: "Due reminder has not been sent for this bill", data: null, code: STATUS_CODES.SUCCESS };
-    const policy = await getCurrentPolicy(organizationId, storeId);
-    const existing = policy?.mode === "ganatri_utility"
-        ? await repository.getPlatformDueReminderOutbox(organizationId, storeId, saleId)
-        : policy?.whatsappAccountId
-            ? await repository.getCustomerReminderOutbox(
-                organizationId,
-                storeId,
-                policy.whatsappAccountId,
-                saleId,
-            )
-            : null;
+    const existing = await repository.getLatestDueReminderOutboxForStore(organizationId, storeId, saleId);
     return existing
         ? {
             status: "success",
