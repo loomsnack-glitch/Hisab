@@ -15,10 +15,12 @@ import {
   listCloudOutboxOperations,
   retryCloudOutboxNow,
   deadLetterCloudOutboxNow,
+  listCloudOperatorActionSummary,
   type CloudOutboxActionAttempt,
   type CloudOutboxActionResult,
 } from "./cloud-outbox.repository";
 import type { CloudOutboxReconciliationSummary } from "./cloud-outbox-summary";
+import { getCloudWebhookHealth, type CloudWebhookHealthSummary } from "./cloud-webhook.repository";
 
 type CloudSafetyData = {
   policy: CloudQuotaPolicy;
@@ -31,6 +33,8 @@ type CloudSafetyData = {
     missingReleaseEvents: number;
   };
   outbox: CloudOutboxReconciliationSummary;
+  webhook: CloudWebhookHealthSummary;
+  operatorActions: Awaited<ReturnType<typeof listCloudOperatorActionSummary>>;
 };
 
 const notFound = (): ServiceResponse<null> => ({
@@ -61,6 +65,8 @@ export const getCloudSafety = async (
       usage: await getCloudQuotaLedgerSummary(organizationId),
       reconciliation: await getCloudQuotaReconciliation(organizationId),
       outbox: await getCloudOutboxReconciliationSummary(organizationId),
+      webhook: await getCloudWebhookHealth(organizationId),
+      operatorActions: await listCloudOperatorActionSummary(organizationId),
     },
     code: STATUS_CODES.SUCCESS,
   };

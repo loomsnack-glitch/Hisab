@@ -116,6 +116,29 @@ export const listCloudOutboxOperations = async (
   return rows.map((row: Record<string, unknown>) => mapCloudOutboxOperation(row));
 };
 
+export type CloudOperatorActionSummary = {
+  action: "retry" | "dead_letter";
+  count: number;
+  lastAt: string | null;
+};
+
+export const listCloudOperatorActionSummary = async (
+  organizationId: string,
+): Promise<CloudOperatorActionSummary[]> => {
+  const rows = await pg`
+    SELECT action, COUNT(*) AS count, MAX(created_at) AS last_at
+    FROM whatsapp_cloud_operator_actions
+    WHERE organization_id = ${organizationId}
+    GROUP BY action
+    ORDER BY action
+  `;
+  return rows.map((row: Record<string, unknown>) => ({
+    action: String(row.action) as CloudOperatorActionSummary["action"],
+    count: Math.max(0, Math.trunc(Number(row.count ?? 0))),
+    lastAt: row.last_at ? new Date(String(row.last_at)).toISOString() : null,
+  }));
+};
+
 const updateCampaignAfterDeadLetter = async (tx: Bun.TransactionSQL, outboxId: string): Promise<void> => {
   await tx`
     UPDATE whatsapp_campaign_recipients

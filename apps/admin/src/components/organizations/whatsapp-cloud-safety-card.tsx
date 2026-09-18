@@ -105,7 +105,21 @@ const WhatsAppCloudSafetyCard = ({ organizationId }: Props) => {
                             <Badge variant="outline" className="rounded-full">Customer cooldown {safety.policy.customerCooldownSeconds}s</Badge>
                             <Badge variant="outline" className="rounded-full">Retryable {safety.outbox.retryableCount.toLocaleString()}</Badge>
                             <Badge variant={safety.outbox.deadLetterCount ? "destructive" : "secondary"} className="rounded-full">Dead letters {safety.outbox.deadLetterCount.toLocaleString()}</Badge>
+                            <Badge variant={safety.webhook.deadLetterCount ? "destructive" : "secondary"} className="rounded-full">Webhook dead letters {safety.webhook.deadLetterCount.toLocaleString()}</Badge>
                             <Badge variant={reconciliationIssues ? "destructive" : "secondary"} className="rounded-full">{reconciliationIssues ? <AlertTriangle className="mr-1 size-3.5" /> : null}{reconciliationIssues ? `${reconciliationIssues} internal reconciliation warning${reconciliationIssues === 1 ? "" : "s"}` : "Internal reconciliation healthy"}</Badge>
+                        </div>
+                        <div className="border-t border-border/60 pt-3">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant={safety.webhook.pendingCount + safety.webhook.processingCount + safety.webhook.retryableCount ? "outline" : "secondary"} className="rounded-full">
+                                    Webhooks open {(safety.webhook.pendingCount + safety.webhook.processingCount + safety.webhook.retryableCount).toLocaleString()}
+                                </Badge>
+                                <Badge variant="outline" className="rounded-full">
+                                    Audit retry {safety.operatorActions.find(action => action.action === "retry")?.count ?? 0}
+                                </Badge>
+                                <Badge variant="outline" className="rounded-full">
+                                    Audit dead-letter {safety.operatorActions.find(action => action.action === "dead_letter")?.count ?? 0}
+                                </Badge>
+                            </div>
                         </div>
                         <div className="border-t border-border/60 pt-3">
                             <div className="mb-2 flex items-center justify-between gap-2">

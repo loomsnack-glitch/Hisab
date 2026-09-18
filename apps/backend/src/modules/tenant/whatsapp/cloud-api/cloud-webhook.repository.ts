@@ -28,6 +28,54 @@ export type PersistCloudWebhookEventResult = {
   duplicate: boolean;
 };
 
+export type CloudWebhookHealthSummary = {
+  pendingCount: number;
+  processingCount: number;
+  retryableCount: number;
+  deadLetterCount: number;
+  oldestOpenAt: string | null;
+  lastReceivedAt: string | null;
+};
+
+export const getCloudWebhookHealth = async (
+  organizationId: string,
+): Promise<CloudWebhookHealthSummary> => {
+  const [row] = await pg`
+    SELECT
+      COUNT(*) FILTER (WHERE event.status = 'pending') AS pending_count,
+      COUNT(*) FILTER (WHERE event.status = 'processing') AS processing_count,
+      COUNT(*) FILTER (WHERE event.status = 'retryable') AS retryable_count,
+      COUNT(*) FILTER (WHERE event.status = 'dead_letter') AS dead_letter_count,
+      MIN(event.created_at) FILTER (WHERE event.status IN ('pending', 'processing', 'retryable')) AS oldest_open_at,
+      MAX(event.created_at) AS last_received_at
+    FROM whatsapp_cloud_webhook_events event
+    WHERE EXISTS (
+      SELECT 1
+      FROM whatsapp_business_accounts business
+      LEFT JOIN whatsapp_accounts account
+        ON account.whatsapp_business_account_id = business.id
+       AND account.organization_id = business.organization_id
+       AND account.provider = 'cloud_api'
+      WHERE business.organization_id = ${organizationId}
+        AND (event.waba_id = business.waba_id OR event.whatsapp_account_id = account.id)
+    )
+  `;
+  const dateOrNull = (value: unknown): string | null => {
+    if (!value) return null;
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  };
+  const nonNegative = (value: unknown): number => Math.max(0, Math.trunc(Number(value ?? 0)));
+  return {
+    pendingCount: nonNegative(row?.pending_count),
+    processingCount: nonNegative(row?.processing_count),
+    retryableCount: nonNegative(row?.retryable_count),
+    deadLetterCount: nonNegative(row?.dead_letter_count),
+    oldestOpenAt: dateOrNull(row?.oldest_open_at),
+    lastReceivedAt: dateOrNull(row?.last_received_at),
+  };
+};
+
 export const findCloudAccountId = async (
   wabaId: string | null,
   phoneNumberId: string | null,

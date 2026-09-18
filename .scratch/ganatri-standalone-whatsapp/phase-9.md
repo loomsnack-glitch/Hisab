@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 9
 
-Status: 9.2 complete; 9.3 next
+Status: Complete with release-environment follow-ups
 Phase: 9 — Promotions and operations
 
 ## Outcome
@@ -178,3 +178,78 @@ idempotent, sender-safe, audited, reviewed, and committed before 9.3 begins.
   passed.
 - Admin campaign dashboard behavior remains covered by the existing component
   surface; browser verification remains a release follow-up.
+
+### 9.3 Subphase plan — Safety and operational visibility
+
+Status: Implementation in progress
+
+User-facing outcome: Organization administrators can see bounded Cloud quota,
+outbox, webhook, reconciliation, and operator-action health from the existing
+Cloud sending controls surface. The surface exposes safe counters and times
+only; it never displays payloads, tokens, message bodies, or credential data.
+
+Scope:
+
+- Add Organization-scoped webhook health counters for pending, processing,
+  retryable, dead-letter, oldest-open, and last-received state.
+- Add bounded summaries of Cloud outbox operator actions alongside existing
+  quota/reconciliation/outbox controls.
+- Keep operational actions permission/entitlement-protected and preserve
+  existing safe redaction and reconciliation behavior.
+- Verify the existing Admin Cloud sending controls card renders loading,
+  healthy, warning, error, and redacted operational states.
+
+Non-goals:
+
+- No payload browser, message-body log, token/credential display, or raw
+  webhook inspection.
+- No new alerting provider, scheduled job, or deployment/runbook rewrite in
+  this subphase.
+
+Acceptance criteria:
+
+- Safety responses include bounded webhook and operator-action summaries scoped
+  to the Organization.
+- Webhook health queries never return payload data.
+- Admin shows webhook dead letters/open work and retry/dead-letter audit counts
+  using existing semantic UI primitives.
+- Existing quota, outbox retry/dead-letter, and reconciliation controls remain
+  functional.
+
+Verification plan:
+
+- Webhook health and safety-schema tests.
+- Full WhatsApp regression and Admin safety/dashboard tests.
+- Backend/Admin typechecks and production builds, and `git diff --check`.
+
+9.3 exit gate: bounded safety and operational visibility is implemented,
+redacted, Organization-scoped, reviewed, and committed before Phase 9 closeout.
+
+### 9.3 review and verification
+
+- Cloud safety now exposes Organization-scoped webhook pending/processing/
+  retryable/dead-letter counters, oldest open time, and last received time.
+- Safety responses include bounded retry/dead-letter operator-action summaries;
+  webhook payloads, message bodies, tokens, and credentials remain excluded.
+- Admin Cloud sending controls show webhook open/dead-letter health and audit
+  counts alongside quota, reconciliation, and outbox controls.
+- Focused webhook/outbox/safety tests: 8 passed.
+- Full WhatsApp regression: 306 passed, 3 skipped, 0 failed.
+- Admin Organization/safety tests: 5 passed.
+- Backend/Admin production builds, touched-file TypeScript diagnostics, and
+  `git diff --check`: passed.
+- Browser/live-provider verification and database-backed probes remain release
+  environment follow-ups.
+
+## Phase 9 closeout
+
+Phase 9.1, 9.2, and 9.3 are complete and reviewed. Marketing campaigns are
+Cloud-only, approved-template-only, Store-scoped, consent-safe, cooldown/
+quota-bounded, and operationally visible without exposing sensitive payloads.
+Ganatri Utility remains unable to perform promotion work.
+
+Deferred/release follow-ups:
+
+- Browser verification for Promotions and Cloud sending controls.
+- Live Meta campaign delivery/status verification.
+- Database-backed probe execution when the development database is reachable.

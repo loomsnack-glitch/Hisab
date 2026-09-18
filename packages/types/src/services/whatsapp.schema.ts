@@ -303,6 +303,19 @@ export const WhatsAppCloudSafetySchema = z.object({
         retryableCount: z.number().int().nonnegative(),
         deadLetterCount: z.number().int().nonnegative(),
     }),
+    webhook: z.object({
+        pendingCount: z.number().int().nonnegative(),
+        processingCount: z.number().int().nonnegative(),
+        retryableCount: z.number().int().nonnegative(),
+        deadLetterCount: z.number().int().nonnegative(),
+        oldestOpenAt: dtoDateSchema.nullable(),
+        lastReceivedAt: dtoDateSchema.nullable(),
+    }),
+    operatorActions: z.array(z.object({
+        action: z.enum(["retry", "dead_letter"]),
+        count: z.number().int().nonnegative(),
+        lastAt: dtoDateSchema.nullable(),
+    })),
 });
 
 export const WhatsAppCloudOutboxOperationSchema = z.object({

@@ -32,7 +32,7 @@ const pg = (strings: TemplateStringsArray, ...values: unknown[]) => {
 
 mock.module("@/config/db", () => ({ pg }));
 
-const { persistCloudWebhookEvent } = await import("./cloud-webhook.repository");
+const { getCloudWebhookHealth, persistCloudWebhookEvent } = await import("./cloud-webhook.repository");
 
 describe("Cloud webhook persistence", () => {
   test("passes the parsed webhook payload as a JSON object", async () => {
@@ -62,5 +62,20 @@ describe("Cloud webhook persistence", () => {
       object: "whatsapp_business_account",
       entry: [{ id: "waba-1", changes: [] }],
     });
+  });
+
+  test("exposes bounded webhook health counters without payload data", async () => {
+    executed.length = 0;
+    const result = await getCloudWebhookHealth("org-1");
+    expect(result).toMatchObject({
+      pendingCount: 0,
+      processingCount: 0,
+      retryableCount: 0,
+      deadLetterCount: 0,
+      oldestOpenAt: null,
+      lastReceivedAt: null,
+    });
+    expect(executed.at(-1)?.sql).toContain("COUNT(*) FILTER");
+    expect(executed.at(-1)?.sql).not.toContain("payload");
   });
 });
