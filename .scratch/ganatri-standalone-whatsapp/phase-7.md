@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 7
 
-Status: Plan reviewed; implementation not started
+Status: 7.1 complete; 7.2 blocked by migration-ledger reconciliation
 Phase: 7 — Migration and integrated cutover
 
 ## Outcome
@@ -62,7 +62,7 @@ sender ownership, or crossing Organization-user and POS-device boundaries.
 
 ### 7.1 Subphase plan — Existing data dry run
 
-Status: Plan reviewed; implementation not started
+Status: Complete; read-only report committed
 
 User-facing outcome: none. This is a read-only operator report that makes the
 cutover decision safe before any policy or route write.
@@ -88,6 +88,26 @@ rewrite, customer migration, or deletion.
 
 Exit evidence: a repeatable dry-run report with zero unclassified write
 conflicts, or an explicit quarantine report that blocks 7.2.
+
+### 7.1 review and verification
+
+- Read-only report: [phase-7-dry-run.json](./phase-7-dry-run.json).
+- Inventory: 3 Organizations, 3 Stores, 4 WhatsApp accounts, 2 Cloud
+  accounts, 1 Cloud assignment, 13 local templates, 19 Cloud templates, 10
+  Cloud bindings, 20 submissions, 784 messages, 325 provider events, and 119
+  outbox rows with 0 active outbox rows.
+- No WhatsApp data conflicts: 0 Stores with multiple Cloud accounts, 0 shared
+  Cloud numbers without exactly one default inbound Store, 0 stale Cloud
+  policies, 0 unresolved outbox account references, and 0 incomplete platform
+  sender references.
+- The current policy baseline is 3 disabled policies, 0 Cloud policies, and 0
+  Ganatri Utility policies; no Store was enabled by the dry run.
+- The migration write gate is blocked only by one historical ledger version,
+  `20260905010000`, recorded in the database but absent from this checkout's
+  migration files. 7.2 must reconcile that baseline before any policy writes.
+- The dry-run script performs reads and writes only the bounded JSON report; it
+  does not mutate database state or expose credentials, full phones, bodies, or
+  provider payloads.
 
 ### 7.2 Subphase plan — Policy record migration
 

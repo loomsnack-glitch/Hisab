@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-09-18T17:42:16.921Z",
+  "readOnly": true,
+  "database": {
+    "database": "neondb",
+    "schema": "public",
+    "server": "169.254.254.254/32"
+  },
+  "migrations": {
+    "appliedLedgerRows": 157,
+    "migrationFiles": 156,
+    "migrationsWithoutFiles": [
+      "20260905010000"
+    ],
+    "filesWithoutRecords": []
+  },
+  "organizations": {
+    "total": 3
+  },
+  "stores": {
+    "total": 3,
+    "withoutCloudAssignment": 2,
+    "withoutCurrentPolicy": 0
+  },
+  "accounts": {
+    "total": 4,
+    "cloud": 2,
+    "legacy": 2
+  },
+  "assignments": {
+    "total": 1,
+    "cloud": 1,
+    "cloudAssignedStores": 1
+  },
+  "policies": {
+    "current": 3,
+    "currentCloud": 0,
+    "currentGanatriUtility": 0,
+    "currentDisabled": 3
+  },
+  "templates": {
+    "local": 13,
+    "localDefaults": 5,
+    "cloud": 19,
+    "cloudBindings": 10,
+    "cloudDefaults": 3,
+    "submissions": 20
+  },
+  "history": {
+    "messages": 784,
+    "providerEvents": 325,
+    "outbox": 119,
+    "activeOutbox": 0
+  },
+  "conflicts": {
+    "storesWithMultipleCloudAccounts": {
+      "count": 0,
+      "sampleStoreIds": []
+    },
+    "sharedCloudNumbersWithoutExactlyOneDefaultInboundStore": {
+      "count": 0,
+      "sampleAccountIds": []
+    },
+    "staleCloudPolicies": {
+      "count": 0,
+      "sampleStoreIds": []
+    },
+    "outboxRowsWithUnresolvedAccountReference": 0,
+    "platformOutboxRowsWithIncompleteSenderReference": 0,
+    "migrationLedgerMismatch": true
+  },
+  "writeGate": {
+    "canStartPolicyMigration": false
+  }
+}
