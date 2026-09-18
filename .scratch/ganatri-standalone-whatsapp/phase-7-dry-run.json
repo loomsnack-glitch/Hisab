@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-18T17:46:04.989Z",
+  "generatedAt": "2026-09-18T17:48:49.688Z",
   "readOnly": true,
   "database": {
     "database": "neondb",
@@ -32,9 +32,9 @@
   },
   "policies": {
     "current": 3,
-    "currentCloud": 0,
+    "currentCloud": 1,
     "currentGanatriUtility": 0,
-    "currentDisabled": 3
+    "currentDisabled": 2
   },
   "templates": {
     "local": 13,
