@@ -395,7 +395,8 @@ const queueDueReminderForStore = async (
             message: "WhatsApp delivery policy is not initialized for this Store",
         };
     if (!admission.admitted) return { status: "error", message: admission.message, data: null, code: STATUS_CODES.CONFLICT };
-    if (admission.sender === "ganatri_utility" && policy) {
+    if (!policy) return { status: "error", message: "WhatsApp delivery policy is not initialized for this Store", data: null, code: STATUS_CODES.CONFLICT };
+    if (admission.sender === "ganatri_utility") {
         const parsedPhone = phoneSchema.safeParse(customer.phone);
         if (!parsedPhone.success) return { status: "error", message: "A customer with a valid international phone number is required for WhatsApp reminders", data: null, code: STATUS_CODES.BAD_REQUEST };
         const window = new Date().toISOString().slice(0, 10);
@@ -449,7 +450,9 @@ const queueDueReminderForStore = async (
         }
     }
 
-    const account = await repository.getAccount(organizationId, storeId);
+    const account = policy.whatsappAccountId
+        ? await repository.getAccountById(policy.whatsappAccountId)
+        : null;
     if (!account) return { status: "error", message: "Link the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     if (account.status !== "connected") return { status: "error", message: "Connect the Store WhatsApp account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
     if (account.provider !== "cloud_api") return { status: "error", message: "This WhatsApp account uses a retired provider; connect a Cloud API account before sending reminders", data: null, code: STATUS_CODES.CONFLICT };
@@ -518,11 +521,11 @@ const queueDueReminderForStore = async (
             const enqueue = userId
                 ? enqueueCloudTemplateSend(userId, organizationId, {
                     storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, componentParameters,
                 })
                 : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
                     storeId, accountId: account.id, customerId, saleId: saleId ?? null,
-                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", componentParameters,
+                    bindingId: binding.binding.id, idempotencyKey, intent: "due_reminder", policyVersion: policy.revision, componentParameters,
                 });
             const queued = await enqueue;
             if (queued.status === "error" || !queued.data) {

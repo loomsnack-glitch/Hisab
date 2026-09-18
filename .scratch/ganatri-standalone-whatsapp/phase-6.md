@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 6
 
-Status: 6.1 complete with documented follow-ups; 6.2 next
+Status: 6.2 complete with documented follow-ups; 6.3 next
 Phase: 6 — Bill and due delivery
 
 ## Outcome
@@ -125,5 +125,104 @@ and the subphase is reviewed and committed before 6.2 begins.
   unrelated pre-existing diagnostics outside this subphase.
 - No migration was required; the existing development database baseline stays
   at 155 applied and 0 pending.
+- Admin build was not rerun because this subphase changed no Admin/UI/shared
+  client files.
+
+## 6.2 Subphase plan — Policy-aware due delivery
+
+Status: Complete; reviewed and ready for commit
+
+### User-facing outcome
+
+An authorized Admin, Store Console, or POS caller can send a due reminder only
+when the selected Customer has completed Sales with a remaining balance in the
+selected Store. The current Store policy determines the sender: Ganatri Utility
+uses the fixed due template, while Organization Cloud uses the approved
+published due-reminder binding. Consent, suppression, phone, sender health, and
+template checks fail safely before a message is queued.
+
+### Scope
+
+- Harden the existing `queueDueReminderForStore` service seam and its user and
+  device callers; do not create a second delivery path.
+- Keep due-balance selection Store-scoped and completed-sale-only, including
+  rejecting a requested `saleId` that is not among that Customer's current due
+  Sales in the Store.
+- Use the account selected by the current Organization Cloud Store policy and
+  carry the policy revision into Cloud due-reminder queueing.
+- Preserve the existing fixed Ganatri Utility template validation, platform
+  outbox consent check, Cloud template admission, immutable snapshots, and
+  daily/idempotent due-reminder keys.
+- Add focused tests/contracts for both sender modes, no due balance, invalid
+  Customer/Store/phone, consent/suppression, disabled/unentitled policy,
+  missing sender/template, and policy/account scope.
+
+### Non-goals
+
+- Retry, dead-letter, status reconciliation, and deliberate resend behavior
+  remain in 6.3.
+- No change to the Customer/Sale balance model or payment allocation rules.
+- No new UI surface or delivery engine; existing Admin, Store Console, and POS
+  callers must continue using the shared service.
+- No migration unless a concrete due-delivery invariant requires a schema
+  boundary.
+
+### Dependencies and public seams
+
+- 6.1 policy-aware bill delivery and the shared Cloud policy lock.
+- `billingRepository.getDueSalesByCustomerStore` as the authoritative due
+  balance/scope read.
+- `queueDueReminderForStore`, `queueDueReminder`, and
+  `queueDueReminderForDevice`.
+- Existing platform and Cloud outbox, consent, template, and policy services.
+
+### Verification plan
+
+- Run due text/component/PDF tests plus due service/policy contracts and the
+  6.1 bill/outbox regression suite.
+- Assert policy-selected account and revision are passed to Cloud queueing;
+  assert no fallback account selection is possible.
+- Run touched-file TypeScript diagnostics, backend build, `git diff --check`,
+  and database status if no migration is introduced.
+- Separate the existing platform outbox database-dependent skip and unrelated
+  repository-wide typecheck failures from new 6.2 results.
+
+### Risks and rollback
+
+- Due reminders may cover one Sale or a Customer statement; idempotency must
+  remain stable for the same due set and day without preventing a future
+  deliberate resend.
+- PDF/media preparation must clean up temporary storage when admission or
+  queueing fails.
+- A policy/account switch must never reroute an already admitted Cloud send;
+  the transaction-level policy check remains authoritative.
+
+### 6.2 exit gate
+
+Both sender modes queue only valid Store-scoped due reminders with current
+consent and immutable sender/template/policy snapshots, negative cases are
+covered, verification is fresh, and the subphase is reviewed and committed
+before 6.3 begins.
+
+### 6.2 review and verification
+
+- Due delivery now uses the Cloud account selected by the current Store policy;
+  it cannot fall back to an arbitrary assigned account.
+- Cloud due-reminder queueing carries the current policy revision through both
+  user and device paths, allowing the shared Cloud outbox policy transaction
+  to reject a sender/policy switch before insertion.
+- Completed-sale and remaining-balance selection remains delegated to the
+  Store-scoped billing repository; a requested Sale outside that due set is
+  rejected before preparation.
+- Existing platform/Cloud consent, suppression, phone, sender-health, fixed or
+  published-template, idempotency, and media-cleanup boundaries remain in use.
+- Focused due, bill, platform admission/outbox, Cloud send/outbox, and policy
+  suite: 57 passed, 1 existing database-dependent test skipped, 0 failed,
+  127 assertions.
+- Backend production build: passed.
+- Touched-file TypeScript check: passed; repository-wide diagnostics remain
+  unrelated pre-existing baseline failures.
+- `git diff --check`: passed; no migration was required and the development
+  database remains at 155 applied and 0 pending.
 - Admin build was not rerun because this subphase changed no Admin/UI/shared
   client files.

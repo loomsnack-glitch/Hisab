@@ -73,7 +73,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 3 | Ganatri Utility sender | 3.1–3.4 | Complete with follow-ups | Fixed bill/due messages use the common outbox safely. |
 | 4 | Organization Cloud connection | 4.1–4.4 | Complete with follow-ups | Embedded Signup produces a validated, encrypted Cloud account. |
 | 5 | Organization template lifecycle | 5.1–5.4 | Complete with follow-ups | Approved templates can be explicitly published per Store. |
-| 6 | Bill/due delivery | 6.1–6.4 | In progress — 6.1 complete; 6.2 next | Both sender modes deliver idempotent, consent-safe messages. |
+| 6 | Bill/due delivery | 6.1–6.4 | In progress — 6.2 complete; 6.3 next | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Not started | Existing Admin/POS boundaries cut over without data loss. |
 | 8 | Later inbox and replies | 8.1–8.3 | Deferred | Organization Cloud conversations are Store-scoped and safe. |
 | 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
@@ -109,8 +109,9 @@ template-content debug logging, and re-ran the 63-test focused suite plus both
 production builds. The correction commit is the final Phase 5 checkpoint.
 
 Phase 6.1 bill-delivery implementation, review, and verification are complete;
-the next boundary is the 6.2 due-delivery plan. The Phase 5 checkpoint remains
-the rollback boundary for the completed 6.1 slice.
+Phase 6.2 due-delivery implementation, review, and verification are complete;
+the next boundary is the 6.3 status/retry/resend plan. The Phase 5 checkpoint
+remains the rollback boundary for the completed 6.1 slice.
 
 ## Recovery checkpoint
 
