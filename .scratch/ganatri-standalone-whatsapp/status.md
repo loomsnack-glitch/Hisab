@@ -1,7 +1,7 @@
 # Ganatri WhatsApp — Phase Loop Status
 
-Status: Phase 7 complete with documented follow-ups
-Last updated: 2026-09-18
+Status: Phase 8 complete with documented follow-ups
+Last updated: 2026-09-19
 
 This is the single execution status tracker for the approved Ganatri WhatsApp
 effort. The product specification and decision register are
@@ -75,7 +75,7 @@ the lifecycle defined in [phase-loop skill](../../.agents/skills/phase-loop/SKIL
 | 5 | Organization template lifecycle | 5.1–5.4 | Complete with follow-ups | Approved templates can be explicitly published per Store. |
 | 6 | Bill/due delivery | 6.1–6.4 | Complete with follow-ups | Both sender modes deliver idempotent, consent-safe messages. |
 | 7 | Migration and cutover | 7.1–7.4 | Complete with follow-ups | Existing Admin/POS boundaries cut over without data loss. |
-| 8 | Organization Cloud inbox and replies | 8.1–8.3 | In progress — 8.2 complete; 8.3 next | Organization Cloud conversations are Store-scoped and safe. |
+| 8 | Organization Cloud inbox and replies | 8.1–8.3 | Complete with follow-ups | Organization Cloud conversations are Store-scoped and safe. |
 | 9 | Later promotions and operations | 9.1–9.3 | Deferred | Marketing and operational controls are Cloud-only and audited. |
 
 ## Phase approval state
@@ -100,8 +100,8 @@ complete and committed. Phase 5.2 submission/status synchronization,
 idempotency hardening, verification, and review are complete and committed.
 Phase 5.3 binding/publish scope hardening, verification, and review are
 complete and committed. Phase 5.4 archive/rollback/audit review is complete
-with documented follow-ups; Phase 5 is complete and Phase 6 is next. Phases 8
-and 9 are intentionally deferred from the initial release.
+with documented follow-ups; Phase 5 is complete and Phase 6 is next. Phase 9
+remains intentionally deferred from the initial release.
 
 The Phase 5 final review loop then corrected Store/sender/kind/language default
 replacement scope, rejected submission/provider language drift, removed
@@ -117,7 +117,9 @@ cutover is next.
 
 Phase 7.1 dry-run inventory, 7.2 idempotent policy migration, 7.3 Store
 Workspace cutover verification, and 7.4 POS route retirement are complete with
-documented release-environment follow-ups. Phase 8 remains deferred.
+documented release-environment follow-ups. Phase 8.1 Cloud inbox scope, 8.2
+Customer matching/attachments, and 8.3 service-window replies are complete
+with documented release-environment follow-ups.
 
 ## Recovery checkpoint
 

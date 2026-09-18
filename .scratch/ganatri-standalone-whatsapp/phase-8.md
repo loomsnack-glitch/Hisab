@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 8
 
-Status: 8.2 complete; 8.3 deferred
+Status: Complete with release-environment follow-ups
 Phase: 8 — Organization Cloud inbox and replies
 
 ## Outcome
@@ -99,7 +99,7 @@ before 8.2 begins.
 
 ### 8.2 Subphase plan — Exact Customer matching and safe attachments
 
-Status: Complete; reviewed and ready to commit
+Status: Complete; reviewed and committed
 
 User-facing outcome: A Store's Organization Cloud inbox links a conversation
 only to the Organization Customer with the exact normalized WhatsApp phone
@@ -183,3 +183,109 @@ the subphase is reviewed and committed before 8.3 begins.
   remains a release follow-up.
 - Browser/live-provider verification remains a release-environment follow-up;
   8.3 reply and service-window behavior has not started.
+
+### 8.3 Subphase plan — Cloud replies and service-window controls
+
+Status: Complete; reviewed and committed
+
+User-facing outcome: Authorized Admin users can reply from a selected Store's
+Organization Cloud inbox only while the customer-service window is open. A
+reply is validated against the current Store policy and Cloud account, queued
+through the durable Cloud outbox, and shown with the normal message delivery
+state. Expired windows, disabled/Ganatri Utility Stores, suppressed Customers,
+and retired accounts fail closed.
+
+Scope:
+
+- Use the existing Cloud free-form admission rule: the latest inbound
+  Customer message must be within 24 hours of the send attempt and must not be
+  in the suppressed state.
+- Revalidate the current Store policy, exact selected account, Cloud
+  connection/readiness, conversation scope, and latest inbound timestamp in
+  the backend queue transaction.
+- Add a distinct durable `conversation_reply` Cloud outbox kind, preserving
+  idempotency, retries, provider status reconciliation, and per-account
+  dispatch serialization.
+- Add a bounded Admin composer with clear open/expired-window state, pending
+  state, error feedback, and message invalidation after queueing.
+- Keep Ganatri Utility conversations hidden and reject all non-Cloud reply
+  paths; do not add marketing, template management, or outbound media here.
+
+Non-goals:
+
+- No replies outside the 24-hour service window; the UI must not offer a
+  template fallback in this subphase.
+- No marketing/promotional sends, customer consent editing, or outbound
+  attachment composer.
+- No cross-Store inbox, account reassignment, or POS route restoration.
+
+Dependencies and public seams:
+
+- 8.1 exact Cloud Store scope and 8.2 Customer/attachment boundaries.
+- `admitCloudTemplateSend`'s existing free-form-window semantics.
+- `whatsapp_messages`, `whatsapp_outbox`, Cloud outbox claim/dispatch, and
+  webhook delivery-status reconciliation.
+- Admin `WhatsAppInboxPage` and the existing conversation service client.
+
+Acceptance criteria:
+
+- A reply with a latest inbound message inside 24 hours queues one text
+  message and one `conversation_reply` outbox record with a caller-provided
+  idempotency key.
+- Missing, future, or older-than-24-hour inbound activity is rejected before
+  queueing; suppressed Customers are rejected.
+- The queue transaction rejects policy/account/store/conversation mismatches
+  and non-Cloud or non-ready accounts.
+- Cloud outbox claim and dispatch send the queued text and retain the existing
+  retry/dead-letter/reconciliation behavior.
+- Admin shows the remaining service-window state and disables reply controls
+  when sending is not allowed.
+
+Verification plan:
+
+- Unit tests for 24-hour admission boundaries and negative suppression/window
+  cases.
+- Migration and outbox contract tests for the new reply kind and dispatcher
+  filters.
+- Backend conversation/reply contract tests and Admin inbox behavior tests.
+- Full WhatsApp regression, backend/Admin typecheck and builds, and
+  `git diff --check`.
+
+8.3 exit gate: Cloud replies are durable, authorization- and window-safe,
+visible in the Admin inbox with delivery states, focused checks/builds pass,
+and the subphase is reviewed and committed before Phase 8 closeout.
+
+### 8.3 review and verification
+
+- Cloud replies now require the current `organization_cloud` Store policy,
+  selected account, connected/verified Cloud sender, private credentials, and
+  the exact conversation scope.
+- The latest inbound message must be in the rolling 24-hour service window;
+  missing, future, expired, and suppressed-Customer cases fail closed.
+- Replies use a caller-provided request id when available, persist one text
+  message and one `conversation_reply` outbox record transactionally, and are
+  dispatched by the existing Cloud retry/reconciliation path.
+- Admin now shows the service-window expiry, disables the composer when closed,
+  queues replies with pending feedback, and refreshes message delivery state.
+- The reply migration was applied to the development database: 158 applied,
+  0 pending.
+- Focused 8.3 admission, migration, reply-boundary, and Admin window tests
+  passed; full WhatsApp regression: 300 passed, 3 skipped, 0 failed.
+- Backend/Admin production builds, touched-file TypeScript diagnostics, and
+  `git diff --check`: passed.
+- The Admin Organization WhatsApp template suite now passes 4/4 after fixing
+  the missing `FileText` icon import in the template manager.
+
+## Phase 8 closeout
+
+Phase 8.1, 8.2, and 8.3 are complete and reviewed. Phase 8 delivers a
+Store-scoped Organization Cloud inbox with exact Customer matching, private
+attachments, and 24-hour service-window replies. Ganatri Utility conversations
+remain hidden from Organization inboxes, and POS conversation routes remain
+retired.
+
+Deferred/release follow-ups:
+
+- Browser verification against an authenticated Admin environment.
+- Live Meta Cloud send/status verification and private object-storage access.
+- Phase 9 promotions and operational controls remain deferred.

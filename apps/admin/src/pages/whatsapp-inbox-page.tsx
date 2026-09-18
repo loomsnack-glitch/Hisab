@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WhatsAppMessageDTO } from "@repo/types";
@@ -8,19 +8,21 @@ import {
     getWhatsAppAttachment,
     getWhatsAppConversation,
     getWhatsAppConversations,
+    sendWhatsAppConversationText,
 } from "@repo/services";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
+import { Textarea } from "@repo/ui/components/textarea";
 import { Spinner } from "@repo/ui/components/spinner";
-import { ArrowLeft, CalendarDays, Check, CheckCheck, CircleAlert, Clock3, FileText, Image as ImageIcon, RefreshCw, Search, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, CheckCheck, CircleAlert, Clock3, FileText, Image as ImageIcon, RefreshCw, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@repo/ui/lib/utils";
 
 import { whatsappKeys } from "@/lib/query-keys";
 import { formatWhatsAppDayLabel, formatWhatsAppTimestamp } from "@/lib/format";
-import { filterWhatsAppConversations } from "@/lib/whatsapp-inbox";
+import { filterWhatsAppConversations, getWhatsAppReplyWindow } from "@/lib/whatsapp-inbox";
 import { getStoreSettingsTabPath } from "@/lib/store-workspace-routes";
 import WhatsAppIcon from "@/components/icons/whatsapp-icon";
 
@@ -40,6 +42,7 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
     const [selectedConversationIdState, setSelectedConversationId] = useState<string | null>(null);
     const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
     const [conversationSearch, setConversationSearch] = useState("");
+    const [replyBody, setReplyBody] = useState("");
 
     const conversationsKey = whatsappKeys.conversations(organizationId, storeId);
     const conversationsQuery = useQuery({
@@ -86,6 +89,12 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
         (conversation) => conversation.id === selectedConversationId,
     ) ?? null;
     const messages = conversationData?.messages ?? [];
+    const replyWindow = getWhatsAppReplyWindow(selectedConversation?.lastInboundAt);
+    const canReply = accountStatus === "connected" && replyWindow.isOpen;
+
+    useEffect(() => {
+        setReplyBody("");
+    }, [selectedConversationId]);
 
     const customerQuery = useQuery({
         queryKey: [...conversationKey, "customer-candidates"],
@@ -112,6 +121,26 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
             void queryClient.invalidateQueries({ queryKey: conversationKey });
             void queryClient.invalidateQueries({ queryKey: conversationsKey });
             void queryClient.invalidateQueries({ queryKey: [...conversationKey, "customer-candidates"] });
+        },
+    });
+
+    const replyMutation = useMutation({
+        mutationFn: (body: string) => sendWhatsAppConversationText(
+            organizationId,
+            storeId,
+            selectedConversationId!,
+            { body, requestId: crypto.randomUUID() },
+        ),
+        onSuccess: (response) => {
+            const message = responseMessage(response);
+            if (message) {
+                toast.error(message);
+                return;
+            }
+            setReplyBody("");
+            toast.success("Reply queued for WhatsApp");
+            void queryClient.invalidateQueries({ queryKey: conversationKey });
+            void queryClient.invalidateQueries({ queryKey: conversationsKey });
         },
     });
 
@@ -310,6 +339,44 @@ export const WhatsAppInboxView = ({ organizationId, storeId, embedded = false }:
                                         })
                                     )}
                                 </div>
+
+                                <form
+                                    className="space-y-2 border-t border-border/60 bg-card px-4 py-3 sm:px-5"
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        const body = replyBody.trim();
+                                        if (body && canReply && !replyMutation.isPending) replyMutation.mutate(body);
+                                    }}
+                                >
+                                    {canReply ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Reply window open until {formatWhatsAppTimestamp(replyWindow.expiresAt)}.
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            Replies are available only within 24 hours of the customer&apos;s latest message.
+                                        </p>
+                                    )}
+                                    <div className="flex items-end gap-2">
+                                        <Textarea
+                                            value={replyBody}
+                                            onChange={(event) => setReplyBody(event.target.value)}
+                                            placeholder={canReply ? "Write a reply…" : "Reply window is closed"}
+                                            maxLength={4096}
+                                            rows={2}
+                                            disabled={!canReply || replyMutation.isPending}
+                                            aria-label="WhatsApp reply"
+                                        />
+                                        <Button
+                                            type="submit"
+                                            size="icon"
+                                            aria-label="Send WhatsApp reply"
+                                            disabled={!canReply || !replyBody.trim() || replyMutation.isPending}
+                                        >
+                                            {replyMutation.isPending ? <Spinner className="size-4" /> : <Send className="size-4" />}
+                                        </Button>
+                                    </div>
+                                </form>
 
                             </>
                         )}

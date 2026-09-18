@@ -55,6 +55,38 @@ export type CloudTemplateAdmissionResult =
   | { admitted: true; snapshot: CloudTemplateSendSnapshot }
   | { admitted: false; reason: CloudTemplateAdmissionReason; message: string };
 
+export type CloudConversationReplyAdmissionInput = {
+  lastInboundAt?: string | null;
+  whatsappSuppressed: boolean;
+  now?: Date;
+};
+
+export type CloudConversationReplyAdmissionResult =
+  | { admitted: true }
+  | { admitted: false; reason: "customer_suppressed" | "freeform_window_expired"; message: string };
+
+export const admitCloudConversationReply = (
+  input: CloudConversationReplyAdmissionInput,
+): CloudConversationReplyAdmissionResult => {
+  if (input.whatsappSuppressed) {
+    return {
+      admitted: false,
+      reason: "customer_suppressed",
+      message: "WhatsApp messaging is suppressed for this customer",
+    };
+  }
+  const lastInbound = input.lastInboundAt ? new Date(input.lastInboundAt).getTime() : Number.NaN;
+  const now = (input.now ?? new Date()).getTime();
+  if (!Number.isFinite(lastInbound) || now - lastInbound > 24 * 60 * 60 * 1_000 || lastInbound > now) {
+    return {
+      admitted: false,
+      reason: "freeform_window_expired",
+      message: "A customer reply within the last 24 hours is required for free-form WhatsApp messaging",
+    };
+  }
+  return { admitted: true };
+};
+
 const requiredParameters = (assetComponents: unknown[], outboundComponents: CloudTemplateAdmissionInput["outboundComponents"]): boolean => {
   if (!Array.isArray(outboundComponents)) return assetComponents.every(component => {
     if (!component || typeof component !== "object") return true;
@@ -101,9 +133,12 @@ export const admitCloudTemplateSend = (input: CloudTemplateAdmissionInput): Clou
       },
     };
   }
-  const lastInbound = input.lastInboundAt ? new Date(input.lastInboundAt).getTime() : Number.NaN;
-  const now = (input.now ?? new Date()).getTime();
-  if (!Number.isFinite(lastInbound) || now - lastInbound > 24 * 60 * 60 * 1_000 || lastInbound > now) return { admitted: false, reason: "freeform_window_expired", message: "A customer reply within the last 24 hours is required for free-form WhatsApp messaging" };
+  const freeform = admitCloudConversationReply({
+    lastInboundAt: input.lastInboundAt,
+    whatsappSuppressed: false,
+    now: input.now,
+  });
+  if (!freeform.admitted) return freeform;
   return {
     admitted: true,
     snapshot: {

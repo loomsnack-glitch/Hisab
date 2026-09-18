@@ -76,6 +76,7 @@ import {
   CheckCircle2,
   Eye,
   ExternalLink,
+  FileText,
   FileType2,
   Image as ImageIcon,
   LoaderCircle,

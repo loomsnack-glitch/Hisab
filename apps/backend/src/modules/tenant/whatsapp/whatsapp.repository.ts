@@ -17,6 +17,7 @@ import { releaseCloudQuota, settleCloudQuota } from "./cloud-api/cloud-quota.rep
 import { promotionRecipientResendAvailableAt, promotionRecipientResendIsBlocked } from "./promotion-recipient-actions";
 import { buildCloudTemplatePreview } from "./cloud-api/cloud-template-preview";
 import { recordCustomerStoreActivityInDatabase } from "./customer-store-association.repository";
+import { admitCloudConversationReply } from "./cloud-api/cloud-template-admission";
 
 type AccountRow = Record<string, unknown>;
 
@@ -58,6 +59,7 @@ const mapConversation = (row: Record<string, unknown>): WhatsAppConversationDTO 
         contactPhoneNumber: String(mapped.contactPhoneNumber),
         displayName: String(mapped.displayName),
         lastMessageAt: (mapped.lastMessageAt as string | null | undefined) ?? null,
+        lastInboundAt: (mapped.lastInboundAt as string | null | undefined) ?? null,
         unreadCount: Number(mapped.unreadCount ?? 0),
         isArchived: Boolean(mapped.isArchived),
         createdAt: String(mapped.createdAt),
@@ -678,12 +680,19 @@ export const getConversations = async (
     accountId: string,
 ): Promise<WhatsAppConversationDTO[]> => {
     const rows = await pg`
-        SELECT *
-        FROM whatsapp_conversations
-        WHERE organization_id = ${organizationId}
-          AND store_id = ${storeId}
-          AND whatsapp_account_id = ${accountId}
-        ORDER BY last_message_at DESC NULLS LAST, updated_at DESC
+        SELECT conversation.*,
+               inbound.last_inbound_at
+        FROM whatsapp_conversations conversation
+        LEFT JOIN LATERAL (
+            SELECT MAX(message.created_at) AS last_inbound_at
+            FROM whatsapp_messages message
+            WHERE message.conversation_id = conversation.id
+              AND message.direction = 'inbound'
+        ) inbound ON TRUE
+        WHERE conversation.organization_id = ${organizationId}
+          AND conversation.store_id = ${storeId}
+          AND conversation.whatsapp_account_id = ${accountId}
+        ORDER BY conversation.last_message_at DESC NULLS LAST, conversation.updated_at DESC
         LIMIT 200
     `;
     return rows.map((row: Record<string, unknown>) => mapConversation(row));
@@ -696,12 +705,19 @@ export const getConversation = async (
     conversationId: string,
 ): Promise<WhatsAppConversationDTO | null> => {
     const [row] = await pg`
-        SELECT *
-        FROM whatsapp_conversations
-        WHERE id = ${conversationId}
-          AND organization_id = ${organizationId}
-          AND store_id = ${storeId}
-          AND whatsapp_account_id = ${accountId}
+        SELECT conversation.*,
+               inbound.last_inbound_at
+        FROM whatsapp_conversations conversation
+        LEFT JOIN LATERAL (
+            SELECT MAX(message.created_at) AS last_inbound_at
+            FROM whatsapp_messages message
+            WHERE message.conversation_id = conversation.id
+              AND message.direction = 'inbound'
+        ) inbound ON TRUE
+        WHERE conversation.id = ${conversationId}
+          AND conversation.organization_id = ${organizationId}
+          AND conversation.store_id = ${storeId}
+          AND conversation.whatsapp_account_id = ${accountId}
     `;
     return row ? mapConversation(row) : null;
 };
@@ -758,6 +774,137 @@ export const getMessageAttachmentKey = async (
         ? { key: String(row.attachment_storage_key), fileName: String(row.attachment_file_name) }
         : null;
 };
+
+export type ConversationReplyQueueParams = {
+    organizationId: string;
+    storeId: string;
+    accountId: string;
+    conversationId: string;
+    body: string;
+    idempotencyKey: string;
+    messageId: string;
+};
+
+export type ConversationReplyQueueResult = {
+    message: WhatsAppMessageDTO;
+    outboxId: string;
+};
+
+export const queueConversationReply = async (
+    params: ConversationReplyQueueParams,
+): Promise<ConversationReplyQueueResult> => pg.begin(async tx => {
+    const [scope] = await tx`
+        SELECT conversation.id,
+               conversation.contact_phone_number,
+               conversation.customer_id,
+               latest_inbound.last_inbound_at,
+               COALESCE(customer.whatsapp_suppressed, FALSE) AS whatsapp_suppressed
+        FROM whatsapp_conversations conversation
+        INNER JOIN whatsapp_accounts account
+          ON account.id = conversation.whatsapp_account_id
+         AND account.organization_id = conversation.organization_id
+        INNER JOIN whatsapp_account_stores assignment
+          ON assignment.whatsapp_account_id = account.id
+         AND assignment.organization_id = account.organization_id
+         AND assignment.store_id = conversation.store_id
+        INNER JOIN whatsapp_store_policies policy
+          ON policy.organization_id = conversation.organization_id
+         AND policy.store_id = conversation.store_id
+         AND policy.mode = 'organization_cloud'
+         AND policy.whatsapp_account_id = account.id
+         AND policy.effective_to IS NULL
+        INNER JOIN whatsapp_business_accounts business
+          ON business.id = account.whatsapp_business_account_id
+         AND business.organization_id = account.organization_id
+        LEFT JOIN customers customer
+          ON customer.id = conversation.customer_id
+         AND customer.organization_id = conversation.organization_id
+        LEFT JOIN LATERAL (
+            SELECT MAX(message.created_at) AS last_inbound_at
+            FROM whatsapp_messages message
+            WHERE message.conversation_id = conversation.id
+              AND message.direction = 'inbound'
+        ) latest_inbound ON TRUE
+        WHERE conversation.id = ${params.conversationId}
+          AND conversation.organization_id = ${params.organizationId}
+          AND conversation.store_id = ${params.storeId}
+          AND conversation.whatsapp_account_id = ${params.accountId}
+          AND account.provider = 'cloud_api'
+          AND account.cloud_status = 'connected'
+          AND account.cloud_provider_phone_status = 'CONNECTED'
+          AND account.cloud_provider_code_verification_status = 'VERIFIED'
+          AND account.cloud_provider_is_on_biz_app IS NOT TRUE
+          AND business.credential_reference IS NOT NULL
+          AND business.credential_key_version IS NOT NULL
+        FOR UPDATE OF conversation, account, policy
+    `;
+    if (!scope) throw new Error("WhatsApp Cloud conversation reply is no longer available");
+    const admission = admitCloudConversationReply({
+        lastInboundAt: scope.last_inbound_at == null ? null : String(scope.last_inbound_at),
+        whatsappSuppressed: Boolean(scope.whatsapp_suppressed),
+    });
+    if (!admission.admitted) throw new Error(admission.message);
+
+    const [existing] = await tx`
+        SELECT message.*, outbox.id AS outbox_id
+        FROM whatsapp_messages message
+        INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+        WHERE message.whatsapp_account_id = ${params.accountId}
+          AND message.idempotency_key = ${params.idempotencyKey}
+          AND message.organization_id = ${params.organizationId}
+          AND message.store_id = ${params.storeId}
+          AND message.conversation_id = ${params.conversationId}
+        FOR UPDATE OF message, outbox
+    `;
+    if (existing) {
+        return { message: mapMessage(existing as Record<string, unknown>), outboxId: String(existing.outbox_id) };
+    }
+
+    const [message] = await tx`
+        INSERT INTO whatsapp_messages (
+            id, organization_id, store_id, whatsapp_account_id, conversation_id,
+            direction, message_type, body, status, idempotency_key
+        ) VALUES (
+            ${params.messageId}, ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${params.conversationId},
+            'outbound', 'text', ${params.body}, 'queued', ${params.idempotencyKey}
+        )
+        ON CONFLICT (whatsapp_account_id, idempotency_key) DO NOTHING
+        RETURNING *
+    `;
+    if (!message) {
+        const [raced] = await tx`
+            SELECT message.*, outbox.id AS outbox_id
+            FROM whatsapp_messages message
+            INNER JOIN whatsapp_outbox outbox ON outbox.message_id = message.id
+            WHERE message.whatsapp_account_id = ${params.accountId}
+              AND message.idempotency_key = ${params.idempotencyKey}
+            FOR UPDATE OF message, outbox
+        `;
+        if (!raced) throw new Error("Cloud conversation reply could not be loaded after a concurrent request");
+        if (String(raced.organization_id) !== params.organizationId || String(raced.store_id) !== params.storeId || String(raced.conversation_id) !== params.conversationId) {
+            throw new Error("Conversation reply idempotency key is already used for another message");
+        }
+        return { message: mapMessage(raced as Record<string, unknown>), outboxId: String(raced.outbox_id) };
+    }
+    const [outbox] = await tx`
+        INSERT INTO whatsapp_outbox (
+            organization_id, store_id, whatsapp_account_id, message_id, kind, status
+        ) VALUES (
+            ${params.organizationId}, ${params.storeId}, ${params.accountId}, ${params.messageId}, 'conversation_reply', 'pending'
+        )
+        RETURNING id
+    `;
+    if (!outbox) throw new Error("Cloud conversation reply outbox could not be created");
+    await tx`
+        UPDATE whatsapp_conversations
+        SET last_message_at = NOW(), updated_at = NOW()
+        WHERE id = ${params.conversationId}
+          AND organization_id = ${params.organizationId}
+          AND store_id = ${params.storeId}
+          AND whatsapp_account_id = ${params.accountId}
+    `;
+    return { message: mapMessage(message as Record<string, unknown>), outboxId: String(outbox.id) };
+});
 
 export const hasProviderMessage = async (accountId: string, providerMessageId: string): Promise<boolean> => {
     const [row] = await pg`

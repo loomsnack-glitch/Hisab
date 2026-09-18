@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { formatDiscountPercentage, formatWhatsAppDayLabel, formatWhatsAppTimestamp, getAverageBillPerOrder, getDiscountPercentage } from "./format";
-import { filterWhatsAppConversations } from "./whatsapp-inbox";
+import { filterWhatsAppConversations, getWhatsAppReplyWindow } from "./whatsapp-inbox";
 
 const conversations = [
     {
@@ -40,6 +40,22 @@ describe("WhatsApp conversation filtering", () => {
 
     test("does not crash when a conversation has incomplete contact text", () => {
         expect(filterWhatsAppConversations([{ displayName: null, contactPhoneNumber: null }], "asha")).toEqual([]);
+    });
+});
+
+describe("WhatsApp reply window", () => {
+    const now = new Date("2026-08-22T12:00:00.000Z");
+
+    test("opens through the 24-hour boundary after a customer message", () => {
+        const result = getWhatsAppReplyWindow("2026-08-21T12:00:00.000Z", now);
+        expect(result.isOpen).toBe(true);
+        expect(result.expiresAt?.toISOString()).toBe("2026-08-22T12:00:00.000Z");
+    });
+
+    test("closes for missing, future, and expired customer activity", () => {
+        expect(getWhatsAppReplyWindow(null, now).isOpen).toBe(false);
+        expect(getWhatsAppReplyWindow("2026-08-22T13:00:00.000Z", now).isOpen).toBe(false);
+        expect(getWhatsAppReplyWindow("2026-08-20T12:00:00.000Z", now).isOpen).toBe(false);
     });
 });
 

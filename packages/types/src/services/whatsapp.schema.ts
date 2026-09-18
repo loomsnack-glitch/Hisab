@@ -14,7 +14,7 @@ export const WhatsAppConversationMessageDirectionSchema = z.enum(["inbound", "ou
 export const WhatsAppTransportMessageTypeSchema = z.enum(["text", "document", "image"]);
 export const WhatsAppMessageTypeSchema = z.enum(["text", "document", "image", "template"]);
 export const WhatsAppMessageStatusSchema = z.enum(["queued", "sending", "sent", "delivered", "read", "failed"]);
-export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion", "template"]);
+export const WhatsAppOutboxKindSchema = z.enum(["invoice", "text", "document", "promotion", "template", "conversation_reply"]);
 export const WhatsAppOutboxStatusSchema = z.enum([
     "pending",
     "processing",
@@ -439,6 +439,7 @@ export const WhatsAppConversationDTOSchema = z.object({
     contactPhoneNumber: phoneSchema,
     displayName: z.string().trim().min(1).max(255),
     lastMessageAt: dtoDateSchema.nullable().optional(),
+    lastInboundAt: dtoDateSchema.nullable().optional(),
     unreadCount: z.number().int().min(0),
     isArchived: z.boolean(),
     createdAt: dtoDateSchema,
@@ -507,6 +508,7 @@ export const WhatsAppSendTextSchema = z.object({
 
 export const WhatsAppSendConversationTextSchema = z.object({
     body: z.string().trim().min(1, "Message cannot be empty").max(4096, "Message is too long"),
+    requestId: z.uuid("Invalid reply request id").optional(),
 });
 
 export const WhatsAppAttachConversationCustomerSchema = z.object({

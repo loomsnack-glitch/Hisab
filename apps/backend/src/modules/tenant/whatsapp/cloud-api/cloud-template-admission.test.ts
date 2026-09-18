@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { admitCloudTemplateSend } from "./cloud-template-admission";
+import { admitCloudConversationReply, admitCloudTemplateSend } from "./cloud-template-admission";
 
 const base = {
   intent: "promotion" as const,
@@ -67,5 +67,24 @@ describe("Cloud template send admission", () => {
     const now = new Date("2026-08-22T12:00:00.000Z");
     expect(admitCloudTemplateSend({ ...base, mode: "freeform", lastInboundAt: "2026-08-22T01:00:00.000Z", now }).admitted).toBe(true);
     expect(admitCloudTemplateSend({ ...base, mode: "freeform", lastInboundAt: "2026-08-20T12:00:00.000Z", now })).toMatchObject({ admitted: false, reason: "freeform_window_expired" });
+  });
+
+  test("admits a conversation reply inside the window and rejects its safety boundaries", () => {
+    const now = new Date("2026-08-22T12:00:00.000Z");
+    expect(admitCloudConversationReply({
+      lastInboundAt: "2026-08-22T01:00:00.000Z",
+      now,
+      whatsappSuppressed: false,
+    })).toEqual({ admitted: true });
+    expect(admitCloudConversationReply({
+      lastInboundAt: "2026-08-20T12:00:00.000Z",
+      now,
+      whatsappSuppressed: false,
+    })).toMatchObject({ reason: "freeform_window_expired" });
+    expect(admitCloudConversationReply({
+      lastInboundAt: "2026-08-22T01:00:00.000Z",
+      now,
+      whatsappSuppressed: true,
+    })).toMatchObject({ reason: "customer_suppressed" });
   });
 });

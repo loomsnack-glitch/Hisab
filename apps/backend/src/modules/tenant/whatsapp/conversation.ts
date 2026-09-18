@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
     STATUS_CODES,
     type DeviceSessionDTO,
@@ -125,12 +125,26 @@ const conversationForScope = async (
 
 const sendTextForScope = async (
     scope: Scope,
-    _conversationId: string,
-    _data: WhatsAppSendConversationTextJSON,
+    conversationId: string,
+    data: WhatsAppSendConversationTextJSON,
 ): Promise<ServiceResponse<WhatsAppConversationMessagesResponse["messages"][number] | null>> => {
-    return scope.account.provider === "cloud_api"
-        ? error("Cloud WhatsApp messages require an approved Cloud template route", STATUS_CODES.CONFLICT)
-        : error("This WhatsApp account uses a retired provider; connect a Cloud API account before sending messages", STATUS_CODES.CONFLICT);
+    if (scope.account.provider !== "cloud_api") {
+        return error("This WhatsApp account uses a retired provider; connect a Cloud API account before sending messages", STATUS_CODES.CONFLICT);
+    }
+    try {
+        const queued = await repository.queueConversationReply({
+            organizationId: scope.organizationId,
+            storeId: scope.storeId,
+            accountId: scope.account.id,
+            conversationId,
+            body: data.body,
+            idempotencyKey: `conversation-reply:${conversationId}:${data.requestId ?? randomUUID()}`,
+            messageId: randomUUID(),
+        });
+        return success(queued.message, "WhatsApp reply queued");
+    } catch (cause) {
+        return error(cause instanceof Error ? cause.message : "WhatsApp reply could not be queued", STATUS_CODES.CONFLICT);
+    }
 };
 
 const attachCustomerForScope = async (

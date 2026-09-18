@@ -57,7 +57,7 @@ export const getCloudOutboxReconciliationSummary = async (
       ON account.id = outbox.whatsapp_account_id
      AND account.organization_id = outbox.organization_id
     WHERE outbox.organization_id = ${organizationId}
-      AND outbox.kind = 'template'
+      AND outbox.kind IN ('template', 'conversation_reply')
       AND account.provider = 'cloud_api'
   `;
   return mapCloudOutboxReconciliationSummary(row as Record<string, unknown> | undefined);
@@ -100,7 +100,7 @@ export const listCloudOutboxOperations = async (
       ON stores.id = outbox.store_id
      AND stores.organization_id = outbox.organization_id
     WHERE outbox.organization_id = ${organizationId}
-      AND outbox.kind = 'template'
+      AND outbox.kind IN ('template', 'conversation_reply')
       AND account.provider = 'cloud_api'
       AND outbox.status IN ('pending', 'retryable', 'reconciling', 'dead_letter')
     ORDER BY CASE outbox.status
@@ -201,7 +201,7 @@ export const retryCloudOutboxNow = async (
     LEFT JOIN whatsapp_campaigns campaign ON campaign.id = recipient.campaign_id
     WHERE outbox.id = ${outboxId}
       AND outbox.organization_id = ${organizationId}
-      AND outbox.kind = 'template'
+      AND outbox.kind IN ('template', 'conversation_reply')
       AND account.provider = 'cloud_api'
     FOR UPDATE OF outbox
   `;
@@ -265,7 +265,7 @@ export const deadLetterCloudOutboxNow = async (
      AND account.organization_id = outbox.organization_id
     WHERE outbox.id = ${outboxId}
       AND outbox.organization_id = ${organizationId}
-      AND outbox.kind = 'template'
+      AND outbox.kind IN ('template', 'conversation_reply')
       AND account.provider = 'cloud_api'
     FOR UPDATE OF outbox
   `;
@@ -338,7 +338,7 @@ export const claimNextCloudOutbox = async (
       INNER JOIN whatsapp_business_accounts business
         ON business.id = account.whatsapp_business_account_id
        AND business.organization_id = account.organization_id
-      WHERE outbox.kind = 'template'
+      WHERE outbox.kind IN ('template', 'conversation_reply')
         AND outbox.status IN ('pending', 'retryable')
         AND outbox.next_attempt_at <= NOW()
         AND account.provider = 'cloud_api'
