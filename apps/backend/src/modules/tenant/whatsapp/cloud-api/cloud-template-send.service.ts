@@ -43,6 +43,7 @@ export const enqueueCloudTemplateSend = async (
     idempotencyKey: string;
     campaignKey?: string | null;
     intent: WhatsAppMessageTemplateKind;
+    policyVersion?: number;
     mode?: "template" | "freeform";
     componentParameters?: CloudTemplateComponentInput[];
     lastInboundAt?: string | null;
@@ -92,7 +93,9 @@ export const enqueueCloudTemplateSend = async (
       customerPhone: customer.phone,
       customerName: customer.name,
       intent: input.intent,
-      snapshot: admission.snapshot,
+      snapshot: input.policyVersion === undefined
+        ? admission.snapshot
+        : { ...admission.snapshot, policyVersion: input.policyVersion },
       messageId: crypto.randomUUID(),
       idempotencyKey: input.idempotencyKey,
       campaignKey: input.campaignKey,

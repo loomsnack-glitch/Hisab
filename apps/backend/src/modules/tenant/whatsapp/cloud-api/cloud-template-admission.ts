@@ -42,6 +42,7 @@ export type CloudTemplateSendSnapshot = {
   bindingId: string;
   assetId: string;
   version: number;
+  policyVersion?: number;
   name: string;
   languageCode: string;
   category: TemplateCategory;

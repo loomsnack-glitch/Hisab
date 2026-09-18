@@ -62,6 +62,7 @@ const queueCloudInvoiceForStore = async (
   store: { name: string; address: string | null; whatsappLinks: StoreMessageLink[] },
   organization: { name: string; tagline: string | null },
   accountId: string,
+  policyVersion: number,
   customMessage: string | undefined,
   selectedTemplate: WhatsAppMessageTemplateDTO | null,
   templateId?: string,
@@ -126,7 +127,7 @@ const queueCloudInvoiceForStore = async (
     const enqueue = userId
       ? enqueueCloudTemplateSend(userId, organizationId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
-          bindingId: binding.binding.id, idempotencyKey, intent: "bill", componentParameters,
+          bindingId: binding.binding.id, idempotencyKey, intent: "bill", policyVersion, componentParameters,
         })
       : enqueueCloudTemplateSendForDevice(organizationId, storeId, {
           storeId, accountId, customerId: sale.customerId!, saleId: sale.id,
@@ -312,11 +313,14 @@ export const queueInvoiceForStore = async (
         admitted: false as const,
         reason: "store_disabled" as const,
         message: "WhatsApp delivery policy is not initialized for this Store",
-      };
+  };
   if (!admission.admitted) {
     return { status: "error", message: admission.message, data: null, code: STATUS_CODES.CONFLICT };
   }
-  if (admission.sender === "ganatri_utility" && policy) {
+  if (!policy) {
+    return { status: "error", message: "WhatsApp delivery policy is not initialized for this Store", data: null, code: STATUS_CODES.CONFLICT };
+  }
+  if (admission.sender === "ganatri_utility") {
     if (!options.resend) {
       const existing = await repository.getPlatformInvoiceOutbox(
         organizationId,
@@ -337,7 +341,9 @@ export const queueInvoiceForStore = async (
     );
   }
 
-  const account = await repository.getAccount(organizationId, storeId);
+  const account = policy.whatsappAccountId
+    ? await repository.getAccountById(policy.whatsappAccountId)
+    : null;
   if (!account) {
     return {
       status: "error",
@@ -402,6 +408,7 @@ export const queueInvoiceForStore = async (
       { name: store.name, address: store.address ?? null, whatsappLinks: store.whatsappLinks },
       { name: organization.name, tagline: organization.tagline ?? null },
       account.id,
+      policy.revision,
       customMessage,
       selectedTemplate,
       templateId,

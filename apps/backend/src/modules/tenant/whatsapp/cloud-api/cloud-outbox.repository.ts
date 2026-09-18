@@ -479,6 +479,7 @@ const parseTemplateSnapshot = (value: unknown): CloudTemplateSendSnapshot | null
     category: snapshot.category as CloudTemplateSendSnapshot["category"],
     intent: snapshot.intent as CloudTemplateSendSnapshot["intent"],
     components: snapshot.components as CloudTemplateSendSnapshot["components"],
+    ...(Number.isInteger(snapshot.policyVersion) ? { policyVersion: snapshot.policyVersion as number } : {}),
     ...(Array.isArray(snapshot.templateComponents) ? { templateComponents: snapshot.templateComponents } : {}),
   };
 };

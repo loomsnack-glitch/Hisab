@@ -50,6 +50,7 @@ const binding = {
 describe("Cloud template send service", () => {
   test("admits first, then queues the versioned template snapshot", async () => {
     let queuedSnapshotVersion: number | null = null;
+    let queuedPolicyVersion: number | null = null;
     let queuedIdempotencyKey: string | null = null;
     const response = await enqueueCloudTemplateSend(userId, organizationId, {
       storeId,
@@ -58,15 +59,17 @@ describe("Cloud template send service", () => {
       bindingId,
       idempotencyKey: "promotion:campaign-1:recipient-1",
       intent: "promotion",
+      policyVersion: 7,
     }, {
       organizationAccess: async () => true,
       getAccount: async () => account,
       getBinding: async () => binding,
       getCustomer: async () => ({ id: customerId, name: "Asha", phone: "+919876543210", marketingOptedIn: true, marketingOptedOut: false, utilityOptedIn: true, whatsappSuppressed: false }),
-      enqueue: async input => { queuedSnapshotVersion = input.snapshot.version; queuedIdempotencyKey = input.idempotencyKey; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
+      enqueue: async input => { queuedSnapshotVersion = input.snapshot.version; queuedPolicyVersion = input.snapshot.policyVersion ?? null; queuedIdempotencyKey = input.idempotencyKey; return { messageId: "message-1", outboxId: "outbox-1", messageStatus: "queued", outboxStatus: "pending" }; },
     });
     expect(response.status).toBe("success");
     expect(queuedSnapshotVersion as unknown as number).toBe(2);
+    expect(queuedPolicyVersion as unknown as number).toBe(7);
     expect(queuedIdempotencyKey as unknown as string).toBe("promotion:campaign-1:recipient-1");
   });
 

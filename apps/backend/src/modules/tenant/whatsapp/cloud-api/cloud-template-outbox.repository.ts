@@ -93,6 +93,12 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
       ON assignment.whatsapp_account_id = account.id
      AND assignment.organization_id = account.organization_id
      AND assignment.store_id = ${params.storeId}
+    INNER JOIN whatsapp_store_policies policy
+      ON policy.organization_id = account.organization_id
+     AND policy.store_id = assignment.store_id
+     AND policy.mode = 'organization_cloud'
+     AND policy.whatsapp_account_id = account.id
+     AND policy.effective_to IS NULL
     INNER JOIN whatsapp_cloud_template_bindings binding
       ON binding.organization_id = account.organization_id
      AND binding.store_id = assignment.store_id
@@ -108,9 +114,10 @@ export const createCloudTemplateOutbox = async (params: CloudTemplateOutboxReque
       AND account.cloud_provider_phone_status = 'CONNECTED'
       AND account.cloud_provider_code_verification_status = 'VERIFIED'
       AND account.cloud_provider_is_on_biz_app IS NOT TRUE
+      AND (${params.snapshot.policyVersion ?? null}::int IS NULL OR policy.revision = ${params.snapshot.policyVersion ?? null})
       AND binding.is_active = TRUE
       AND asset.status = 'approved'
-    FOR UPDATE OF account, binding, asset
+    FOR UPDATE OF account, binding, asset, policy
   `;
   if (!scope) throw new Error("Cloud template send is no longer available");
   if (String(scope.template_version) !== String(params.snapshot.version) || String(scope.template_category) !== params.snapshot.category) {
