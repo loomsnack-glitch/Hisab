@@ -586,6 +586,28 @@ export const getPosWhatsAppDueReminderStatus = async (
   }
 };
 
+export const retryPosWhatsAppDueReminder = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp/due-reminder/retry`);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const resendPosWhatsAppDueReminder = async (
+  saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+  try {
+    const response = await api.post(`/pos/sales/${saleId}/whatsapp/due-reminder/resend`, { requestId: crypto.randomUUID() });
+    return response.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
 export const getPosWhatsAppConversations = async (): Promise<
   ServiceResponse<WhatsAppConversationListResponse | null>
 > => {

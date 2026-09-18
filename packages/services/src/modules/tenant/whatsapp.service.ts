@@ -622,6 +622,32 @@ export const getWhatsAppDueReminderStatus = async (
     }
 };
 
+export const retryWhatsAppDueReminder = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<WhatsAppReminderResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/due-reminder/${saleId}/retry`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
+export const resendWhatsAppDueReminder = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<WhatsAppReminderResponse> => {
+    try {
+        const response = await api.post(`/organizations/${organizationId}/stores/${storeId}/whatsapp/due-reminder/${saleId}/resend`, { requestId: crypto.randomUUID() });
+        return response.data;
+    } catch (error) {
+        return handleApiError(error);
+    }
+};
+
 export const createWhatsAppPromotion = async (
     organizationId: string,
     storeId: string,

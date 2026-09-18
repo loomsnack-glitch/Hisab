@@ -517,6 +517,37 @@ export const getPlatformInvoiceOutbox = async (
     };
 };
 
+export const getPlatformDueReminderOutbox = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    const [row] = await pg`
+        SELECT o.id AS outbox_id,
+               o.status AS outbox_status,
+               m.id AS message_id,
+               m.status AS message_status
+        FROM whatsapp_outbox o
+        INNER JOIN whatsapp_messages m ON m.id = o.message_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.sender_kind = 'ganatri_platform'
+          AND o.platform_sender_key = 'ganatri_utility'
+          AND o.sale_id = ${saleId}
+          AND o.kind = 'template'
+          AND m.idempotency_key LIKE 'due-reminder:%'
+        ORDER BY o.created_at DESC
+        LIMIT 1
+    `;
+    if (!row) return null;
+    return {
+        messageId: String(row.message_id),
+        outboxId: String(row.outbox_id),
+        messageStatus: row.message_status as InvoiceOutboxRecord["messageStatus"],
+        outboxStatus: row.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+    };
+};
+
 export const getCustomerReminderOutbox = async (
     organizationId: string,
     storeId: string,
@@ -549,6 +580,28 @@ export const getCustomerReminderOutbox = async (
         messageStatus: row.message_status as InvoiceOutboxRecord["messageStatus"],
         outboxStatus: row.outbox_status as InvoiceOutboxRecord["outboxStatus"],
     };
+};
+
+export const recordWhatsAppDeliveryOperatorAction = async (input: {
+    organizationId: string;
+    storeId: string;
+    actorUserId?: string | null;
+    sourceOutboxId?: string | null;
+    outboxId: string;
+    action: "retry" | "resend";
+    requestId?: string | null;
+    details?: Record<string, unknown>;
+}): Promise<void> => {
+    await pg`
+        INSERT INTO whatsapp_delivery_operator_actions (
+            organization_id, store_id, actor_user_id, source_outbox_id,
+            outbox_id, action, request_id, details
+        ) VALUES (
+            ${input.organizationId}, ${input.storeId}, ${input.actorUserId ?? null},
+            ${input.sourceOutboxId ?? null}, ${input.outboxId}, ${input.action},
+            ${input.requestId ?? null}, ${input.details ?? {}}::jsonb
+        )
+    `;
 };
 
 export const getCustomerByPhone = async (organizationId: string, phoneNumber: string): Promise<CustomerDTO | null> => {
@@ -1572,6 +1625,152 @@ export const retryPlatformInvoiceOutbox = async (
             outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
         };
     });
+};
+
+export const retryCustomerReminderOutbox = async (
+    organizationId: string,
+    storeId: string,
+    accountId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    return pg.begin(async tx => {
+        const [outbox] = await tx`
+            UPDATE whatsapp_outbox
+            SET status = 'pending', next_attempt_at = NOW(), lease_owner = NULL,
+                lease_expires_at = NULL, last_error_code = NULL,
+                last_error_message = NULL, updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND store_id = ${storeId}
+              AND whatsapp_account_id = ${accountId}
+              AND sale_id = ${saleId}
+              AND kind = 'template'
+              AND status IN ('retryable', 'dead_letter')
+              AND EXISTS (
+                  SELECT 1 FROM whatsapp_messages reminder_message
+                  WHERE reminder_message.id = whatsapp_outbox.message_id
+                    AND reminder_message.idempotency_key LIKE 'due-reminder:%'
+              )
+            RETURNING id, message_id, status
+        `;
+        if (!outbox) {
+            const [existing] = await tx`
+                SELECT o.id AS outbox_id,
+                       o.status AS outbox_status,
+                       m.id AS message_id,
+                       m.status AS message_status
+                FROM whatsapp_outbox o
+                INNER JOIN whatsapp_messages m ON m.id = o.message_id
+                WHERE o.organization_id = ${organizationId}
+                  AND o.store_id = ${storeId}
+                  AND o.whatsapp_account_id = ${accountId}
+                  AND o.sale_id = ${saleId}
+                  AND o.kind = 'template'
+                  AND m.idempotency_key LIKE 'due-reminder:%'
+                ORDER BY o.created_at DESC
+                LIMIT 1
+            `;
+            return existing
+                ? {
+                    messageId: String(existing.message_id),
+                    outboxId: String(existing.outbox_id),
+                    messageStatus: existing.message_status as InvoiceOutboxRecord["messageStatus"],
+                    outboxStatus: existing.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+                }
+                : null;
+        }
+        await tx`
+            UPDATE whatsapp_messages
+            SET status = 'queued', failure_code = NULL, failure_message = NULL
+            WHERE id = ${outbox.message_id}
+        `;
+        const [message] = await tx`
+            SELECT id, status
+            FROM whatsapp_messages
+            WHERE id = ${outbox.message_id}
+        `;
+        return message
+            ? {
+                messageId: String(message.id),
+                outboxId: String(outbox.id),
+                messageStatus: message.status as InvoiceOutboxRecord["messageStatus"],
+                outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
+            }
+            : null;
+    });
+};
+
+export const retryPlatformDueReminderOutbox = async (
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    return pg.begin(async tx => {
+        const [outbox] = await tx`
+            UPDATE whatsapp_outbox
+            SET status = 'pending', next_attempt_at = NOW(), lease_owner = NULL,
+                lease_expires_at = NULL, last_error_code = NULL,
+                last_error_message = NULL, updated_at = NOW()
+            WHERE organization_id = ${organizationId}
+              AND store_id = ${storeId}
+              AND sender_kind = 'ganatri_platform'
+              AND platform_sender_key = 'ganatri_utility'
+              AND sale_id = ${saleId}
+              AND kind = 'template'
+              AND status IN ('retryable', 'dead_letter')
+              AND EXISTS (
+                SELECT 1 FROM whatsapp_messages reminder_message
+                WHERE reminder_message.id = whatsapp_outbox.message_id
+                  AND reminder_message.idempotency_key LIKE 'due-reminder:%'
+              )
+            RETURNING id, message_id, status
+        `;
+        if (!outbox) return getLatestPlatformDueReminderInTransaction(tx, organizationId, storeId, saleId);
+        await tx`
+            UPDATE whatsapp_messages
+            SET status = 'queued', provider_message_id = NULL, failure_code = NULL,
+                failure_message = NULL, sent_at = NULL, delivered_at = NULL, read_at = NULL
+            WHERE id = ${outbox.message_id}
+        `;
+        return {
+            messageId: String(outbox.message_id),
+            outboxId: String(outbox.id),
+            messageStatus: "queued" as InvoiceOutboxRecord["messageStatus"],
+            outboxStatus: outbox.status as InvoiceOutboxRecord["outboxStatus"],
+        };
+    });
+};
+
+const getLatestPlatformDueReminderInTransaction = async (
+    tx: Bun.TransactionSQL,
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<InvoiceOutboxRecord | null> => {
+    const [existing] = await tx`
+        SELECT o.id AS outbox_id,
+               o.status AS outbox_status,
+               m.id AS message_id,
+               m.status AS message_status
+        FROM whatsapp_outbox o
+        INNER JOIN whatsapp_messages m ON m.id = o.message_id
+        WHERE o.organization_id = ${organizationId}
+          AND o.store_id = ${storeId}
+          AND o.sender_kind = 'ganatri_platform'
+          AND o.platform_sender_key = 'ganatri_utility'
+          AND o.sale_id = ${saleId}
+          AND o.kind = 'template'
+          AND m.idempotency_key LIKE 'due-reminder:%'
+        ORDER BY o.created_at DESC
+        LIMIT 1
+    `;
+    return existing
+        ? {
+            messageId: String(existing.message_id),
+            outboxId: String(existing.outbox_id),
+            messageStatus: existing.message_status as InvoiceOutboxRecord["messageStatus"],
+            outboxStatus: existing.outbox_status as InvoiceOutboxRecord["outboxStatus"],
+        }
+        : null;
 };
 
 export const claimProviderEvent = async (

@@ -47,6 +47,31 @@ const MAX_DUE_REMINDER_PDF_BYTES = 10 * 1024 * 1024;
 const privateBucket = () => process.env.MINIO_BUCKET_NAME?.trim() || "";
 const dueReminderObjectKey = (organizationId: string, storeId: string, accountId: string, customerId: string, saleId?: string) =>
     `whatsapp-due-reminders/${organizationId}/${storeId}/${accountId}/${customerId}/${saleId ?? "statement"}.pdf`;
+type DueReminderQueueOptions = { resend?: boolean; requestId?: string };
+const dueReminderIdempotencyKey = (input: {
+    organizationId: string;
+    storeId: string;
+    customerId: string;
+    saleId?: string;
+    sales: Array<{ id: string; dueTotal?: unknown }>;
+    resend?: boolean;
+    requestId?: string;
+}): string => {
+    const window = new Date().toISOString().slice(0, 10);
+    const base = input.saleId
+        ? `due-reminder:${input.saleId}:${window}`
+        : `due-reminder:${createHash("sha256").update(JSON.stringify({
+            organizationId: input.organizationId,
+            storeId: input.storeId,
+            customerId: input.customerId,
+            sales: input.sales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((left, right) => left.id.localeCompare(right.id)),
+            window,
+        })).digest("hex")}`;
+    if (!input.resend) return base;
+    const requestId = input.requestId?.trim() || crypto.randomUUID();
+    if (!requestId || requestId.length > 255 || /[\r\n]/.test(requestId)) throw new Error("Due reminder resend request id is invalid");
+    return `${base}:resend:${requestId}`;
+};
 type StoreScope =
     | { error: string; code: StatusCode }
     | { organization: Awaited<ReturnType<typeof organizationRepository.getOrganizationByIdForUser>>; store: Awaited<ReturnType<typeof organizationRepository.getStoreById>> };
@@ -375,6 +400,7 @@ const queueDueReminderForStore = async (
   customMessage?: string,
   saleId?: string,
   userId?: string,
+  options: DueReminderQueueOptions = {},
 ): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
     const entitlementError = await requireWhatsAppStoreEntitlement(storeId);
     if (entitlementError) return entitlementError;
@@ -385,6 +411,15 @@ const queueDueReminderForStore = async (
     if (sales.length === 0) return { status: "error", message: "This customer has no due bills in this Store", data: null, code: STATUS_CODES.CONFLICT };
     const reminderSales = saleId ? sales.filter(sale => sale.id === saleId) : sales;
     if (reminderSales.length === 0) return { status: "error", message: "This bill has no remaining due amount", data: null, code: STATUS_CODES.CONFLICT };
+    const idempotencyKey = dueReminderIdempotencyKey({
+        organizationId,
+        storeId,
+        customerId,
+        saleId,
+        sales: reminderSales,
+        resend: options.resend,
+        requestId: options.requestId,
+    });
 
     const policy = await getCurrentPolicy(organizationId, storeId);
     const admission = policy
@@ -399,15 +434,6 @@ const queueDueReminderForStore = async (
     if (admission.sender === "ganatri_utility") {
         const parsedPhone = phoneSchema.safeParse(customer.phone);
         if (!parsedPhone.success) return { status: "error", message: "A customer with a valid international phone number is required for WhatsApp reminders", data: null, code: STATUS_CODES.BAD_REQUEST };
-        const window = new Date().toISOString().slice(0, 10);
-        const fingerprint = createHash("sha256").update(JSON.stringify({
-            organizationId,
-            storeId,
-            customerId,
-            sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
-            window,
-        })).digest("hex");
-        const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
         try {
             const config = requireWhatsAppPlatformConfig();
             const template = await resolvePlatformTemplate("due_reminder", config);
@@ -509,15 +535,6 @@ const queueDueReminderForStore = async (
                 documentLink = await storage.generateSignedUrl(bucket, attachmentStorageKey, cloudMediaUrlTtlSeconds());
             }
             const componentParameters = buildDueReminderCloudComponents(binding.asset.components, localTemplateBody, values, binding.binding.variableMapping, documentLink);
-            const window = new Date().toISOString().slice(0, 10);
-            const fingerprint = createHash("sha256").update(JSON.stringify({
-                organizationId,
-                storeId,
-                customerId,
-                sales: reminderSales.map(sale => ({ id: sale.id, dueTotal: String(sale.dueTotal ?? "0") })).sort((a, b) => a.id.localeCompare(b.id)),
-                window,
-            })).digest("hex");
-            const idempotencyKey = saleId ? `due-reminder:${saleId}:${window}` : `due-reminder:${fingerprint}`;
             const enqueue = userId
                 ? enqueueCloudTemplateSend(userId, organizationId, {
                     storeId, accountId: account.id, customerId, saleId: saleId ?? null,
@@ -544,14 +561,14 @@ const queueDueReminderForStore = async (
     }
 };
 
-export const queueDueReminder = async (userId: string, organizationId: string, storeId: string, customerId: string, customMessage?: string, saleId?: string) => {
+export const queueDueReminder = async (userId: string, organizationId: string, storeId: string, customerId: string, customMessage?: string, saleId?: string, options: DueReminderQueueOptions = {}) => {
     const scope = await scopeStore(userId, organizationId, storeId);
     if ("error" in scope) return { status: "error" as const, message: scope.error, data: null, code: scope.code };
-    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId, userId);
+    return queueDueReminderForStore(organizationId, storeId, customerId, customMessage, saleId, userId, options);
 };
 
-export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string) =>
-    queueDueReminderForStore(session.organization.id, session.store.id, customerId, customMessage, saleId);
+export const queueDueReminderForDevice = (session: DeviceSessionDTO, customerId: string, customMessage?: string, saleId?: string, options: DueReminderQueueOptions = {}) =>
+    queueDueReminderForStore(session.organization.id, session.store.id, customerId, customMessage, saleId, undefined, options);
 
 export const revokePublicInvoiceLink = async (userId: string, organizationId: string, storeId: string, saleId: string) => {
     const scope = await scopeStore(userId, organizationId, storeId);
@@ -598,8 +615,17 @@ const getDueReminderStatusForStore = async (
     const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
     const customerId = sale?.customerId ?? null;
     if (!customerId) return { status: "success", message: "Due reminder has not been sent for this bill", data: null, code: STATUS_CODES.SUCCESS };
-    const account = await repository.getAccount(organizationId, storeId);
-    const existing = account ? await repository.getCustomerReminderOutbox(organizationId, storeId, account.id, saleId) : null;
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    const existing = policy?.mode === "ganatri_utility"
+        ? await repository.getPlatformDueReminderOutbox(organizationId, storeId, saleId)
+        : policy?.whatsappAccountId
+            ? await repository.getCustomerReminderOutbox(
+                organizationId,
+                storeId,
+                policy.whatsappAccountId,
+                saleId,
+            )
+            : null;
     return existing
         ? {
             status: "success",
@@ -618,6 +644,111 @@ export const getDueReminderStatus = async (userId: string, organizationId: strin
 
 export const getDueReminderStatusForDevice = (session: DeviceSessionDTO, saleId: string) =>
     getDueReminderStatusForStore(session.organization.id, session.store.id, saleId);
+
+const dueQueueResponse = (
+    customerId: string,
+    saleId: string,
+    record: repository.InvoiceOutboxRecord,
+): ServiceResponse<WhatsAppReminderQueueResponseDTO> => ({
+    status: "success",
+    message: "Due reminder queued for WhatsApp",
+    data: { customerId, saleId, ...record },
+    code: STATUS_CODES.SUCCESS,
+});
+
+export const retryDueReminder = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
+    if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const policy = await getCurrentPolicy(organizationId, storeId);
+    const retried = policy?.mode === "ganatri_utility"
+        ? await repository.retryPlatformDueReminderOutbox(organizationId, storeId, saleId)
+        : policy?.whatsappAccountId
+            ? await repository.retryCustomerReminderOutbox(organizationId, storeId, policy.whatsappAccountId, saleId)
+            : null;
+    return retried
+        ? dueQueueResponse(sale.customerId, saleId, retried)
+        : { status: "error", message: "This due reminder is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
+};
+
+export const retryDueReminderForDevice = async (
+    session: DeviceSessionDTO,
+    saleId: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const entitlementError = await requireWhatsAppStoreEntitlement(session.store.id);
+    if (entitlementError) return entitlementError;
+    const sale = await billingRepository.getSaleById(session.organization.id, session.store.id, saleId);
+    if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const policy = await getCurrentPolicy(session.organization.id, session.store.id);
+    const retried = policy?.mode === "ganatri_utility"
+        ? await repository.retryPlatformDueReminderOutbox(session.organization.id, session.store.id, saleId)
+        : policy?.whatsappAccountId
+            ? await repository.retryCustomerReminderOutbox(session.organization.id, session.store.id, policy.whatsappAccountId, saleId)
+            : null;
+    return retried
+        ? dueQueueResponse(sale.customerId, saleId, retried)
+        : { status: "error", message: "This due reminder is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
+};
+
+export const resendDueReminder = async (
+    userId: string,
+    organizationId: string,
+    storeId: string,
+    saleId: string,
+    requestId?: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const scope = await scopeStore(userId, organizationId, storeId);
+    if ("error" in scope) return { status: "error", message: scope.error, data: null, code: scope.code };
+    const source = await getDueReminderStatusForStore(organizationId, storeId, saleId);
+    const sale = await billingRepository.getSaleById(organizationId, storeId, saleId);
+    if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const resendRequestId = requestId?.trim() || crypto.randomUUID();
+    const queued = await queueDueReminderForStore(organizationId, storeId, sale.customerId, undefined, saleId, userId, { resend: true, requestId: resendRequestId });
+    if (queued.status === "success" && queued.data) {
+        await repository.recordWhatsAppDeliveryOperatorAction({
+            organizationId,
+            storeId,
+            actorUserId: userId,
+            sourceOutboxId: source.data?.outboxId ?? null,
+            outboxId: queued.data.outboxId,
+            action: "resend",
+            requestId: resendRequestId,
+            details: { kind: "due_reminder", saleId },
+        }).catch(error => console.error("[whatsapp] due resend audit failed", error instanceof Error ? error.name : "unknown"));
+    }
+    return queued;
+};
+
+export const resendDueReminderForDevice = async (
+    session: DeviceSessionDTO,
+    saleId: string,
+    requestId?: string,
+): Promise<ServiceResponse<WhatsAppReminderQueueResponseDTO | null>> => {
+    const source = await getDueReminderStatusForStore(session.organization.id, session.store.id, saleId);
+    const sale = await billingRepository.getSaleById(session.organization.id, session.store.id, saleId);
+    if (!sale?.customerId) return { status: "error", message: "Bill not found", data: null, code: STATUS_CODES.NOT_FOUND };
+    const resendRequestId = requestId?.trim() || crypto.randomUUID();
+    const queued = await queueDueReminderForStore(session.organization.id, session.store.id, sale.customerId, undefined, saleId, undefined, { resend: true, requestId: resendRequestId });
+    if (queued.status === "success" && queued.data) {
+        await repository.recordWhatsAppDeliveryOperatorAction({
+            organizationId: session.organization.id,
+            storeId: session.store.id,
+            actorUserId: null,
+            sourceOutboxId: source.data?.outboxId ?? null,
+            outboxId: queued.data.outboxId,
+            action: "resend",
+            requestId: resendRequestId,
+            details: { kind: "due_reminder", saleId, actor: "device" },
+        }).catch(error => console.error("[whatsapp] device due resend audit failed", error instanceof Error ? error.name : "unknown"));
+    }
+    return queued;
+};
 export const replayPendingMessageEvents = conversationService.replayPendingMessageEvents;
 export const createPromotion = promotionService.createPromotion;
 export const getPromotionDashboard = async (userId: string, organizationId: string, storeId: string, days = 30, limit = 20, page = 1) => {

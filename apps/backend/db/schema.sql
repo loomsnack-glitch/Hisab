@@ -2927,6 +2927,27 @@ CREATE TABLE public.whatsapp_cloud_operator_actions (
 
 
 --
+-- Name: whatsapp_delivery_operator_actions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.whatsapp_delivery_operator_actions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    store_id uuid NOT NULL,
+    actor_user_id uuid,
+    source_outbox_id uuid,
+    outbox_id uuid NOT NULL,
+    action character varying(32) NOT NULL,
+    request_id character varying(255),
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT whatsapp_delivery_operator_action_name_check CHECK (((action)::text = ANY ((ARRAY['retry'::character varying, 'resend'::character varying])::text[]))),
+    CONSTRAINT whatsapp_delivery_operator_action_request_check CHECK (((request_id IS NULL) OR ((length(btrim((request_id)::text)) >= 1) AND (length(btrim((request_id)::text)) <= 255)))),
+    CONSTRAINT whatsapp_delivery_operator_action_details_check CHECK ((jsonb_typeof(details) = 'object'::text))
+);
+
+
+--
 -- Name: whatsapp_cloud_provisioning_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4779,6 +4800,14 @@ ALTER TABLE ONLY public.whatsapp_cloud_operator_actions
 
 
 --
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: whatsapp_cloud_provisioning_attempts whatsapp_cloud_provisioning_a_organization_id_idempotency_k_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6165,6 +6194,20 @@ CREATE INDEX idx_whatsapp_cloud_operator_actions_org_created ON public.whatsapp_
 --
 
 CREATE INDEX idx_whatsapp_cloud_operator_actions_outbox_created ON public.whatsapp_cloud_operator_actions USING btree (outbox_id, created_at DESC);
+
+
+--
+-- Name: idx_whatsapp_delivery_operator_actions_org_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_whatsapp_delivery_operator_actions_org_created ON public.whatsapp_delivery_operator_actions USING btree (organization_id, created_at DESC);
+
+
+--
+-- Name: idx_whatsapp_delivery_operator_actions_outbox_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_whatsapp_delivery_operator_actions_outbox_created ON public.whatsapp_delivery_operator_actions USING btree (outbox_id, created_at DESC);
 
 
 --
@@ -9313,6 +9356,46 @@ ALTER TABLE ONLY public.whatsapp_cloud_operator_actions
 
 ALTER TABLE ONLY public.whatsapp_cloud_operator_actions
     ADD CONSTRAINT whatsapp_cloud_operator_actions_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES public.whatsapp_outbox(id) ON DELETE CASCADE;
+
+
+--
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_actor_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_outbox_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES public.whatsapp_outbox(id) ON DELETE CASCADE;
+
+
+--
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_source_outbox_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_source_outbox_id_fkey FOREIGN KEY (source_outbox_id) REFERENCES public.whatsapp_outbox(id) ON DELETE SET NULL;
+
+
+--
+-- Name: whatsapp_delivery_operator_actions whatsapp_delivery_operator_actions_store_id_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.whatsapp_delivery_operator_actions
+    ADD CONSTRAINT whatsapp_delivery_operator_actions_store_id_organization_id_fkey FOREIGN KEY (store_id, organization_id) REFERENCES public.stores(id, organization_id) ON DELETE CASCADE;
 
 
 --

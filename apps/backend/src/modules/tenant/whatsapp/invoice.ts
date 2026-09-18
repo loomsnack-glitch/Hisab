@@ -488,15 +488,30 @@ export const resendInvoice = async (
       code: STATUS_CODES.NOT_FOUND,
     };
   }
-  return queueInvoiceForStore(
+  const source = await getExistingInvoice(organizationId, storeId, saleId);
+  const resendRequestId = requestId?.trim() || crypto.randomUUID();
+  const queued = await queueInvoiceForStore(
     organizationId,
     storeId,
     saleId,
     undefined,
     undefined,
     userId,
-    { resend: true, requestId },
+    { resend: true, requestId: resendRequestId },
   );
+  if (queued.status === "success" && queued.data) {
+    await repository.recordWhatsAppDeliveryOperatorAction({
+      organizationId,
+      storeId,
+      actorUserId: userId,
+      sourceOutboxId: source?.outboxId ?? null,
+      outboxId: queued.data.outboxId,
+      action: "resend",
+      requestId: resendRequestId,
+      details: { kind: "bill", saleId },
+    }).catch(error => console.error("[whatsapp] bill resend audit failed", error instanceof Error ? error.name : "unknown"));
+  }
+  return queued;
 };
 
 const getExistingInvoice = async (
@@ -508,7 +523,9 @@ const getExistingInvoice = async (
   if (policy?.mode === "ganatri_utility") {
     return repository.getPlatformInvoiceOutbox(organizationId, storeId, saleId);
   }
-  const account = await repository.getAccount(organizationId, storeId);
+  const account = policy?.whatsappAccountId
+    ? await repository.getAccountById(policy.whatsappAccountId)
+    : null;
   return account ? repository.getInvoiceOutbox(organizationId, storeId, account.id, saleId) : null;
 };
 
@@ -549,7 +566,9 @@ export const retryInvoice = async (
       ? response(saleId, retried, true)
       : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
   }
-  const account = await repository.getAccount(organizationId, storeId);
+  const account = policy?.whatsappAccountId
+    ? await repository.getAccountById(policy.whatsappAccountId)
+    : null;
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(organizationId, storeId, account.id, saleId);
   return retried
@@ -570,15 +589,32 @@ export const resendInvoiceForDevice = async (
   saleId: string,
   requestId?: string,
 ): Promise<ServiceResponse<WhatsAppInvoiceQueueResponseDTO | null>> =>
-  queueInvoiceForStore(
+  (async () => {
+    const source = await getExistingInvoice(session.organization.id, session.store.id, saleId);
+    const resendRequestId = requestId?.trim() || crypto.randomUUID();
+    const queued = await queueInvoiceForStore(
     session.organization.id,
     session.store.id,
     saleId,
     undefined,
     undefined,
     undefined,
-    { resend: true, requestId },
-  );
+    { resend: true, requestId: resendRequestId },
+    );
+    if (queued.status === "success" && queued.data) {
+      await repository.recordWhatsAppDeliveryOperatorAction({
+        organizationId: session.organization.id,
+        storeId: session.store.id,
+        actorUserId: null,
+        sourceOutboxId: source?.outboxId ?? null,
+        outboxId: queued.data.outboxId,
+        action: "resend",
+        requestId: resendRequestId,
+        details: { kind: "bill", saleId, actor: "device" },
+      }).catch(error => console.error("[whatsapp] device bill resend audit failed", error instanceof Error ? error.name : "unknown"));
+    }
+    return queued;
+  })();
 
 export const getInvoiceStatusForDevice = async (
   session: DeviceSessionDTO,
@@ -605,7 +641,9 @@ export const retryInvoiceForDevice = async (
       ? response(saleId, retried, true)
       : { status: "error", message: "This invoice is not waiting for retry", data: null, code: STATUS_CODES.CONFLICT };
   }
-  const account = await repository.getAccount(session.organization.id, session.store.id);
+  const account = policy?.whatsappAccountId
+    ? await repository.getAccountById(policy.whatsappAccountId)
+    : null;
   if (!account) return { status: "error", message: "Link the Store WhatsApp account before retrying", data: null, code: STATUS_CODES.CONFLICT };
   const retried = await repository.retryInvoiceOutbox(session.organization.id, session.store.id, account.id, saleId);
   return retried

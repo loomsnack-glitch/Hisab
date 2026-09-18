@@ -11,6 +11,10 @@ import {
     getWhatsAppInvoiceStatus,
     queuePosWhatsAppInvoice,
     queuePosWhatsAppDueReminder,
+    retryPosWhatsAppDueReminder,
+    retryWhatsAppDueReminder,
+    resendPosWhatsAppDueReminder,
+    resendWhatsAppDueReminder,
     queueWhatsAppInvoice,
     queueWhatsAppDueReminder,
     retryPosWhatsAppInvoice,
@@ -270,20 +274,44 @@ const SaleDetailDialog = ({
     const dueReminderMutation = useMutation({
         mutationFn: () => {
             if (!sale?.customerId) throw new Error("This bill has no customer");
+            const canRetry = whatsappDueReminder?.outboxStatus === "retryable" || whatsappDueReminder?.outboxStatus === "dead_letter";
+            const isSending = ["queued", "sending"].includes(whatsappDueReminder?.messageStatus ?? "")
+                || ["pending", "processing", "reconciling"].includes(whatsappDueReminder?.outboxStatus ?? "");
+            const canResend = Boolean(whatsappDueReminder?.messageStatus) && !canRetry && !isSending;
             return mode === "device"
-                ? queuePosWhatsAppDueReminder(sale.customerId, undefined, sale.id)
-                : queueWhatsAppDueReminder(organizationId, storeId, sale.customerId, undefined, sale.id);
+                ? canRetry
+                    ? retryPosWhatsAppDueReminder(sale.id)
+                    : canResend
+                      ? resendPosWhatsAppDueReminder(sale.id)
+                      : queuePosWhatsAppDueReminder(sale.customerId, undefined, sale.id)
+                : canRetry
+                  ? retryWhatsAppDueReminder(organizationId, storeId, sale.id)
+                  : canResend
+                    ? resendWhatsAppDueReminder(organizationId, storeId, sale.id)
+                    : queueWhatsAppDueReminder(organizationId, storeId, sale.customerId, undefined, sale.id);
         },
         onSuccess: response => {
             if (response.status !== "success") {
                 toast.error(response.message || "Due reminder could not be queued");
                 return;
             }
-            toast.success("Due reminder queued for WhatsApp");
+            toast.success(whatsappDueReminder?.messageStatus ? "Due reminder sent again" : "Due reminder queued for WhatsApp");
             void whatsappDueReminderQuery.refetch();
         },
         onError: (error: { message?: string }) => toast.error(error?.message || "Due reminder could not be queued"),
     });
+
+    const isDueReminderSending = ["queued", "sending"].includes(whatsappDueReminder?.messageStatus ?? "")
+        || ["pending", "processing", "reconciling"].includes(whatsappDueReminder?.outboxStatus ?? "");
+    const dueReminderLabel = dueReminderMutation.isPending
+        ? "Queueing..."
+        : isDueReminderSending
+            ? "Sending..."
+            : whatsappDueReminder?.outboxStatus === "retryable" || whatsappDueReminder?.outboxStatus === "dead_letter"
+                ? "Retry due reminder"
+                : whatsappDueReminder?.messageStatus
+                    ? "Send due reminder again"
+                    : "Remind due";
 
     const handlePrint = async () => {
         if (!sale) return;
@@ -417,16 +445,12 @@ const SaleDetailDialog = ({
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending}
+                                            disabled={dueReminderMutation.isPending || whatsappDueReminderQuery.isPending || isDueReminderSending}
                                             onClick={() => dueReminderMutation.mutate()}
                                             className="h-8 rounded-lg px-2.5"
                                         >
                                             <Clock className="size-4 text-orange-500" />
-                                            {dueReminderMutation.isPending
-                                                ? "Queueing..."
-                                                : whatsappDueReminder
-                                                  ? "Remind again"
-                                                  : "Remind due"}
+                                            {dueReminderLabel}
                                         </Button>
                                     ) : null}
                                     <Button

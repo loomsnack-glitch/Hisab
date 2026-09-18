@@ -692,6 +692,30 @@ router.get("/sales/:saleId/whatsapp/due-reminder", async (c) => {
   }
 });
 
+router.post("/sales/:saleId/whatsapp/due-reminder/retry", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    return handleServiceResponse(c, await whatsappService.retryDueReminderForDevice(c.get("authDevice"), saleId));
+  } catch (error) {
+    return handleError(FILE_NAME, "retryDueReminderForDevice", c, error);
+  }
+});
+
+router.post("/sales/:saleId/whatsapp/due-reminder/resend", async (c) => {
+  try {
+    const saleId = c.req.param("saleId");
+    const invalidSaleId = validateUuidParam(saleId, "Invalid sale id");
+    if (invalidSaleId) return c.json(invalidSaleId, invalidSaleId.code);
+    const payload = await c.req.json().catch(() => ({}));
+    const requestId = typeof payload?.requestId === "string" ? payload.requestId : undefined;
+    return handleServiceResponse(c, await whatsappService.resendDueReminderForDevice(c.get("authDevice"), saleId, requestId));
+  } catch (error) {
+    return handleError(FILE_NAME, "resendDueReminderForDevice", c, error);
+  }
+});
+
 router.get("/whatsapp/conversations", async (c) => {
   try {
     return handleServiceResponse(

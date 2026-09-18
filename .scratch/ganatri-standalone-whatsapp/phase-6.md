@@ -1,6 +1,6 @@
 # Ganatri WhatsApp — Phase 6
 
-Status: 6.2 complete with documented follow-ups; 6.3 next
+Status: 6.3 complete with documented follow-ups; 6.4 next
 Phase: 6 — Bill and due delivery
 
 ## Outcome
@@ -128,9 +128,77 @@ and the subphase is reviewed and committed before 6.2 begins.
 - Admin build was not rerun because this subphase changed no Admin/UI/shared
   client files.
 
+## 6.3 Subphase plan — Status, retry, and deliberate resend
+
+Status: Complete; reviewed and committed
+
+### User-facing outcome
+
+Admin, Store Console, and POS can see the real bill/due delivery state and take
+the correct next action. Retry requeues only a retryable/dead-letter operation
+using its immutable original snapshot. Deliberate resend creates a new
+idempotency identity, is explicit in the UI/API, and records an operator action;
+ordinary duplicate requests never create another message.
+
+### Scope
+
+- Resolve bill and due status/retry through the current Store policy and its
+  selected sender, including Ganatri Utility platform outbox rows.
+- Add due-reminder retry and deliberate resend service, routes, shared clients,
+  and the existing billing detail controls for Admin and POS/device callers.
+- Keep provider webhook status ordering, timeout reconciliation, bounded retry,
+  dead-letter, and permanent-failure behavior in the existing outbox seams.
+- Persist explicit resend actions with actor, Store, source outbox, new outbox,
+  action, and request identity; do not mutate historical messages.
+- Preserve sender/template/policy snapshots and prevent policy switches from
+  rerouting queued work.
+
+### Non-goals
+
+- No new delivery worker or provider integration.
+- No automatic resend after a provider failure; only bounded retry or explicit
+  user action is allowed.
+- No campaign/inbox retry redesign; Cloud safety controls remain their own
+  Organization-level operator surface.
+
+### Dependencies and public seams
+
+- Existing platform/Cloud outbox status transitions and webhook reconciliation.
+- `getInvoiceStatus`, invoice retry/resend, due status, and the shared billing
+  detail dialogs.
+- Existing Admin/POS service clients and query keys.
+- A small delivery-operator audit migration/repository boundary for explicit
+  resend actions.
+
+### Verification plan
+
+- Test status selection for both platform and Cloud senders, retryable versus
+  terminal states, ordinary duplicate idempotency, and unique resend identity.
+- Test due retry/resend routes and both user/device callers; verify the current
+  policy account is always used.
+- Test provider status ordering, timeout reconciliation, retry/dead-letter
+  action guards, and immutable snapshots through existing focused suites and
+  source contracts where DB-backed integration is unavailable.
+- Run backend/Admin/POS builds as applicable, touched-file TypeScript checks,
+  database migration status, and `git diff --check`.
+
+### Risks and rollback
+
+- A resend must never reuse an ordinary or prior resend idempotency key.
+- Retry must not reconstruct content or silently follow a new sender/template;
+  it reuses the stored outbox snapshot.
+- If the audit migration cannot be applied cleanly, stop at the 6.3 gate rather
+  than claiming resend completion.
+
+### 6.3 exit gate
+
+Both bill and due operations expose accurate status, bounded retry, and audited
+deliberate resend for platform and Cloud modes; duplicate and policy-switch
+cases are safe; all checks pass; and 6.3 is reviewed and committed before 6.4.
+
 ## 6.2 Subphase plan — Policy-aware due delivery
 
-Status: Complete; reviewed and ready for commit
+Status: Complete; reviewed and committed
 
 ### User-facing outcome
 
@@ -226,3 +294,22 @@ before 6.3 begins.
   database remains at 155 applied and 0 pending.
 - Admin build was not rerun because this subphase changed no Admin/UI/shared
   client files.
+
+### 6.3 review and verification
+
+- Invoice status/retry now resolves the current Store policy account; due status
+  now reports Ganatri Utility platform outbox rows as well as Cloud rows.
+- Due retry and deliberate resend are available through Admin and POS/device
+  routes and shared clients; billing dialogs distinguish queue, retry, sending,
+  and explicit resend states.
+- Ordinary due requests retain their deterministic idempotency key; resend uses
+  a separate request-scoped key and records the source/new outboxes, actor, and
+  action in `whatsapp_delivery_operator_actions`.
+- Provider status ordering, bounded retry, reconciliation, permanent failure,
+  and dead-letter behavior remain in the existing outbox paths.
+- Full WhatsApp suite: 293 passed, 3 known database-dependent tests skipped,
+  0 failed, 753 assertions.
+- Backend, Admin, and POS production builds: passed. Touched-file TypeScript
+  diagnostics: passed. `git diff --check`: passed.
+- Development database: 156 migrations applied, 0 pending; the new delivery
+  operator-action migration is applied and represented in `db/schema.sql`.
